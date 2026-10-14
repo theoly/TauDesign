@@ -39,7 +39,7 @@ describe('CHK-F-03: 标题栏内部元素严格垂直居中与对齐规范', () 
 
   test('标题文字 (h1~h4, p, span) 自动居中与单行省略', () => {
     expect(mobileCss).toContain('.appbar > h1');
-    expect(mobileCss).toContain('.appbar > span:not(.tap-target)');
+    expect(mobileCss).toContain('.appbar > span:not(.tap-target):not(.appbar-capsule)');
     expect(mobileCss).toContain('justify-content: center');
     expect(mobileCss).toContain('text-overflow: ellipsis');
     expect(mobileCss).toContain('white-space: nowrap');

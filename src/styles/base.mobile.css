@@ -71,7 +71,7 @@
 .appbar > h3,
 .appbar > h4,
 .appbar > p,
-.appbar > span:not(.tap-target) {
+.appbar > span:not(.tap-target):not(.appbar-capsule) {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -156,6 +156,8 @@
   justify-content: center;
   width: 50%;
   height: 100%;
+  flex: 1 1 0%;
+  box-sizing: border-box;
   font-size: var(--font-size-xl);
   line-height: 1;
 }

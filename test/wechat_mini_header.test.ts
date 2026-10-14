@@ -7,6 +7,38 @@ import { techBlueTheme } from '../src/utils/themePresets';
 import { buildStyleSpecimenHtml, specimenCoverage } from '../src/utils/styleSpecimen';
 
 describe('微信小程序式移动端页面头部', () => {
+  test('真实 span 胶囊不继承标题弹性布局，样张和生成范例保持固定尺寸', () => {
+    const style = document.createElement('style');
+    style.textContent = compileTokensToCss(techBlueTheme.tokens, 'light', 'mobile') + getBaseCss('mobile');
+    document.head.appendChild(style);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    try {
+      for (const html of [getFewShotExample('mobile'), buildStyleSpecimenHtml('mobile')]) {
+        host.innerHTML = html;
+        const capsule = host.querySelector<HTMLElement>('.appbar > .appbar-capsule')!;
+        expect(capsule).not.toBeNull();
+        expect(capsule.matches('.appbar > span:not(.tap-target):not(.appbar-capsule)')).toBe(false);
+        const computed = getComputedStyle(capsule);
+        expect(computed.flexGrow).toBe('0');
+        expect(computed.flexShrink).toBe('0');
+        expect(computed.width).toBe('86px');
+        expect(computed.height).toBe('32px');
+        const title = host.querySelector<HTMLElement>('.appbar-title')!;
+        expect(getComputedStyle(title).position).toBe('absolute');
+        expect(getComputedStyle(title).left).toBe('50%');
+        for (const control of capsule.children) {
+          expect(getComputedStyle(control).flexBasis).toBe('0%');
+          expect(getComputedStyle(control).boxSizing).toBe('border-box');
+          expect(getComputedStyle(control).justifyContent).toBe('center');
+        }
+      }
+    } finally {
+      host.remove();
+      style.remove();
+    }
+  });
+
   test('状态栏、导航栏独立占位，标题居中且胶囊为双分区', () => {
     const css = getBaseCss('mobile');
     const tokenCss = compileTokensToCss(techBlueTheme.tokens);
