@@ -8,7 +8,7 @@ function withAlpha(hex: string, alpha: number): string {
   return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
-export function compileTokensToCss(tokens: DesignSystemTokens, mode: 'light' | 'dark' = 'light'): string {
+export function compileTokensToCss(tokens: DesignSystemTokens, mode: 'light' | 'dark' = 'light', device: 'pc' | 'mobile' | 'all' = 'all'): string {
   const c = tokens.colors;
   const t = tokens.typography;
   const s = tokens.spacing;
@@ -70,6 +70,16 @@ export function compileTokensToCss(tokens: DesignSystemTokens, mode: 'light' | '
   --space-5: ${sp('5', 20)}px;
   --space-6: ${sp('6', 24)}px;
   --space-8: ${sp('8', 32)}px;
+
+  ${device === 'pc' ? '' : `/* Mobile header geometry */
+  --mini-status-height: 44px;
+  --mini-capsule-width: 86px;
+  --mini-capsule-height: 32px;
+  --mini-title-reserve: 210px;
+  --mini-home-ring: 12px;
+  --mini-home-dot: 4px;
+  --mini-border-width: 1px;
+  --mini-home-ring-width: 2px;`}
 
   /* Radius */
   --radius-none: ${r.none || '0px'};

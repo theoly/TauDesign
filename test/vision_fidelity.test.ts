@@ -135,4 +135,25 @@ describe('高保真视觉与布局复刻协议 2.0 (Vision Fidelity 2.0)', () =>
     expect(unknownClasses.length).toBe(0);
     expect(literalColors.length).toBe(0);
   });
+
+  it('CHK-VF-06: 多模态协议包含内容范围忠实度约束，禁止新增参考图未出现的功能区块/菜单项/标签', () => {
+    const enriched = enrichContext({
+      rawPrompt: '参考附件图片精准复刻页面',
+      intent: 'create_screen',
+      activeScreenId: null,
+      screens: {},
+      deviceProfile: 'mobile',
+      frameWidth: 390,
+      baseSystemPrompt: 'MOCK_SYSTEM_PROMPT',
+      attachment: {
+        name: 'reference.png',
+        dataUrl: 'data:image/png;base64,mockImageContent'
+      }
+    });
+
+    const content = enriched.messages.find((m) => m.role === 'user')?.content || '';
+
+    expect(content).toContain('CONTENT SCOPE FIDELITY');
+    expect(content).toContain('DO NOT invent, add, or supplement extra sections/items that do not appear in the reference image');
+  });
 });

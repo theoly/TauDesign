@@ -8,6 +8,18 @@ export interface UsageRecord {
   inputTokens: number;
   outputTokens: number;
   estimatedCostUsd: number;
+  source?: 'provider' | 'estimated';
+}
+
+export interface LiveUsage {
+  requestId: string;
+  providerName: string;
+  modelId: string;
+  inputTokens: number;
+  outputTokens: number;
+  source: 'provider' | 'estimated' | 'unknown';
+  status: 'running' | 'completed' | 'aborted' | 'error';
+  startedAt: number;
 }
 
 export interface UsageState {
@@ -24,7 +36,13 @@ export interface UsageState {
   sessionOutputTokens: number;
   sessionEstimatedCostUsd: number;
 
+  activeRequests: Record<string, LiveUsage>;
+  lastRequest: LiveUsage | null;
+
   recordUsage: (record: Omit<UsageRecord, 'id' | 'timestamp'>) => void;
+  beginRequest: (request: Pick<LiveUsage, 'requestId' | 'providerName' | 'modelId' | 'inputTokens'>) => void;
+  updateRequest: (requestId: string, update: Partial<Pick<LiveUsage, 'inputTokens' | 'outputTokens' | 'source'>>) => void;
+  finishRequest: (requestId: string, status: LiveUsage['status'], estimatedCostUsd: number) => void;
   resetSessionUsage: () => void;
   clearUsage: () => void;
 }
@@ -63,6 +81,54 @@ export const useUsageStore = create<UsageState>((set, get) => ({
   sessionInputTokens: 0,
   sessionOutputTokens: 0,
   sessionEstimatedCostUsd: 0,
+  activeRequests: {},
+  lastRequest: null,
+
+  beginRequest: (request) => set((state) => ({
+    activeRequests: {
+      ...state.activeRequests,
+      [request.requestId]: {
+        ...request,
+        outputTokens: 0,
+        source: 'estimated',
+        status: 'running',
+        startedAt: Date.now()
+      }
+    }
+  })),
+
+  updateRequest: (requestId, update) => set((state) => {
+    const current = state.activeRequests[requestId];
+    if (!current) return state;
+    return {
+      activeRequests: {
+        ...state.activeRequests,
+        [requestId]: { ...current, ...update }
+      }
+    };
+  }),
+
+  finishRequest: (requestId, status, estimatedCostUsd) => {
+    const current = get().activeRequests[requestId];
+    if (!current) return;
+    const { [requestId]: _finished, ...remaining } = get().activeRequests;
+    const finalRequest: LiveUsage = {
+      ...current,
+      status,
+      source: current.source === 'provider' ? 'provider' : current.outputTokens > 0 ? 'estimated' : 'unknown'
+    };
+    set({ activeRequests: remaining, lastRequest: finalRequest });
+    if (finalRequest.source !== 'unknown') {
+      get().recordUsage({
+        providerName: current.providerName,
+        modelId: current.modelId,
+        inputTokens: current.inputTokens,
+        outputTokens: current.outputTokens,
+        estimatedCostUsd,
+        source: finalRequest.source
+      });
+    }
+  },
 
   recordUsage: (data) => {
     set((state) => {
@@ -123,7 +189,9 @@ export const useUsageStore = create<UsageState>((set, get) => ({
       sessionCalls: 0,
       sessionInputTokens: 0,
       sessionOutputTokens: 0,
-      sessionEstimatedCostUsd: 0
+      sessionEstimatedCostUsd: 0,
+      activeRequests: {},
+      lastRequest: null
     });
   }
 }));

@@ -43,9 +43,9 @@ const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
 - Page section spacing: .mt-4 / .mt-6 (NOT .mt-8); page padding .p-4 / .px-4 (NOT .p-8).
 - Card padding: .p-3 / .p-4. Body text: .text-md (16px) — 14px is too small on a phone.
 - TOUCH TARGETS: inputs use .input .input-touch (48px). Any icon-only button must carry .tap-target (44x44 minimum).
-- SAFE AREAS: use .safe-top (44px status bar) and .safe-bottom (34px home indicator) — never let content sit flush against the screen edges.
+- SAFE AREAS: every screen has a separate .status-bar (44px) and .appbar (48px) at the top; use .safe-bottom (34px) for the home indicator. Do NOT combine .safe-top with this two-row header or reserve the status height twice.
 - STRUCTURE & APPBAR (STRICT LAYOUT CONTRACT):
-  * Top navigation: When an app bar is needed, use .appbar (or .appbar .safe-top). Buttons and title inside .appbar MUST be strictly vertically centered (use .tap-target for back/close/actions, and a centered title like <span class="text-md font-semibold">标题</span>). For landing/login pages with an ambient hero banner, content can begin directly on the page background without an app bar.
+  * EVERY mobile screen, including landing/login and hero pages, MUST begin with a separate .status-bar row followed by a .appbar row. The status row contains time on the left and signal/Wi-Fi/battery icons on the right. The appbar contains a left .tap-target back/close control (or an empty 44px placeholder on a root page), a centered .appbar-title, and a fixed .appbar-capsule at the right with .appbar-capsule-more and .appbar-capsule-home. Treat the capsule as a visual mock of the WeChat native control; do not invent working Mini Program APIs.
   * BODY CONTAINMENT & NO OVERLAP: The page body must sit in its own container directly below .appbar. Body content MUST NEVER overlap with or slide under the .appbar. Never use negative margins (e.g. -mt-*) on elements below .appbar.
   * FULL-BLEED HERO BANNERS & GRADIENTS: When a screen features an immersive brand/gradient header (e.g. certification/profile/store banner), let the hero block span the full width without horizontal margins and without bottom rounded corners (0 bottom radius). List cards beneath it sit on the canvas with standard spacing or gentle overlap.
   * Bottom navigation uses .tabbar with .tabbar-item (mark active as .is-active).
@@ -87,10 +87,11 @@ const PC_EXAMPLE = `<main class="p-8">
 </main>`;
 
 const MOBILE_EXAMPLE = `<main class="col bg-surface-alt" style="min-height:100%;">
-  <div class="appbar safe-top">
+  <div class="status-bar"><span>9:41</span><span class="status-bar-icons"><svg viewBox="0 0 24 24" fill="currentColor" aria-label="信号"><path d="M3 19h3v-4H3zm5 0h3v-7H8zm5 0h3V9h-3zm5 0h3V5h-3z"/></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="Wi-Fi"><path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="电量"><rect x="2" y="6" width="18" height="12" rx="2"/><path d="M22 10v4"/><rect x="5" y="9" width="12" height="6" fill="currentColor" stroke="none"/></svg></span></div>
+  <div class="appbar">
     <span class="tap-target"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></span>
-    <span class="text-md font-semibold">账户登录</span>
-    <span class="tap-target"></span>
+    <span class="appbar-title">账户登录</span>
+    <span class="appbar-capsule" aria-label="小程序胶囊"><span class="appbar-capsule-more">···</span><span class="appbar-capsule-home"></span></span>
   </div>
   <div class="col gap-6 p-4 flex-1">
     <div class="col gap-2 mt-6">

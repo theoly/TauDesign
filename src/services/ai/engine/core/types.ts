@@ -32,6 +32,8 @@ export interface StreamTextResult {
   reasoningPromise: Promise<string | undefined>;
   /** 真实 Token 消耗统计 (C-2 协议回传) */
   usagePromise: Promise<TokenUsage | undefined>;
+  /** 连接异常后从完整 artifact 恢复时的原始错误；正常完成时为空 */
+  recoveryPromise?: Promise<string | undefined>;
   abort: () => void;
 }
 

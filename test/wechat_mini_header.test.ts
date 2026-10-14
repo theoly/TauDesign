@@ -1,0 +1,53 @@
+import { describe, expect, test } from 'bun:test';
+import { getBaseCss } from '../src/styles/baseCss';
+import { getDeviceAestheticRules, getFewShotExample } from '../src/services/ai/aestheticRules';
+import { extractClassWhitelist } from '../src/utils/cssCompiler';
+import { compileTokensToCss } from '../src/utils/cssCompiler';
+import { techBlueTheme } from '../src/utils/themePresets';
+import { buildStyleSpecimenHtml, specimenCoverage } from '../src/utils/styleSpecimen';
+
+describe('微信小程序式移动端页面头部', () => {
+  test('状态栏、导航栏独立占位，标题居中且胶囊为双分区', () => {
+    const css = getBaseCss('mobile');
+    const tokenCss = compileTokensToCss(techBlueTheme.tokens);
+    expect(tokenCss).toContain('--mini-status-height: 44px');
+    expect(css).toMatch(/\.status-bar\s*\{[^}]*height:\s*var\(--mini-status-height\)/);
+    expect(css).toMatch(/\.appbar\s*\{[^}]*height:\s*48px/);
+    expect(css).toMatch(/\.appbar > \.appbar-title\s*\{[^}]*left:\s*50%/);
+    expect(tokenCss).toContain('--mini-capsule-width: 86px');
+    expect(css).toMatch(/\.appbar > \.appbar-capsule\s*\{[^}]*width:\s*var\(--mini-capsule-width\)/);
+    expect(css).toContain('.appbar-capsule-more { border-right:');
+
+    const example = getFewShotExample('mobile');
+    const statusIndex = example.indexOf('class="status-bar"');
+    const navIndex = example.indexOf('class="appbar"');
+    const bodyIndex = example.indexOf('class="col gap-6 p-4 flex-1"');
+    expect(statusIndex).toBeGreaterThan(0);
+    expect(navIndex).toBeGreaterThan(statusIndex);
+    expect(bodyIndex).toBeGreaterThan(navIndex);
+    expect(example).toContain('class="appbar-title"');
+    expect(example).toContain('class="appbar-capsule-more"');
+    expect(example).toContain('class="appbar-capsule-home"');
+    expect(example).not.toContain('appbar safe-top');
+  });
+
+  test('移动端规则覆盖登录页与 Hero 页，避免重复安全区', () => {
+    const rules = getDeviceAestheticRules('mobile');
+    expect(rules).toContain('EVERY mobile screen, including landing/login and hero pages');
+    expect(rules).toContain('Do NOT combine .safe-top');
+    expect(rules).toContain('.status-bar');
+    expect(rules).toContain('.appbar-capsule');
+  });
+
+  test('新增类名只进入移动端白名单且出现在样张', () => {
+    const mobile = extractClassWhitelist(getBaseCss('mobile'));
+    const pc = extractClassWhitelist(getBaseCss('pc'));
+    const specimen = buildStyleSpecimenHtml('mobile');
+    for (const name of ['status-bar', 'status-bar-icons', 'appbar-title', 'appbar-capsule', 'appbar-capsule-more', 'appbar-capsule-home']) {
+      expect(mobile).toContain(name);
+      expect(pc).not.toContain(name);
+      expect(specimen).toContain(`class="${name}"`);
+    }
+    expect(specimenCoverage('mobile').missing).toEqual([]);
+  });
+});

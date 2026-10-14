@@ -7,6 +7,7 @@ import { PipelineOutput } from '../pipeline/types';
 import { createAIEngineCore, supportsVision } from '../core';
 import { resolveGenerationTarget } from '../../generationTargetResolver';
 import { StructureDiff } from '../../../../utils/structureGuard';
+import { DeviationNote } from '../pipeline/interceptors/streamTransform';
 import { CanvasToolExecutor } from '../../../tools/canvasToolExecutor';
 import { resolveToolFromAIResponse } from '../../../tools/toolResolver';
 import { resolveApplyToolCall } from '../../../tools/applyTargetResolver';
@@ -45,7 +46,12 @@ export interface ChatMessageItem {
   pendingProposal?: any;
   candidateDecision?: string;
   decisionConfirmed?: boolean;
+  /** 设计取舍披露 (doc/feature/deviation-note/spec.md)：真实冲突时模型附带的可选选择卡片 */
+  deviationNote?: DeviationNote;
+  /** 用户对 deviationNote 的裁决：'keep' 保持当前方案 / 'switch' 已填入参考图方案指令待发送 */
+  deviationChoice?: 'keep' | 'switch';
   isError?: boolean;
+  streamRecovered?: boolean;
   /** 本轮被结构守卫拦截，尚未落地任何画框 (BR-GRM-04) */
   isGuardRejected?: boolean;
   auditReport?: ScreenAuditReport;
@@ -679,6 +685,8 @@ export function useAIEngineChat() {
                 toolAction,
                 htmlOutput: output.extractedHtml,
                 candidateDecision,
+                deviationNote: output.deviationNote,
+                streamRecovered: Boolean(output.recoveredStreamError),
                 usage: turnUsage,
                 text: switchedToVision
                   ? `> 💡 **提示**: 当前主力模型为纯文本模型，已自动转由 Vision 档位 **${activeRole.provider.name} (${activeRole.modelId})** 解析参考图。\n\n${m.text || defaultText}`
@@ -888,6 +896,16 @@ export function useAIEngineChat() {
     setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, candidateDecision: undefined } : m)));
   };
 
+  /**
+   * 用户对设计取舍卡片的裁决 (doc/feature/deviation-note/spec.md BR-DN-05)。
+   * 'keep' 仅标记已处理，不触发任何新生成；'switch' 的实际指令填入由 ChatDrawer
+   * 侧调用既有 handleInsertQuickPrompt(note.alternativeInstruction) 完成，
+   * 此处只负责记录裁决状态，不发明新的暂停/恢复生成机制。
+   */
+  const resolveDeviationChoice = (msgId: string, choice: 'keep' | 'switch') => {
+    setMessages((prev) => prev.map((m) => (m.id === msgId ? { ...m, deviationChoice: choice } : m)));
+  };
+
   const resolveProposal = (msgId: string, choice: 'applied' | 'once' | 'ignored') => {
     const targetMsg = messages.find((m) => m.id === msgId);
     const proposal = targetMsg?.pendingProposal;
@@ -1009,6 +1027,7 @@ export function useAIEngineChat() {
     confirmDecision,
     dismissDecision,
     resolveProposal,
+    resolveDeviationChoice,
     adoptCandidate: handleAdoptCandidate,
     discardCandidate: handleDiscardCandidate,
     keepBothCandidates: handleKeepBothCandidates,

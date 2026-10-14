@@ -13,7 +13,7 @@ export function prepareModelRequest(options: StreamTextOptions): PreparedRequest
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   let bodyJson: Record<string, unknown> = {};
 
-  const estimatedInputChars = messages.reduce((acc, m) => acc + (m.content?.length || 0), 0);
+  const estimatedInputChars = messages.reduce((acc, m) => acc + (m.content?.length || 0) + (m.imageUrl ? 1000 : 0), 0);
 
   if (provider.protocol === 'openai_compatible') {
     const cleanBase = (provider.baseUrl || '').trim().replace(/\/+$/, '');

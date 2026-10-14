@@ -1,5 +1,5 @@
 import { AIProviderConfig, ErrorKind, StreamEvent } from '../../types/provider';
-import { useUsageStore } from '../../stores/useUsageStore';
+import { createUsageTracker } from './usageTracker';
 import { isTauri, invoke, Channel } from '@tauri-apps/api/core';
 import { ModelDiscoveryService } from './modelDiscoveryService';
 import { DiscoveredModel } from './engine/core/multimodalGuard';
@@ -13,14 +13,12 @@ export interface ChatMessage {
 class StreamChunkProcessor {
   private buffer = '';
   private currentEvent = 'message';
-  private accumulatedOutputChars = 0;
-  private hasRecordedUsage = false;
+  private lastInputTokens: number | undefined;
+  private lastOutputTokens: number | undefined;
   private isInsideThinkTag = false;
 
   constructor(
     private provider: AIProviderConfig,
-    private modelId: string,
-    private inputCharsEstimated: number,
     private onEvent: (ev: StreamEvent) => void
   ) {}
 
@@ -36,8 +34,10 @@ class StreamChunkProcessor {
         try {
           const parsed = JSON.parse(trimmed);
           if (parsed.message?.content) {
-            this.accumulatedOutputChars += parsed.message.content.length;
             this.onEvent({ type: 'Delta', text: parsed.message.content });
+          }
+          if (parsed.done && typeof parsed.prompt_eval_count === 'number' && typeof parsed.eval_count === 'number') {
+            this.onEvent({ type: 'Usage', input_tokens: parsed.prompt_eval_count, output_tokens: parsed.eval_count });
           }
           if (parsed.done) {
             this.onEvent({ type: 'Done', finish_reason: 'stop' });
@@ -96,7 +96,6 @@ class StreamChunkProcessor {
               data.choices?.[0]?.delta?.reasoning;
 
             if (reasoningDelta) {
-              this.accumulatedOutputChars += reasoningDelta.length;
               if (!this.isInsideThinkTag) {
                 this.isInsideThinkTag = true;
                 this.onEvent({ type: 'Delta', text: '<think>\n' + reasoningDelta });
@@ -110,7 +109,6 @@ class StreamChunkProcessor {
               data.choices?.[0]?.text ??
               data.choices?.[0]?.message?.content;
             if (delta) {
-              this.accumulatedOutputChars += delta.length;
               if (this.isInsideThinkTag) {
                 this.isInsideThinkTag = false;
                 this.onEvent({ type: 'Delta', text: '\n</think>\n\n' + delta });
@@ -118,18 +116,8 @@ class StreamChunkProcessor {
                 this.onEvent({ type: 'Delta', text: delta });
               }
             }
-            if (data.usage) {
-              this.hasRecordedUsage = true;
-              const inTok = data.usage.prompt_tokens || 0;
-              const outTok = data.usage.completion_tokens || 0;
-              this.onEvent({ type: 'Usage', input_tokens: inTok, output_tokens: outTok });
-              useUsageStore.getState().recordUsage({
-                providerName: this.provider.name,
-                modelId: this.modelId,
-                inputTokens: inTok,
-                outputTokens: outTok,
-                estimatedCostUsd: Number(((inTok * 0.000001) + (outTok * 0.000003)).toFixed(6))
-              });
+            if (data.usage && typeof data.usage.prompt_tokens === 'number' && typeof data.usage.completion_tokens === 'number') {
+              this.onEvent({ type: 'Usage', input_tokens: data.usage.prompt_tokens, output_tokens: data.usage.completion_tokens });
             }
             if (data.choices?.[0]?.finish_reason) {
               if (this.isInsideThinkTag) {
@@ -142,7 +130,6 @@ class StreamChunkProcessor {
             if (data.type === 'content_block_delta' && data.delta?.type === 'thinking_delta') {
               const thinking = data.delta.thinking;
               if (thinking) {
-                this.accumulatedOutputChars += thinking.length;
                 if (!this.isInsideThinkTag) {
                   this.isInsideThinkTag = true;
                   this.onEvent({ type: 'Delta', text: '<think>\n' + thinking });
@@ -156,7 +143,6 @@ class StreamChunkProcessor {
               (data.type === 'content_block_delta' ? data.delta?.text : null) ??
               data.content?.[0]?.text;
             if (textDelta) {
-              this.accumulatedOutputChars += textDelta.length;
               if (this.isInsideThinkTag) {
                 this.isInsideThinkTag = false;
                 this.onEvent({ type: 'Delta', text: '\n</think>\n\n' + textDelta });
@@ -164,18 +150,13 @@ class StreamChunkProcessor {
                 this.onEvent({ type: 'Delta', text: textDelta });
               }
             }
-            if (data.usage) {
-              this.hasRecordedUsage = true;
-              const inTok = data.usage.input_tokens || 0;
-              const outTok = data.usage.output_tokens || 0;
-              this.onEvent({ type: 'Usage', input_tokens: inTok, output_tokens: outTok });
-              useUsageStore.getState().recordUsage({
-                providerName: this.provider.name,
-                modelId: this.modelId,
-                inputTokens: inTok,
-                outputTokens: outTok,
-                estimatedCostUsd: Number(((inTok * 0.000003) + (outTok * 0.000015)).toFixed(6))
-              });
+            const usage = data.usage ?? data.message?.usage;
+            if (usage) {
+              if (typeof usage.input_tokens === 'number') this.lastInputTokens = usage.input_tokens;
+              if (typeof usage.output_tokens === 'number') this.lastOutputTokens = usage.output_tokens;
+              if (this.lastInputTokens !== undefined && this.lastOutputTokens !== undefined) {
+                this.onEvent({ type: 'Usage', input_tokens: this.lastInputTokens, output_tokens: this.lastOutputTokens });
+              }
             }
             if (this.currentEvent === 'message_stop' || data.type === 'message_stop') {
               if (this.isInsideThinkTag) {
@@ -187,21 +168,14 @@ class StreamChunkProcessor {
           } else if (this.provider.protocol === 'gemini') {
             const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
             if (text) {
-              this.accumulatedOutputChars += text.length;
               this.onEvent({ type: 'Delta', text });
             }
             if (data.candidates?.[0]?.finishReason) {
               this.onEvent({ type: 'Done', finish_reason: data.candidates[0].finishReason });
-              const inTok = Math.max(1, Math.round(this.inputCharsEstimated / 3.5));
-              const outTok = Math.max(1, Math.round(this.accumulatedOutputChars / 3.5));
-              useUsageStore.getState().recordUsage({
-                providerName: this.provider.name,
-                modelId: this.modelId,
-                inputTokens: inTok,
-                outputTokens: outTok,
-                estimatedCostUsd: Number(((inTok * 0.0000005) + (outTok * 0.0000015)).toFixed(6))
-              });
-              this.hasRecordedUsage = true;
+            }
+            const metadata = data.usageMetadata;
+            if (typeof metadata?.promptTokenCount === 'number' && typeof metadata?.candidatesTokenCount === 'number') {
+              this.onEvent({ type: 'Usage', input_tokens: metadata.promptTokenCount, output_tokens: metadata.candidatesTokenCount });
             }
           }
         } catch (e) {
@@ -212,21 +186,10 @@ class StreamChunkProcessor {
   }
 
   public finish() {
+    if (this.buffer) this.processChunk('\n');
     if (this.isInsideThinkTag) {
       this.isInsideThinkTag = false;
       this.onEvent({ type: 'Delta', text: '\n</think>\n\n' });
-    }
-    if (!this.hasRecordedUsage && this.accumulatedOutputChars > 0) {
-      const inTok = Math.max(1, Math.round(this.inputCharsEstimated / 3.5));
-      const outTok = Math.max(1, Math.round(this.accumulatedOutputChars / 3.5));
-      useUsageStore.getState().recordUsage({
-        providerName: this.provider.name,
-        modelId: this.modelId,
-        inputTokens: inTok,
-        outputTokens: outTok,
-        estimatedCostUsd: Number(((inTok * 0.000001) + (outTok * 0.000003)).toFixed(6))
-      });
-      this.hasRecordedUsage = true;
     }
   }
 }
@@ -237,12 +200,12 @@ export class AIService {
     modelId: string,
     messages: ChatMessage[],
     onEvent: (ev: StreamEvent) => void,
-    timeoutMs = 300000
+    timeoutMs = 900000
   ): { abort: () => void; promise: Promise<void> } {
     const controller = new AbortController();
     let isAborted = false;
 
-    // 1. 全局最大总时限（兜底保护，默认 300s，对齐 Rust 端超时）
+    // 1. 全局最大总时限（兜底保护，默认 15 分钟；正常流仍受空闲心跳保护）
     const maxTimeoutMs = timeoutMs;
     // 2. 流式活跃心跳窗口（默认 90s：每次收到有效数据分片自动刷新；若连续 90s 无任何新分片则判定挂死）
     const inactivityTimeoutMs = Math.min(timeoutMs, 90000);
@@ -265,7 +228,7 @@ export class AIService {
       clearAllTimers();
       if (isAborted) return;
       controller.abort();
-      onEvent({
+      emitEvent({
         type: 'Error',
         kind: 'timeout',
         message: reason
@@ -286,7 +249,14 @@ export class AIService {
     // 初始化等待首包定时器
     refreshInactivityTimer();
     const inputCharsEstimated = messages.reduce((acc, m) => acc + m.content.length + (m.imageUrl ? 1000 : 0), 0);
-    const processor = new StreamChunkProcessor(provider, modelId, inputCharsEstimated, onEvent);
+    const usageTracker = createUsageTracker(provider, modelId, inputCharsEstimated);
+    let streamFailed = false;
+    const emitEvent = (event: StreamEvent) => {
+      if (event.type === 'Error') streamFailed = true;
+      usageTracker.onEvent(event);
+      onEvent(event);
+    };
+    const processor = new StreamChunkProcessor(provider, emitEvent);
 
     let url = '';
 
@@ -435,7 +405,8 @@ export class AIService {
                 processor.processChunk(payload.data);
               } else if (payload.type === 'Error') {
                 clearAllTimers();
-                onEvent({
+                processor.finish();
+                emitEvent({
                   type: 'Error',
                   kind: 'network_error',
                   message: payload.data || '网络请求异常'
@@ -443,7 +414,7 @@ export class AIService {
               } else if (payload.type === 'Done') {
                 clearAllTimers();
                 processor.finish();
-                onEvent({ type: 'Done', finish_reason: 'stop' });
+                emitEvent({ type: 'Done', finish_reason: 'stop' });
               }
             };
 
@@ -457,7 +428,10 @@ export class AIService {
             });
             return;
           } catch (tauriErr) {
-            console.warn('Tauri proxy_stream_request unavailable or failed, falling back to fetch:', tauriErr);
+            if (!streamFailed) {
+              emitEvent({ type: 'Error', kind: 'network_error', message: `原生代理中断: ${String(tauriErr)}` });
+            }
+            return;
           }
         }
 
@@ -504,7 +478,7 @@ export class AIService {
             // Keep original text
           }
 
-          onEvent({
+          emitEvent({
             type: 'Error',
             kind,
             message: `HTTP 错误 ${status}: ${parsedMessage}`,
@@ -515,7 +489,7 @@ export class AIService {
 
         if (!resp.body) {
           clearAllTimers();
-          onEvent({ type: 'Error', kind: 'invalid_response', message: '响应体为空' });
+          emitEvent({ type: 'Error', kind: 'invalid_response', message: '响应体为空' });
           return;
         }
 
@@ -544,11 +518,14 @@ export class AIService {
           msg = `跨域网络限制 (CORS): ${e.message}。由于该服务提供商 (${url}) 未在服务端开放浏览器跨域头，请在客户端桌面端运行或通过代理访问。`;
         }
 
-        onEvent({
+        processor.finish();
+        emitEvent({
           type: 'Error',
           kind: 'network_error',
           message: msg
         });
+      } finally {
+        usageTracker.settle(isAborted ? 'aborted' : streamFailed ? 'error' : 'completed');
       }
     })();
 
@@ -557,6 +534,7 @@ export class AIService {
         isAborted = true;
         clearAllTimers();
         controller.abort();
+        usageTracker.settle('aborted');
       },
       promise
     };

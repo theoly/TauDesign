@@ -285,6 +285,22 @@ You MUST thoroughly visually analyze the attached screenshot and reproduce its e
    - STRICT ANTI-HALLUCINATION: ONLY render icons that visibly exist in the screenshot!
    - NEVER invent cartoon smileys (☺) or arbitrary emojis when official verification badges, shields, checkmarks, or locks are shown! Use clean semantic SVG icons (<svg class="icon" ...>).
    - Accurately preserve text hierarchy without unwanted line breaks on badges or titles.
+   - CONTENT SCOPE FIDELITY (内容范围忠实度): ONLY reproduce functional sections, menu items, tags, badges, or feature blocks that are visibly present in the screenshot. DO NOT invent, add, or supplement extra sections/items that do not appear in the reference image, even if they seem like a common or natural addition for this type of page. If the user's own request explicitly asks for additional content beyond the screenshot, that explicit instruction takes precedence — but never add unrequested "nice-to-have" content on your own initiative.
+
+7. DEVIATION DISCLOSURE (设计取舍披露 — 严格受限的例外):
+   - You MUST still output exactly one complete <artifact>...</artifact> block as normal. This section ONLY concerns what may optionally follow AFTER the closing </artifact> tag.
+   - By default, output NOTHING after </artifact>. This exception applies ONLY when the reference image genuinely conflicts with the project's existing state on one of these three axes:
+     (a) navigation structure / information architecture, (b) an already-active project decision, (c) a component the project mandates reusing.
+   - Purely aesthetic differences (corner radius, exact hue, spacing) are NEVER grounds for this exception — silently follow the project's own aesthetic system for those.
+   - When (and only when) a genuine conflict on one of the three axes above exists, you MAY append EXACTLY ONE block of this exact shape immediately after </artifact>, with no other text before, between, or after it:
+     <deviation-note>{"conflict": "...", "chosen": "...", "alternative": "...", "alternativeInstruction": "..."}</deviation-note>
+   - All four fields are required, non-empty strings:
+     - "conflict": what the reference image shows vs. what the project's existing state requires.
+     - "chosen": which option you actually used in the <artifact> you just produced, and why.
+     - "alternative": the other option, described precisely.
+     - "alternativeInstruction": a precise, self-contained instruction that could be sent verbatim as the NEXT user turn to switch this screen to the alternative — not a vague description.
+   - At most ONE <deviation-note> per response. If multiple such conflicts exist, report only the single most significant one.
+   - When you are unsure whether a conflict qualifies, do NOT emit the note — silence is always the safe default.
 
 User Request: ${userPrompt}`;
   }

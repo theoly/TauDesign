@@ -1,5 +1,6 @@
 import { EngineMessage, TokenUsage } from '../core/types';
 import { StructureDiff } from '../../../../utils/structureGuard';
+import { DeviationNote } from './interceptors/streamTransform';
 
 export interface PipelineInput {
   rawPrompt: string;
@@ -64,6 +65,8 @@ export interface PipelineOutput {
   reasoningText?: string;
   extractedHtml?: string;
   structureDiff?: StructureDiff;
+  /** 设计取舍披露 (doc/feature/deviation-note/spec.md BR-DN-05)：仅成功路径挂载 */
+  deviationNote?: DeviationNote;
   stagedScreen?: {
     id: string;
     targetOriginalId: string;
@@ -73,6 +76,7 @@ export interface PipelineOutput {
   themeProposal?: any;
   changeSet?: Record<string, unknown>;
   errorMessage?: string;
+  recoveredStreamError?: string;
   usage?: TokenUsage;
   artifactMetadata?: {
     identifier?: string;

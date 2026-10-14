@@ -19,7 +19,7 @@ describe('AIService: Stream Timeout & Inactivity Sliding Heartbeat', () => {
     globalThis.fetch = originalFetch;
   });
 
-  test('CHK-TO-01: default timeout is 300000ms (5 minutes), aligning with desktop Rust proxy', () => {
+  test('CHK-TO-01: stream accepts a per-request timeout override', () => {
     expect(AIService.stream.length).toBeGreaterThanOrEqual(4);
   });
 

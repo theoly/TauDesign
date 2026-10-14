@@ -6,6 +6,29 @@
 .safe-top { padding-top: 44px; }
 .safe-bottom { padding-bottom: 34px; }
 
+/* 微信小程序式头部：状态栏与页面导航分层，避免 .appbar.safe-top 的复合高度重复计算。 */
+.status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--mini-status-height);
+  min-height: var(--mini-status-height);
+  padding: 0 var(--space-4, 16px);
+  box-sizing: border-box;
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  flex-shrink: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  line-height: 1;
+}
+.status-bar-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.status-bar-icons svg { display: block; width: var(--space-4); height: var(--space-4); }
+
 /* 顶部标题栏 */
 .appbar {
   display: flex;
@@ -94,6 +117,65 @@
   height: 20px;
   display: block;
   margin: auto;
+}
+
+/* 页面标题固定在屏幕中轴，左右控件宽度变化时仍保持居中。 */
+.appbar > .appbar-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: calc(100% - var(--mini-title-reserve));
+  flex: none;
+  pointer-events: none;
+}
+
+/* 小程序右上角原生胶囊的原型视觉示意。 */
+.appbar > .appbar-capsule {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--mini-capsule-width);
+  height: var(--mini-capsule-height);
+  min-width: var(--mini-capsule-width);
+  padding: 0;
+  margin-left: auto;
+  border: var(--mini-border-width) solid var(--color-border);
+  border-radius: var(--radius-full);
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  box-sizing: border-box;
+  flex: none;
+  overflow: hidden;
+}
+.appbar-capsule-more,
+.appbar-capsule-home {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 50%;
+  height: 100%;
+  font-size: var(--font-size-xl);
+  line-height: 1;
+}
+.appbar-capsule-more { border-right: var(--mini-border-width) solid var(--color-border); }
+.appbar-capsule-home::before {
+  content: '';
+  display: block;
+  width: var(--mini-home-ring);
+  height: var(--mini-home-ring);
+  border: var(--mini-home-ring-width) solid currentColor;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+.appbar-capsule-home::after {
+  content: '';
+  position: absolute;
+  width: var(--mini-home-dot);
+  height: var(--mini-home-dot);
+  border-radius: 50%;
+  background: currentColor;
 }
 
 /* 标题栏后紧邻的主体容器：清除可能导致上浮重叠的负外边距 */

@@ -141,7 +141,8 @@ You generate production-ready HTML and styles for web and mobile applications us
      options.hasAttachment
        ? `\n5. REFERENCE IMAGE FIDELITY:
    - Faithfully reproduce visual warmth and palette (.bg-ambient-warm, .bg-ambient-cool, .bg-gradient-soft).
-   - For full-bleed headers, avoid artificial floating cards with bottom rounded corners.`
+   - For full-bleed headers, avoid artificial floating cards with bottom rounded corners.
+   - NARROW EXCEPTION (deviation-note): the "no text outside <artifact>" rule above has exactly one scoped exception, fully specified in the DEVIATION DISCLOSURE section of the user message below. Follow that section's conditions precisely; do not invent a different format.`
        : ''
    }`;
     sections.push({ id: 'role_core', content: roleContent });
@@ -155,7 +156,7 @@ You generate production-ready HTML and styles for web and mobile applications us
     sections.push({ id: 'design_spec', content: specContent });
 
     // 3. design_tokens
-    const tokensCss = compileTokensToCss(options.designSystem.tokens, options.colorMode ?? 'light');
+    const tokensCss = compileTokensToCss(options.designSystem.tokens, options.colorMode ?? 'light', options.deviceProfile);
     const tokensContent = `### DESIGN TOKENS:\n\`\`\`css\n${tokensCss}\n\`\`\``;
     sections.push({ id: 'design_tokens', content: tokensContent });
 

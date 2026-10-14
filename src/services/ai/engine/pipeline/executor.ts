@@ -1,7 +1,7 @@
 import { AIEngineCore } from '../core/types';
 import { enrichContext } from '../context/contextEnricher';
 import { analyzePipelineIntent } from './interceptors/intentInterceptor';
-import { extractArtifact, extractHtmlFromResponse, recordUsageToStore } from './interceptors/streamTransform';
+import { extractArtifact, extractDeviationNote, extractHtmlFromResponse } from './interceptors/streamTransform';
 import { checkStructureIntegrity } from './interceptors/guardInterceptor';
 import { applyGeneratedHtml } from './interceptors/applier';
 import { PipelineInput, PipelineOutput, PipelineContext } from './types';
@@ -155,7 +155,7 @@ export class PipelineExecutor {
 
     const reasoningText = await streamRes.reasoningPromise;
     const usage = await streamRes.usagePromise;
-    recordUsageToStore(usage, provider.name, model);
+    const recoveredStreamError = await streamRes.recoveryPromise;
 
     // If question intent, return directly
     if (intentResult.intent === 'question') {
@@ -163,6 +163,7 @@ export class PipelineExecutor {
         status: 'answered_question',
         rawResponse,
         reasoningText,
+        recoveredStreamError,
         usage
       };
     }
@@ -174,11 +175,13 @@ export class PipelineExecutor {
         status: 'no_html',
         rawResponse,
         reasoningText,
+        recoveredStreamError,
         usage,
         errorMessage: '模型未输出有效的 HTML 代码块'
       };
     }
     const extractedHtml = artifact.html;
+    const deviationNote = extractDeviationNote(rawResponse);
 
     const artifactMeta = {
       identifier: artifact.identifier,
@@ -197,6 +200,7 @@ export class PipelineExecutor {
         extractedHtml,
         structureDiff: guardCheck.structureDiff,
         errorMessage: guardCheck.reason,
+        recoveredStreamError,
         usage,
         artifactMetadata: artifactMeta,
         warnings: artifact.warnings
@@ -215,8 +219,11 @@ export class PipelineExecutor {
       reasoningText,
       extractedHtml,
       structureDiff: guardCheck.structureDiff,
+      // 仅成功路径 (applied / staged_side_by_side) 挂载取舍披露 (BR-DN-05 / CHK-DN-05)
+      deviationNote,
       stagedScreen: applyRes.stagedScreen,
       changeSet: applyRes.changeSet,
+      recoveredStreamError,
       usage,
       artifactMetadata: artifactMeta,
       warnings: artifact.warnings

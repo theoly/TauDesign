@@ -314,7 +314,8 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
       : `
       <div class="col gap-4">
         <div class="border r-lg overflow-hidden col">
-          <div class="appbar"><span class="tap-target">${ICONS.user}</span><span class="text-md font-semibold">appbar</span><span class="tap-target">${ICONS.settings}</span></div>
+          <div class="status-bar"><span>9:41</span><span class="status-bar-icons"><svg viewBox="0 0 24 24" fill="currentColor" aria-label="信号"><path d="M3 19h3v-4H3zm5 0h3v-7H8zm5 0h3V9h-3zm5 0h3V5h-3z"/></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="Wi-Fi"><path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0M9 16a5 5 0 0 1 6 0"/></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="电量"><rect x="2" y="6" width="18" height="12" rx="2"/><path d="M22 10v4"/><rect x="5" y="9" width="12" height="6" fill="currentColor" stroke="none"/></svg></span></div>
+          <div class="appbar"><span class="tap-target">${ICONS.user}</span><span class="appbar-title">页面标题</span><span class="appbar-capsule" aria-label="小程序胶囊"><span class="appbar-capsule-more">···</span><span class="appbar-capsule-home"></span></span></div>
           <div class="list-item"><span class="text-sm flex-1">list-item · 最小高度 56px</span><span class="text-xs text-muted">详情</span></div>
           <div class="list-item"><span class="text-sm flex-1">list-item · 第二行</span><span class="text-xs text-muted">详情</span></div>
         </div>

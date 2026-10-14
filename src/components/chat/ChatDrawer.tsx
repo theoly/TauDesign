@@ -41,7 +41,8 @@ import {
   Settings,
   Activity,
   Crosshair,
-  ZoomIn
+  ZoomIn,
+  GitBranch
 } from 'lucide-react';
 import { LocateTarget } from '../../utils/tokenLint';
 
@@ -124,8 +125,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
     totalCalls,
     totalInputTokens,
     totalOutputTokens,
+    activeRequests,
+    lastRequest,
     resetSessionUsage
   } = useUsageStore();
+  const currentUsage = Object.values(activeRequests).slice(-1)[0] || lastRequest;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -467,6 +471,17 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       </div>
 
       {/* Token Usage Details Dropdown */}
+      {currentUsage && (
+        <div className="px-3 py-1 bg-slate-950/70 border-b border-slate-800/80 flex items-center gap-1.5 text-[10px] text-slate-400" aria-live="polite">
+          <Zap className="w-3 h-3 text-amber-400 shrink-0" />
+          <span>{currentUsage.status === 'running' ? '本次请求' : '最近请求'}:</span>
+          <strong className="font-mono text-slate-200">{formatTokenCount(currentUsage.inputTokens + currentUsage.outputTokens)}</strong>
+          <span className="text-slate-500">入 {formatTokenCount(currentUsage.inputTokens)} / 出 {formatTokenCount(currentUsage.outputTokens)}</span>
+          <span className="ml-auto shrink-0 text-amber-300/80">
+            {currentUsage.source === 'provider' ? '实际' : currentUsage.source === 'unknown' ? '未知' : '估算'}
+          </span>
+        </div>
+      )}
       {showUsageDetails && (
         <div className="p-3 bg-slate-950 border-b border-slate-800 space-y-2 text-[11px] select-text">
           <div className="flex items-center justify-between font-medium text-slate-300">
@@ -807,6 +822,42 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                         className="text-slate-400 hover:text-slate-200 text-[10px]"
                       >
                         忽略
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 设计取舍披露卡片 (doc/feature/deviation-note/spec.md) */}
+              {m.deviationNote && (
+                <div className="p-3 bg-violet-950/40 border border-violet-800/50 rounded-xl space-y-2 text-violet-200">
+                  <div className="flex items-center gap-1.5 font-semibold text-[11px]">
+                    <GitBranch className="w-3.5 h-3.5 text-violet-400" />
+                    <span>检测到设计取舍</span>
+                  </div>
+                  <p className="text-[11px] text-violet-300/90 leading-relaxed">{m.deviationNote.conflict}</p>
+                  <p className="text-[11px] text-violet-300/70 leading-relaxed">当前方案：{m.deviationNote.chosen}</p>
+                  {m.deviationChoice ? (
+                    <div className="flex items-center gap-1 text-[10px] text-emerald-400 pt-1">
+                      <Check className="w-3 h-3" />
+                      <span>{m.deviationChoice === 'switch' ? '已把参考图方案指令填入输入框，可编辑后发送' : '已保持当前方案'}</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        onClick={() => engine.resolveDeviationChoice(m.id, 'keep')}
+                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] transition"
+                      >
+                        保持当前方案
+                      </button>
+                      <button
+                        onClick={() => {
+                          engine.resolveDeviationChoice(m.id, 'switch');
+                          handleInsertQuickPrompt(m.deviationNote!.alternativeInstruction);
+                        }}
+                        className="px-2.5 py-1 bg-violet-600 hover:bg-violet-500 text-white font-medium rounded-lg text-[10px] transition"
+                      >
+                        换成参考图方案（{m.deviationNote.alternative}）
                       </button>
                     </div>
                   )}
@@ -1248,7 +1299,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       </div>
                       {m.text.includes('读取流数据异常') && (
                         <div className="text-[10px] text-red-400/80 bg-red-950/60 p-1.5 rounded border border-red-900/60">
-                          💡 提示：模型响应时间较长或网络连接中断。已为您调整长连接保护，可直接重试。
+                          💡 提示：响应流在传输中断开；若完整页面尚未到达，可直接重试。
                         </div>
                       )}
                       {!isCurrentGenerating && (
@@ -1344,6 +1395,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               </div>
 
               {/* Single Message Token Usage */}
+              {m.streamRecovered && (
+                <div className="pl-1 pt-1 text-[10px] text-amber-300" role="status">
+                  连接中断；已使用完整接收的页面结果，请检查生成内容。
+                </div>
+              )}
               {m.usage && m.sender === 'assistant' && (
                 <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono pl-1 pt-0.5">
                   <Zap className="w-2.5 h-2.5 text-amber-400/80" />

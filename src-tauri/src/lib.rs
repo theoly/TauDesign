@@ -37,7 +37,7 @@ async fn proxy_stream_request(
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(std::time::Duration::from_secs(30))
-        .timeout(std::time::Duration::from_secs(300)) // 5 分钟超时，满足大模型复杂页面思考与长文本流式生成
+        .read_timeout(std::time::Duration::from_secs(90)) // 每次读取空闲超时；正常持续输出的流不受固定总时长截断
         .tcp_keepalive(Some(std::time::Duration::from_secs(15))) // 保持底层 TCP 连接活跃，防止网关意外切断长连接
         .build()
         .map_err(|e| e.to_string())?;

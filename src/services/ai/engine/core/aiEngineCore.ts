@@ -2,6 +2,14 @@ import { AITransport, StreamEvent } from '../transport/types';
 import { AIEngineCore, StreamTextOptions, StreamTextResult, TokenUsage } from './types';
 import { prepareModelRequest } from './protocolAdapter';
 
+function hasCompleteArtifact(raw: string): boolean {
+  const lower = raw.toLowerCase();
+  const start = lower.indexOf('<artifact');
+  if (start < 0) return false;
+  const openingEnd = lower.indexOf('>', start);
+  return openingEnd >= 0 && lower.indexOf('</artifact>', openingEnd + 1) >= 0;
+}
+
 export class DefaultAIEngineCore implements AIEngineCore {
   constructor(private transport: AITransport) {}
 
@@ -27,6 +35,7 @@ export class DefaultAIEngineCore implements AIEngineCore {
     let reasoningResolvers: Array<() => void> = [];
     let isStreamDone = false;
     let streamError: Error | null = null;
+    let recoverableStreamError = false;
 
     const notifyText = (chunk: string) => {
       textQueue.push(chunk);
@@ -63,6 +72,11 @@ export class DefaultAIEngineCore implements AIEngineCore {
     let resolveUsage: (val: TokenUsage | undefined) => void;
     const usagePromise = new Promise<TokenUsage | undefined>((res) => {
       resolveUsage = res;
+    });
+
+    let resolveRecovery: (val: string | undefined) => void;
+    const recoveryPromise = new Promise<string | undefined>((res) => {
+      resolveRecovery = res;
     });
 
     const handleEvent = (ev: StreamEvent) => {
@@ -108,6 +122,7 @@ export class DefaultAIEngineCore implements AIEngineCore {
         finishQueues();
       } else if (ev.type === 'Error') {
         streamError = new Error(`[${ev.kind}] ${ev.message}`);
+        recoverableStreamError = ev.kind === 'network_error' || ev.kind === 'timeout';
         finishQueues();
       }
     };
@@ -122,36 +137,52 @@ export class DefaultAIEngineCore implements AIEngineCore {
       }
     }
 
+    const completeWithText = (recoveryMessage?: string) => {
+      // Final extraction of text & reasoning
+      const thinkMatch = rawAccumulated.match(/<think>([\s\S]*?)(?:<\/think>|$)/i);
+      const reasoning = thinkMatch ? thinkMatch[1].trim() : undefined;
+      const cleanText = rawAccumulated.replace(/<think>[\s\S]*?(?:<\/think>|$)/i, '').trim();
+
+      if (!finalUsage && rawAccumulated.length > 0) {
+        finalUsage = {
+          inputTokens: Math.max(1, Math.round(estimatedInputChars / 3.5)),
+          outputTokens: Math.max(1, Math.round(rawAccumulated.replace(/<\/?think>/g, '').length / 3.5))
+        };
+      }
+
+      resolveText(cleanText);
+      resolveReasoning(reasoning);
+      resolveUsage(finalUsage);
+      resolveRecovery(recoveryMessage);
+    };
+
     transportPromise
       .then(() => {
+        finishQueues();
         if (streamError) {
-          rejectText(streamError);
-          resolveReasoning(undefined);
-          resolveUsage(finalUsage);
+          if (recoverableStreamError && hasCompleteArtifact(rawAccumulated)) {
+            completeWithText(streamError.message);
+          } else {
+            rejectText(streamError);
+            resolveReasoning(undefined);
+            resolveUsage(finalUsage);
+            resolveRecovery(undefined);
+          }
           return;
         }
 
-        // Final extraction of text & reasoning
-        const thinkMatch = rawAccumulated.match(/<think>([\s\S]*?)(?:<\/think>|$)/i);
-        const reasoning = thinkMatch ? thinkMatch[1].trim() : undefined;
-        const cleanText = rawAccumulated.replace(/<think>[\s\S]*?(?:<\/think>|$)/i, '').trim();
-
-        if (!finalUsage && rawAccumulated.length > 0) {
-          finalUsage = {
-            inputTokens: Math.max(1, Math.round(estimatedInputChars / 3.5)),
-            outputTokens: Math.max(1, Math.round(rawAccumulated.length / 3.5))
-          };
-        }
-
-        resolveText(cleanText);
-        resolveReasoning(reasoning);
-        resolveUsage(finalUsage);
+        completeWithText();
       })
       .catch((err) => {
         finishQueues();
-        rejectText(err);
-        resolveReasoning(undefined);
-        resolveUsage(undefined);
+        if (hasCompleteArtifact(rawAccumulated)) {
+          completeWithText(err instanceof Error ? err.message : String(err));
+        } else {
+          rejectText(err);
+          resolveReasoning(undefined);
+          resolveUsage(finalUsage);
+          resolveRecovery(undefined);
+        }
       });
 
     const createAsyncIterable = (queue: string[], resolvers: Array<() => void>): AsyncIterable<string> => ({
@@ -176,6 +207,7 @@ export class DefaultAIEngineCore implements AIEngineCore {
       textPromise,
       reasoningPromise,
       usagePromise,
+      recoveryPromise,
       abort
     };
   }
