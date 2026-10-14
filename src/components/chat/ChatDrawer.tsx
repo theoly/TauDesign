@@ -45,6 +45,14 @@ import {
   GitBranch
 } from 'lucide-react';
 import { LocateTarget } from '../../utils/tokenLint';
+import {
+  readUploadedTextFile,
+  readTextPath,
+  resolveTextReferences,
+  validateTextReferences,
+  MAX_TEXT_FILES_PER_TURN,
+  type TextReference
+} from '../../services/ai/textFileContext';
 
 interface ChatDrawerProps {
   onOpenSettings?: (tab?: 'provider' | 'quick_prompts') => void;
@@ -86,6 +94,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   const [input, setInput] = useState('');
   const [showMentionMenu, setShowMentionMenu] = useState(false);
   const [attachedImage, setAttachedImage] = useState<{ name: string; dataUrl: string } | null>(null);
+  const [attachedTextFiles, setAttachedTextFiles] = useState<TextReference[]>([]);
+  const [textFileError, setTextFileError] = useState<string | null>(null);
+  const [isReadingFiles, setIsReadingFiles] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { globalPrompts } = useQuickPromptsStore();
   const projectPrompts = useProjectStore((state) => state.quickPrompts) || [];
@@ -260,30 +271,61 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
     clearPendingNodeRef();
   };
 
-  // 剪切板粘贴图片处理 (BR-IMG-01)
-  const handlePaste = (e: React.ClipboardEvent) => {
-    const items = e.clipboardData?.items;
-    if (!items || items.length === 0) return;
-
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile();
-        if (file) {
-          e.preventDefault();
-          const reader = new FileReader();
-          reader.onload = (ev) => {
-            if (ev.target?.result) {
-              const ext = item.type.split('/')[1] || 'png';
-              const timeStr = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
-              const fileName = file.name && file.name !== 'image.png' ? file.name : `剪切板截图_${timeStr}.${ext}`;
-              setAttachedImage({ name: fileName, dataUrl: ev.target.result as string });
-            }
-          };
-          reader.readAsDataURL(file);
-          break;
+  const addTextFiles = async (files: File[], source: 'upload' | 'paste') => {
+    setIsReadingFiles(true);
+    setTextFileError(null);
+    try {
+      if (attachedTextFiles.length + files.length > MAX_TEXT_FILES_PER_TURN) {
+        throw new Error(`每轮最多读取 ${MAX_TEXT_FILES_PER_TURN} 个文本文件`);
+      }
+      const incoming: TextReference[] = [];
+      for (const file of files) incoming.push(await readUploadedTextFile(file, source));
+      const combined = [...attachedTextFiles];
+      for (const item of incoming) {
+        if (!combined.some((existing) => existing.name === item.name && existing.content === item.content)) {
+          combined.push(item);
         }
       }
+      validateTextReferences(combined);
+      setAttachedTextFiles(combined);
+    } catch (error) {
+      setTextFileError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsReadingFiles(false);
+    }
+  };
+
+  // 剪切板图片与文本文件；普通文本由 textarea 的浏览器默认行为粘贴。
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = Array.from(e.clipboardData?.items || []);
+    const files = Array.from(e.clipboardData?.files || []);
+    if (items.length === 0 && files.length === 0) return;
+
+    const imageFromItem = items.find((item) => item.type.startsWith('image/') && item.getAsFile());
+    const imageFile = imageFromItem?.getAsFile() || files.find((file) => file.type.startsWith('image/'));
+    if (imageFile) {
+      e.preventDefault();
+      e.stopPropagation?.();
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        if (ev.target?.result) {
+          const ext = imageFile.type.split('/')[1] || 'png';
+          const timeStr = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
+          const fileName = imageFile.name && imageFile.name !== 'image.png' ? imageFile.name : `剪切板截图_${timeStr}.${ext}`;
+          setAttachedImage({ name: fileName, dataUrl: ev.target.result as string });
+        }
+      };
+      reader.readAsDataURL(imageFile);
+    }
+    const textItems = items
+      .filter((item) => item.kind === 'file' && !item.type.startsWith('image/'))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file));
+    const textFiles = textItems.length > 0 ? textItems : files.filter((file) => !file.type.startsWith('image/'));
+    if (textFiles.length > 0) {
+      e.preventDefault();
+      e.stopPropagation?.();
+      void addTextFiles(textFiles, 'paste');
     }
   };
 
@@ -316,8 +358,26 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   };
 
   const handleSendMessage = async (rawPrompt?: string) => {
-    let textToSend = rawPrompt || input.trim();
-    if (!textToSend || engine.isGenerating) return;
+    let textToSend = rawPrompt || input.trim() ||
+      (attachedTextFiles.length > 0 ? '请根据附加文本资料完成本轮设计需求。' : attachedImage ? '请根据参考图片生成页面。' : '');
+    if (!textToSend || engine.isGenerating || isReadingFiles) return;
+
+    let textReferences: TextReference[];
+    setTextFileError(null);
+    setIsReadingFiles(true);
+    try {
+      const { id, folderPath } = useProjectStore.getState();
+      textReferences = await resolveTextReferences(
+        textToSend,
+        attachedTextFiles,
+        (path) => readTextPath(path, id, folderPath)
+      );
+    } catch (error) {
+      setTextFileError(error instanceof Error ? error.message : String(error));
+      setIsReadingFiles(false);
+      return;
+    }
+    setIsReadingFiles(false);
 
     // 注入元素引用上下文（仅当元素引用启用时）
     const nodeRef = isElementReferenced ? pendingNodeRef : null;
@@ -333,6 +393,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       ? { name: attachedImage.name, dataUrl: attachedImage.dataUrl }
       : undefined;
     setAttachedImage(null);
+    setAttachedTextFiles([]);
 
     // 清除元素引用（单次修改后不保留）
     if (pendingNodeRef) {
@@ -364,7 +425,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       // 活跃画框单独传递：仅当用户明确说「修改」时才作为落点 (BR-GT-03)
       activeScreenId,
       referencedElement: referencedElementInfo,
-      displayText: rawPrompt || input.trim()
+      displayText: rawPrompt || input.trim(),
+      textReferences
     });
   };
 
@@ -1035,6 +1097,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             </div>
                           )}
 
+                          {m.textFileNames?.map((name, index) => (
+                            <div key={`${name}-${index}`} className="inline-flex items-center gap-1.5 px-2 py-1 mr-1 rounded-lg border border-blue-300/40 bg-blue-700/60 text-[11px] text-blue-50 max-w-full">
+                              <FileCode className="w-3 h-3 flex-shrink-0" />
+                              <span className="truncate" title={name}>{name}</span>
+                            </div>
+                          ))}
+
                           <div className="text-sm leading-relaxed text-white select-text">{displayPrompt}</div>
                         </div>
                       );
@@ -1567,22 +1636,43 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         <input
           type="file"
           ref={fileInputRef}
-          accept="image/*"
+          accept="image/*,.md,.markdown,.txt,.json,.yaml,.yml,.csv,.tsv,.xml,.html,.css,.js,.jsx,.ts,.tsx,.log,.sql,.ini,.toml,.sh,.py,.rs,text/plain"
+          multiple
           className="hidden"
-          disabled={engine.isGenerating}
+          disabled={engine.isGenerating || isReadingFiles}
           onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) {
+            const files = Array.from(e.target.files || []);
+            e.target.value = '';
+            const images = files.filter((file) => file.type.startsWith('image/'));
+            const texts = files.filter((file) => !file.type.startsWith('image/'));
+            if (images.length > 0) {
+              const image = images[0];
               const reader = new FileReader();
               reader.onload = (ev) => {
-                if (ev.target?.result) {
-                  setAttachedImage({ name: file.name, dataUrl: ev.target.result as string });
-                }
+                if (ev.target?.result) setAttachedImage({ name: image.name, dataUrl: ev.target.result as string });
               };
-              reader.readAsDataURL(file);
+              reader.readAsDataURL(image);
             }
+            if (texts.length > 0) void addTextFiles(texts, 'upload');
           }}
         />
+
+        {(attachedTextFiles.length > 0 || textFileError || isReadingFiles) && (
+          <div className="mb-2 space-y-1" aria-live="polite">
+            {attachedTextFiles.map((file, index) => (
+              <div key={`${file.name}-${index}`} className="flex items-center gap-2 p-2 rounded-lg border border-blue-800/60 bg-blue-950/30 text-[11px] text-blue-200">
+                <FileCode className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate flex-1" title={file.name}>{file.name}</span>
+                <span className="text-blue-300/60">{file.content.length} 字</span>
+                <button type="button" onClick={() => setAttachedTextFiles((prev) => prev.filter((_, i) => i !== index))} title={`移除 ${file.name}`} disabled={engine.isGenerating}>
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            {isReadingFiles && <div className="text-[11px] text-blue-300">正在读取文本文件...</div>}
+            {textFileError && <div role="alert" className="text-[11px] text-red-300">文件读取失败：{textFileError}</div>}
+          </div>
+        )}
 
         {attachedImage && (
           <div className="space-y-1 mb-2">
@@ -1706,9 +1796,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            disabled={engine.isGenerating}
+            disabled={engine.isGenerating || isReadingFiles}
             className="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-800 disabled:opacity-40 rounded-xl transition"
-            title="上传参考设计图/UI截图，或直接按 Cmd+V / Ctrl+V 粘贴截图 (Vision 反推设计)"
+            title="上传图片或 Markdown、TXT 等文本文件；也可粘贴文件或在对话中写本地路径"
           >
             <ImageIcon className="w-4 h-4" />
           </button>
@@ -1731,7 +1821,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             placeholder={
               engine.isGenerating
                 ? 'AI 正在生成中，点击右侧按钮可立即停止...'
-                : '输入设计诉求，可上传或按 Cmd+V / Ctrl+V 粘贴剪切板截图...'
+                : '输入设计诉求，可上传/粘贴图片或文本文件，也可引用本地文本路径...'
             }
             rows={2}
             className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 pr-20 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
@@ -1756,7 +1846,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             <button
               type="button"
               onClick={() => handleSendMessage()}
-              disabled={!input.trim() && !attachedImage}
+              disabled={(!input.trim() && !attachedImage && attachedTextFiles.length === 0) || isReadingFiles}
               className="absolute right-2.5 top-2.5 p-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl transition shadow"
               title="发送设计诉求 (Enter)"
             >

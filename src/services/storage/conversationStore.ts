@@ -44,6 +44,8 @@ export interface ConversationTurn {
     text: string;
     /** 附件只存 relPath，绝不存 base64 原文 (T-AE-32) */
     attachments?: string[];
+    /** 本轮读取过的文本资料名称/路径，不重复存储正文。 */
+    textFiles?: string[];
   };
   assistant: {
     text: string;

@@ -1,10 +1,12 @@
 import { EngineMessage, TokenUsage } from '../core/types';
 import { StructureDiff } from '../../../../utils/structureGuard';
 import { DeviationNote } from './interceptors/streamTransform';
+import type { TextReference } from '../../textFileContext';
 
 export interface PipelineInput {
   rawPrompt: string;
   attachment?: { name: string; dataUrl: string };
+  textReferences?: TextReference[];
   activeScreenId: string | null;
   styleTagIds?: string[];
   /**

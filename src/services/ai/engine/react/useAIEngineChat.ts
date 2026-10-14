@@ -13,6 +13,7 @@ import { resolveToolFromAIResponse } from '../../../tools/toolResolver';
 import { resolveApplyToolCall } from '../../../tools/applyTargetResolver';
 import { ScreenAuditReport } from '../../../../utils/tokenLint';
 import { NidEngine } from '../../../../utils/nidEngine';
+import type { TextReference } from '../../textFileContext';
 
 export interface ChatMessageItem {
   id: string;
@@ -31,6 +32,7 @@ export interface ChatMessageItem {
     screenName?: string;
   };
   imageUrl?: string;
+  textFileNames?: string[];
   reasoningText?: string;
   thinkingStage?: number; // 1: 分析需求, 2: 规划布局, 3: 应用Token, 4: 渲染出图 (PRD §3.2.3)
   isGenerating?: boolean;
@@ -88,6 +90,7 @@ export interface SendMessageOptions {
     screenName?: string;
   };
   displayText?: string;
+  textReferences?: TextReference[];
 }
 
 export function hasExplicitModifyIntent(text: string): boolean {
@@ -247,7 +250,8 @@ export function useAIEngineChat() {
               displayText: cleanText !== rawUserText ? cleanText : undefined,
               referencedElement: refElem || undefined,
               referencedScreen: refScreen,
-              imageUrl
+              imageUrl,
+              textFileNames: t.user.textFiles
             });
             restored.push({
               id: `ast_${t.turnId}`,
@@ -296,6 +300,7 @@ export function useAIEngineChat() {
   ) => {
     const textToSend = rawPrompt.trim();
     if (!textToSend || isGenerating) return;
+    const textReferences = options?.textReferences || [];
 
     // 生成目标单一裁决点 (BR-GT-06)：引用判定与动作判定只在这里做一次，
     // 下游 intentInterceptor / contextEnricher / toolResolver 全部消费该结果。
@@ -439,7 +444,8 @@ export function useAIEngineChat() {
         displayText: cleanDisplayPrompt !== textToSend ? cleanDisplayPrompt : undefined,
         referencedScreen,
         referencedElement,
-        imageUrl: attachment?.dataUrl
+        imageUrl: attachment?.dataUrl,
+        textFileNames: textReferences.map((file) => file.path || file.name)
       },
       {
         id: assistantMsgId,
@@ -493,6 +499,7 @@ export function useAIEngineChat() {
         input: {
           rawPrompt: textToSend,
           attachment,
+          textReferences,
           activeScreenId: effectiveScreenId,
           decision: {
             intent:
@@ -711,6 +718,7 @@ export function useAIEngineChat() {
           ts: Date.now(),
           user: {
             text: textToSend,
+            textFiles: textReferences.map((file) => file.path || file.name),
             attachments: attachmentPath ? [attachmentPath] : undefined
           },
           assistant: {

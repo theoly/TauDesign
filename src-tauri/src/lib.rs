@@ -173,6 +173,7 @@ pub fn run() {
             project_fs::project_ensure_dir,
             project_fs::project_exists,
             project_fs::project_read_text,
+            project_fs::read_text_context_file,
             project_fs::project_write_text_atomic,
             project_fs::project_append_line,
             project_fs::project_read_tail_lines,

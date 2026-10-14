@@ -96,6 +96,7 @@ export class PipelineExecutor {
       frameWidth,
       baseSystemPrompt: systemPrompt,
       attachment: input.attachment,
+      textReferences: input.textReferences,
       designRules,
       decisions,
       targetScreenOverride: input.decision ? { id: input.decision.targetScreenId } : undefined

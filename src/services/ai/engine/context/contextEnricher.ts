@@ -5,6 +5,7 @@ import { resolveMentions } from './mentionResolver';
 import { enforceBudgetGuard } from './budgetGuard';
 import { resolveDesignProse } from './designProseProvider';
 import { ARTIFACT_OUTPUT_CONTRACT, ARTIFACT_OUTPUT_REMINDER } from '../../promptBuilder';
+import { formatTextReferences, type TextReference } from '../../textFileContext';
 
 export interface ContextEnricherParams {
   rawPrompt: string;
@@ -15,6 +16,7 @@ export interface ContextEnricherParams {
   frameWidth: number;
   baseSystemPrompt: string;
   attachment?: { name: string; dataUrl: string };
+  textReferences?: TextReference[];
   designRules?: string[]; // PRD D18
   decisions?: Array<{ id: string; rule: string; rationale: string }>; // PRD D20
   presetId?: string;
@@ -138,6 +140,7 @@ export function enrichContext(params: ContextEnricherParams): EnrichedContextRes
     frameWidth,
     baseSystemPrompt,
     attachment,
+    textReferences = [],
     designRules = [],
     decisions = [],
     presetId,
@@ -303,6 +306,10 @@ You MUST thoroughly visually analyze the attached screenshot and reproduce its e
    - When you are unsure whether a conflict qualifies, do NOT emit the note — silence is always the safe default.
 
 User Request: ${userPrompt}`;
+  }
+
+  if (textReferences.length > 0) {
+    userPrompt = `${userPrompt}\n\n${formatTextReferences(textReferences)}`;
   }
 
   // Inject target screen if modifying (ISSUE-011 core)

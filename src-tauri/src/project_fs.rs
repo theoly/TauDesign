@@ -61,6 +61,74 @@ pub fn project_read_text(root: String, rel: String) -> Result<Option<String>, St
         .map_err(|e| format!("读取失败 {rel}: {e}"))
 }
 
+/// 仅供用户在对话中明确引用本地文本文件时使用。相对路径受工程目录约束；
+/// 绝对路径必须由用户在本轮消息中给出，且只读取小体积 UTF-8 文本。
+#[tauri::command]
+pub fn read_text_context_file(
+    path: String,
+    project_root: Option<String>,
+) -> Result<String, String> {
+    const MAX_BYTES: u64 = 64 * 1024;
+    const EXTENSIONS: &[&str] = &[
+        "md", "markdown", "txt", "json", "yaml", "yml", "csv", "tsv", "xml", "html", "css", "js",
+        "jsx", "ts", "tsx", "log", "sql", "ini", "toml", "sh", "py", "rs",
+    ];
+
+    let expanded = if path.starts_with("~/") || path.starts_with("~\\") {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .map_err(|_| "无法解析用户主目录".to_string())?;
+        Path::new(&home).join(&path[2..])
+    } else {
+        PathBuf::from(&path)
+    };
+    let is_relative = !expanded.is_absolute();
+    let candidate = if is_relative {
+        let root = project_root
+            .as_deref()
+            .ok_or("当前工程没有本地目录，无法读取相对路径")?;
+        resolve(root, &path)?
+    } else {
+        expanded
+    };
+    let canonical =
+        fs::canonicalize(&candidate).map_err(|e| format!("无法读取文件 {path}: {e}"))?;
+
+    if is_relative {
+        let root = project_root.as_deref().ok_or("当前工程没有本地目录")?;
+        let canonical_root =
+            fs::canonicalize(root).map_err(|e| format!("无法读取工程目录: {e}"))?;
+        if !canonical.starts_with(canonical_root) {
+            return Err(format!("路径超出当前工程目录: {path}"));
+        }
+    }
+
+    let ext = canonical
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    if !EXTENSIONS.contains(&ext.as_str()) {
+        return Err(format!("不支持读取该文件类型: {path}"));
+    }
+    let meta = fs::metadata(&canonical).map_err(|e| format!("无法读取文件 {path}: {e}"))?;
+    if !meta.is_file() {
+        return Err(format!("路径不是文件: {path}"));
+    }
+    if meta.len() > MAX_BYTES {
+        return Err(format!("文件超过 64 KiB 限制: {path}"));
+    }
+    let bytes = fs::read(&canonical).map_err(|e| format!("无法读取文件 {path}: {e}"))?;
+    if bytes.len() as u64 > MAX_BYTES {
+        return Err(format!("文件超过 64 KiB 限制: {path}"));
+    }
+    let content = String::from_utf8(bytes).map_err(|_| format!("文件不是 UTF-8 文本: {path}"))?;
+    if content.contains('\0') {
+        return Err(format!("文件包含二进制内容: {path}"));
+    }
+    Ok(content.trim_start_matches('\u{feff}').to_string())
+}
+
 /// 原子写入：先写临时文件并 fsync，再 rename 覆盖。
 /// 中途崩溃时目标文件仍保持上一个完整版本 (PRD §3.8.2)。
 #[tauri::command]
@@ -206,5 +274,48 @@ mod tests {
         assert!(resolve("/tmp/p", "project.json").is_ok());
         assert!(resolve("/tmp/p", "conversations/2026-09.jsonl").is_ok());
         assert!(resolve("/tmp/p", "./assets/images/a.png").is_ok());
+    }
+
+    #[test]
+    fn reads_small_utf8_text_and_rejects_escape_or_binary() {
+        let root =
+            std::env::temp_dir().join(format!("tdesign-text-context-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("brief.md"), "# 需求\n正文").unwrap();
+        fs::write(root.join("binary.txt"), b"a\0b").unwrap();
+        fs::write(root.join("invalid.txt"), [0xff]).unwrap();
+        fs::write(root.join("huge.md"), vec![b'a'; 64 * 1024 + 1]).unwrap();
+        let root_str = root.to_str().unwrap().to_string();
+        assert_eq!(
+            read_text_context_file("brief.md".into(), Some(root_str.clone())).unwrap(),
+            "# 需求\n正文"
+        );
+        assert_eq!(
+            read_text_context_file(root.join("brief.md").to_str().unwrap().into(), None).unwrap(),
+            "# 需求\n正文"
+        );
+        assert!(read_text_context_file("../brief.md".into(), Some(root_str.clone())).is_err());
+        assert!(read_text_context_file("binary.txt".into(), Some(root_str.clone())).is_err());
+        assert!(read_text_context_file("invalid.txt".into(), Some(root_str.clone())).is_err());
+        assert!(read_text_context_file("huge.md".into(), Some(root_str.clone())).is_err());
+        assert!(read_text_context_file("brief.png".into(), Some(root_str)).is_err());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn relative_symlink_cannot_escape_project_root() {
+        let root = std::env::temp_dir().join(format!("tdesign-text-link-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let outside =
+            std::env::temp_dir().join(format!("tdesign-outside-{}.md", std::process::id()));
+        fs::write(&outside, "private").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("linked.md")).unwrap();
+        assert!(
+            read_text_context_file("linked.md".into(), Some(root.to_str().unwrap().into()))
+                .is_err()
+        );
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_file(outside);
     }
 }
