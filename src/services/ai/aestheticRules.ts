@@ -13,7 +13,8 @@ import type { DeviceProfile } from '../../styles/baseCss';
 
 /** 与设备无关的黄金视觉层级准则 (spec §1.1) */
 export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY — these rules are what separate a polished UI from a rough prototype):
-- SURFACES & CONTRAST: The page background MUST be the soft low-saturation base (var(--color-bg)); cards and forms sit on var(--color-surface) with a hairline .border plus .shadow-soft or .shadow-card. Never place a surface-colored block directly on a surface-colored background — without contrast the layout reads flat.
+- 配色可见性与美观度：文字、图标和关键控件必须与实际背景清晰区分，严禁同色或近似色导致内容难以辨认。更换背景时同步检查并调整前景色；图片、渐变、半透明背景按叠加效果判断，必要时使用 Token 底色或遮罩。浅色/深色模式均须清晰可辨，并保持品牌色协调、语义一致和主次层级，不为柔和、低饱和或装饰效果牺牲可见性。
+- SURFACES & CONTRAST: 页面使用柔和低饱和底色 var(--color-bg)；卡片与表单使用 var(--color-surface)，搭配细线 .border 及 .shadow-soft 或 .shadow-card；同色表面须有边框或阴影区分层次，避免扁平混淆。
 - TYPOGRAPHY LADDER: Every screen MUST show at least three distinct text levels:
   * Heading: .text-xl / .text-2xl + .font-bold
   * Subtitle / helper: .text-xs / .text-sm + .text-muted

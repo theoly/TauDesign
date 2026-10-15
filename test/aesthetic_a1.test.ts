@@ -11,6 +11,7 @@ import { classifyIntent } from '../src/services/ai/intentClassifier';
 import { techBlueTheme } from '../src/utils/themePresets';
 import { TokenLintEngine } from '../src/utils/tokenLint';
 import { buildStyleSpecimenHtml, specimenCoverage } from '../src/utils/styleSpecimen';
+import { buildPolishPrompt } from '../src/services/ai/polishPrompt';
 
 const wl = (d: 'pc' | 'mobile') => extractClassWhitelist(getBaseCss(d));
 const prompt = (d: 'pc' | 'mobile', intent: 'create_screen' | 'modify_screen' | 'change_theme' | 'question') =>
@@ -70,6 +71,29 @@ describe('T-AE-08/09 · Prompt 美学规则分档注入', () => {
   test('层级准则在两档位均注入', () => {
     for (const d of ['pc', 'mobile'] as const) {
       expect(prompt(d, 'create_screen')).toContain('VISUAL HIERARCHY');
+    }
+  });
+
+  test('生成、修改与润色均包含前景/背景可见性及配色协调原则', () => {
+    for (const deviceProfile of ['pc', 'mobile'] as const) {
+      const frameWidth = deviceProfile === 'pc' ? 1440 : 390;
+      const prompts = [buildPolishPrompt({ designSystem: techBlueTheme, deviceProfile, frameWidth })];
+      for (const colorMode of ['light', 'dark'] as const) {
+        for (const intent of ['create_screen', 'modify_screen'] as const) {
+          prompts.push(PromptBuilder.buildSystemPrompt({
+            designSystem: techBlueTheme, deviceProfile, frameWidth, colorMode, intent
+          }));
+        }
+      }
+      for (const p of prompts) {
+        expect(p).toContain('配色可见性与美观度');
+        expect(p).toContain('文字、图标和关键控件必须与实际背景清晰区分');
+        expect(p).toContain('严禁同色或近似色导致内容难以辨认');
+        expect(p).toContain('更换背景时同步检查并调整前景色');
+        expect(p).toContain('图片、渐变、半透明背景按叠加效果判断');
+        expect(p).toContain('品牌色协调、语义一致和主次层级');
+        expect(p).toContain('不为柔和、低饱和或装饰效果牺牲可见性');
+      }
     }
   });
 });
