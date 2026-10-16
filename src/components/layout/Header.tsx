@@ -27,7 +27,7 @@ interface HeaderProps {
   onOpenSettings: () => void;
 }
 
-/** 资源库与设计系统入口已移入左侧栏 (D22)，顶栏不再重复提供 */
+/** 资源库与设计系统入口已移入右侧栏 (D22)，顶栏不再重复提供 */
 export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) => {
   const {
     name,

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <sub>编辑器工作台：左侧页面画框、中部无限画布、右侧 AI 原生助手与属性检查器<br>Editor workspace: screen list on the left, infinite canvas in the middle, AI assistant and inspector on the right</sub>
+  <sub>编辑器工作台截图（布局以当前版本为准）：左侧 AI 对话、中部无限画布、右侧页面 / 资源 / 设计系统 / 历史 / 元素属性<br>Workspace screenshot (layout may differ): AI chat on the left, infinite canvas in the middle, pages / assets / design system / history / element properties on the right</sub>
 </p>
 
 <p align="center">
@@ -58,6 +58,7 @@
 - **多页面全局漫游**：支持在超大画板中任意平移（按住空格拖动或触控板双指滑动）与缩放（10%–400%），宏观把握整个产品业务动线；
 - **设备专属比例标尺**：创建工程时可选 **电脑端 (PC 1440px)** 或 **手机端 (Mobile 390px)**，杜绝错位变形；
 - **首屏折线视口指引**：画框高度随内容自然撑开，同时虚线标出真实设备首屏分界线（电脑 900px / 手机 844px），兼顾长图设计与真实屏幕首屏体验；
+- **实时小地图**：在左下角同步查看页面内容缩略图、画框分布、选中态和当前视口，点击或拖动快速定位；平移、缩放、修改内容和主题时自动更新；
 - **智能防重叠与一键整理**：画框拖拽自动避让，点击顶栏「整理画板」可一键将所有页面整齐规范排版。
 
 #### 2. 💬 懂设计的 AI 智能对话助手
@@ -75,6 +76,7 @@
   - **保留原版**：一键撤回新提案，原画框完好无损。
 
 #### 4. 🎯 可视化属性检查器 (Inspector)
+- **统一右侧标签栏**：页面、资源、设计系统、历史与元素属性集中切换；选中画布元素时自动展开「元素属性」，支持拖拽调宽和折叠；
 - **精准点选高亮**：鼠标轻移即展示悬浮框，点击画框内任意元素即可激活检查器面板；
 - **外边距与内边距 (Box Model)**：以专业盒模型图示呈现 Margin 与 Padding，支持纯数字输入、微调步进或 `auto` 居中，自动补齐标准 `px` 单位；
 - **Flex 排版直观调节**：水平/垂直排列、左右对齐、两端对齐、网格间隙 (Gap) 一键切换；
@@ -124,7 +126,7 @@
 4. 选择工程保存文件夹（工程将以文件夹形式完整沉淀在您的电脑中）。
 
 #### 第三步：输入需求，见证创意生成
-点击右侧活动栏的 **AI 对话** 抽屉，在输入框中输入您的第一条设计构想，例如：
+在最左侧的 **AI 对话** 面板输入您的第一条设计构想，例如：
 > “*设计一个现代极简风格的企业 SaaS 登录页面，包含企业邮箱登录、密码输入框、微信扫码切换 Tab 以及底部服务协议。*”
 
 点击发送，AI 将在画板中为您快速建立第一个画框并开始流式渲染！
@@ -241,6 +243,7 @@ Traditional AI UI generators often suffer from three major pain points: **"Rough
 - **Fluid Pan & Zoom**: Pan freely (Hold Space + Drag or two-finger trackpad swipe) and zoom from 10% to 400% to keep the entire product architecture in sight.
 - **Dedicated Device Profiles**: Choose between **Desktop (PC 1440px)** or **Mobile (390px)** upon project creation to prevent layout distortion.
 - **Fold Line Viewport Guides**: Screen height expands naturally with content, overlaid with dashed lines indicating true fold lines (PC 900px / Mobile 844px).
+- **Live Minimap**: Preview page content, artboard positions, the active screen and the current viewport. Click or drag to navigate; content, style, layout and viewport changes update automatically.
 - **Collision Avoidance & Auto-Tidy**: Smooth dragging with intelligent collision avoidance; one-click "Tidy Up" neatly arranges all screens.
 
 #### 2. 💬 Design-Native AI Assistant
@@ -258,6 +261,7 @@ Traditional AI UI generators often suffer from three major pain points: **"Rough
   - **Keep Original**: Discard the proposal; the original screen remains untouched.
 
 #### 4. 🎯 Visual Property Inspector
+- **Unified Right Sidebar**: Switch between pages, assets, design system, history and element properties. Selecting an element opens its properties; the sidebar supports resizing and collapsing.
 - **Precise Element Selection**: Hover highlights and click-to-select with full DOM isolation.
 - **Interactive Box Model**: Visual margin and padding controls with numerical inputs, step buttons, `auto` centering, and automatic `px` unit sanitization.
 - **Flexbox & Grid Controls**: Toggle direction, alignment, justification, and gap with one click.
@@ -307,7 +311,7 @@ Traditional AI UI generators often suffer from three major pain points: **"Rough
 4. Select a local folder to store your project.
 
 #### Step 3: Prompt & Generate
-Open the **AI Chat** drawer on the right and type your design concept:
+Use the **AI Chat** panel on the left to type your design concept:
 > "*Design a minimalist SaaS login page with corporate email sign-in, password input, WeChat QR code tab switcher, and terms of service at the bottom.*"
 
 Hit Send, and watch TauDesign construct your first screen on the canvas in real time!
@@ -392,6 +396,88 @@ Please carefully review the following disclaimers before building, downloading, 
 
 ---
 
+## 🛠️ 源码编译 / Build from Source
+
+### 环境准备 / Prerequisites
+
+前端使用 React + TypeScript + Vite，桌面壳使用 Tauri 2 + Rust。请先安装 [Bun](https://bun.sh/docs/installation)、Node.js 22（或其他满足 Vite 6 要求的版本）和 Git；桌面调试与打包还需通过 [rustup](https://rustup.rs/) 安装 Rust stable / Cargo。`src-tauri/Cargo.toml` 声明 Rust 最低版本为 1.77.2，实际构建应使用满足当前锁定依赖要求的 stable 工具链。
+
+The frontend uses React, TypeScript and Vite; the desktop app uses Tauri 2 and Rust. Install Bun, Node.js 22 (or another Vite 6 compatible version) and Git. Desktop development also requires Rust stable and Cargo via rustup; the declared Rust minimum alone may not satisfy all locked dependencies.
+
+桌面系统依赖 / Desktop system dependencies（详见 [Tauri 官方环境准备](https://v2.tauri.app/start/prerequisites/)）：
+
+| 平台 / Platform | 构建环境 / Build environment |
+| :--- | :--- |
+| macOS | Xcode Command Line Tools（`xcode-select --install`）；桌面系统提供 WebKit。/ Xcode Command Line Tools; system WebKit. |
+| Windows | Microsoft C++ Build Tools 的“使用 C++ 的桌面开发”工作负载、Windows SDK、WebView2 Runtime；Rust 使用 MSVC 工具链。/ C++ desktop workload, Windows SDK, WebView2 and MSVC Rust toolchain. |
+| Linux | 按发行版安装 WebKitGTK 4.1 开发包、编译工具、OpenSSL 及 Tauri 系统依赖，具体包名见官方说明。/ Install WebKitGTK 4.1 development packages, build tools, OpenSSL and distribution-specific Tauri dependencies. |
+
+### 1. 安装项目依赖 / Install dependencies
+
+下载或克隆本仓库，在包含 `package.json` 的项目根目录运行以下命令。/ Download or clone this repository and run these commands from its root:
+
+```bash
+bun install
+```
+
+### 2. 本地调试 / Local development
+
+仅调试前端 / Frontend only:
+
+```bash
+bun run dev
+```
+
+浏览器访问 `http://localhost:5173`。端口在 `vite.config.ts` 中固定为 5173，若已占用请先停止占用进程。浏览器模式通过 Vite 开发代理请求 AI；本地工程文件读写、原生对话框及原生 PNG 导出需使用桌面模式验证。
+
+Open `http://localhost:5173`. The port is fixed; stop any existing server using it first. Browser development uses the Vite AI proxy. Verify native project storage, dialogs and PNG export in desktop mode.
+
+启动完整桌面应用 / Run the desktop app:
+
+```bash
+bun run tauri dev
+```
+
+Tauri 会通过 `beforeDevCommand` 自动启动 Vite；不要同时另开一个 `bun run dev` 占用 5173。首次编译会下载 Rust 依赖并编译原生代码。API Key 可在应用内配置，编译本身不需要密钥。
+
+Tauri starts Vite automatically. Do not start a second dev server on port 5173. The first run downloads and compiles Rust dependencies. API keys are configured inside the app and are not required to compile it.
+
+### 3. 验证与生产构建 / Checks and production build
+
+```bash
+bun test
+bun run type-check
+bun run build
+```
+
+前端产物位于 `dist/`。`bun run build` 只构建前端；构建桌面安装包请执行 / Frontend assets go to `dist/`. To compile and bundle the desktop app:
+
+```bash
+bun run tauri:build
+```
+
+桌面产物位于 `src-tauri/target/release/bundle/`。Tauri 会自动先构建前端；原生构建和安装包应在目标操作系统上执行。/ Desktop bundles go to `src-tauri/target/release/bundle/`. Tauri builds the frontend automatically. Build native bundles on the target operating system.
+
+### 4. 收集分发包 / Collect distribution packages
+
+仓库提供额外打包脚本，需要 Bash 和 `jq`（Windows 在 Git Bash 中运行）。/ The distribution script requires Bash and `jq`; use Git Bash on Windows.
+
+```bash
+bun run package:desktop
+```
+
+脚本构建后将文件收集到 `dist-desktop/`，名称与版本取自 `src-tauri/tauri.conf.json`。/ The script builds and collects packages into `dist-desktop/`, using the name and version from `src-tauri/tauri.conf.json`.
+
+| 运行平台 / Build host | 收集产物 / Collected artifacts |
+| :--- | :--- |
+| macOS | `.app`、`.dmg`、`.zip` |
+| Windows | MSI、NSIS `.exe` |
+| Linux | DEB、AppImage；检测到 `rpmbuild` 时额外生成 RPM / RPM when `rpmbuild` is available |
+
+此脚本按当前平台选择打包格式，`PACKAGE_PLATFORM` 仅覆盖平台检测，不安装交叉编译工具链。/ `PACKAGE_PLATFORM` overrides platform detection only; it does not set up cross-compilation.
+
+---
+
 ## 👨‍💻 Developer & Contributor Guide
 
 If you are a full-stack engineer or open-source contributor interested in system architecture:
@@ -405,7 +491,7 @@ If you are a full-stack engineer or open-source contributor interested in system
 Distributed under the [Apache License 2.0](./LICENSE) / 基于 [Apache License 2.0](./LICENSE) 开源。
 
 ```
-Copyright 2026 TauDesign Authors
+Copyright 2026 TauDesign Authors theo@ukmms.org
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

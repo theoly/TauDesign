@@ -486,7 +486,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   }, [activeStreamText]);
 
   return (
-    <div className="w-80 h-full bg-slate-900 border-l border-slate-800 flex flex-col z-20 select-text">
+    <div className="w-[340px] shrink-0 h-full bg-slate-900 border-r border-slate-800 flex flex-col z-20 select-text">
       {/* Header */}
       <div className="p-3 border-b border-slate-800 flex items-center justify-between text-xs">
         <div className="flex items-center gap-1.5 min-w-0">

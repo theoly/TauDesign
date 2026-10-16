@@ -54,7 +54,7 @@ import { deleteElementByNid } from '../utils/domPatcher';
 const blankScreenHtml = (name: string) => `<div class="p-8" style="min-height: 800px; background: var(--color-bg);">
   <div class="card p-6 r-lg shadow-md col gap-4" style="background: var(--color-surface);">
     <h2 class="text-2xl font-bold">${name}</h2>
-    <p class="text-sm text-secondary">空白画框。在右侧对话面板描述你的需求，或直接用检查器排版。</p>
+    <p class="text-sm text-secondary">空白画框。在左侧对话面板描述你的需求，或直接用检查器排版。</p>
     <div class="row gap-3 mt-2">
       <button class="btn btn-primary r-md">主要操作</button>
       <button class="btn btn-ghost r-md">次要操作</button>

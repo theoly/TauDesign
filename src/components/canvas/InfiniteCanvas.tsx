@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { handleHistoryShortcut } from '../../utils/historyShortcuts';
 import { ScreenFrame } from './ScreenFrame';
-import { Check, Copy, Map, Plus, Sparkles, X } from 'lucide-react';
+import { CanvasMinimap } from './CanvasMinimap';
+import { Check, Copy, Plus, Sparkles, X } from 'lucide-react';
 
 interface InfiniteCanvasProps {
   /** T-AE-26: 单画框质感润色入口，由 App 层承接以复用 RestylePanel */
@@ -14,7 +15,6 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
   const [isPanning, setIsPanning] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
   const [isSpacePressed, setIsSpacePressed] = useState(false);
-  const [showMinimap, setShowMinimap] = useState(true);
 
   const {
     screens,
@@ -23,7 +23,6 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
     settings,
     viewportTransform,
     setViewportTransform,
-    setActiveScreen,
     stagedScreen,
     adoptStagedChange,
     discardStagedChange,
@@ -284,82 +283,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
         </div>
       )}
 
-      {/* Floating Minimap (PRD §3.3.1) */}
-      <div className="absolute bottom-4 left-4 z-40 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-xl shadow-2xl p-2.5 flex flex-col gap-2 transition select-none">
-        <div className="flex items-center justify-between text-[10px] font-semibold text-slate-400">
-          <div className="flex items-center gap-1.5">
-            <Map className="w-3 h-3 text-blue-400" />
-            <span>小地图 (Minimap)</span>
-          </div>
-          <button
-            onClick={() => setShowMinimap(!showMinimap)}
-            className="text-slate-500 hover:text-slate-300 transition"
-          >
-            {showMinimap ? '收起' : '展开'}
-          </button>
-        </div>
-
-        {showMinimap && (
-          <div
-            className="relative w-44 h-28 bg-slate-950/80 rounded-lg border border-slate-800/80 overflow-hidden cursor-crosshair"
-            onClick={(e) => {
-              const rect = e.currentTarget.getBoundingClientRect();
-              const clickX = e.clientX - rect.left;
-              const clickY = e.clientY - rect.top;
-              const targetWorldX = (clickX / rect.width) * 4000;
-              const targetWorldY = (clickY / rect.height) * 2500;
-              const cRect = containerRef.current?.getBoundingClientRect();
-              const cW = cRect ? cRect.width : 1000;
-              const cH = cRect ? cRect.height : 700;
-              setViewportTransform({
-                x: cW / 2 - targetWorldX * scale,
-                y: cH / 2 - targetWorldY * scale,
-                scale
-              });
-            }}
-          >
-            {screenOrder.map((id) => {
-              const s = screens[id];
-              if (!s) return null;
-              const isActive = id === activeScreenId;
-              const left = (s.position.x / 4000) * 100;
-              const top = (s.position.y / 2500) * 100;
-              const width = (settings.frameWidth / 4000) * 100;
-              const height = ((s.measuredHeight || 800) / 2500) * 100;
-
-              return (
-                <div
-                  key={id}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveScreen(id);
-                    const cRect = containerRef.current?.getBoundingClientRect();
-                    const cW = cRect ? cRect.width : 1000;
-                    const cH = cRect ? cRect.height : 700;
-                    setViewportTransform({
-                      x: cW / 2 - (s.position.x + settings.frameWidth / 2) * scale,
-                      y: cH / 2 - (s.position.y + 400) * scale,
-                      scale
-                    });
-                  }}
-                  className={`absolute rounded-[2px] transition ${
-                    isActive
-                      ? 'bg-blue-500 ring-1 ring-blue-300 shadow'
-                      : 'bg-slate-700 hover:bg-slate-600'
-                  }`}
-                  style={{
-                    left: `${Math.max(0, Math.min(left, 90))}%`,
-                    top: `${Math.max(0, Math.min(top, 90))}%`,
-                    width: `${Math.max(width, 4)}%`,
-                    height: `${Math.max(height, 4)}%`
-                  }}
-                  title={s.name}
-                />
-              );
-            })}
-          </div>
-        )}
-      </div>
+      <CanvasMinimap canvasRef={containerRef} />
 
       {/* 纯净工作区空画布引导 (OpenDesign / PRD 体验升级) */}
       {screenOrder.length === 0 && !stagedScreen && (
@@ -370,7 +294,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
             </div>
             <h3 className="text-sm font-semibold text-slate-100">纯净工作区 · 准备就绪</h3>
             <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-              在右侧对话框输入界面描述（如：“生成一个现代科技风的控制台仪表盘”），AI 将直接生成设计画框；或手动添加空白画框开始。
+              在左侧对话框输入界面描述（如：“生成一个现代科技风的控制台仪表盘”），AI 将直接生成设计画框；或手动添加空白画框开始。
             </p>
             <div className="mt-5 flex items-center justify-center gap-2.5">
               <button

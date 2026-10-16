@@ -2,7 +2,7 @@ import { DesignSystem } from '../../types/designSystem';
 import { ComponentDefinition, Decision } from '../../types/project';
 import { compileTokensToCss, extractClassWhitelist } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
-import { GOLDEN_HIERARCHY, getDeviceAestheticRules, getFewShotExample } from './aestheticRules';
+import { GOLDEN_HIERARCHY, NEW_SCREEN_STATE_RULES, getDeviceAestheticRules, getFewShotExample } from './aestheticRules';
 import { renderCraftSection } from './craft';
 import { resolveDesignProse } from './engine/context/designProseProvider';
 
@@ -188,7 +188,7 @@ You generate production-ready HTML and styles for web and mobile applications us
     if (wantsCraft) {
       const craftBase = renderCraftSection(intent);
       const deviceRules = getDeviceAestheticRules(options.deviceProfile);
-      const craftContent = `${craftBase}\n\n#### 设备档位专属工艺约束 (${options.deviceProfile.toUpperCase()} Profile)\n${deviceRules}\n\n#### 视觉层次金律 (VISUAL HIERARCHY)\n${GOLDEN_HIERARCHY}`;
+      const craftContent = `${craftBase}\n\n#### 设备档位专属工艺约束 (${options.deviceProfile.toUpperCase()} Profile)\n${deviceRules}\n\n#### 视觉层次金律 (VISUAL HIERARCHY)\n${GOLDEN_HIERARCHY}${intent === 'create_screen' ? `\n\n${NEW_SCREEN_STATE_RULES}` : ''}`;
       sections.push({ id: 'craft_references', content: craftContent });
     }
 

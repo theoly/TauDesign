@@ -88,12 +88,12 @@ describe('M1 验收 · 工程管理页与工作空间外壳', () => {
     expect(switchBtns.length).toBe(0);
   });
 
-  test('4. 活动栏四视图互斥切换；再点当前项折叠侧边栏', () => {
+  test('4. 活动栏五视图互斥切换；再点当前项折叠侧边栏', () => {
     render();
     click(findButton('新建第一个工程'));
     click(findButton('创建并进入'));
 
-    const activity = ['页面', '资源', '设计系统', '历史'].map((t) => byTitle(t));
+    const activity = ['页面', '资源', '设计系统', '历史', '元素属性'].map((t) => byTitle(t));
     expect(activity.every((el) => el !== null)).toBe(true);
 
     // 默认「页面」视图
@@ -110,6 +110,11 @@ describe('M1 验收 · 工程管理页与工作空间外壳', () => {
     click(byTitle('历史'));
     expect(text()).toContain('撤销栈');
     expect(text()).toContain('自动还原点');
+
+    click(byTitle('元素属性'));
+    expect(byTitle('元素属性')?.getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('[data-testid="resource-sidebar"]')?.textContent).toContain('未选中任何元素');
+    click(byTitle('历史'));
 
     // 再点当前项 → 折叠
     click(byTitle('历史'));

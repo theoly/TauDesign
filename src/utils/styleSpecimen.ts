@@ -352,7 +352,7 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
     <div class="panel p-4 row items-center justify-between gap-4 mt-2">
       <div class="row items-center gap-3 flex-1">
         <span class="text-primary">${ICONS.sparkles}</span>
-        <span class="text-sm text-secondary">在右侧对话面板描述你的需求，即可生成第一个页面。本页可随时删除。</span>
+        <span class="text-sm text-secondary">在左侧对话面板描述你的需求，即可生成第一个页面。本页可随时删除。</span>
       </div>
       <button class="btn btn-ghost btn-sm nowrap">知道了</button>
     </div>

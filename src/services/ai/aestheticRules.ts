@@ -14,7 +14,7 @@ import type { DeviceProfile } from '../../styles/baseCss';
 /** 与设备无关的黄金视觉层级准则 (spec §1.1) */
 export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY — these rules are what separate a polished UI from a rough prototype):
 - 配色可见性与美观度：文字、图标和关键控件必须与实际背景清晰区分，严禁同色或近似色导致内容难以辨认。更换背景时同步检查并调整前景色；图片、渐变、半透明背景按叠加效果判断，必要时使用 Token 底色或遮罩。浅色/深色模式均须清晰可辨，并保持品牌色协调、语义一致和主次层级，不为柔和、低饱和或装饰效果牺牲可见性。
-- SURFACES & CONTRAST: 页面使用柔和低饱和底色 var(--color-bg)；卡片与表单使用 var(--color-surface)，搭配细线 .border 及 .shadow-soft 或 .shadow-card；同色表面须有边框或阴影区分层次，避免扁平混淆。
+- SURFACES & CONTRAST: 页面低饱和底色 var(--color-bg)，卡片/表单 var(--color-surface) + .border + .shadow-soft 或 .shadow-card；同色表面用边框/阴影区分层次。
 - TYPOGRAPHY LADDER: Every screen MUST show at least three distinct text levels:
   * Heading: .text-xl / .text-2xl + .font-bold
   * Subtitle / helper: .text-xs / .text-sm + .text-muted
@@ -24,9 +24,13 @@ export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY — these rules are
   * intra-component: .gap-1 / .gap-2
   * card padding: .p-4 / .p-5 / .p-6
   * page sections: see the device-specific rules below
-- ICONS: Buttons, inputs, metric cards and list rows MUST carry inline SVG icons (Lucide / Heroicons style, class="icon", stroke="currentColor"). A screen with zero icons is a FAILURE.
-- REALISTIC CONTENT: Use believable mock data — real-looking Chinese names, formatted phone numbers, dates, amounts, status badges. Never emit "占位文字" / "Lorem ipsum" / "标题1".
-- STATUS & FEEDBACK: Prefer .badge-soft with semantic colors over plain text for states.`;
+- ICONS: 按钮、输入框、指标卡与列表行须有 Lucide/Heroicons 风格内联SVG图标，class="icon"、stroke="currentColor"；无图标页面不合格。
+- REALISTIC CONTENT: 使用真实感中文姓名、电话、日期、金额和状态徽标；禁用“占位文字”/“Lorem ipsum”/“标题1”。
+- 按钮文字默认不换行：.btn 已设 white-space: nowrap；不插入<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal 覆盖并调高按钮。
+- STATUS & FEEDBACK: 状态优先用 .badge-soft + 语义色，避免纯文字。`;
+
+/** Only new pages should proactively diversify repeated controls' business states. */
+export const NEW_SCREEN_STATE_RULES = `新页面同组控件多状态：尽量利用现有实例展示代表性不同状态，如输入框空值/已填/错误/禁用、选项未选/选中、按钮可用/加载/禁用。不额外堆砌控件；状态须与业务一致，互斥组最多一个选中；遵守用户指定状态和参考图，移动端不依赖hover。`;
 
 const PC_RULES = `DEVICE RULES — PC (1440px):
 - CONTENT WIDTH: Wrap page-level content in .container-max (max 1200px, centered). NEVER let content stretch across the full 1440px — this is the single most common cause of ugly desktop output.

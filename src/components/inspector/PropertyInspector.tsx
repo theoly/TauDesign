@@ -107,7 +107,7 @@ export const PropertyInspector: React.FC = () => {
     const lint = curScreen ? TokenLintEngine.scan(curScreen.htmlContent, designSystem) : null;
 
     return (
-      <div className="w-[340px] h-full bg-slate-900 border-l border-slate-800 p-5 flex flex-col justify-between text-xs select-none">
+      <div className="w-full min-w-0 h-full bg-slate-900 p-5 flex flex-col justify-between text-xs select-none">
         <div className="flex-1 flex flex-col items-center justify-center text-center text-slate-500">
           <Sliders className="w-8 h-8 text-slate-600 mb-3" />
           <span className="font-medium text-slate-400">未选中任何元素</span>
@@ -283,7 +283,7 @@ Requirements:
   };
 
   return (
-    <div className="w-[340px] h-full bg-slate-900 border-l border-slate-800 flex flex-col z-20 text-xs select-none">
+    <div className="w-full min-w-0 h-full bg-slate-900 flex flex-col z-20 text-xs select-none">
       {/* Header & Breadcrumb (PRD §3.6.1) */}
       <div className="p-3 border-b border-slate-800 bg-slate-900/60">
         <div className="flex items-center gap-1 text-slate-400 text-[11px] mb-2 font-mono overflow-x-auto whitespace-nowrap pb-1">

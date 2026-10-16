@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { Header } from './components/layout/Header';
 import { SideBar } from './components/layout/SideBar';
 import { InfiniteCanvas } from './components/canvas/InfiniteCanvas';
-import { PropertyInspector } from './components/inspector/PropertyInspector';
 import { ChatDrawer } from './components/chat/ChatDrawer';
 import { ThemeEditor } from './components/theme/ThemeEditor';
 import { ExportModal } from './components/export/ExportModal';
@@ -100,26 +99,17 @@ const Workspace: React.FC = () => {
       )}
 
       <div className="flex-1 flex overflow-hidden relative">
-        {/* 左侧：VSCode 式活动栏 + 侧边栏（页面 / 资源 / 设计系统 / 历史，D22） */}
+        <ChatDrawer onOpenSettings={handleOpenSettings} />
+
+        <div className="flex-1 min-w-0 h-full relative overflow-hidden">
+          <InfiniteCanvas onPolish={(sid) => setRestyleScope(sid)} />
+        </div>
+
         <SideBar
           onOpenRestyle={() => setRestyleScope('all')}
           onOpenAssetCenter={() => setShowAssetModal(true)}
           onOpenThemeEditor={() => setShowThemeModal(true)}
         />
-
-        <div className="flex-1 h-full relative overflow-hidden">
-          <InfiniteCanvas onPolish={(sid) => setRestyleScope(sid)} />
-        </div>
-
-        <ErrorBoundary
-          fallbackTitle="属性检查器渲染异常"
-          fallbackMessage="当前选中元素的属性解析或渲染遇到异常，已隔离保护。点击下方按钮可重置选区。"
-          onReset={() => useProjectStore.getState().selectNode(null)}
-        >
-          <PropertyInspector />
-        </ErrorBoundary>
-
-        <ChatDrawer onOpenSettings={handleOpenSettings} />
       </div>
 
       {showThemeModal && <ThemeEditor onClose={() => setShowThemeModal(false)} />}
