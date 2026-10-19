@@ -7,6 +7,7 @@ import { DesignSystemVisualPreview } from './DesignSystemVisualPreview';
 import { Bookmark, Check, ChevronDown, Code, FileText, Moon, Palette, Plus, Search, Sparkles, Sun } from 'lucide-react';
 import rawBaseCss from '../../styles/base.css?raw';
 import { resolveDesignProse } from '../../services/ai/engine/context/designProseProvider';
+import { applyBrandColor, COLOR_SCHEMES } from '../../utils/colorHarmony';
 
 interface ThemeEditorProps {
   onClose: () => void;
@@ -30,6 +31,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
   const [showStylePicker, setShowStylePicker] = useState(false);
   const [evolveResult, setEvolveResult] = useState<string | null>(null);
   const [showProseCard, setShowProseCard] = useState(false);
+  const [harmonizeSurfaces, setHarmonizeSurfaces] = useState(true);
 
   const activeProse = resolveDesignProse({ presetId: designSystem.id });
 
@@ -50,20 +52,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
   ];
 
   const handlePrimaryColorChange = (newColorHex: string) => {
-    const updated = {
-      ...designSystem,
-      tokens: {
-        ...designSystem.tokens,
-        colors: {
-          ...designSystem.tokens.colors,
-          primary: {
-            ...designSystem.tokens.colors.primary,
-            '500': newColorHex
-          }
-        }
-      }
-    };
-    setDesignSystem(updated);
+    setDesignSystem({ ...designSystem, tokens: applyBrandColor(designSystem.tokens, newColorHex, harmonizeSurfaces) });
   };
 
   const handleAddManualRule = () => {
@@ -241,10 +230,24 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
 
               {/* Primary Color Picker */}
               <div className="space-y-3 p-4 bg-slate-950 border border-slate-800 rounded-xl">
-                <span className="font-semibold text-slate-300 block">核心主色微调 (Primary Token)</span>
+                <span className="font-semibold text-slate-300 block">品牌配色</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {COLOR_SCHEMES.map(scheme => (
+                    <button key={scheme.id} type="button" onClick={() => {
+                      setDesignSystem({ ...designSystem, tokens: applyBrandColor(designSystem.tokens, scheme.seed, true) });
+                    }} title={scheme.description} className="flex items-center gap-2 rounded-lg border border-slate-700 p-2 text-xs text-slate-200 hover:bg-slate-800">
+                      <span className="h-4 w-4 rounded-full" style={{ background: scheme.seed }} />{scheme.name}
+                    </button>
+                  ))}
+                </div>
+                <label className="flex items-center gap-2 text-xs text-slate-400">
+                  <input type="checkbox" checked={harmonizeSurfaces} onChange={e => setHarmonizeSurfaces(e.target.checked)} />
+                  自定义主色时联动背景、卡片、中性色与阴影
+                </label>
                 <div className="flex items-center gap-4">
                   <input
                     type="color"
+                    aria-label="自定义品牌主色"
                     value={designSystem.tokens.colors.primary['500'] || '#2563eb'}
                     onChange={(e) => handlePrimaryColorChange(e.target.value)}
                     className="w-10 h-10 rounded-lg cursor-pointer bg-transparent border-0"
@@ -254,10 +257,11 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                       {designSystem.tokens.colors.primary['500'] || '#2563eb'}
                     </span>
                     <span className="text-[11px] text-slate-500">
-                      改动仅修改 &lt;style id="tokens"&gt;，100ms 内全画框所有按钮及焦点元素秒级响应
+                      {harmonizeSurfaces ? '自动生成完整色阶与协调表面；支持撤销。' : '更新完整品牌色阶，保留自定义背景与表面；支持撤销。'}
                     </span>
                   </div>
                 </div>
+                <p className="text-[11px] leading-relaxed text-slate-400">背景保持低饱和，卡片用表面色；品牌色集中用于主操作和选中态，成功、警告、危险色只表达状态。</p>
               </div>
 
               {/* 风格性格参数 (T-AE-24) */}

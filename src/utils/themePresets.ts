@@ -187,7 +187,7 @@ export const cyberCyanTheme: DesignSystem = {
     colors: {
       primary: { '50': '#ecfeff', '100': '#cffafe', '200': '#a5f3fc', '500': '#06b6d4', '600': '#0891b2', '700': '#0e7490', '900': '#164e63' },
       neutral: { '50': '#f9fafb', '100': '#f3f4f6', '200': '#e5e7eb', '500': '#6b7280', '700': '#374151', '900': '#030712' },
-      success: '#22d3ee',
+      success: '#10b981',
       warning: '#fbbf24',
       danger: '#fb7185',
       background: pair('#f4f7f9', '#030712'),

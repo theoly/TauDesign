@@ -1,4 +1,5 @@
 import { DesignSystemTokens } from '../../types/designSystem';
+import { buildPrimaryRamp } from '../../utils/colorHarmony';
 
 /**
  * 参考图风格提取落 Token (A3 / T-AE-29)。
@@ -124,7 +125,7 @@ export function applyExtraction(tokens: DesignSystemTokens, e: ExtractedStyle): 
     ...tokens,
     colors: {
       ...tokens.colors,
-      primary: e.primary ? { ...tokens.colors.primary, '500': e.primary } : tokens.colors.primary,
+      primary: e.primary ? buildPrimaryRamp(e.primary) : tokens.colors.primary,
       background: put(tokens.colors.background, e.background),
       surface: put(tokens.colors.surface, e.surface),
       textPrimary: put(tokens.colors.textPrimary, e.textPrimary),

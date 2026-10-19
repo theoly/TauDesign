@@ -11,6 +11,8 @@
 # 环境变量：
 #   PACKAGE_PLATFORM=macos|linux|windows   覆盖平台探测（交叉核对脚本逻辑时用）
 #   SKIP_BUILD=1                           跳过构建，只收集已有产物
+#   PACKAGE_DMG=1                          macOS 额外生成 DMG（默认关闭）
+#   PACKAGE_ZIP=1                          macOS 额外生成 ZIP（默认关闭）
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -131,25 +133,30 @@ case "$PLATFORM" in
 
     collect "$APP_SRC" "${APP_NAME}.app"
 
-    STAGE="$OUT_DIR/dmg-stage"
-    DMG="$OUT_DIR/${SLUG}-${VERSION}-macos.dmg"
-    ZIP="$OUT_DIR/${SLUG}-${VERSION}-macos.zip"
+    if [ "${PACKAGE_DMG:-}" = "1" ]; then
+      STAGE="$OUT_DIR/dmg-stage"
+      DMG="$OUT_DIR/${SLUG}-${VERSION}-macos.dmg"
 
-    echo "💿 Step 3: 生成 DMG ..."
-    # 先清干净：cp -R 到已存在的同名目录会套娃，ln -s 到已存在的软链会失败
-    rm -rf "$STAGE" "$DMG" "$ZIP"
-    mkdir -p "$STAGE"
-    cp -R "$APP_SRC" "$STAGE/"
-    ln -s /Applications "$STAGE/Applications"
-    hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
-    rm -rf "$STAGE"
-    COLLECTED+=("$(basename "$DMG")")
-    echo "   ✓ $(basename "$DMG")"
+      echo "💿 生成 DMG ..."
+      # 先清干净，避免同名目录嵌套或已有软链导致失败
+      rm -rf "$STAGE" "$DMG"
+      mkdir -p "$STAGE"
+      cp -R "$APP_SRC" "$STAGE/"
+      ln -s /Applications "$STAGE/Applications"
+      hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
+      rm -rf "$STAGE"
+      COLLECTED+=("$(basename "$DMG")")
+      echo "   ✓ $(basename "$DMG")"
+    fi
 
-    echo "🗜️  Step 4: 生成 Zip ..."
-    (cd "$OUT_DIR" && zip -r -q "$(basename "$ZIP")" "${APP_NAME}.app")
-    COLLECTED+=("$(basename "$ZIP")")
-    echo "   ✓ $(basename "$ZIP")"
+    if [ "${PACKAGE_ZIP:-}" = "1" ]; then
+      ZIP="$OUT_DIR/${SLUG}-${VERSION}-macos.zip"
+      echo "🗜️  生成 Zip ..."
+      rm -f "$ZIP"
+      (cd "$OUT_DIR" && zip -r -q "$(basename "$ZIP")" "${APP_NAME}.app")
+      COLLECTED+=("$(basename "$ZIP")")
+      echo "   ✓ $(basename "$ZIP")"
+    fi
     ;;
 
   linux)

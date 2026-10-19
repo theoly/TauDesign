@@ -194,6 +194,29 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
         </div>
       </div>`;
 
+  const contentLayout = `
+      <div class="col gap-4 min-w-0">
+        <div class="row wrap items-center gap-3">
+          <div class="row items-center gap-2">
+            <span class="avatar bg-primary-light text-primary">王</span>
+            <div class="col gap-1"><span class="text-nowrap font-semibold">王先生</span><span class="text-xs text-muted">医生</span></div>
+          </div>
+          <div class="row items-center gap-2">
+            <span class="avatar bg-accent-light text-primary">李</span>
+            <div class="col gap-1"><span class="text-nowrap font-semibold">李女士</span><span class="text-xs text-muted">高校教师</span></div>
+          </div>
+        </div>
+        <div class="row wrap gap-2">
+          <span class="badge bg-primary-light">第 2 次 / 合同 3 次</span>
+          <span class="badge-soft">有效约见待核销</span>
+          <span class="tag bg-surface-alt">提醒待解冻</span>
+        </div>
+        <div class="row items-start gap-2">
+          <span class="icon-box bg-primary-light r-full">${ICONS.mail}</span>
+          <p class="flex-1 min-w-0 break-words text-sm">地址与长链接自然换行：https://example.com/appointments/202610191234567890</p>
+        </div>
+      </div>`;
+
   const metrics = `
       <div class="grid-3 gap-4">
         ${[
@@ -370,6 +393,7 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
   ${section('表单 Form', '输入框、下拉与辅助说明', forms)}
   ${section('标识 Badge & Tag', '状态标识与标签', badges)}
   ${section('头像 Avatar', '用户标识与信息组合', avatars)}
+  ${section('内容布局契约', '姓名单行、标签整体换行、图标居中、长文本可收缩', contentLayout)}
   ${section('数据卡片 Metrics', '指标卡与趋势标识', metrics)}
   ${section('列表与边框 Borders', 'border 全方向', listAndBorders)}
   ${section('微质感 Micro-texture', '复合阴影、毛玻璃、输入组、软标识与骨架屏', texture)}

@@ -23,6 +23,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* 避免浏览器默认蓝/紫链接脱离当前品牌；保留原生下划线提示。 */
+a { color: var(--color-primary-text); }
+
 /* 2. Layout Primitives (Flex & Grid) */
 .row {
   display: flex;
@@ -38,6 +41,10 @@ body {
 
 .wrap { flex-wrap: wrap; }
 .nowrap { flex-wrap: nowrap; }
+/* 容器换行与文字换行独立控制，避免把 .nowrap 当作文字不换行。 */
+.text-nowrap { white-space: nowrap; }
+.min-w-0 { min-width: 0; }
+.break-words { overflow-wrap: anywhere; }
 .flex-1 { flex: 1 1 0%; }
 .flex-auto { flex: 1 1 auto; }
 .flex-none { flex: none; }
@@ -144,7 +151,7 @@ body {
 .text-center { text-align: center; }
 .text-right { text-align: right; }
 
-.text-primary { color: var(--color-primary, #2563eb); }
+.text-primary { color: var(--color-primary-text, var(--color-primary)); }
 .text-secondary { color: var(--color-text-secondary, #475569); }
 .text-muted { color: var(--color-text-muted, #94a3b8); }
 .text-inverse { color: #ffffff; }
@@ -155,10 +162,10 @@ body {
 /* 5. Surfaces, Backgrounds & Borders */
 .bg-surface { background-color: var(--color-surface, #ffffff); }
 .bg-surface-alt { background-color: var(--color-surface-alt, #f1f5f9); }
-.bg-primary { background-color: var(--color-primary, #2563eb); color: #ffffff; }
-.bg-primary-light { background-color: var(--color-primary-light, #dbeafe); color: var(--color-primary, #2563eb); }
-.bg-accent { background-color: var(--color-accent, #7c3aed); color: #ffffff; }
-.bg-accent-light { background-color: var(--color-accent-light, #ede9fe); color: var(--color-accent, #7c3aed); }
+.bg-primary { background-color: var(--color-primary); color: var(--color-on-primary); }
+.bg-primary-light { background-color: var(--color-primary-light); color: var(--color-primary-text); }
+.bg-accent { background-color: var(--color-accent); color: var(--color-on-accent); }
+.bg-accent-light { background-color: var(--color-accent-light); color: var(--color-accent-text); }
 .bg-success-light { background-color: var(--color-success-light, #dcfce7); color: var(--color-success, #16a34a); }
 .bg-warning-light { background-color: var(--color-warning-light, #fef3c7); color: var(--color-warning, #d97706); }
 .bg-danger-light { background-color: var(--color-danger-light, #fee2e2); color: var(--color-danger, #dc2626); }
@@ -238,6 +245,7 @@ body {
 
 .btn {
   display: inline-flex;
+  flex-shrink: 0;
   white-space: nowrap;
   align-items: center;
   justify-content: center;
@@ -269,7 +277,7 @@ body {
 
 .btn-primary {
   background-color: var(--color-primary, #2563eb);
-  color: #ffffff;
+  color: var(--color-on-primary);
 }
 
 .btn-ghost {
@@ -283,6 +291,7 @@ body {
 }
 
 .input, .select {
+  min-width: 0;
   font-family: inherit;
   font-size: var(--font-size-sm, 14px);
   padding: 8px 12px;
@@ -301,6 +310,8 @@ body {
 
 .badge {
   display: inline-flex;
+  white-space: nowrap;
+  flex-shrink: 0;
   align-items: center;
   font-size: var(--font-size-xs, 12px);
   font-weight: 600;
@@ -310,6 +321,8 @@ body {
 
 .tag {
   display: inline-flex;
+  white-space: nowrap;
+  flex-shrink: 0;
   align-items: center;
   gap: 4px;
   font-size: var(--font-size-xs, 12px);
@@ -319,11 +332,16 @@ body {
 }
 
 .avatar {
-  width: 40px;
-  height: 40px;
+  width: calc(var(--space-5) * 2);
+  height: calc(var(--space-5) * 2);
   border-radius: var(--radius-full, 9999px);
   overflow: hidden;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  line-height: 1;
+  white-space: nowrap;
   background-color: var(--color-surface-alt, #f1f5f9);
 }
 
@@ -331,6 +349,25 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
+}
+
+/* 图标容器负责居中；.icon 保持行内兼容，避免普通文字中的图标变成独占一行。 */
+.icon-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  flex: none;
+  line-height: 1;
+}
+.avatar > .icon,
+.icon-box > .icon,
+.btn > .icon,
+.badge > .icon,
+.badge-soft > .icon,
+.tag > .icon {
   display: block;
 }
 
@@ -380,6 +417,7 @@ body {
 /* 10.3 复合组件模式 */
 .input-group {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: var(--space-2, 8px);
   width: 100%;
@@ -411,6 +449,8 @@ body {
 
 .badge-soft {
   display: inline-flex;
+  white-space: nowrap;
+  flex-shrink: 0;
   align-items: center;
   gap: var(--space-1, 4px);
   padding: 2px var(--space-2, 8px);
@@ -421,6 +461,9 @@ body {
   background-color: var(--color-surface-alt, #f1f5f9);
   color: var(--color-text-secondary, #475569);
 }
+.badge-soft.text-success { color: var(--color-success); background-color: var(--color-success-light); }
+.badge-soft.text-warning { color: var(--color-warning); background-color: var(--color-warning-light); }
+.badge-soft.text-danger { color: var(--color-danger); background-color: var(--color-danger-light); }
 
 .divider-text {
   display: flex;

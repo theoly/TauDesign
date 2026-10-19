@@ -1,4 +1,5 @@
 import { DENSITY_SCALE, DesignSystemTokens } from '../types/designSystem';
+import { resolveColorRoles } from './colorHarmony';
 
 /** #rrggbb -> rgba(r,g,b,alpha)；非法输入原样返回 */
 function withAlpha(hex: string, alpha: number): string {
@@ -18,36 +19,36 @@ export function compileTokensToCss(tokens: DesignSystemTokens, mode: 'light' | '
   const bg = mode === 'light' ? c.background.light : c.background.dark;
   const surface = mode === 'light' ? c.surface.light : c.surface.dark;
   const surfaceAlt = mode === 'light' ? c.surfaceAlt.light : c.surfaceAlt.dark;
-  const textPrimary = mode === 'light' ? c.textPrimary.light : c.textPrimary.dark;
-  const textSecondary = mode === 'light' ? c.textSecondary.light : c.textSecondary.dark;
+  const roles = resolveColorRoles(tokens, mode);
   const border = mode === 'light' ? c.border.light : c.border.dark;
   const pick = (p: { light: string; dark: string }) => (mode === 'light' ? p.light : p.dark);
   const density = DENSITY_SCALE[tokens.personality.density];
   const sp = (k: string, fallback: number) => Math.round((s[k] ?? fallback) * density);
 
-  const primary500 = c.primary['500'] || '#2563eb';
-  const primaryLight = c.primary['100'] || '#dbeafe';
-
   return `:root {
   /* Colors */
-  --color-primary: ${primary500};
-  --color-primary-light: ${primaryLight};
+  --color-primary: ${roles.primary};
+  --color-primary-text: ${roles.primaryText};
+  --color-on-primary: ${roles.onPrimary};
+  --color-primary-light: ${roles.primaryLight};
   --color-bg: ${bg};
   --color-surface: ${surface};
   --color-surface-alt: ${surfaceAlt};
-  --color-text-primary: ${textPrimary};
-  --color-text-secondary: ${textSecondary};
+  --color-text-primary: ${roles.textPrimary};
+  --color-text-secondary: ${roles.textSecondary};
   --color-border: ${border};
   --color-border-subtle: ${withAlpha(border, tokens.personality.borderAlpha)};
-  --color-success: ${c.success};
-  --color-success-light: ${withAlpha(c.success, 0.15)};
-  --color-warning: ${c.warning};
-  --color-warning-light: ${withAlpha(c.warning, 0.15)};
-  --color-danger: ${c.danger};
-  --color-danger-light: ${withAlpha(c.danger, 0.15)};
-  --color-accent: ${c.primary['600'] || c.primary['500'] || '#7c3aed'};
-  --color-accent-light: ${withAlpha(c.primary['500'] || '#7c3aed', 0.15)};
-  --color-text-muted: ${mode === 'light' ? '#94a3b8' : '#64748b'};
+  --color-success: ${roles.success.text};
+  --color-success-light: ${roles.success.light};
+  --color-warning: ${roles.warning.text};
+  --color-warning-light: ${roles.warning.light};
+  --color-danger: ${roles.danger.text};
+  --color-danger-light: ${roles.danger.light};
+  --color-accent: ${roles.accent};
+  --color-accent-text: ${roles.accentText};
+  --color-on-accent: ${roles.onAccent};
+  --color-accent-light: ${roles.accentLight};
+  --color-text-muted: ${roles.textMuted};
 
   /* Typography */
   --font-sans: ${t.fontFamilySans};

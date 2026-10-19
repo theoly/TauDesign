@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { DesignSystem } from '../../types/designSystem';
 import { compileTokensToCss } from '../../utils/cssCompiler';
+import { resolveColorRoles } from '../../utils/colorHarmony';
 import { Check, Copy, Eye, Moon, Sun, Terminal } from 'lucide-react';
 
 interface DesignSystemVisualPreviewProps {
@@ -29,6 +30,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
   };
 
   const tokens = theme.tokens;
+  const roles = useMemo(() => resolveColorRoles(tokens, mode), [tokens, mode]);
   const compiledCss = useMemo(() => compileTokensToCss(tokens, mode), [tokens, mode]);
 
   // 取代表性色值供卡片直接显示 Hex
@@ -36,7 +38,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
   const bgHex = mode === 'dark' ? tokens.colors.background.dark : tokens.colors.background.light;
   const surfaceHex = mode === 'dark' ? tokens.colors.surface.dark : tokens.colors.surface.light;
   const surfaceAltHex = mode === 'dark' ? tokens.colors.surfaceAlt.dark : tokens.colors.surfaceAlt.light;
-  const textPrimaryHex = mode === 'dark' ? tokens.colors.textPrimary.dark : tokens.colors.textPrimary.light;
+  const textPrimaryHex = roles.textPrimary;
   const borderHex = mode === 'dark' ? tokens.colors.border.dark : tokens.colors.border.light;
 
   const handleCopyCss = () => {
@@ -119,12 +121,12 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
               <h4 className="text-[11px] font-bold uppercase tracking-wider mb-3 opacity-60">调色板 (Palette)</h4>
               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
                 {[
-                  { label: 'Primary', role: 'accent', hex: primaryHex, bg: primaryHex, text: '#ffffff' },
+                  { label: 'Primary', role: 'accent', hex: primaryHex, bg: primaryHex, text: roles.onPrimary },
                   { label: 'Surface', role: 'surface', hex: surfaceHex, bg: surfaceHex, text: textPrimaryHex, border: true },
                   { label: 'Surface Alt', role: 'accent-sec', hex: surfaceAltHex, bg: surfaceAltHex, text: textPrimaryHex },
-                  { label: 'Success', role: 'success', hex: tokens.colors.success, bg: tokens.colors.success, text: '#ffffff' },
-                  { label: 'Warning', role: 'warning', hex: tokens.colors.warning, bg: tokens.colors.warning, text: '#ffffff' },
-                  { label: 'Danger', role: 'danger', hex: tokens.colors.danger, bg: tokens.colors.danger, text: '#ffffff' }
+                  { label: 'Success', role: 'success', hex: roles.success.text, bg: roles.success.light, text: roles.success.text },
+                  { label: 'Warning', role: 'warning', hex: roles.warning.text, bg: roles.warning.light, text: roles.warning.text },
+                  { label: 'Danger', role: 'danger', hex: roles.danger.text, bg: roles.danger.light, text: roles.danger.text }
                 ].map((c) => (
                   <div
                     key={c.label}
@@ -186,17 +188,17 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
                 }}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-blue-500">CARD SAMPLE</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: roles.textSecondary }}>CARD SAMPLE</span>
                   <div className="flex items-center gap-1.5">
                     <span
                       className="px-2 py-0.5 text-[10px] font-medium rounded-full"
-                      style={{ backgroundColor: `${tokens.colors.success}20`, color: tokens.colors.success }}
+                      style={{ backgroundColor: roles.success.light, color: roles.success.text }}
                     >
                       Active
                     </span>
                     <span
                       className="px-2 py-0.5 text-[10px] font-medium rounded-full"
-                      style={{ backgroundColor: `${primaryHex}20`, color: primaryHex }}
+                      style={{ backgroundColor: roles.primaryLight, color: roles.primaryText }}
                     >
                       Pro
                     </span>
@@ -215,6 +217,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
                     className="px-3.5 py-1.5 text-xs font-semibold text-white transition shadow-sm"
                     style={{
                       backgroundColor: primaryHex,
+                      color: roles.onPrimary,
                       borderRadius: tokens.radius.md
                     }}
                   >

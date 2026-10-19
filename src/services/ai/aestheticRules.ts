@@ -14,36 +14,37 @@ import type { DeviceProfile } from '../../styles/baseCss';
 /** 与设备无关的黄金视觉层级准则 (spec §1.1) */
 export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY — these rules are what separate a polished UI from a rough prototype):
 - 配色可见性与美观度：文字、图标和关键控件必须与实际背景清晰区分，严禁同色或近似色导致内容难以辨认。更换背景时同步检查并调整前景色；图片、渐变、半透明背景按叠加效果判断，必要时使用 Token 底色或遮罩。浅色/深色模式均须清晰可辨，并保持品牌色协调、语义一致和主次层级，不为柔和、低饱和或装饰效果牺牲可见性。
-- SURFACES & CONTRAST: 页面低饱和底色 var(--color-bg)，卡片/表单 var(--color-surface) + .border + .shadow-soft 或 .shadow-card；同色表面用边框/阴影区分层次。
-- TYPOGRAPHY LADDER: Every screen MUST show at least three distinct text levels:
+- COLOR ROLES: 背景 bg，卡片 surface，分组 surface-alt；品牌强调约5–10%，集中于主操作/选中。普通指标/图标用中性色，语义色仅表示状态。主色文字用 .text-primary，主按钮用 .btn-primary；勿写死白字、蓝链接或整段彩色正文。
+- TYPOGRAPHY LADDER (3 levels):
   * Heading: .text-xl / .text-2xl + .font-bold
   * Subtitle / helper: .text-xs / .text-sm + .text-muted
   * Body: .text-sm / .text-md, default weight
-  A screen where every text node is the same size and color is a FAILURE.
-- SPACING RHYTHM (three tiers, never uniform):
+  Uniform text size/color is a FAILURE.
+- SPACING RHYTHM (three distinct tiers):
   * intra-component: .gap-1 / .gap-2
   * card padding: .p-4 / .p-5 / .p-6
   * page sections: see the device-specific rules below
 - ICONS: 按钮、输入框、指标卡与列表行须有 Lucide/Heroicons 风格内联SVG图标，class="icon"、stroke="currentColor"；无图标页面不合格。
 - REALISTIC CONTENT: 使用真实感中文姓名、电话、日期、金额和状态徽标；禁用“占位文字”/“Lorem ipsum”/“标题1”。
 - 按钮文字默认不换行：.btn 已设 white-space: nowrap；不插入<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal 覆盖并调高按钮。
+- COMPONENT LAYOUT CONTRACT: .nowrap 仅控制 flex-wrap，文字用 .text-nowrap。标签组用 .row.wrap.gap-2，标签不设 .flex-1，空间不足整体换行。姓名单行，职业位于姓名下方，人物组不足换行；润色不新增或移动节点。头像用 .avatar，装饰图标用 .icon-box，内部 .icon 的 viewBox 留白对称。长文本列用 .flex-1.min-w-0，地址/URL 按需 .break-words。按钮组可整体换行；禁止缩字、裁字或位移补偿居中。
 - STATUS & FEEDBACK: 状态优先用 .badge-soft + 语义色，避免纯文字。`;
 
 /** Only new pages should proactively diversify repeated controls' business states. */
 export const NEW_SCREEN_STATE_RULES = `新页面同组控件多状态：尽量利用现有实例展示代表性不同状态，如输入框空值/已填/错误/禁用、选项未选/选中、按钮可用/加载/禁用。不额外堆砌控件；状态须与业务一致，互斥组最多一个选中；遵守用户指定状态和参考图，移动端不依赖hover。`;
 
 const PC_RULES = `DEVICE RULES — PC (1440px):
-- CONTENT WIDTH: Wrap page-level content in .container-max (max 1200px, centered). NEVER let content stretch across the full 1440px — this is the single most common cause of ugly desktop output.
-- Page section spacing: .mt-8 / .mb-8 between major blocks; page padding .p-6 / .p-8.
-- Card padding: .p-5 / .p-6. Body text: .text-sm (14px).
-- Inputs are 40~44px tall (default .input height).
+- CONTENT WIDTH: Use .container-max (max 1200px, centered); NEVER stretch page content across 1440px.
+- Sections: .mt-8 / .mb-8; page: .p-6 / .p-8.
+- Cards: .p-5 / .p-6. Body: .text-sm (14px).
+- Inputs: 40~44px.
 - Grids: .grid-2 / .grid-3 / .grid-4 are all appropriate for dense information.
-- HOVER IS A CORE TEXTURE TOOL: use .card-hover on clickable cards, .row-hover on table rows, .link-hover on inline links.
+- HOVER: .card-hover for clickable cards, .row-hover for table rows, .link-hover for inline links.
 - Navigation: top bar and/or left sidebar.
 - SEMANTIC REGIONS: Decouple <aside class="sidebar">, .toolbar / .filter-bar, and <table>. Never emit white-on-white text.`;
 
 const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
-- SINGLE COLUMN ONLY for the main content vertical flow. Avoid wide data tables or heavy desktop grids; for compact feature cards, quick actions, or metric badges, 2 or 3 items side by side (.grid-2, .grid-3, or .row.gap-2 with .flex-1) are appropriate. For long lists of horizontal cards, use .scroll-x.
+- SINGLE COLUMN ONLY for main content. No wide tables or desktop grids. Compact cards/actions/metrics may use .grid-2, .grid-3 or .row.gap-2 with .flex-1 if content fits; short labels follow COMPONENT LAYOUT CONTRACT. Long horizontal card lists use .scroll-x.
 - NO HOVER STATES. Touch screens never fire hover, and no hover utility exists in this profile's whitelist. Never write a :hover rule or reference a hover class. Express affordance through spacing, dividers, borders and .badge-soft instead.
 - Page section spacing: .mt-4 / .mt-6 (NOT .mt-8); page padding .p-4 / .px-4 (NOT .p-8).
 - Card padding: .p-3 / .p-4. Body text: .text-md (16px) — 14px is too small on a phone.

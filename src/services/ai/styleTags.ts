@@ -1,4 +1,5 @@
 import type { DesignSystemTokens } from '../../types/designSystem';
+import { applyBrandColor } from '../../utils/colorHarmony';
 
 /**
  * 对话框风格标签 (A2 / T-AE-21)。
@@ -111,7 +112,7 @@ export function proposeTokenChange(text: string, current: DesignSystemTokens): T
     const value = `#${hex[1]}`;
     return {
       label: `主色调整为 ${value}（当前 ${current.colors.primary['500']}）`,
-      apply: (tok) => ({ ...tok, colors: { ...tok.colors, primary: { ...tok.colors.primary, '500': value } } })
+      apply: (tok) => applyBrandColor(tok, value)
     };
   }
 

@@ -211,12 +211,13 @@
   color: var(--color-text-muted, #94a3b8);
 }
 .tabbar > .tabbar-item.is-active {
-  color: var(--color-primary, #2563eb);
+  color: var(--color-primary-text, var(--color-primary));
 }
 
 /* 底部吸底主 CTA：移动端主操作的标准位置 */
 .cta-fixed {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-3, 12px);
   padding: var(--space-3, 12px) var(--space-4, 16px) calc(var(--space-3, 12px) + 34px);
   background-color: var(--color-surface, #ffffff);
@@ -226,8 +227,8 @@
   z-index: 20;
 }
 .cta-fixed > .btn {
-  flex: 1 1 0%;
-  height: 48px;
+  flex: 1 0 auto;
+  min-height: calc(var(--space-6) * 2);
 }
 
 /* 横滑卡片组：移动端需要并列内容时的替代方案（不用多列栅格） */
@@ -248,6 +249,7 @@
   font-size: var(--font-size-md, 16px);
 }
 .tap-target {
+  flex-shrink: 0;
   min-width: 44px;
   min-height: 44px;
   display: inline-flex;
