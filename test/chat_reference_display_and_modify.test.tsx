@@ -1,3 +1,4 @@
+import { mockModificationAnalysis, confirmLatestModification } from './modification_review_helpers';
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -15,6 +16,7 @@ import { AIService } from '../src/services/ai/aiService';
 import { PipelineExecutor } from '../src/services/ai/engine/pipeline/executor';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+let analysisMock: ReturnType<typeof mockModificationAnalysis>;
 
 describe('对话历史引用展示与修改路由保护 (Chat Reference Display & Modify Guard)', () => {
   let container: HTMLDivElement;
@@ -24,6 +26,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
   const originalStream = AIService.stream;
 
   beforeEach(() => {
+    analysisMock = mockModificationAnalysis();
     localStorage.clear();
     const store = useProjectStore.getState();
     store.initNewProject({
@@ -51,6 +54,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
   });
 
   afterEach(() => {
+    analysisMock.mockRestore();
     PipelineExecutor.execute = originalExecute;
     AIService.stream = originalStream;
     act(() => {
@@ -177,6 +181,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       await act(async () => {
         sendBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
+      await confirmLatestModification(container);
 
       // 验证渲染结果：用户气泡内应有引用元素徽章，且不包含 ugly-raw-html
       const chatText = container.textContent || '';
@@ -228,6 +233,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       await act(async () => {
         sendBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
+      await confirmLatestModification(container);
 
       // 验证：虽然开关未手动开启，但显式修改指令自动将 activeScreenId 注入管道
       expect(executedScreenId).toBe(screenId);
@@ -270,6 +276,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       await act(async () => {
         sendBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
+      await confirmLatestModification(container);
 
       const afterState = useProjectStore.getState();
       // 1. 候选方案暂存比选 (BR-SSR-01)
@@ -362,6 +369,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       await act(async () => {
         sendBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
+      await confirmLatestModification(container);
 
       expect(callCount).toBe(1);
       // 采纳新版候选方案 (BR-SSR-01)
@@ -384,6 +392,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       await act(async () => {
         rollbackBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
+      await confirmLatestModification(container);
 
       // 验证：重新发起调整，且准确绑定原画框 ID
       expect(callCount).toBe(2);
@@ -421,6 +430,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       await act(async () => {
         sendBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
+      await confirmLatestModification(container);
 
       const chatText = container.textContent || '';
       expect(chatText).toContain('设计画框已挂载至画板');

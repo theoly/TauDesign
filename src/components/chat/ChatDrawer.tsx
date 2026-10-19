@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { ModificationReviewCard } from './ModificationReviewCard';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useAIConfigStore } from '../../stores/useAIConfigStore';
 import { supportsVision } from '../../services/ai/engine/core/multimodalGuard';
@@ -168,6 +169,24 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   } = useProjectStore();
   const { providers, bindings } = useAIConfigStore();
   const engine = useAIEngineChat();
+
+  // 消息/附件异步恢复并渲染后再定位；不依赖消息条数，避免等长会话切换失效。
+  useLayoutEffect(() => {
+    if (!engine.restoredHistoryKey) return;
+    const el = scrollContainerRef.current;
+    if (el) el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    shouldAutoScrollRef.current = true;
+    setIsAtBottom(true);
+  }, [engine.restoredHistoryKey]);
+
+  const latestReviewStatus = engine.messages[engine.messages.length - 1]?.modificationReview?.status;
+  useLayoutEffect(() => {
+    const el = scrollContainerRef.current;
+    if (el && shouldAutoScrollRef.current && (latestReviewStatus === 'ready' || latestReviewStatus === 'error')) {
+      el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+      setIsAtBottom(true);
+    }
+  }, [latestReviewStatus]);
 
   // 监听并接收来自属性面板等的「一键评测」推送报告
   useEffect(() => {
@@ -603,6 +622,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           ref={scrollContainerRef}
           onScroll={handleScroll}
           onWheel={handleWheel}
+          onLoadCapture={() => {
+            // 历史图片解码后可能撑高列表；用户正在读旧消息时不抢回底部。
+            const el = scrollContainerRef.current;
+            if (el && shouldAutoScrollRef.current) {
+              el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+            }
+          }}
           className="flex-1 overflow-y-auto p-4 space-y-4 text-xs"
         >
         {/* Side-by-Side Floating / Inline Bar (D17) */}
@@ -1041,6 +1067,10 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   </div>
                 </div>
               )}
+
+              {m.modificationReview && <ModificationReviewCard review={m.modificationReview} disabled={engine.isGenerating}
+                onConfirm={(selected, extra, mode) => engine.confirmModification(m.id, selected, extra, mode)}
+                onCancel={() => engine.cancelModification(m.id)} onRetry={() => engine.retryModificationAnalysis(m.id)} />}
 
               {/* Text / Result Bubble */}
               {(m.text || m.htmlOutput || m.isStopped || isCurrentGenerating) && (

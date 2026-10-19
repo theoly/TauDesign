@@ -1,3 +1,4 @@
+import { mockModificationAnalysis, confirmLatestModification } from './modification_review_helpers';
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -12,6 +13,7 @@ import { PipelineExecutor } from '../src/services/ai/engine/pipeline/executor';
 import { AIService } from '../src/services/ai/aiService';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+let analysisMock: ReturnType<typeof mockModificationAnalysis>;
 
 const ORIGINAL_HTML =
   '<main data-nid="root1"><header data-nid="hd1"><h1>充值魔方点</h1></header>' +
@@ -170,6 +172,7 @@ describe('引用画框修改落点路由 (Guard Reject Modify Routing)', () => {
     const originalStream = AIService.stream;
 
     beforeEach(() => {
+    analysisMock = mockModificationAnalysis();
       localStorage.clear();
       const store = useProjectStore.getState();
       store.initNewProject({
@@ -193,6 +196,7 @@ describe('引用画框修改落点路由 (Guard Reject Modify Routing)', () => {
     });
 
     afterEach(() => {
+    analysisMock.mockRestore();
       PipelineExecutor.execute = originalExecute;
       AIService.stream = originalStream;
       act(() => {
@@ -230,6 +234,7 @@ describe('引用画框修改落点路由 (Guard Reject Modify Routing)', () => {
       await act(async () => {
         sendBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
+      await confirmLatestModification(container);
 
       // 1. 拦截态：不得暴露会新建页面的挂载入口
       const guardText = container.textContent || '';

@@ -147,6 +147,20 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
   // Find target screen position for staged screen
   const targetScreen = stagedScreen ? screens[stagedScreen.targetScreenId] : null;
 
+  // 新候选出现时让两版同时进入视口；后续平移/缩放仍由用户控制。
+  useEffect(() => {
+    if (!stagedScreen || !targetScreen) return;
+    const width = containerRef.current?.getBoundingClientRect().width || 0;
+    if (!width) return;
+    const pairWidth = (settings.frameWidth || 390) * 2 + (settings.deviceProfile === 'mobile' ? 40 : 60);
+    const compareScale = Math.max(0.1, Math.min(1, (width - 64) / pairWidth));
+    setViewportTransform({
+      x: (width - pairWidth * compareScale) / 2 - targetScreen.position.x * compareScale,
+      y: 120 - targetScreen.position.y * compareScale,
+      scale: compareScale
+    });
+  }, [stagedScreen, targetScreen?.id, settings.frameWidth, settings.deviceProfile, setViewportTransform]);
+
   return (
     <div
       ref={containerRef}
@@ -175,6 +189,10 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
           transform: `translate3d(${x}px, ${y}px, 0) scale(${scale})`
         }}
       >
+        {stagedScreen && targetScreen && <div data-testid="comparison-backdrop" aria-hidden="true"
+          className="absolute bg-slate-950/75 z-20"
+          style={{ left: `${-x / scale}px`, top: `${-y / scale}px`, width: `calc(100vw / ${scale})`, height: `calc(100vh / ${scale})` }}
+          onClick={event => event.stopPropagation()} />}
         {screenOrder.map((id) => {
           const screen = screens[id];
           if (!screen) return null;
@@ -188,7 +206,9 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
           if (screen.thumbnail && scale < 0.25) lodLevel = 0;
           else if (isActive) lodLevel = 2;
 
-          return <ScreenFrame key={id} screen={screen} lodLevel={lodLevel} onPolish={onPolish} />;
+          return <ScreenFrame key={id} screen={screen} lodLevel={lodLevel} onPolish={onPolish}
+            isComparisonTarget={Boolean(stagedScreen && targetScreen?.id === id)}
+            isComparisonBackground={Boolean(stagedScreen && targetScreen && targetScreen.id !== id)} />;
         })}
 
         {/* Staged Screen (Side-by-side D17 preview) */}
@@ -206,10 +226,12 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
                   y: targetScreen.position.y
                 },
                 htmlContent: stagedScreen.newHtml,
+                scopedCss: targetScreen.scopedCss,
                 measuredHeight: targetScreen.measuredHeight
               }}
               lodLevel={2}
               isStaged={true}
+              overrideSourceScreenId={targetScreen.id}
             />
           );
         })()}
@@ -251,30 +273,30 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
 
       {/* Side-by-Side Floating Adoption Toolbar (D17 / §3.2.9) */}
       {stagedScreen && (
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900/90 backdrop-blur-md border border-purple-500/50 shadow-2xl rounded-2xl px-6 py-3 flex items-center gap-4 text-sm">
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 w-max max-w-[calc(100%_-_2rem)] bg-slate-900/90 backdrop-blur-md border border-purple-500/50 shadow-2xl rounded-2xl px-4 py-3 flex flex-wrap justify-center items-center gap-3 text-xs">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping" />
             <span className="font-semibold text-purple-200">AI 新方案已在右侧画框并排就绪</span>
           </div>
           <div className="h-4 w-px bg-slate-700" />
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap justify-center items-center gap-2">
             <button
               onClick={adoptStagedChange}
-              className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-1.5 rounded-lg shadow transition"
+              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-1.5 rounded-lg shadow transition"
             >
               <Check className="w-4 h-4" />
               <span>采纳新版 (替换原版)</span>
             </button>
             <button
               onClick={keepBothScreens}
-              className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-4 py-1.5 rounded-lg border border-slate-700 transition"
+              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-4 py-1.5 rounded-lg border border-slate-700 transition"
             >
               <Copy className="w-4 h-4" />
               <span>两版都留</span>
             </button>
             <button
               onClick={discardStagedChange}
-              className="flex items-center gap-1 text-slate-400 hover:text-red-400 font-medium px-3 py-1.5 rounded-lg transition"
+              className="flex shrink-0 whitespace-nowrap items-center gap-1 text-slate-400 hover:text-red-400 font-medium px-3 py-1.5 rounded-lg transition"
             >
               <X className="w-4 h-4" />
               <span>保留原版</span>

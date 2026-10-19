@@ -14,6 +14,9 @@ import { resolveApplyToolCall } from '../../../tools/applyTargetResolver';
 import { ScreenAuditReport } from '../../../../utils/tokenLint';
 import { NidEngine } from '../../../../utils/nidEngine';
 import type { TextReference } from '../../textFileContext';
+import { analyzeScreenModification, buildReviewedModificationRequest, captureModificationSnapshot, isModificationSnapshotCurrent, getLocalModificationPlan,
+  type ModificationAnalysis, type ModificationMode, type ModificationReviewState, type ModificationSnapshot } from '../../modificationReview';
+import { applyLocalCopyEdits, generateSupplementedLocalEdits } from '../../localCopyModification';
 
 export interface ChatMessageItem {
   id: string;
@@ -57,6 +60,7 @@ export interface ChatMessageItem {
   /** 本轮被结构守卫拦截，尚未落地任何画框 (BR-GRM-04) */
   isGuardRejected?: boolean;
   auditReport?: ScreenAuditReport;
+  modificationReview?: ModificationReviewState;
   preActionSnapshot?: {
     screenId: string;
     screenName: string;
@@ -181,6 +185,8 @@ function detectCandidateDecision(prompt: string): string | undefined {
 
 export function useAIEngineChat() {
   const {
+    id: projectId,
+    folderPath,
     screens,
     activeScreenId,
     designSystem,
@@ -202,6 +208,8 @@ export function useAIEngineChat() {
   const { addCheckpoint } = useHistoryStore();
 
   const [messages, setMessages] = useState<ChatMessageItem[]>([WELCOME_MESSAGE]);
+  const conversationKey = JSON.stringify([projectId, folderPath ?? null]);
+  const [restoredHistoryKey, setRestoredHistoryKey] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [thinkingStage, setThinkingStage] = useState(0);
   const [unmatchedMentions, setUnmatchedMentions] = useState<string[]>([]);
@@ -209,9 +217,18 @@ export function useAIEngineChat() {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const engineCoreRef = useRef(createAIEngineCore());
+  const operationLockRef = useRef(false);
+  const modificationPlansRef = useRef(new Map<string, {
+    request: string; attachment?: { name: string; dataUrl: string }; options?: SendMessageOptions;
+    snapshot: ModificationSnapshot; decision: ReturnType<typeof resolveGenerationTarget>; analysis?: ModificationAnalysis;
+  }>());
 
   useEffect(() => {
     let isCancelled = false;
+    abortControllerRef.current?.abort();
+    modificationPlansRef.current.clear();
+    setMessages([WELCOME_MESSAGE]);
+    setRestoredHistoryKey(null);
     const loadSaved = async () => {
       try {
         const convStore = getConversationStore();
@@ -266,13 +283,16 @@ export function useAIEngineChat() {
         }
       } catch (e) {
         console.warn('Load conversations error:', e);
+      } finally {
+        if (!isCancelled) setRestoredHistoryKey(conversationKey);
       }
     };
     loadSaved();
     return () => {
       isCancelled = true;
+      abortControllerRef.current?.abort();
     };
-  }, [getConversationStore, getAttachmentStore]);
+  }, [conversationKey, getConversationStore, getAttachmentStore]);
 
   const abort = () => {
     if (abortControllerRef.current) {
@@ -285,6 +305,7 @@ export function useAIEngineChat() {
                 ...m,
                 isStopped: true,
                 isGenerating: false,
+                modificationReview: m.modificationReview ? { ...m.modificationReview, status: 'cancelled' } : undefined,
                 text: m.text ? `${m.text}\n\n[用户已停止生成]` : '生成已由用户手动停止。'
               }
             : m
@@ -296,15 +317,17 @@ export function useAIEngineChat() {
   const sendMessage = async (
     rawPrompt: string,
     attachment?: { name: string; dataUrl: string },
-    options?: SendMessageOptions
+    options?: SendMessageOptions,
+    approved?: { snapshot: ModificationSnapshot; decision: ReturnType<typeof resolveGenerationTarget> }
   ) => {
     const textToSend = rawPrompt.trim();
-    if (!textToSend || isGenerating) return;
+    if (!textToSend || isGenerating || operationLockRef.current) return;
+    if (approved && !isModificationSnapshotCurrent(useProjectStore.getState(), approved.snapshot)) return;
     const textReferences = options?.textReferences || [];
 
     // 生成目标单一裁决点 (BR-GT-06)：引用判定与动作判定只在这里做一次，
     // 下游 intentInterceptor / contextEnricher / toolResolver 全部消费该结果。
-    const decision = resolveGenerationTarget({
+    const decision = approved?.decision ?? resolveGenerationTarget({
       rawPrompt: textToSend,
       screens,
       referenceToggleScreenId:
@@ -405,6 +428,51 @@ export function useAIEngineChat() {
       return;
     }
 
+    // 旧页面修改先分析；只有确认卡片回传的固定目标才能进入原生成管道。
+    if (!approved && (decision.action === 'modify_screen' || decision.action === 'patch_element') && effectiveScreenId) {
+      const snapshot = captureModificationSnapshot(useProjectStore.getState(), effectiveScreenId);
+      const reviewId = `review_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      const plan = { request: textToSend, attachment, options, snapshot, decision, analysis: undefined as ModificationAnalysis | undefined };
+      modificationPlansRef.current.set(reviewId, plan);
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      operationLockRef.current = true;
+      setIsGenerating(true);
+      setMessages(prev => [...prev,
+        { id: `usr_${reviewId}`, sender: 'user', text: textToSend, displayText: options?.displayText || extractCleanUserPrompt(textToSend), imageUrl: attachment?.dataUrl,
+          referencedElement: options?.referencedElement || parseReferencedElement(textToSend) || undefined,
+          referencedScreen: { id: effectiveScreenId, name: screens[effectiveScreenId].name, viaActiveScreen: decision.referenceSource === 'active_screen' } },
+        { id: reviewId, sender: 'assistant', text: '', modificationReview: { status: 'analyzing', summary: '正在读取原页面，整理可选择的修改建议。', items: [] } }
+      ]);
+      const update = (review: ModificationReviewState) => setMessages(prev => prev.map(m => m.id === reviewId ? { ...m, modificationReview: review } : m));
+      try {
+        const current = useProjectStore.getState();
+        const screen = current.screens[effectiveScreenId];
+        const analysis = await analyzeScreenModification(engineCoreRef.current, {
+          provider: activeRole.provider, model: activeRole.modelId, signal: controller.signal,
+          html: screen.htmlContent, name: screen.name, request: textToSend,
+          designSystem: current.designSystem, mode: current.settings.colorMode, elementNid: decision.elementNid,
+          deviceProfile: current.settings.deviceProfile, frameWidth: current.settings.frameWidth,
+          protectedNids: current.getProtectedNids(effectiveScreenId),
+          imageUrl: attachment?.dataUrl,
+          context: JSON.stringify({ scopedCss: screen.scopedCss,
+            overrides: Object.entries(current.overrides).filter(([key]) => key.startsWith(`${effectiveScreenId}:`)),
+            references: textReferences, decisions: Object.values(current.decisions).filter(d => d.active) })
+        });
+        if (!isModificationSnapshotCurrent(useProjectStore.getState(), snapshot)) throw new Error('原页面或工程已变化，请重新分析。');
+        plan.analysis = analysis;
+        update({ ...analysis, status: 'ready' });
+      } catch (error) {
+        update({ status: controller.signal.aborted ? 'cancelled' : 'error', summary: error instanceof Error ? error.message : '分析失败，请重试。', items: [] });
+      } finally {
+        operationLockRef.current = false;
+        setIsGenerating(false);
+        if (abortControllerRef.current === controller) abortControllerRef.current = null;
+      }
+      return;
+    }
+
+    operationLockRef.current = true;
     const userMsgId = `usr_${Date.now()}`;
     const assistantMsgId = `ast_${Date.now()}`;
     const startTime = Date.now();
@@ -553,6 +621,11 @@ export function useAIEngineChat() {
       clearTimeout(stageTimer1);
       clearTimeout(stageTimer2);
       const elapsedSeconds = Number(((Date.now() - startTime) / 1000).toFixed(1));
+
+      if (approved && !isModificationSnapshotCurrent(useProjectStore.getState(), approved.snapshot)) {
+        setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, isGenerating: false, isError: true, text: '生成期间原页面或工程已变化，本次未应用修改，请重新分析。' } : m));
+        return;
+      }
 
       if (output.status === 'error') {
         setMessages((prev) =>
@@ -743,9 +816,96 @@ export function useAIEngineChat() {
         )
       );
     } finally {
+      operationLockRef.current = false;
       setIsGenerating(false);
       abortControllerRef.current = null;
     }
+  };
+
+  const confirmModification = async (messageId: string, selected: string[], extra: string, mode: ModificationMode = 'page') => {
+    const plan = modificationPlansRef.current.get(messageId);
+    if (!plan?.analysis || operationLockRef.current || isGenerating) return;
+    if (!isModificationSnapshotCurrent(useProjectStore.getState(), plan.snapshot)) {
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, modificationReview: { ...plan.analysis!, status: 'error', summary: '原页面或工程已变化，请重新分析。' } } : m));
+      return;
+    }
+    let scope: string;
+    try { scope = buildReviewedModificationRequest(plan.analysis, selected, extra); } catch { return; }
+    if (mode === 'local') {
+      const localPlan = getLocalModificationPlan(plan.analysis, selected);
+      if (!localPlan) return;
+      const controller = new AbortController(); abortControllerRef.current = controller;
+      operationLockRef.current = true; setIsGenerating(true); setLastGuardOutput(null);
+      const update = (review: ModificationReviewState) => setMessages(prev => prev.map(m => m.id === messageId ? { ...m, modificationReview: review } : m));
+      update({ ...plan.analysis, status: 'submitted', summary: '正在复制原页面并应用已确认的局部修改。' });
+      try {
+        const current = useProjectStore.getState();
+        const screen = current.screens[plan.snapshot.screenId];
+        const conversationStore = current.getConversationStore();
+        const attachmentStore = current.getAttachmentStore();
+        let operations: unknown = localPlan.operations;
+        if (extra.trim()) {
+          let binding = getActiveProviderForRole('code') || getActiveProviderForRole('chat');
+          if (plan.attachment && (!binding || !supportsVision(binding.provider, binding.modelId))) binding = getActiveProviderForRole('vision');
+          if (!binding?.provider || (!binding.provider.apiKey && binding.provider.protocol !== 'ollama_native')) throw new Error('请先配置可用的 AI Provider 以解析补充要求。');
+          operations = await generateSupplementedLocalEdits(engineCoreRef.current, {
+            provider: binding.provider, model: binding.modelId, signal: controller.signal, html: screen.htmlContent,
+            request: scope, allowedNids: localPlan.allowedNids, device: current.settings.deviceProfile,
+            designSystem: current.designSystem, mode: current.settings.colorMode, imageUrl: plan.attachment?.dataUrl
+          });
+        }
+        if (controller.signal.aborted) throw new Error('局部修改已取消。');
+        if (!isModificationSnapshotCurrent(useProjectStore.getState(), plan.snapshot)) throw new Error('原页面或工程已变化，请重新分析。');
+        const candidate = applyLocalCopyEdits(screen.htmlContent, operations, {
+          device: current.settings.deviceProfile, allowedNids: localPlan.allowedNids, protectedNids: current.getProtectedNids(screen.id)
+        });
+        current.stageScreenChange(screen.id, candidate.html, `${screen.name}（局部修改候选）`);
+        current.panToScreen(screen.id);
+        modificationPlansRef.current.delete(messageId);
+        update({ ...plan.analysis, status: 'submitted' });
+        const resultText = `已在「${screen.name}」的副本上完成 ${candidate.targetNids.length} 个节点的局部修改，原页面未替换。请对比后采纳或保留原版。`;
+        setMessages(prev => [...prev,
+          { id: `local_usr_${messageId}`, sender: 'user', text: scope },
+          { id: `local_ast_${messageId}`, sender: 'assistant', text: resultText, screenId: screen.id, screenName: screen.name,
+            toolAction: 'modified', htmlOutput: candidate.html, preActionSnapshot: { screenId: screen.id, screenName: screen.name, htmlContent: screen.htmlContent },
+            originalUserPrompt: `${plan.request}\n${scope}`, originalReferencedScreenId: screen.id, originalAttachment: plan.attachment,
+            originalDecision: { action: 'modify_screen', targetScreenId: screen.id, styleReferenceScreenId: null, elementNid: null } }
+        ]);
+        try {
+          const savedAttachment = plan.attachment ? await attachmentStore.save(plan.attachment.name, plan.attachment.dataUrl) : null;
+          await conversationStore.appendTurn({ turnId: `local_${messageId}`, ts: Date.now(),
+            user: { text: `${plan.request}\n${scope}`, attachments: savedAttachment ? [savedAttachment.relPath] : undefined,
+              textFiles: plan.options?.textReferences?.map(file => file.path || file.name) }, assistant: { text: resultText } });
+        } catch (error) { console.warn('Conversation save error:', error); }
+      } catch (error) {
+        update({ ...plan.analysis, status: controller.signal.aborted ? 'cancelled' : 'ready', summary: `局部修改未执行：${error instanceof Error ? error.message : String(error)}` });
+      } finally {
+        operationLockRef.current = false; setIsGenerating(false);
+        if (abortControllerRef.current === controller) abortControllerRef.current = null;
+      }
+      return;
+    }
+    modificationPlansRef.current.delete(messageId);
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, modificationReview: { ...plan.analysis!, status: 'submitted' } } : m));
+    const prompt = `${plan.request}\n\n[本次确认修改范围，以此为准]\n${scope}`;
+    await sendMessage(prompt, plan.attachment, { ...plan.options, displayText: `${plan.options?.displayText || extractCleanUserPrompt(plan.request)}\n\n${scope}` }, plan);
+  };
+
+  const cancelModification = (messageId: string) => {
+    modificationPlansRef.current.delete(messageId);
+    setMessages(prev => prev.map(m => m.id === messageId && m.modificationReview ? { ...m, modificationReview: { ...m.modificationReview, status: 'cancelled' } } : m));
+  };
+
+  const retryModificationAnalysis = async (messageId: string) => {
+    const plan = modificationPlansRef.current.get(messageId);
+    if (!plan || operationLockRef.current || isGenerating) return;
+    const current = useProjectStore.getState();
+    if (!current.screens[plan.snapshot.screenId] || JSON.stringify([current.id, current.folderPath ?? null]) !== plan.snapshot.projectKey) {
+      setMessages(prev => prev.map(m => m.id === messageId && m.modificationReview ? { ...m, modificationReview: { ...m.modificationReview, status: 'error', summary: '原目标页面已不存在或工程已切换，请重新指定目标。' } } : m));
+      return;
+    }
+    cancelModification(messageId);
+    await sendMessage(plan.request, plan.attachment, { ...plan.options, referencedScreenId: plan.snapshot.screenId });
   };
 
   /** 裁决并落地一段已生成 HTML，目标画框由 resolveApplyToolCall 统一判定 (BR-GRM-02 / BR-GRM-03) */
@@ -1022,11 +1182,15 @@ export function useAIEngineChat() {
 
   return {
     messages,
+    restoredHistoryKey,
     isGenerating,
     thinkingStage,
     unmatchedMentions,
     lastGuardOutput,
-    sendMessage,
+    sendMessage: (prompt: string, attachment?: { name: string; dataUrl: string }, options?: SendMessageOptions) => sendMessage(prompt, attachment, options),
+    confirmModification,
+    cancelModification,
+    retryModificationAnalysis,
     abort,
     forceApply,
     mountMessageHtml,

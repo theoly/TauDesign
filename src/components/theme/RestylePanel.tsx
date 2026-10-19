@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Check, Loader2, Sparkles, X } from 'lucide-react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useAIConfigStore } from '../../stores/useAIConfigStore';
@@ -6,6 +6,11 @@ import { AIService } from '../../services/ai/aiService';
 import { buildPolishPrompt, describeTargetStyle } from '../../services/ai/polishPrompt';
 import { acceptRestyleResult, summarizeOutcomes, type RestyleOutcome, type RestyleTarget } from '../../services/ai/restyleService';
 import { useHistoryStore } from '../../stores/useHistoryStore';
+import { createAIEngineCore } from '../../services/ai/engine/core';
+import { analyzeScreenModification, buildReviewedModificationRequest, captureModificationSnapshot, isModificationSnapshotCurrent, getLocalModificationPlan,
+  type ModificationMode, type ModificationReviewState, type ModificationSnapshot } from '../../services/ai/modificationReview';
+import { applyLocalCopyEdits, generateSupplementedLocalEdits } from '../../services/ai/localCopyModification';
+import { ModificationReviewCard } from '../chat/ModificationReviewCard';
 
 /** 从流式输出中提取 ```html 代码块 */
 function extractHtml(raw: string): string | null {
@@ -33,25 +38,37 @@ interface RestylePanelProps {
 }
 
 export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) => {
-  const { designSystem, settings, buildRestylePlan, applyRestyleOutcome, screens } = useProjectStore();
+  const { designSystem, settings, buildRestylePlan, applyRestyleOutcome, screens, overrides } = useProjectStore();
   const { getActiveProviderForRole } = useAIConfigStore();
   const addCheckpoint = useHistoryStore((s) => s.addCheckpoint);
 
   const isSingle = scope !== 'all';
   // Polish 就是队列只含一项的 Restyle——同一套结构守卫与 Checkpoint 保护
   const plan = useMemo(
-    () => buildRestylePlan(isSingle ? [scope] : undefined),
-    [buildRestylePlan, isSingle, scope]
+    () => {
+      if (!isSingle) return buildRestylePlan();
+      const screen = screens[scope];
+      const target: RestyleTarget | null = screen ? { kind: 'screen', id: scope, name: screen.name, html: screen.htmlContent,
+        protectedNids: useProjectStore.getState().getProtectedNids(scope) } : null;
+      return { queue: target ? [target] : [], dryRun: target, estimatedCalls: target ? 1 : 0, naiveCalls: target ? 1 : 0 };
+    },
+    [buildRestylePlan, isSingle, scope, screens, overrides]
   );
-  const [phase, setPhase] = useState<'plan' | 'dryrun' | 'review' | 'batch' | 'done'>('plan');
+  const [phase, setPhase] = useState<'plan' | 'analysis' | 'dryrun' | 'review' | 'batch' | 'done'>('plan');
   const [busy, setBusy] = useState(false);
   const [dryOutcome, setDryOutcome] = useState<RestyleOutcome | null>(null);
   const [outcomes, setOutcomes] = useState<RestyleOutcome[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [analysis, setAnalysis] = useState<ModificationReviewState | null>(null);
+  const snapshotRef = useRef<ModificationSnapshot | null>(null);
+  const controllerRef = useRef<AbortController | null>(null);
+  const coreRef = useRef(createAIEngineCore());
+  const busyRef = useRef(false);
+  useEffect(() => () => { controllerRef.current?.abort(); }, []);
 
   const styleDirective = useMemo(() => describeTargetStyle(designSystem), [designSystem]);
 
-  const runOne = async (target: RestyleTarget): Promise<RestyleOutcome> => {
+  const runOne = async (target: RestyleTarget, confirmedScope?: string): Promise<RestyleOutcome> => {
     const binding = getActiveProviderForRole('code');
     if (!binding?.provider) return { target, status: 'failed', message: '未配置可用的 AI Provider' };
 
@@ -59,10 +76,18 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
       designSystem,
       deviceProfile: settings.deviceProfile,
       frameWidth: settings.frameWidth,
-      styleDirective,
+      colorMode: settings.colorMode,
+      styleDirective: confirmedScope ? `${styleDirective}\n${confirmedScope}` : styleDirective,
       protectedNids: target.protectedNids
     });
 
+    if (confirmedScope) {
+      const result = coreRef.current.streamText({ provider: binding.provider, model: binding.modelId,
+        signal: controllerRef.current?.signal, messages: [
+          { role: 'system', content: systemPrompt }, { role: 'user', content: `仅按已确认范围润色，严格保持元素树与文案：\n${target.html}` }
+        ] });
+      return acceptRestyleResult(target, extractHtml(await result.textPromise));
+    }
     let raw = '';
     const { promise } = AIService.stream(
       binding.provider,
@@ -79,6 +104,67 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
     return acceptRestyleResult(target, extractHtml(raw));
   };
 
+  const analyzeSingle = async () => {
+    if (busyRef.current || !plan.dryRun) return;
+    busyRef.current = true; setBusy(true); setError(null); setPhase('analysis');
+    setAnalysis({ status: 'analyzing', summary: '正在分析原页面的布局、配色和组件表现。', items: [] });
+    const controller = new AbortController(); controllerRef.current = controller;
+    try {
+      const binding = getActiveProviderForRole('code');
+      if (!binding?.provider || (!binding.provider.apiKey && binding.provider.protocol !== 'ollama_native')) throw new Error('请先配置可用的 AI Provider。');
+      const current = useProjectStore.getState();
+      const snapshot = captureModificationSnapshot(current, scope); snapshotRef.current = snapshot;
+      const screen = current.screens[scope];
+      const result = await analyzeScreenModification(coreRef.current, {
+        provider: binding.provider, model: binding.modelId, signal: controller.signal, html: screen.htmlContent, name: screen.name,
+        request: '分析可改善的视觉表现，仅建议调整已有节点的class；保持元素结构、文案、data-nid不变，不修改带手动样式覆盖的节点。',
+        designSystem, mode: settings.colorMode, deviceProfile: settings.deviceProfile, frameWidth: settings.frameWidth,
+        protectedNids: current.getProtectedNids(scope), allowText: false,
+        context: JSON.stringify({ scopedCss: screen.scopedCss, overrides: Object.entries(current.overrides).filter(([key]) => key.startsWith(`${scope}:`)) })
+      });
+      if (!isModificationSnapshotCurrent(useProjectStore.getState(), snapshot)) throw new Error('原页面或工程已变化，请重新分析。');
+      if (!controller.signal.aborted) setAnalysis({ ...result, status: 'ready' });
+    } catch (e) {
+      if (!controller.signal.aborted) setAnalysis({ status: 'error', summary: e instanceof Error ? e.message : String(e), items: [] });
+    } finally { busyRef.current = false; if (!controller.signal.aborted) setBusy(false); }
+  };
+
+  const confirmSingle = async (selected: string[], extra: string, mode: ModificationMode = 'page') => {
+    if (!analysis || !snapshotRef.current || !plan.dryRun || busyRef.current) return;
+    if (!isModificationSnapshotCurrent(useProjectStore.getState(), snapshotRef.current)) {
+      setAnalysis({ ...analysis, status: 'error', summary: '原页面或工程已变化，请重新分析。' }); return;
+    }
+    const request = buildReviewedModificationRequest(analysis, selected, extra);
+    busyRef.current = true; setBusy(true); setError(null);
+    controllerRef.current = new AbortController();
+    try {
+      let outcome: RestyleOutcome;
+      if (mode === 'local') {
+        const local = getLocalModificationPlan(analysis, selected);
+        if (!local) throw new Error('当前选择不能安全局部修改，请重新分析。');
+        let operations: unknown = local.operations;
+        if (extra.trim()) {
+          const binding = getActiveProviderForRole('code');
+          if (!binding?.provider || (!binding.provider.apiKey && binding.provider.protocol !== 'ollama_native')) throw new Error('请先配置可用的 AI Provider。');
+          operations = await generateSupplementedLocalEdits(coreRef.current, {
+            provider: binding.provider, model: binding.modelId, signal: controllerRef.current.signal,
+            html: plan.dryRun.html, request, allowedNids: local.allowedNids, device: settings.deviceProfile,
+            designSystem, mode: settings.colorMode, allowText: false
+          });
+        }
+        const candidate = applyLocalCopyEdits(plan.dryRun.html, operations, { device: settings.deviceProfile,
+          allowedNids: local.allowedNids, protectedNids: plan.dryRun.protectedNids, allowText: false });
+        outcome = acceptRestyleResult(plan.dryRun, candidate.html);
+      } else outcome = await runOne(plan.dryRun, request);
+      if (controllerRef.current?.signal.aborted) return;
+      if (!isModificationSnapshotCurrent(useProjectStore.getState(), snapshotRef.current)) throw new Error('生成期间原页面或工程已变化，请重新分析。');
+      if (outcome.status !== 'applied' || !outcome.html) throw new Error(outcome.message || '结构校验未通过，未修改原页面。');
+      useProjectStore.getState().stageScreenChange(scope, outcome.html, `${plan.dryRun.name}（润色候选）`);
+      useProjectStore.getState().panToScreen(scope); onClose();
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+    finally { busyRef.current = false; setBusy(false); }
+  };
+
   const doDryRun = async () => {
     if (!plan.dryRun) return;
     setBusy(true);
@@ -86,14 +172,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
     try {
       const o = await runOne(plan.dryRun);
       setDryOutcome(o);
-      // 单画框润色没有「批量」可言，试跑即正式执行——通过校验就直接落地
-      if (isSingle && o.status === 'applied') {
-        snapshotAndApply(o);
-        setOutcomes([o]);
-        setPhase('done');
-      } else {
-        setPhase('review');
-      }
+      setPhase('review');
     } catch (e) {
       setError(String(e));
     } finally {
@@ -149,12 +228,12 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
               </h2>
               <p className="text-slate-400 text-xs mt-0.5">
                 {isSingle
-                  ? '保持元素结构与文案不变，只提升视觉表现'
+                  ? '先分析并选择修改项，再生成候选方案对比'
                   : '把当前设计风格应用到已有页面中「换主题回溯不到」的部分'}
               </p>
             </div>
           </div>
-          <button onClick={onClose} disabled={busy} className="text-slate-400 hover:text-slate-200 p-1 disabled:opacity-40">
+          <button onClick={onClose} disabled={busy && phase !== 'analysis'} className="text-slate-400 hover:text-slate-200 p-1 disabled:opacity-40">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -165,7 +244,8 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
             <div className="flex items-center justify-between text-slate-300">
               <span className="font-semibold">执行计划</span>
               <span className="text-slate-400">
-                预计 <span className="text-blue-400 font-semibold">{plan.estimatedCalls}</span> 次 AI 调用
+                预计 <span className="text-blue-400 font-semibold">{plan.estimatedCalls + (isSingle ? 1 : 0)}</span> 次 AI 调用
+                {isSingle && '（分析 + 生成）'}
               </span>
             </div>
             <div className="text-slate-500 leading-relaxed">
@@ -190,8 +270,8 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
               <span className="leading-relaxed">
                 {isSingle ? (
                   <>
-                    将对「{plan.dryRun?.name ?? '—'}」执行一次视觉重构。落地前自动创建 Checkpoint，可随时回退；
-                    若模型改动了元素结构或删减了内容，结果会被直接拒绝、不落盘。
+                    先分析「{plan.dryRun?.name ?? '—'}」，由你勾选改进项或补充要求，再调用一次生成候选。
+                    结构校验通过后进入新旧对比，确认采纳前原页面保持不变。
                   </>
                 ) : (
                   <>
@@ -202,6 +282,9 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
               </span>
             </div>
           )}
+
+          {phase === 'analysis' && analysis && <ModificationReviewCard review={analysis} disabled={busy}
+            onConfirm={confirmSingle} onCancel={onClose} onRetry={analyzeSingle} />}
 
           {phase === 'review' && dryOutcome && (
             <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
@@ -247,17 +330,17 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
         </div>
 
         <div className="p-4 border-t border-slate-800 flex items-center justify-end gap-2">
-          <button onClick={onClose} disabled={busy} className="px-3 py-1.5 text-slate-300 hover:text-slate-100 text-xs disabled:opacity-40">
+          <button onClick={onClose} disabled={busy && phase !== 'analysis'} className="px-3 py-1.5 text-slate-300 hover:text-slate-100 text-xs disabled:opacity-40">
             {phase === 'done' ? '完成' : '取消'}
           </button>
           {phase === 'plan' && (
             <button
-              onClick={doDryRun}
+              onClick={isSingle ? analyzeSingle : doDryRun}
               disabled={busy || !plan.dryRun}
               className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-medium rounded-lg flex items-center gap-1.5"
             >
               {busy && <Loader2 className="w-3 h-3 animate-spin" />}
-              {isSingle ? '开始润色' : '试跑单个目标'}
+              {isSingle ? '分析原页面' : '试跑单个目标'}
             </button>
           )}
           {phase === 'review' && (

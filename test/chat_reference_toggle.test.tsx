@@ -1,3 +1,4 @@
+import { mockModificationAnalysis, confirmLatestModification } from './modification_review_helpers';
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -9,6 +10,7 @@ import { AIService } from '../src/services/ai/aiService';
 import { PipelineExecutor } from '../src/services/ai/engine/pipeline/executor';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+let analysisMock: ReturnType<typeof mockModificationAnalysis>;
 
 describe('Chat Reference Toggle: 画布点选与对话引用解耦 & 双态卡片交互', () => {
   let container: HTMLDivElement;
@@ -18,6 +20,7 @@ describe('Chat Reference Toggle: 画布点选与对话引用解耦 & 双态卡�
   const originalStream = AIService.stream;
 
   beforeEach(() => {
+    analysisMock = mockModificationAnalysis();
     localStorage.clear();
     const store = useProjectStore.getState();
     store.initNewProject({
@@ -50,6 +53,7 @@ describe('Chat Reference Toggle: 画布点选与对话引用解耦 & 双态卡�
   });
 
   afterEach(() => {
+    analysisMock.mockRestore();
     PipelineExecutor.execute = originalExecute;
     AIService.stream = originalStream;
     act(() => {
@@ -186,6 +190,7 @@ describe('Chat Reference Toggle: 画布点选与对话引用解耦 & 双态卡�
     await act(async () => {
       sendBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+      await confirmLatestModification(container);
 
     expect(capturedInput).not.toBeNull();
     // 核心断言：未点击引用时，activeScreenId 必须为 null，防止覆盖已有页面！
@@ -234,6 +239,7 @@ describe('Chat Reference Toggle: 画布点选与对话引用解耦 & 双态卡�
     await act(async () => {
       sendBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+      await confirmLatestModification(container);
 
     expect(capturedInput).not.toBeNull();
     // 核心断言：已启用引用时，activeScreenId 必须为选中画框 ID！

@@ -17,6 +17,7 @@ export interface PolishOptions {
   designSystem: DesignSystem;
   deviceProfile: DeviceProfile;
   frameWidth: number;
+  colorMode?: 'light' | 'dark';
   /** Restyle 时附加的目标风格描述；Polish 留空表示只提升质感、不改风格调性 */
   styleDirective?: string;
   /** 这些 nid 存在 L4 手动覆盖，改动它们的样式没有意义（会被 !important 挡住） */
@@ -35,7 +36,7 @@ WHAT YOU MAY CHANGE (this is the entire job):
 - Nothing else.`;
 
 export function buildPolishPrompt(options: PolishOptions): string {
-  const tokensCss = compileTokensToCss(options.designSystem.tokens, 'light');
+  const tokensCss = compileTokensToCss(options.designSystem.tokens, options.colorMode ?? 'light');
   const whitelist = extractClassWhitelist(getBaseCss(options.deviceProfile))
     .map((c) => `.${c}`)
     .join(', ');

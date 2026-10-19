@@ -1,3 +1,4 @@
+import { mockModificationAnalysis, confirmLatestModification } from './modification_review_helpers';
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -10,12 +11,14 @@ import { defaultTheme } from '../src/utils/themePresets';
 import { useAIConfigStore, defaultProviders, defaultBindings } from '../src/stores/useAIConfigStore';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+let analysisMock: ReturnType<typeof mockModificationAnalysis>;
 
 describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试套件', () => {
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
+    analysisMock = mockModificationAnalysis();
     useAIConfigStore.setState({
       providers: defaultProviders.map((p) =>
         p.id === 'prov-deepseek' ? { ...p, apiKey: 'sk-test-valid' } : p
@@ -64,6 +67,7 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
   });
 
   afterEach(() => {
+    analysisMock.mockRestore();
     act(() => {
       root.unmount();
     });
@@ -282,6 +286,7 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
       await act(async () => {
         sendBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
+      await confirmLatestModification(container);
 
       const store = useProjectStore.getState();
       // 1. 原画框未被破坏覆盖

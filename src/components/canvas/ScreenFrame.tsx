@@ -14,11 +14,14 @@ interface ScreenFrameProps {
   screen: Screen;
   lodLevel: 0 | 1 | 2; // 0=bitmap proxy, 1=frozen iframe, 2=active iframe
   isStaged?: boolean;
+  isComparisonTarget?: boolean;
+  isComparisonBackground?: boolean;
+  overrideSourceScreenId?: string;
   /** T-AE-26: 触发单画框 AI 质感润色 */
   onPolish?: (screenId: string) => void;
 }
 
-export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isStaged, onPolish }) => {
+export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isStaged, isComparisonTarget, isComparisonBackground, overrideSourceScreenId, onPolish }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [measuredHeight, setMeasuredHeight] = useState<number>(screen.measuredHeight || 800);
@@ -73,7 +76,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
 
   // Compile L4 Overrides for this screen
   const screenOverrides = Object.entries(overrides)
-    .filter(([key]) => key.startsWith(`${screen.id}:`))
+    .filter(([key]) => key.startsWith(`${overrideSourceScreenId || screen.id}:`))
     .map(([key, ov]) => {
       const declarationsStr = Object.entries(ov.declarations)
         .filter(([_, val]) => val !== '' && val !== undefined && val !== null)
@@ -626,11 +629,13 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       ref={containerRef}
       id={`screen-frame-${screen.id}`}
       data-testid={`screen-frame-${screen.id}`}
+      data-comparison-focus={isStaged || isComparisonTarget ? 'true' : undefined}
       className="absolute select-none group"
       style={{
         left: `${screen.position.x}px`,
         top: `${screen.position.y}px`,
-        width: `${frameWidth}px`
+        width: `${frameWidth}px`,
+        zIndex: isStaged || isComparisonTarget ? 30 : isComparisonBackground ? 0 : undefined
       }}
       onClick={() => setActiveScreen(screen.id)}
     >
