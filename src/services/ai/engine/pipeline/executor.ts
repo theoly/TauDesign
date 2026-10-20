@@ -1,3 +1,6 @@
+import { streamWithContinuation } from '../../boundedContinuation';
+import { buildDesignBrief, type DesignBrief } from '../../designBrief';
+import { checkGenerationQuality, qualitySummary } from '../../generationQuality';
 import { AIEngineCore } from '../core/types';
 import { enrichContext } from '../context/contextEnricher';
 import { analyzePipelineIntent } from './interceptors/intentInterceptor';
@@ -25,6 +28,10 @@ export interface ExecutePipelineOptions {
    * DESIGN.md / Craft 的完整 System Prompt；缺省时退回 baseSystemPrompt 字面量。
    */
   designSystem?: DesignSystem;
+  designProseMarkdown?: string;
+  designBrief?: DesignBrief;
+  projectKnowledge?: string;
+  protectedNids?: string[];
   colorMode?: 'light' | 'dark';
   components?: ComponentDefinition[];
   designRules?: string[];
@@ -48,6 +55,8 @@ export class PipelineExecutor {
       designTokens,
       designSystem,
       colorMode,
+      designProseMarkdown,
+      protectedNids,
       components,
       designRules = [],
       decisions = [],
@@ -72,17 +81,23 @@ export class PipelineExecutor {
     // 2. System Prompt 组装 (ISSUE-015)
     // 意图在第 1 步才确定，故 Prompt 必须在此处构建，才能保住 T-AE-10 的
     // 按意图条件注入粒度（Few-Shot 仅 create_screen、改主题/提问零美学层）。
+    const designBrief = intentResult.intent === 'create_screen' && designSystem
+      ? options.designBrief ?? buildDesignBrief({ request: input.rawPrompt, designSystem, device: deviceProfile, mode: colorMode ?? 'light',
+          globalDecisions: decisions.map(d => d.rule), components: components ?? [], projectKnowledge: options.projectKnowledge }) : undefined;
     const systemPrompt = designSystem
       ? PromptBuilder.buildSystemPrompt({
           designSystem,
           deviceProfile,
           frameWidth,
           colorMode,
+          designProseMarkdown,
           components,
           designRules,
           decisions,
           intent: intentResult.intent,
-          hasAttachment: Boolean(input.attachment)
+          hasAttachment: Boolean(input.attachment),
+          componentRequest: input.rawPrompt,
+          taskBrief: designBrief
         })
       : baseSystemPrompt;
 
@@ -97,8 +112,10 @@ export class PipelineExecutor {
       baseSystemPrompt: systemPrompt,
       attachment: input.attachment,
       textReferences: input.textReferences,
+      projectKnowledge: options.projectKnowledge,
       designRules,
       decisions,
+      projectProseMarkdown: designProseMarkdown,
       targetScreenOverride: input.decision ? { id: input.decision.targetScreenId } : undefined
     });
 
@@ -119,44 +136,15 @@ export class PipelineExecutor {
     };
 
     // 3. Core Invocation
-    const streamRes = engineCore.streamText({
-      provider,
-      model,
-      messages: enriched.messages,
+    const recovered = await streamWithContinuation(engineCore, {
+      provider, model, messages: enriched.messages,
+      maxTokens: intentResult.intent === 'modify_screen' && (enriched.targetScreen?.htmlContent.length ?? 0) > 12000 ? 16384 : 8192,
       signal
-    });
-
-    // Stream consumption loops
-    (async () => {
-      try {
-        for await (const chunk of streamRes.textStream) {
-          if (onStreamDelta) onStreamDelta(chunk);
-        }
-      } catch {}
-    })();
-
-    (async () => {
-      try {
-        for await (const rChunk of streamRes.reasoningStream) {
-          if (onReasoningDelta) onReasoningDelta(rChunk);
-        }
-      } catch {}
-    })();
-
-    let rawResponse = '';
-    try {
-      rawResponse = await streamRes.textPromise;
-    } catch (err: any) {
-      return {
-        status: 'error',
-        rawResponse: '',
-        errorMessage: err?.message || 'AI 生成异常中断'
-      };
-    }
-
-    const reasoningText = await streamRes.reasoningPromise;
-    const usage = await streamRes.usagePromise;
-    const recoveredStreamError = await streamRes.recoveryPromise;
+    }, { onText: onStreamDelta, onReasoning: onReasoningDelta, allowContinuation: intentResult.intent !== 'question' });
+    const { rawResponse, reasoningText, usage, recoveredStreamError, finishReason } = recovered;
+    const recoveryWarnings = recovered.warnings;
+    if (recovered.errorMessage) return { status: 'error', rawResponse, reasoningText, usage, recoveredStreamError,
+      warnings: recoveryWarnings, errorMessage: recovered.errorMessage };
 
     // If question intent, return directly
     if (intentResult.intent === 'question') {
@@ -165,6 +153,7 @@ export class PipelineExecutor {
         rawResponse,
         reasoningText,
         recoveredStreamError,
+        warnings: recoveryWarnings,
         usage
       };
     }
@@ -177,11 +166,19 @@ export class PipelineExecutor {
         rawResponse,
         reasoningText,
         recoveredStreamError,
+        warnings: recoveryWarnings,
         usage,
         errorMessage: '模型未输出有效的 HTML 代码块'
       };
     }
     const extractedHtml = artifact.html;
+    if (!artifact.isComplete) {
+      const atLimit = /length|max[_-]?(?:output[_-]?)?tokens/i.test(finishReason ?? '');
+      const message = atLimit ? '模型达到输出上限，页面未完整返回，原页面未修改。' : '模型输出未完整返回（页面产物未闭合），原页面未修改。';
+      return { status: 'rejected_by_quality', rawResponse, reasoningText, usage, recoveredStreamError, warnings: recoveryWarnings,
+        errorMessage: message, qualityReport: { passed: false, findings: [{ code: 'incomplete_artifact', severity: 'error', message,
+          actual: finishReason ?? '未收到完整闭合产物', expected: '完整页面及闭合产物，不能将流式片段作为最终候选' }] } };
+    }
     const deviationNote = extractDeviationNote(rawResponse);
 
     const artifactMeta = {
@@ -189,6 +186,15 @@ export class PipelineExecutor {
       type: artifact.type,
       title: artifact.title,
       isFallback: artifact.isFallback
+    };
+
+    const qualityReport = checkGenerationQuality(extractedHtml, {
+      deviceProfile, designSystem, baselineHtml: enriched.targetScreen ? screens[enriched.targetScreen.id]?.htmlContent : undefined, protectedNids,
+      modificationRequest: input.rawPrompt
+    });
+    if (!qualityReport.passed) return {
+      status: 'rejected_by_quality', rawResponse, qualityReport, reasoningText, usage, recoveredStreamError, warnings: recoveryWarnings,
+      errorMessage: qualitySummary(qualityReport)
     };
 
     // 5. Structure Guard Check
@@ -199,12 +205,13 @@ export class PipelineExecutor {
         rawResponse,
         reasoningText,
         extractedHtml,
+        qualityReport,
         structureDiff: guardCheck.structureDiff,
         errorMessage: guardCheck.reason,
         recoveredStreamError,
         usage,
         artifactMetadata: artifactMeta,
-        warnings: artifact.warnings
+        warnings: [...recoveryWarnings, ...(artifact.warnings ?? [])]
       };
     }
 
@@ -216,6 +223,7 @@ export class PipelineExecutor {
 
     return {
       status: applyRes.status,
+      qualityReport,
       rawResponse,
       reasoningText,
       extractedHtml,
@@ -227,7 +235,7 @@ export class PipelineExecutor {
       recoveredStreamError,
       usage,
       artifactMetadata: artifactMeta,
-      warnings: artifact.warnings
+      warnings: [...recoveryWarnings, ...(artifact.warnings ?? [])]
     };
   }
 }

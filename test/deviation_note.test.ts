@@ -189,7 +189,7 @@ describe('设计取舍披露与用户裁决 (Deviation Note) — doc/feature/dev
       const mockTransport = new MockTransport();
       // 模型严重丢失结构节点，同时附带 deviation-note——守卫应拦截且不挂载取舍披露
       mockTransport.queueResponse(
-        '```html\n<div>只剩下一句话</div>\n```' +
+        '```html\n<div>只剩下一句话<button type="submit">提交</button></div>\n```' +
           '<deviation-note>{"conflict": "x", "chosen": "y", "alternative": "z", "alternativeInstruction": "w"}</deviation-note>'
       );
       const engineCore = new DefaultAIEngineCore(mockTransport);

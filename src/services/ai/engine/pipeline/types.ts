@@ -1,3 +1,4 @@
+import type { QualityReport } from '../../generationQuality';
 import { EngineMessage, TokenUsage } from '../core/types';
 import { StructureDiff } from '../../../../utils/structureGuard';
 import { DeviationNote } from './interceptors/streamTransform';
@@ -58,6 +59,7 @@ export interface PipelineOutput {
     | 'applied'
     | 'staged_side_by_side'
     | 'rejected_by_guard'
+    | 'rejected_by_quality'
     | 'no_html'
     | 'theme_proposed'
     | 'answered_question'
@@ -67,6 +69,7 @@ export interface PipelineOutput {
   reasoningText?: string;
   extractedHtml?: string;
   structureDiff?: StructureDiff;
+  qualityReport?: QualityReport;
   /** 设计取舍披露 (doc/feature/deviation-note/spec.md BR-DN-05)：仅成功路径挂载 */
   deviationNote?: DeviationNote;
   stagedScreen?: {

@@ -142,7 +142,7 @@ describe('局部模式选择与实际接线', () => {
     act(()=>host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
     const radios=host.querySelectorAll<HTMLInputElement>('input[type="radio"]');expect(radios[0].checked).toBe(true);
     await act(async()=>{Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('按所选内容生成新版'))!.click();});expect(mode).toBe('local');
-    act(()=>radios[1].click());await act(async()=>{Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('按所选内容生成新版'))!.click();});expect(mode).toBe('page');
+    act(()=>radios[2].click());await act(async()=>{Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('按所选内容生成新版'))!.click();});expect(mode).toBe('page');
   });
   test('单页润色局部确认也不再次生成完整HTML',async()=>{
     let closed=false;const stream=spyOn(DefaultAIEngineCore.prototype,'streamText');

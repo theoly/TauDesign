@@ -39,7 +39,7 @@ export function stripEditorChromeClasses(html: string): string {
     .replace(/\s*class=(["'])([^"']*)\1/gi, (match, quote: string, value: string) => {
       const kept = value
         .split(/\s+/)
-        .filter((cls) => cls && cls !== 'aidesign-selected' && cls !== 'aidesign-hovered');
+        .filter((cls) => cls && cls !== 'aidesign-selected' && cls !== 'aidesign-hovered' && cls !== 'aidesign-quality-target');
       if (kept.length === 0) return '';
       return ` class=${quote}${kept.join(' ')}${quote}`;
     });

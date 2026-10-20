@@ -1,6 +1,7 @@
 import { DesignSystem } from '../types/designSystem';
 import { extractClassWhitelist } from './cssCompiler';
 import { getBaseCss, type DeviceProfile } from '../styles/baseCss';
+import { parseHtmlCopy } from './htmlDocument';
 
 /** 编辑器注入的运行时类，不属于设计基座，不应报为 unknown_class */
 const IGNORED_CLASS_PREFIXES = ['aidesign-'];
@@ -30,27 +31,20 @@ export class TokenLintEngine {
     let totalNodes = 0;
     const whitelist = new Set(extractClassWhitelist(getBaseCss(deviceProfile)));
 
-    // Parse all element nodes
-    const tagMatches = html.matchAll(/<([a-zA-Z0-9-]+)([^>]*?)>/g);
-
-    for (const m of tagMatches) {
-      const tag = m[1].toLowerCase();
-      const attrs = m[2];
-
-      if (['!doctype', 'html', 'head', 'meta', 'title', 'link', 'style', 'script'].includes(tag)) {
-        continue;
-      }
-
+    const { doc, full } = parseHtmlCopy(html);
+    const nonCompliant = new Set<Element>();
+    for (const element of Array.from(doc.querySelectorAll('*'))) {
+      const tag = element.tagName.toLowerCase();
+      if (['html', 'head', 'meta', 'title', 'link', 'style', 'script'].includes(tag) || (tag === 'body' && !full)) continue;
       totalNodes++;
-      const nidMatch = attrs.match(/data-nid=["']([^"']+)["']/);
-      const nid = nidMatch ? nidMatch[1] : 'unknown';
-
+      const initialIssueCount = issues.length;
+      const nid = element.getAttribute('data-nid') || 'unknown';
+      const styleValue = element.getAttribute('style');
       // 1. Check for literal hex or rgb colors in inline style
-      const styleMatch = attrs.match(/style=["']([^"']+)["']/);
-      if (styleMatch) {
-        const styleStr = styleMatch[1];
+      if (styleValue) {
+        const styleStr = styleValue;
         const hexMatch = styleStr.match(/#([a-fA-F0-9]{3,8})\b/);
-        if (hexMatch && !styleStr.includes('var(--color-')) {
+        if (hexMatch) {
           issues.push({
             nid,
             tagName: tag,
@@ -90,9 +84,9 @@ export class TokenLintEngine {
       // 4. T-AE-04: 检测白名单外的类名
       // 这是发现"Prompt 承诺了但 base.css 中不存在"的类名漂移的唯一防线。
       // 此前 unknown_class 只在类型中声明、无任何实现，导致 51 个空转类名长期无人察觉。
-      const classMatch = attrs.match(/\bclass=["']([^"']*)["']/);
-      if (classMatch) {
-        const unknown = classMatch[1]
+      const classValue = element.getAttribute('class');
+      if (classValue) {
+        const unknown = classValue
           .split(/\s+/)
           .filter(Boolean)
           .filter(c => !whitelist.has(c) && !IGNORED_CLASS_PREFIXES.some(p => c.startsWith(p)));
@@ -107,9 +101,10 @@ export class TokenLintEngine {
           });
         }
       }
+      if (issues.length > initialIssueCount) nonCompliant.add(element);
     }
 
-    const nonCompliantNodes = new Set(issues.map(i => i.nid)).size;
+    const nonCompliantNodes = nonCompliant.size;
     const compliantNodes = Math.max(0, totalNodes - nonCompliantNodes);
     const complianceRate = totalNodes > 0 ? Math.round((compliantNodes / totalNodes) * 100) : 100;
 
@@ -122,16 +117,28 @@ export class TokenLintEngine {
   }
 
   /**
-   * One-click batch auto-fix: maps literal values to nearest standard Tokens
+   * 显式修复：沿用既有颜色角色映射，仅修改样式声明，不推断业务语义。
    */
   public static autoFix(html: string): string {
-    let fixed = html;
-    // Replace hex colors with var(--color-primary) or var(--color-surface)
-    fixed = fixed.replace(/color:\s*#[a-fA-F0-9]{3,8}/gi, 'color: var(--color-primary)');
-    fixed = fixed.replace(/background(?:-color)?:\s*#[a-fA-F0-9]{3,8}/gi, 'background-color: var(--color-surface)');
-    // Fix random px radius
-    fixed = fixed.replace(/border-radius:\s*[0-9]+px/gi, 'border-radius: var(--radius-md)');
-    return fixed;
+    const copy = parseHtmlCopy(html);
+    for (const element of Array.from(copy.doc.querySelectorAll<HTMLElement>('[style]'))) {
+      const style = element.style;
+      // 先捕获所有原始声明，避免改写shorthand时改变CSSOM枚举。
+      const properties = new Set(Array.from({ length: style.length }, (_, index) => style.item(index)));
+      properties.add('border-radius');
+      for (const property of properties) {
+        const value = style.getPropertyValue(property);
+        const priority = style.getPropertyPriority(property);
+        if (/#[a-fA-F0-9]{3,8}\b/.test(value)) {
+          if (property === 'color') style.setProperty(property, 'var(--color-primary)', priority);
+          if (property === 'background' || property === 'background-color') style.setProperty(property, 'var(--color-surface)', priority);
+        }
+        if (property === 'border-radius' && /^\d+px$/.test(value.trim())) {
+          style.setProperty(property, 'var(--radius-md)', priority);
+        }
+      }
+    }
+    return copy.serialize();
   }
 }
 

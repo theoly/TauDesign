@@ -1,3 +1,4 @@
+import type { GenerationOptions } from '../../aiService';
 import { StreamEvent, ErrorKind } from '../../../../types/provider';
 
 export type { StreamEvent, ErrorKind };
@@ -11,6 +12,7 @@ export interface TransportRequest {
   provider?: any;
   model?: string;
   messages?: any[];
+  generationOptions?: GenerationOptions;
   allowPrivateNetwork?: boolean;
   allowedInternalHosts?: string[];
 }

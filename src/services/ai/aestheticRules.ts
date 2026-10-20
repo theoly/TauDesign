@@ -28,7 +28,7 @@ export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY — these rules are
 - REALISTIC CONTENT: 使用真实感中文姓名、电话、日期、金额和状态徽标；禁用“占位文字”/“Lorem ipsum”/“标题1”。
 - 按钮文字默认不换行：.btn 已设 white-space: nowrap；不插入<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal 覆盖并调高按钮。
 - COMPONENT LAYOUT CONTRACT: .nowrap 仅控制 flex-wrap，文字用 .text-nowrap。标签组用 .row.wrap.gap-2，标签不设 .flex-1，空间不足整体换行。姓名单行，职业位于姓名下方，人物组不足换行；润色不新增或移动节点。头像用 .avatar，装饰图标用 .icon-box，内部 .icon 的 viewBox 留白对称。长文本列用 .flex-1.min-w-0，地址/URL 按需 .break-words。按钮组可整体换行；禁止缩字、裁字或位移补偿居中。
-- STATUS & FEEDBACK: 状态优先用 .badge-soft + 语义色，避免纯文字。`;
+- STATUS & FEEDBACK: 状态用.badge-soft + 语义色；通知角标遵循组件契约，右上附着不遮图标或内容。`;
 
 /** Only new pages should proactively diversify repeated controls' business states. */
 export const NEW_SCREEN_STATE_RULES = `新页面同组控件多状态：尽量利用现有实例展示代表性不同状态，如输入框空值/已填/错误/禁用、选项未选/选中、按钮可用/加载/禁用。不额外堆砌控件；状态须与业务一致，互斥组最多一个选中；遵守用户指定状态和参考图，移动端不依赖hover。`;
@@ -56,7 +56,7 @@ const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
   * FULL-BLEED HERO BANNERS & GRADIENTS: When a screen features an immersive brand/gradient header (e.g. certification/profile/store banner), let the hero block span the full width without horizontal margins and without bottom rounded corners (0 bottom radius). List cards beneath it sit on the canvas with standard spacing or gentle overlap.
   * Bottom navigation uses .tabbar with .tabbar-item (mark active as .is-active).
   * CTA BUTTON PLACEMENT: In card forms or bottom sheet dialogs, form submit buttons belong inline within the card flow (e.g. under inputs, above social proof). Use .cta-fixed when a sticky full-screen bottom bar is explicitly requested or appropriate. When reproducing a design reference, ALWAYS match the button placement in the reference!
-  * RIBBON BADGES & STATUS STRIPS: When cards have top-right corner badges (e.g. "推荐完成", "热门"), ensure they sit flush against the card's top-right corner. Notice bars inside cards use subtle background tint (.bg-warning-light or .bg-surface-alt) with semantic icons.
+  * RIBBON BADGES & STATUS STRIPS: Card corner labels need their own reserved area; never cover the title, image subject or body content. Notification badges use .notification-control with a reserved top band and an absolute top-right badge; center the icon horizontally, never overlap it or use side-by-side columns. Use .badge-dot for a subtle update and .badge-count for small counts, reserving danger color for urgent issues. Notice bars use subtle background tint (.bg-warning-light or .bg-surface-alt) with semantic icons.
   * SEMANTIC REGION DECOUPLING: Status bar (.status-bar, 9:41/signals), navigation bar (.appbar, title/back), and hero marketing section (.hero-section, slogan/badges) MUST be rendered as decoupled semantic containers. Never fuse status bar and hero into a single indivisible container. Contrast rule: Never emit invisible white-on-white text when changing backgrounds!`;
 
 export function getDeviceAestheticRules(device: DeviceProfile): string {

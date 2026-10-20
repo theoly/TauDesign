@@ -126,7 +126,8 @@ export function extractArtifact(raw: string): ExtractedArtifact | undefined {
         type: 'screen',
         html: htmlSnippet,
         isFallback: true,
-        isComplete: true
+        // 未闭合Markdown围栏只能用于流式预览，不能标记成最终产物。
+        isComplete: !raw.includes('```')
       };
     }
   }

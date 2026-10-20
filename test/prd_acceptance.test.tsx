@@ -174,7 +174,7 @@ describe('PRD 全功能综合验收 (Full PRD Acceptance Suite)', () => {
     });
 
     test('D17 采纳分支 1: 「采纳新版」覆盖原画框，原版自动打 Checkpoint 备份', () => {
-      const newHtml = '<div data-nid="root-new" class="p-4"><h1>采纳后的页面</h1></div>';
+      const newHtml = '<div data-nid="root-new" class="p-4"><h1>采纳后的页面</h1><button data-nid="btn-00001" class="btn btn-primary">点击进入</button></div>';
       useProjectStore.getState().stageScreenChange('screen-1', newHtml, '改版方案');
 
       useProjectStore.getState().adoptStagedChange();
@@ -190,7 +190,7 @@ describe('PRD 全功能综合验收 (Full PRD Acceptance Suite)', () => {
 
     test('D17 采纳分支 2: 「两版都留」开辟新画框，原画框保持不变', () => {
       const originalHtml = useProjectStore.getState().screens['screen-1'].htmlContent;
-      const newHtml = '<div data-nid="root-alt"><h1>独立新分支页面</h1></div>';
+      const newHtml = '<div data-nid="root-alt"><h1>独立新分支页面</h1><button data-nid="btn-00001" class="btn btn-primary">点击进入</button></div>';
       useProjectStore.getState().stageScreenChange('screen-1', newHtml, '分支新页');
 
       useProjectStore.getState().keepBothScreens();

@@ -1,6 +1,7 @@
 import { AIProviderConfig, ErrorKind, StreamEvent } from '../../types/provider';
 import { createUsageTracker } from './usageTracker';
 import { isTauri, invoke, Channel } from '@tauri-apps/api/core';
+import { supportsNativeContinuation } from './boundedContinuation';
 import { ModelDiscoveryService } from './modelDiscoveryService';
 import { DiscoveredModel } from './engine/core/multimodalGuard';
 
@@ -8,6 +9,12 @@ export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
   imageUrl?: string;
+  partial?: true;
+}
+
+export interface GenerationOptions {
+  maxTokens?: number;
+  temperature?: number;
 }
 
 class StreamChunkProcessor {
@@ -200,7 +207,8 @@ export class AIService {
     modelId: string,
     messages: ChatMessage[],
     onEvent: (ev: StreamEvent) => void,
-    timeoutMs = 900000
+    timeoutMs = 900000,
+    generationOptions: GenerationOptions = {}
   ): { abort: () => void; promise: Promise<void> } {
     const controller = new AbortController();
     let isAborted = false;
@@ -287,15 +295,16 @@ export class AIService {
                 ]
               };
             }
-            return { role: m.role, content: m.content };
+            return { role: m.role, content: m.content, ...(m.partial && supportsNativeContinuation(provider, modelId) && m === messages.at(-1) && m.role === 'assistant' ? { partial: true } : {}) };
           });
 
           const body: Record<string, unknown> = {
             model: modelId,
             messages: formattedMessages,
+            ...(formattedMessages.some(m => 'partial' in m) ? { enable_thinking: false } : {}),
             stream: true,
-            temperature: 0.7,
-            max_tokens: 8192
+            temperature: generationOptions.temperature ?? 0.7,
+            max_tokens: generationOptions.maxTokens ?? 8192
           };
 
           // Official OpenAI supports stream_options; omit for custom third-party proxies to prevent 400 Bad Request
@@ -350,8 +359,8 @@ export class AIService {
             model: modelId,
             messages: anthropicMessages,
             stream: true,
-            max_tokens: 8192,
-            temperature: 0.7
+            max_tokens: generationOptions.maxTokens ?? 8192,
+            temperature: generationOptions.temperature ?? 0.7
           };
 
           if (systemMsg.trim()) {
@@ -382,7 +391,7 @@ export class AIService {
 
           bodyJson = {
             contents,
-            generationConfig: { temperature: 0.7, maxOutputTokens: 4096 }
+            generationConfig: { temperature: generationOptions.temperature ?? 0.7, maxOutputTokens: generationOptions.maxTokens ?? 4096 }
           };
         } else if (provider.protocol === 'ollama_native') {
           const cleanBase = (provider.baseUrl || '').trim().replace(/\/+$/, '');
@@ -390,7 +399,13 @@ export class AIService {
           bodyJson = {
             model: modelId,
             messages,
-            stream: true
+            stream: true,
+            ...(generationOptions.maxTokens !== undefined || generationOptions.temperature !== undefined ? {
+              options: {
+                ...(generationOptions.maxTokens !== undefined ? { num_predict: generationOptions.maxTokens } : {}),
+                ...(generationOptions.temperature !== undefined ? { temperature: generationOptions.temperature } : {})
+              }
+            } : {})
           };
         }
 

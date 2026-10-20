@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FileText, History, Image as ImageIcon, Palette, Sliders } from 'lucide-react';
+import { BookOpen, FileText, History, Image as ImageIcon, Palette, Sliders } from 'lucide-react';
+import { ProjectDocumentsPanel } from './panels/ProjectDocumentsPanel';
 import { ScreensPanel } from './panels/ScreensPanel';
 import { AssetsPanel } from './panels/AssetsPanel';
 import { DesignSystemPanel } from './panels/DesignSystemPanel';
@@ -8,10 +9,11 @@ import { PropertyInspector } from '../inspector/PropertyInspector';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { useProjectStore } from '../../stores/useProjectStore';
 
-export type SidebarView = 'screens' | 'assets' | 'design' | 'history' | 'inspector';
+export type SidebarView = 'screens' | 'assets' | 'design' | 'history' | 'inspector' | 'documents';
 
 const VIEWS: { key: SidebarView; icon: React.FC<{ className?: string }>; label: string }[] = [
   { key: 'screens', icon: FileText, label: '页面' },
+  { key: 'documents', icon: BookOpen, label: '项目文档' },
   { key: 'assets', icon: ImageIcon, label: '资源' },
   { key: 'design', icon: Palette, label: '设计系统' },
   { key: 'history', icon: History, label: '历史' },
@@ -118,6 +120,9 @@ export const SideBar: React.FC<SideBarProps> = ({ onOpenAssetCenter, onOpenTheme
           {!collapsed && view === 'assets' && <AssetsPanel onOpenAssetCenter={onOpenAssetCenter} />}
           {!collapsed && view === 'design' && <DesignSystemPanel onOpenThemeEditor={onOpenThemeEditor} onOpenRestyle={onOpenRestyle} />}
           {!collapsed && view === 'history' && <HistoryPanel />}
+          <div style={{ display: view === 'documents' ? undefined : 'none' }}>
+            <ProjectDocumentsPanel />
+          </div>
           <div className="h-full" style={{ display: view === 'inspector' ? undefined : 'none' }}>
             <ErrorBoundary
               fallbackTitle="属性检查器渲染异常"

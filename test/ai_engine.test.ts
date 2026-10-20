@@ -131,8 +131,8 @@ describe('AI Engine & Pipeline Suite (Layer 1 ~ Layer 4)', () => {
     };
 
     const mockTransport = new MockTransport();
-    // Model severely drops inputs, buttons, and cards, returning a 1-line div
-    mockTransport.queueResponse('```html\n<div>只剩下一句话</div>\n```');
+    // 保留主操作以单独验证结构守卫；主操作丢失由更早的质量守卫阻断。
+    mockTransport.queueResponse('```html\n<div>只剩下一句话<button type="submit">提交</button></div>\n```');
 
     const engineCore = new DefaultAIEngineCore(mockTransport);
 

@@ -1,3 +1,6 @@
+import { buildProjectKnowledgeContext } from '../../projectKnowledge';
+import { buildDesignBrief, type DesignBrief } from '../../designBrief';
+import type { QualityReport } from '../../generationQuality';
 import { useState, useRef, useEffect } from 'react';
 import { useProjectStore } from '../../../../stores/useProjectStore';
 import { useAIConfigStore } from '../../../../stores/useAIConfigStore';
@@ -13,10 +16,13 @@ import { resolveToolFromAIResponse } from '../../../tools/toolResolver';
 import { resolveApplyToolCall } from '../../../tools/applyTargetResolver';
 import { ScreenAuditReport } from '../../../../utils/tokenLint';
 import { NidEngine } from '../../../../utils/nidEngine';
-import type { TextReference } from '../../textFileContext';
-import { analyzeScreenModification, buildReviewedModificationRequest, captureModificationSnapshot, isModificationSnapshotCurrent, getLocalModificationPlan,
+import { formatTextReferences, type TextReference } from '../../textFileContext';
+import { analyzeScreenModification, buildReviewedModificationRequest, captureModificationSnapshot, isModificationSnapshotCurrent, getLocalModificationPlan, getRegionModificationPlan,
   type ModificationAnalysis, type ModificationMode, type ModificationReviewState, type ModificationSnapshot } from '../../modificationReview';
-import { applyLocalCopyEdits, generateSupplementedLocalEdits } from '../../localCopyModification';
+import { applyLocalCopyEdits, generateSupplementedLocalEdits, mergeLocalEditOperations } from '../../localCopyModification';
+import { requiresModificationReview } from '../../modificationEntry';
+import { generateElementCopyEdits } from '../../elementCopyModification';
+import { generateRegionCopyEdits } from '../../regionCopyModification';
 
 export interface ChatMessageItem {
   id: string;
@@ -57,9 +63,12 @@ export interface ChatMessageItem {
   deviationChoice?: 'keep' | 'switch';
   isError?: boolean;
   streamRecovered?: boolean;
+  generationWarnings?: string[];
   /** 本轮被结构守卫拦截，尚未落地任何画框 (BR-GRM-04) */
   isGuardRejected?: boolean;
   auditReport?: ScreenAuditReport;
+  qualityReport?: QualityReport;
+  designBrief?: DesignBrief;
   modificationReview?: ModificationReviewState;
   preActionSnapshot?: {
     screenId: string;
@@ -428,8 +437,14 @@ export function useAIEngineChat() {
       return;
     }
 
-    // 旧页面修改先分析；只有确认卡片回传的固定目标才能进入原生成管道。
-    if (!approved && (decision.action === 'modify_screen' || decision.action === 'patch_element') && effectiveScreenId) {
+    const projectKnowledge = buildProjectKnowledgeContext(useProjectStore.getState(), textToSend, effectiveScreenId ?? undefined);
+
+    const modifiesExisting = (decision.action === 'modify_screen' || decision.action === 'patch_element') && effectiveScreenId;
+    const modificationSnapshot = approved?.snapshot ?? (modifiesExisting
+      ? captureModificationSnapshot(useProjectStore.getState(), effectiveScreenId!) : undefined);
+
+    // 具体改法已由用户授权，直接生成；宽泛诉求才整理可选择的建议。
+    if (!approved && modifiesExisting && requiresModificationReview(extractCleanUserPrompt(textToSend), { hasElementReference: Boolean(decision.elementNid) })) {
       const snapshot = captureModificationSnapshot(useProjectStore.getState(), effectiveScreenId);
       const reviewId = `review_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       const plan = { request: textToSend, attachment, options, snapshot, decision, analysis: undefined as ModificationAnalysis | undefined };
@@ -455,6 +470,7 @@ export function useAIEngineChat() {
           deviceProfile: current.settings.deviceProfile, frameWidth: current.settings.frameWidth,
           protectedNids: current.getProtectedNids(effectiveScreenId),
           imageUrl: attachment?.dataUrl,
+          projectKnowledge,
           context: JSON.stringify({ scopedCss: screen.scopedCss,
             overrides: Object.entries(current.overrides).filter(([key]) => key.startsWith(`${effectiveScreenId}:`)),
             references: textReferences, decisions: Object.values(current.decisions).filter(d => d.active) })
@@ -467,6 +483,55 @@ export function useAIEngineChat() {
       } finally {
         operationLockRef.current = false;
         setIsGenerating(false);
+        if (abortControllerRef.current === controller) abortControllerRef.current = null;
+      }
+      return;
+    }
+
+    if (!approved && modifiesExisting && decision.elementNid) {
+      // 明确引用的具体要求只生成该子树的操作，禁止退回整页改写。
+      const current = useProjectStore.getState();
+      const screen = current.screens[effectiveScreenId!];
+      const snapshot = modificationSnapshot!;
+      const controller = new AbortController(); abortControllerRef.current = controller;
+      operationLockRef.current = true; setIsGenerating(true); setLastGuardOutput(null);
+      const messageId = `element_${Date.now()}`;
+      const startedAt = Date.now();
+      const conversationStore = current.getConversationStore(), attachmentStore = current.getAttachmentStore();
+      setMessages(prev => [...prev,
+        {id:`usr_${messageId}`,sender:'user',text:textToSend,displayText:options?.displayText || extractCleanUserPrompt(textToSend),imageUrl:attachment?.dataUrl,
+          referencedElement:options?.referencedElement || parseReferencedElement(textToSend) || undefined,
+          referencedScreen:{id:screen.id,name:screen.name},textFileNames:textReferences.map(file=>file.path || file.name)},
+        {id:messageId,sender:'assistant',text:'',isGenerating:true,thinkingStage:2,
+          preActionSnapshot:{screenId:screen.id,screenName:screen.name,htmlContent:screen.htmlContent},originalUserPrompt:textToSend,
+          originalReferencedScreenId:screen.id,originalAttachment:attachment,
+          originalDecision:{action:'modify_screen',targetScreenId:screen.id,styleReferenceScreenId:null,elementNid:decision.elementNid}}
+      ]);
+      try {
+        const candidate = await generateElementCopyEdits(engineCoreRef.current,{
+          provider:activeRole.provider,model:activeRole.modelId,signal:controller.signal,
+          html:screen.htmlContent,targetNid:decision.elementNid,request:extractCleanUserPrompt(textToSend),device:current.settings.deviceProfile,
+          designSystem:current.designSystem,mode:current.settings.colorMode,protectedNids:current.getProtectedNids(screen.id),
+          imageUrl:attachment?.dataUrl,projectKnowledge:[projectKnowledge,formatTextReferences(textReferences)].filter(Boolean).join('\n\n'),
+          context:JSON.stringify({scopedCss:screen.scopedCss,overrides:Object.entries(current.overrides).filter(([key])=>key.startsWith(`${screen.id}:`))})
+        });
+        if (controller.signal.aborted) return;
+        if (!isModificationSnapshotCurrent(useProjectStore.getState(),snapshot)) throw new Error('原页面或工程已变化，本次未应用修改。');
+        current.stageScreenChange(screen.id,candidate.html,`${screen.name}（元素细节修改候选）`,textToSend);
+        current.panToScreen(screen.id);
+        const resultText = `已在原页副本中修改所引用元素的局部细节，其他内容保留。请对比后采纳。`;
+        setMessages(prev=>prev.map(m=>m.id===messageId?{...m,text:resultText,isGenerating:false,elapsedSeconds:Number(((Date.now()-startedAt)/1000).toFixed(1)),
+          screenId:screen.id,screenName:screen.name,toolAction:'modified',htmlOutput:candidate.html,qualityReport:candidate.qualityReport}:m));
+        try {
+          const saved = attachment ? await attachmentStore.save(attachment.name,attachment.dataUrl) : null;
+          await conversationStore.appendTurn({turnId:messageId,ts:Date.now(),user:{text:textToSend,
+            attachments:saved?[saved.relPath]:undefined,textFiles:textReferences.map(file=>file.path || file.name)},assistant:{text:resultText}});
+        } catch (error) { console.warn('Conversation save error:',error); }
+      } catch (error) {
+        if (!controller.signal.aborted) setMessages(prev=>prev.map(m=>m.id===messageId?{...m,isGenerating:false,isError:true,
+          text:`局部修改未执行：${error instanceof Error ? error.message : String(error)}`} : m));
+      } finally {
+        operationLockRef.current = false; setIsGenerating(false);
         if (abortControllerRef.current === controller) abortControllerRef.current = null;
       }
       return;
@@ -503,6 +568,11 @@ export function useAIEngineChat() {
     const cleanDisplayPrompt =
       options?.displayText || extractCleanUserPrompt(textToSend);
 
+    const taskBrief = decision.action === 'create_screen' ? buildDesignBrief({ request: cleanDisplayPrompt,
+      designSystem, device: settings.deviceProfile, mode: settings.colorMode,
+      globalDecisions: Object.values(decisions).filter(d => d.active && d.scope === 'global').map(d => d.text),
+      components: Object.values(components), projectKnowledge }) : undefined;
+
     setMessages((prev) => [
       ...prev,
       {
@@ -520,6 +590,7 @@ export function useAIEngineChat() {
         sender: 'assistant',
         text: '',
         isGenerating: true,
+        designBrief: taskBrief,
         thinkingStage: 1, // 1: 分析需求
         preActionSnapshot: preSnapshot,
         originalUserPrompt: textToSend,
@@ -592,7 +663,10 @@ export function useAIEngineChat() {
         // ISSUE-015: 必须把完整设计系统与当前明暗模式交给管道，
         // 否则模型拿不到 Token 与类名白名单，只能自行发挥并写死颜色
         designSystem,
+        designBrief: taskBrief,
+        projectKnowledge,
         colorMode: settings.colorMode,
+        protectedNids: decision.targetScreenId ? useProjectStore.getState().getProtectedNids(decision.targetScreenId) : [],
         components: Object.values(components),
         designTokens: designSystem.tokens,
         designRules: activeDecisionsList.map((d) => d.rule),
@@ -622,8 +696,22 @@ export function useAIEngineChat() {
       clearTimeout(stageTimer2);
       const elapsedSeconds = Number(((Date.now() - startTime) / 1000).toFixed(1));
 
-      if (approved && !isModificationSnapshotCurrent(useProjectStore.getState(), approved.snapshot)) {
+      // 失败和质量拒绝同样消耗模型用量；恢复请求的累计统计不能因早退而丢失。
+      const promptTokens = output.usage?.inputTokens ?? Math.max(1, Math.round(textToSend.length / 3.5));
+      const completionTokens = output.usage?.outputTokens ?? Math.max(1, Math.round((output.extractedHtml?.length || output.rawResponse.length || 100) / 3.5));
+      const turnUsage = { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens };
+      setMessages(prev => prev.map(m => m.id === assistantMsgId ? {
+        ...m, usage: turnUsage, generationWarnings: output.warnings, elapsedSeconds
+      } : m));
+      if (controller.signal.aborted) return;
+
+      if (modificationSnapshot && !isModificationSnapshotCurrent(useProjectStore.getState(), modificationSnapshot)) {
         setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, isGenerating: false, isError: true, text: '生成期间原页面或工程已变化，本次未应用修改，请重新分析。' } : m));
+        return;
+      }
+
+      if (output.status === 'rejected_by_quality') {
+        setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, isGenerating: false, isError: true, text: `本次结果未应用：${output.errorMessage}`, qualityReport: output.qualityReport } : m));
         return;
       }
 
@@ -653,7 +741,7 @@ export function useAIEngineChat() {
           stageScreenChange(
             targetScreenId,
             formattedHtml,
-            `${screenTitle} (AI 方案候选)`
+            `${screenTitle} (AI 方案候选)`, textToSend
           );
           useProjectStore.getState().panToScreen(targetScreenId);
         }
@@ -667,6 +755,7 @@ export function useAIEngineChat() {
                   elapsedSeconds,
                   structureDiff: output.structureDiff,
                   isGuardRejected: true,
+                  qualityReport: output.qualityReport,
                   htmlOutput: output.extractedHtml,
                   screenId: targetScreenId || undefined,
                   screenName: screenTitle,
@@ -725,7 +814,7 @@ export function useAIEngineChat() {
             ? 'modified'
             : 'patched';
 
-        const toolResult = CanvasToolExecutor.execute(toolCall);
+        const toolResult = CanvasToolExecutor.execute(toolCall.tool === 'modify_screen' ? { ...toolCall, params: { ...toolCall.params, modificationRequest: textToSend } } : toolCall);
         if (toolResult.success) {
           createdScreenId = toolResult.screenId;
           finalScreenName = toolResult.screenName;
@@ -734,16 +823,6 @@ export function useAIEngineChat() {
       }
 
       const candidateDecision = detectCandidateDecision(textToSend);
-
-      const fallbackPromptTokens = Math.max(1, Math.round(textToSend.length / 3.5));
-      const fallbackCompletionTokens = Math.max(1, Math.round((output.extractedHtml?.length || output.rawResponse.length || 100) / 3.5));
-      const promptTokens = output.usage?.inputTokens ?? fallbackPromptTokens;
-      const completionTokens = output.usage?.outputTokens ?? fallbackCompletionTokens;
-      const turnUsage = {
-        promptTokens,
-        completionTokens,
-        totalTokens: promptTokens + completionTokens
-      };
 
       const defaultText =
         toolAction === 'modified'
@@ -766,6 +845,7 @@ export function useAIEngineChat() {
                 htmlOutput: output.extractedHtml,
                 candidateDecision,
                 deviationNote: output.deviationNote,
+                qualityReport: output.qualityReport,
                 streamRecovered: Boolean(output.recoveredStreamError),
                 usage: turnUsage,
                 text: switchedToVision
@@ -831,43 +911,56 @@ export function useAIEngineChat() {
     }
     let scope: string;
     try { scope = buildReviewedModificationRequest(plan.analysis, selected, extra); } catch { return; }
-    if (mode === 'local') {
+    if (mode === 'local' || mode === 'region') {
       const localPlan = getLocalModificationPlan(plan.analysis, selected);
-      if (!localPlan) return;
+      const regionPlan = getRegionModificationPlan(plan.analysis, selected);
+      if (mode === 'local' ? !localPlan : !regionPlan) return;
+      const modeName = mode === 'region' ? '完整区块' : '局部';
       const controller = new AbortController(); abortControllerRef.current = controller;
       operationLockRef.current = true; setIsGenerating(true); setLastGuardOutput(null);
       const update = (review: ModificationReviewState) => setMessages(prev => prev.map(m => m.id === messageId ? { ...m, modificationReview: review } : m));
-      update({ ...plan.analysis, status: 'submitted', summary: '正在复制原页面并应用已确认的局部修改。' });
+      update({ ...plan.analysis, status: 'submitted', summary: `正在复制原页面并应用已确认的${modeName}修改。` });
       try {
         const current = useProjectStore.getState();
         const screen = current.screens[plan.snapshot.screenId];
         const conversationStore = current.getConversationStore();
         const attachmentStore = current.getAttachmentStore();
-        let operations: unknown = localPlan.operations;
-        if (extra.trim()) {
+        const confirmedKnowledge = [buildProjectKnowledgeContext(current, scope, screen.id),
+          formatTextReferences(plan.options?.textReferences ?? [])].filter(Boolean).join('\n\n');
+        let operations: unknown = localPlan?.operations;
+        let regionCandidate: Awaited<ReturnType<typeof generateRegionCopyEdits>> | undefined;
+        if (mode === 'region' || extra.trim()) {
           let binding = getActiveProviderForRole('code') || getActiveProviderForRole('chat');
           if (plan.attachment && (!binding || !supportsVision(binding.provider, binding.modelId))) binding = getActiveProviderForRole('vision');
           if (!binding?.provider || (!binding.provider.apiKey && binding.provider.protocol !== 'ollama_native')) throw new Error('请先配置可用的 AI Provider 以解析补充要求。');
-          operations = await generateSupplementedLocalEdits(engineCoreRef.current, {
+          if (mode === 'region') regionCandidate = await generateRegionCopyEdits(engineCoreRef.current, {
             provider: binding.provider, model: binding.modelId, signal: controller.signal, html: screen.htmlContent,
-            request: scope, allowedNids: localPlan.allowedNids, device: current.settings.deviceProfile,
-            designSystem: current.designSystem, mode: current.settings.colorMode, imageUrl: plan.attachment?.dataUrl
+            request: scope, targetNids: regionPlan!.targetNids, allowedNids: regionPlan!.targetNids, device: current.settings.deviceProfile,
+            protectedNids: current.getProtectedNids(screen.id), modificationRequest: scope,
+            designSystem: current.designSystem, mode: current.settings.colorMode, imageUrl: plan.attachment?.dataUrl,
+            projectKnowledge: confirmedKnowledge
           });
+          else operations = mergeLocalEditOperations(localPlan!.operations, await generateSupplementedLocalEdits(engineCoreRef.current, {
+            provider: binding.provider, model: binding.modelId, signal: controller.signal, html: screen.htmlContent,
+            request: scope, allowedNids: localPlan!.allowedNids, device: current.settings.deviceProfile,
+            designSystem: current.designSystem, mode: current.settings.colorMode, imageUrl: plan.attachment?.dataUrl,
+            projectKnowledge: confirmedKnowledge
+          }));
         }
         if (controller.signal.aborted) throw new Error('局部修改已取消。');
         if (!isModificationSnapshotCurrent(useProjectStore.getState(), plan.snapshot)) throw new Error('原页面或工程已变化，请重新分析。');
-        const candidate = applyLocalCopyEdits(screen.htmlContent, operations, {
-          device: current.settings.deviceProfile, allowedNids: localPlan.allowedNids, protectedNids: current.getProtectedNids(screen.id)
+        const candidate = regionCandidate ?? applyLocalCopyEdits(screen.htmlContent, operations, {
+          device: current.settings.deviceProfile, allowedNids: localPlan!.allowedNids, protectedNids: current.getProtectedNids(screen.id)
         });
-        current.stageScreenChange(screen.id, candidate.html, `${screen.name}（局部修改候选）`);
+        current.stageScreenChange(screen.id, candidate.html, `${screen.name}（${modeName}修改候选）`, scope);
         current.panToScreen(screen.id);
         modificationPlansRef.current.delete(messageId);
         update({ ...plan.analysis, status: 'submitted' });
-        const resultText = `已在「${screen.name}」的副本上完成 ${candidate.targetNids.length} 个节点的局部修改，原页面未替换。请对比后采纳或保留原版。`;
+        const resultText = `已在「${screen.name}」的副本上完成 ${mode === 'region' ? regionPlan!.targetNids.length : localPlan!.allowedNids.length} 个目标的${modeName}修改，原页面未替换。请对比后采纳或保留原版。`;
         setMessages(prev => [...prev,
           { id: `local_usr_${messageId}`, sender: 'user', text: scope },
           { id: `local_ast_${messageId}`, sender: 'assistant', text: resultText, screenId: screen.id, screenName: screen.name,
-            toolAction: 'modified', htmlOutput: candidate.html, preActionSnapshot: { screenId: screen.id, screenName: screen.name, htmlContent: screen.htmlContent },
+            toolAction: 'modified', qualityReport: candidate.qualityReport, htmlOutput: candidate.html, preActionSnapshot: { screenId: screen.id, screenName: screen.name, htmlContent: screen.htmlContent },
             originalUserPrompt: `${plan.request}\n${scope}`, originalReferencedScreenId: screen.id, originalAttachment: plan.attachment,
             originalDecision: { action: 'modify_screen', targetScreenId: screen.id, styleReferenceScreenId: null, elementNid: null } }
         ]);
@@ -878,7 +971,7 @@ export function useAIEngineChat() {
               textFiles: plan.options?.textReferences?.map(file => file.path || file.name) }, assistant: { text: resultText } });
         } catch (error) { console.warn('Conversation save error:', error); }
       } catch (error) {
-        update({ ...plan.analysis, status: controller.signal.aborted ? 'cancelled' : 'ready', summary: `局部修改未执行：${error instanceof Error ? error.message : String(error)}` });
+        update({ ...plan.analysis, status: controller.signal.aborted ? 'cancelled' : 'ready', summary: `${modeName}修改未执行：${error instanceof Error ? error.message : String(error)}` });
       } finally {
         operationLockRef.current = false; setIsGenerating(false);
         if (abortControllerRef.current === controller) abortControllerRef.current = null;
@@ -928,7 +1021,7 @@ export function useAIEngineChat() {
       if (decided.action !== 'create_screen' && target) {
         return CanvasToolExecutor.execute({
           tool: 'modify_screen',
-          params: { screenId: target.id, title: target.name, html: htmlToApply, forceInPlace }
+          params: { screenId: target.id, title: target.name, html: htmlToApply, forceInPlace, modificationRequest: userPrompt }
         });
       }
       if (decided.action === 'create_screen') {
@@ -959,7 +1052,7 @@ export function useAIEngineChat() {
       if (toolCall.tool === 'modify_screen') {
         return CanvasToolExecutor.execute({
           ...toolCall,
-          params: { ...toolCall.params, forceInPlace }
+          params: { ...toolCall.params, forceInPlace, modificationRequest: userPrompt }
         });
       }
       return CanvasToolExecutor.execute(toolCall);
@@ -969,6 +1062,7 @@ export function useAIEngineChat() {
 
   const handleAdoptCandidate = () => {
     adoptStagedChange();
+    if (useProjectStore.getState().stagedScreen) return;
     setLastGuardOutput(null);
     setMessages((prev) =>
       prev.map((msg) => ({
@@ -987,6 +1081,7 @@ export function useAIEngineChat() {
 
   const handleKeepBothCandidates = () => {
     keepBothScreens();
+    if (useProjectStore.getState().stagedScreen) return;
     setLastGuardOutput(null);
     setMessages((prev) =>
       prev.map((msg) => ({
@@ -1018,7 +1113,7 @@ export function useAIEngineChat() {
       stageScreenChange(
         fallbackScreenId,
         htmlToApply,
-        `${screens[fallbackScreenId]?.name || '画框'} (强制应用)`
+        `${screens[fallbackScreenId]?.name || '画框'} (强制应用)`, sourceMsg?.originalUserPrompt
       );
     } else if (sourceMsg) {
       setMessages((prev) =>

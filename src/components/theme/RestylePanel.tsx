@@ -1,3 +1,4 @@
+import { buildProjectKnowledgeContext } from '../../services/ai/projectKnowledge';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Check, Loader2, Sparkles, X } from 'lucide-react';
 import { useProjectStore } from '../../stores/useProjectStore';
@@ -9,7 +10,7 @@ import { useHistoryStore } from '../../stores/useHistoryStore';
 import { createAIEngineCore } from '../../services/ai/engine/core';
 import { analyzeScreenModification, buildReviewedModificationRequest, captureModificationSnapshot, isModificationSnapshotCurrent, getLocalModificationPlan,
   type ModificationMode, type ModificationReviewState, type ModificationSnapshot } from '../../services/ai/modificationReview';
-import { applyLocalCopyEdits, generateSupplementedLocalEdits } from '../../services/ai/localCopyModification';
+import { applyLocalCopyEdits, generateSupplementedLocalEdits, mergeLocalEditOperations } from '../../services/ai/localCopyModification';
 import { ModificationReviewCard } from '../chat/ModificationReviewCard';
 
 /** 从流式输出中提取 ```html 代码块 */
@@ -78,15 +79,18 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
       frameWidth: settings.frameWidth,
       colorMode: settings.colorMode,
       styleDirective: confirmedScope ? `${styleDirective}\n${confirmedScope}` : styleDirective,
-      protectedNids: target.protectedNids
+      protectedNids: target.protectedNids,
+      components: Object.values(useProjectStore.getState().components),
+      decisions: Object.values(useProjectStore.getState().decisions).filter(d => d.active && (d.scope === 'global' || d.screenId === target.id))
     });
 
+    const projectKnowledge = buildProjectKnowledgeContext(useProjectStore.getState(), confirmedScope || '仅润色当前页面UI，保留功能结构文案', target.id);
     if (confirmedScope) {
       const result = coreRef.current.streamText({ provider: binding.provider, model: binding.modelId,
         signal: controllerRef.current?.signal, messages: [
-          { role: 'system', content: systemPrompt }, { role: 'user', content: `仅按已确认范围润色，严格保持元素树与文案：\n${target.html}` }
+          { role: 'system', content: systemPrompt }, { role: 'user', content: `${projectKnowledge}\n\n仅按已确认范围润色，严格保持元素树与文案：\n${target.html}` }
         ] });
-      return acceptRestyleResult(target, extractHtml(await result.textPromise));
+      return acceptRestyleResult(target, extractHtml(await result.textPromise), { designSystem, deviceProfile: settings.deviceProfile });
     }
     let raw = '';
     const { promise } = AIService.stream(
@@ -94,14 +98,14 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
       binding.modelId,
       [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: `重塑以下${target.kind === 'component' ? '组件' : '页面'}：\n\n${target.html}` }
+        { role: 'user', content: `${projectKnowledge}\n\n重塑以下${target.kind === 'component' ? '组件' : '页面'}：\n\n${target.html}` }
       ],
       (ev) => {
         if (ev.type === 'Delta') raw += ev.text;
       }
     );
     await promise;
-    return acceptRestyleResult(target, extractHtml(raw));
+    return acceptRestyleResult(target, extractHtml(raw), { designSystem, deviceProfile: settings.deviceProfile });
   };
 
   const analyzeSingle = async () => {
@@ -120,6 +124,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
         request: '分析可改善的视觉表现，仅建议调整已有节点的class；保持元素结构、文案、data-nid不变，不修改带手动样式覆盖的节点。',
         designSystem, mode: settings.colorMode, deviceProfile: settings.deviceProfile, frameWidth: settings.frameWidth,
         protectedNids: current.getProtectedNids(scope), allowText: false,
+        projectKnowledge: buildProjectKnowledgeContext(current, '仅改善UI视觉表现', scope),
         context: JSON.stringify({ scopedCss: screen.scopedCss, overrides: Object.entries(current.overrides).filter(([key]) => key.startsWith(`${scope}:`)) })
       });
       if (!isModificationSnapshotCurrent(useProjectStore.getState(), snapshot)) throw new Error('原页面或工程已变化，请重新分析。');
@@ -139,6 +144,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
     controllerRef.current = new AbortController();
     try {
       let outcome: RestyleOutcome;
+      if (mode === 'region') throw new Error('纯润色不支持区块结构修改，请选择局部操作或整页润色。');
       if (mode === 'local') {
         const local = getLocalModificationPlan(analysis, selected);
         if (!local) throw new Error('当前选择不能安全局部修改，请重新分析。');
@@ -146,15 +152,16 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
         if (extra.trim()) {
           const binding = getActiveProviderForRole('code');
           if (!binding?.provider || (!binding.provider.apiKey && binding.provider.protocol !== 'ollama_native')) throw new Error('请先配置可用的 AI Provider。');
-          operations = await generateSupplementedLocalEdits(coreRef.current, {
+          operations = mergeLocalEditOperations(local.operations, await generateSupplementedLocalEdits(coreRef.current, {
             provider: binding.provider, model: binding.modelId, signal: controllerRef.current.signal,
             html: plan.dryRun.html, request, allowedNids: local.allowedNids, device: settings.deviceProfile,
-            designSystem, mode: settings.colorMode, allowText: false
-          });
+            designSystem, mode: settings.colorMode, allowText: false,
+            projectKnowledge: buildProjectKnowledgeContext(useProjectStore.getState(), request, scope)
+          }));
         }
         const candidate = applyLocalCopyEdits(plan.dryRun.html, operations, { device: settings.deviceProfile,
           allowedNids: local.allowedNids, protectedNids: plan.dryRun.protectedNids, allowText: false });
-        outcome = acceptRestyleResult(plan.dryRun, candidate.html);
+        outcome = acceptRestyleResult(plan.dryRun, candidate.html, { designSystem, deviceProfile: settings.deviceProfile });
       } else outcome = await runOne(plan.dryRun, request);
       if (controllerRef.current?.signal.aborted) return;
       if (!isModificationSnapshotCurrent(useProjectStore.getState(), snapshotRef.current)) throw new Error('生成期间原页面或工程已变化，请重新分析。');

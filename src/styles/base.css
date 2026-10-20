@@ -465,6 +465,61 @@ a { color: var(--color-primary-text); }
 .badge-soft.text-warning { color: var(--color-warning); background-color: var(--color-warning-light); }
 .badge-soft.text-danger { color: var(--color-danger); background-color: var(--color-danger-light); }
 
+/* 预留上沿容纳右上角徽标，主图标水平居中且不与角标相交。 */
+.notification-control {
+  position: relative;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: calc(var(--space-5) * 2 + var(--space-1));
+  min-height: calc(var(--space-5) * 2 + var(--space-1));
+  padding: calc(var(--font-size-xs) + var(--space-1)) var(--space-3) var(--space-2);
+  flex: none;
+  vertical-align: middle;
+}
+.notification-control > .icon {
+  align-self: center;
+  display: block;
+}
+.notification-control > .badge-count {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+.notification-control > .badge-dot {
+  position: absolute;
+  top: calc(var(--font-size-xs) - var(--space-1) / 2);
+  right: var(--space-2);
+}
+.badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: calc(var(--font-size-xs) + var(--space-1));
+  min-height: calc(var(--font-size-xs) + var(--space-1));
+  padding: calc(var(--space-1) / 2) var(--space-1);
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  background-color: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+}
+.badge-count.text-primary { background-color: var(--color-primary-light); color: var(--color-primary-text); }
+.badge-count.text-danger { background-color: var(--color-danger-light); color: var(--color-danger); }
+.badge-dot {
+  display: inline-block;
+  width: calc(var(--space-1) * 1.5);
+  height: calc(var(--space-1) * 1.5);
+  flex: none;
+  border-radius: var(--radius-full);
+  background-color: var(--color-primary);
+}
+.badge-dot.text-danger { background-color: var(--color-danger); }
+
 .divider-text {
   display: flex;
   align-items: center;

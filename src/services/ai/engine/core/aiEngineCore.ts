@@ -25,7 +25,11 @@ export class DefaultAIEngineCore implements AIEngineCore {
     const { transportRequest, estimatedInputChars } = prepareModelRequest(options);
 
     let rawAccumulated = '';
+    let settled = false;
     let finalUsage: TokenUsage | undefined;
+    let finishReason: string | undefined;
+    let resolveFinishReason!: (reason: string | undefined) => void;
+    const finishReasonPromise = new Promise<string | undefined>(resolve => { resolveFinishReason = resolve; });
     let isInsideThink = false;
 
     // Async queues for textStream and reasoningStream
@@ -80,6 +84,7 @@ export class DefaultAIEngineCore implements AIEngineCore {
     });
 
     const handleEvent = (ev: StreamEvent) => {
+      if (settled) return;
       if (ev.type === 'Delta') {
         const deltaText = ev.text;
         rawAccumulated += deltaText;
@@ -119,6 +124,8 @@ export class DefaultAIEngineCore implements AIEngineCore {
           outputTokens: ev.output_tokens
         };
       } else if (ev.type === 'Done') {
+        // Rust传输结束还会发一次stop，不能覆盖Provider先前的length/max_tokens。
+        if (ev.finish_reason && (!finishReason || ev.finish_reason !== 'stop')) finishReason = ev.finish_reason;
         finishQueues();
       } else if (ev.type === 'Error') {
         streamError = new Error(`[${ev.kind}] ${ev.message}`);
@@ -127,37 +134,48 @@ export class DefaultAIEngineCore implements AIEngineCore {
       }
     };
 
-    const { abort, promise: transportPromise } = this.transport.stream(transportRequest, handleEvent);
+    const { abort: transportAbort, promise: transportPromise } = this.transport.stream(transportRequest, handleEvent);
 
-    if (options.signal) {
-      if (options.signal.aborted) {
-        abort();
-      } else {
-        options.signal.addEventListener('abort', () => abort(), { once: true });
-      }
-    }
+    const usageOrEstimate = (): TokenUsage | undefined => finalUsage ?? (rawAccumulated.length ? {
+      inputTokens: Math.max(1, Math.round(estimatedInputChars / 3.5)),
+      outputTokens: Math.max(1, Math.round(rawAccumulated.replace(/<\/?think>/g, '').length / 3.5))
+    } : undefined);
+    const abort = () => {
+      if (settled) return;
+      settled = true;
+      options.signal?.removeEventListener('abort', abort);
+      finishQueues();
+      rejectText(new DOMException('生成已取消', 'AbortError'));
+      resolveReasoning(undefined);
+      resolveUsage(usageOrEstimate());
+      resolveRecovery(undefined);
+      resolveFinishReason(finishReason);
+      try { transportAbort(); } catch { /* settle independently of transport cooperation */ }
+    };
+    if (options.signal?.aborted) abort();
+    else options.signal?.addEventListener('abort', abort, { once: true });
 
     const completeWithText = (recoveryMessage?: string) => {
       // Final extraction of text & reasoning
       const thinkMatch = rawAccumulated.match(/<think>([\s\S]*?)(?:<\/think>|$)/i);
       const reasoning = thinkMatch ? thinkMatch[1].trim() : undefined;
-      const cleanText = rawAccumulated.replace(/<think>[\s\S]*?(?:<\/think>|$)/i, '').trim();
+      // Prefix completion must preserve boundary whitespace byte-for-byte.
+      const cleanText = rawAccumulated.replace(/<think>[\s\S]*?(?:<\/think>|$)/i, '');
 
-      if (!finalUsage && rawAccumulated.length > 0) {
-        finalUsage = {
-          inputTokens: Math.max(1, Math.round(estimatedInputChars / 3.5)),
-          outputTokens: Math.max(1, Math.round(rawAccumulated.replace(/<\/?think>/g, '').length / 3.5))
-        };
-      }
+      finalUsage = usageOrEstimate();
 
       resolveText(cleanText);
       resolveReasoning(reasoning);
-      resolveUsage(finalUsage);
+      resolveUsage(usageOrEstimate());
       resolveRecovery(recoveryMessage);
+      resolveFinishReason(finishReason);
     };
 
     transportPromise
       .then(() => {
+        if (settled) return;
+        settled = true;
+        options.signal?.removeEventListener('abort', abort);
         finishQueues();
         if (streamError) {
           if (recoverableStreamError && hasCompleteArtifact(rawAccumulated)) {
@@ -165,8 +183,9 @@ export class DefaultAIEngineCore implements AIEngineCore {
           } else {
             rejectText(streamError);
             resolveReasoning(undefined);
-            resolveUsage(finalUsage);
+            resolveUsage(usageOrEstimate());
             resolveRecovery(undefined);
+            resolveFinishReason(finishReason);
           }
           return;
         }
@@ -174,14 +193,18 @@ export class DefaultAIEngineCore implements AIEngineCore {
         completeWithText();
       })
       .catch((err) => {
+        if (settled) return;
+        settled = true;
+        options.signal?.removeEventListener('abort', abort);
         finishQueues();
         if (hasCompleteArtifact(rawAccumulated)) {
           completeWithText(err instanceof Error ? err.message : String(err));
         } else {
           rejectText(err);
           resolveReasoning(undefined);
-          resolveUsage(finalUsage);
+          resolveUsage(usageOrEstimate());
           resolveRecovery(undefined);
+          resolveFinishReason(finishReason);
         }
       });
 
@@ -208,6 +231,7 @@ export class DefaultAIEngineCore implements AIEngineCore {
       reasoningPromise,
       usagePromise,
       recoveryPromise,
+      finishReasonPromise,
       abort
     };
   }

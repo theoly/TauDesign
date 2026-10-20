@@ -1,7 +1,7 @@
-import { DesignSystem } from '../../types/designSystem';
-import { compileTokensToCss, extractClassWhitelist } from '../../utils/cssCompiler';
-import { getBaseCss, type DeviceProfile } from '../../styles/baseCss';
-import { GOLDEN_HIERARCHY, getDeviceAestheticRules } from './aestheticRules';
+import type { DesignSystem } from '../../types/designSystem';
+import type { DeviceProfile } from '../../styles/baseCss';
+import type { ComponentDefinition, Decision } from '../../types/project';
+import { PromptBuilder } from './promptBuilder';
 
 /**
  * 质感润色 / 风格重塑的 Prompt (A3 / T-AE-26, T-AE-27)。
@@ -22,6 +22,10 @@ export interface PolishOptions {
   styleDirective?: string;
   /** 这些 nid 存在 L4 手动覆盖，改动它们的样式没有意义（会被 !important 挡住） */
   protectedNids?: string[];
+  components?: ComponentDefinition[];
+  designRules?: string[];
+  decisions?: Decision[] | Array<{ id: string; rule: string; rationale: string }>;
+  designProseMarkdown?: string;
 }
 
 const IMMUTABLE_RULES = `STRUCTURAL CONTRACT (violating ANY of these makes the output be REJECTED outright):
@@ -36,39 +40,13 @@ WHAT YOU MAY CHANGE (this is the entire job):
 - Nothing else.`;
 
 export function buildPolishPrompt(options: PolishOptions): string {
-  const tokensCss = compileTokensToCss(options.designSystem.tokens, options.colorMode ?? 'light');
-  const whitelist = extractClassWhitelist(getBaseCss(options.deviceProfile))
-    .map((c) => `.${c}`)
-    .join(', ');
-
-  const protectedNote =
-    options.protectedNids && options.protectedNids.length > 0
-      ? `\nPROTECTED NODES (the user has manually styled these; leave their class attribute untouched):\n${options.protectedNids.join(', ')}\n`
-      : '';
-
-  return `You are the Visual Refinement Engine for "TauDesign".
-Your job is to polish, refine, and elevate an existing HTML screen design into a production-grade, aesthetically stunning experience.
-
-${IMMUTABLE_RULES}
-${protectedNote}
-### AVAILABLE CLASSES (the ONLY classes that exist):
-${whitelist}
-
-### CURRENT DESIGN SYSTEM TOKENS:
-\`\`\`css
-${tokensCss}
-\`\`\`
-
-### AESTHETIC DIRECTIVES:
-${GOLDEN_HIERARCHY}
-
-${getDeviceAestheticRules(options.deviceProfile)}
-${options.styleDirective ? `\n### TARGET STYLE (restyle to match this):\n${options.styleDirective}\n` : ''}
-### TARGET DEVICE: ${options.frameWidth}px (${options.deviceProfile.toUpperCase()})
-
-### OUTPUT FORMAT (STRICT):
+  const outputContract = `### OUTPUT CONTRACT — POLISH (STRICT):
 Return ONLY the rewritten HTML inside a \`\`\`html code block. No commentary before or after.
-必须且仅输出被 \`\`\`html 包裹的完整 HTML，严禁任何解释性文字。元素树、文案与 data-nid 必须与输入完全一致。`;
+必须且仅输出被 \`\`\`html 包裹的完整 HTML，严禁任何解释性文字。
+${IMMUTABLE_RULES}
+${options.protectedNids?.length ? `PROTECTED NODES (leave class and style attributes untouched): ${options.protectedNids.join(', ')}` : ''}
+${options.styleDirective ? `TARGET STYLE: ${options.styleDirective}` : ''}`;
+  return PromptBuilder.buildSystemPrompt({ ...options, intent: 'modify_screen', outputContract });
 }
 
 /** 把 StyleDNA 三问的答案转成 Restyle 的目标风格描述 */

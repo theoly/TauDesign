@@ -1,3 +1,4 @@
+import { type ProjectDocumentEntry, validateProjectDocument, MAX_PROJECT_DOCUMENTS } from '../types/projectDocument';
 import { create } from 'zustand';
 import { DesignSystem } from '../types/designSystem';
 import { QuickPromptItem } from '../types/quickPrompt';
@@ -49,6 +50,8 @@ import {
   CANVAS_LAYOUT_CONSTANTS
 } from '../utils/canvasLayout';
 import { deleteElementByNid } from '../utils/domPatcher';
+import { checkGenerationQuality } from '../services/ai/generationQuality';
+import type { RenderedQualityReport } from '../utils/renderedQuality';
 
 /** 新建工程时的空白起始画框 (PRD §3.0.1) */
 const blankScreenHtml = (name: string) => `<div class="p-8" style="min-height: 800px; background: var(--color-bg);">
@@ -185,6 +188,9 @@ interface ProjectState {
   decisions: Record<DecisionId, Decision>;
   components: Record<ComponentId, ComponentDefinition>;
   assets: Record<AssetId, Asset>;
+  projectDocuments: Record<string, ProjectDocumentEntry>;
+  upsertProjectDocument: (doc: ProjectDocumentEntry) => void;
+  removeProjectDocument: (id: string) => void;
 
   /**
    * 侧边栏折叠面板的展开状态 (PRD §3.0.3)。key 按视图命名空间，如 `assets.images`。
@@ -210,7 +216,13 @@ interface ProjectState {
     targetScreenId: ScreenId;
     newHtml: string;
     screenName: string;
+    modificationRequest?: string;
   } | null;
+  /** 仅当前候选的渲染证据；不进入历史或存盘。 */
+  stagedRenderQuality: { key: string; report: RenderedQualityReport } | null;
+  stagedRenderRevision: number;
+  getStagedRenderContextKey: () => string;
+  setStagedRenderQuality: (key: string, report: RenderedQualityReport) => void;
 
   /** Add to Chat 功能：待注入对话框的节点引用（单次，发送后清除）*/
   pendingNodeRef: NodeReference | null;
@@ -329,7 +341,7 @@ interface ProjectState {
   clearPendingNodeRef: () => void;
 
   // Side-by-Side Staging (D17)
-  stageScreenChange: (targetScreenId: ScreenId, newHtml: string, screenName: string) => void;
+  stageScreenChange: (targetScreenId: ScreenId, newHtml: string, screenName: string, modificationRequest?: string) => void;
   adoptStagedChange: () => void;
   discardStagedChange: () => void;
   keepBothScreens: () => void;
@@ -417,6 +429,23 @@ const initialScreen2: Screen = {
 </div>`)
 };
 
+/** 所有采纳入口共用，聊天回调也不能绕过源检查和已有的当前渲染证据。 */
+function canAdoptStagedScreen(state: ProjectState): boolean {
+  const staged = state.stagedScreen;
+  if (!staged || !state.screens[staged.targetScreenId]) return false;
+  const source = checkGenerationQuality(staged.newHtml, {
+    deviceProfile: state.settings.deviceProfile, designSystem: state.designSystem,
+    baselineHtml: state.screens[staged.targetScreenId].htmlContent,
+    protectedNids: state.getProtectedNids(staged.targetScreenId),
+    modificationRequest: staged.modificationRequest
+  });
+  if (source.findings.some(f => f.severity === 'error')) return false;
+  const rendered = state.stagedRenderQuality;
+  return !rendered || (rendered.key === state.getStagedRenderContextKey()
+    && rendered.report.status !== 'pending'
+    && !rendered.report.findings.some(f => f.severity === 'error'));
+}
+
 export const useProjectStore = create<ProjectState>((set, get) => ({
   id: 'proj_default',
   name: 'MyDesignStudio',
@@ -448,6 +477,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
   components: {},
   assets: {},
+  projectDocuments: {},
   panelStates: {},
 
   activeScreenId: 'screen-1',
@@ -457,6 +487,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   viewportTransform: { x: 80, y: 80, scale: 0.7 },
   activeSnapGuides: null,
   stagedScreen: null,
+  stagedRenderQuality: null,
+  stagedRenderRevision: 0,
   pendingNodeRef: null,
   pendingAuditReport: null,
   coverImage: null,
@@ -1521,6 +1553,38 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return { syncedCount, skippedConflictCount, details };
   },
 
+  upsertProjectDocument: (doc) => {
+    validateProjectDocument(doc);
+    const documents = get().projectDocuments;
+    const previous = documents[doc.id];
+    if (!previous && Object.keys(documents).length >= MAX_PROJECT_DOCUMENTS) throw new Error('最多保存 20 份项目文档');
+    const next = {
+      ...doc,
+      title: doc.title.trim(),
+      ...(previous?.originalContent !== undefined ? { originalContent: previous.originalContent } : {}),
+      ...(doc.missing ? { enabled: false } : {})
+    };
+    useHistoryStore.getState().commit(
+      `${previous ? '编辑' : '新增'}项目文档: ${next.title}`,
+      [{ op: previous ? 'replace' : 'add', path: ['projectDocuments', doc.id], value: next }],
+      [previous ? { op: 'replace', path: ['projectDocuments', doc.id], value: previous } : { op: 'remove', path: ['projectDocuments', doc.id] }]
+    );
+    set({ projectDocuments: { ...documents, [doc.id]: next } });
+    get().saveProject();
+  },
+
+  removeProjectDocument: (id) => {
+    const previous = get().projectDocuments[id];
+    if (!previous) return;
+    useHistoryStore.getState().commit(`删除项目文档: ${previous.title}`,
+      [{ op: 'remove', path: ['projectDocuments', id] }],
+      [{ op: 'add', path: ['projectDocuments', id], value: previous }]);
+    const documents = { ...get().projectDocuments };
+    delete documents[id];
+    set({ projectDocuments: documents });
+    get().saveProject();
+  },
+
   // Assets (PRD §3.4.1 / BR-IMG-03 去重复用)
   addAsset: (asset) => {
     const curAssets = get().assets;
@@ -1649,15 +1713,29 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   clearPendingNodeRef: () => set({ pendingNodeRef: null }),
 
   // Side-by-side adoption (D17)
-  stageScreenChange: (targetScreenId, newHtml, screenName) => {
+  getStagedRenderContextKey: () => {
+    const state = get(), staged = state.stagedScreen;
+    if (!staged) return '';
+    const target = state.screens[staged.targetScreenId];
+    return JSON.stringify([state.id, state.stagedRenderRevision, staged, state.settings,
+      state.designSystem.tokens, state.overrides, target?.htmlContent, target?.scopedCss]);
+  },
+
+  setStagedRenderQuality: (key, report) => {
+    if (!get().stagedScreen || key !== get().getStagedRenderContextKey()) return;
+    set({ stagedRenderQuality: { key, report } });
+  },
+
+  stageScreenChange: (targetScreenId, newHtml, screenName, modificationRequest) => {
     set({
-      stagedScreen: { targetScreenId, newHtml, screenName }
+      stagedScreen: { targetScreenId, newHtml, screenName, modificationRequest },
+      stagedRenderQuality: null, stagedRenderRevision: get().stagedRenderRevision + 1
     });
   },
 
   adoptStagedChange: () => {
     const staged = get().stagedScreen;
-    if (!staged) return;
+    if (!staged || !canAdoptStagedScreen(get())) return;
     const target = get().screens[staged.targetScreenId];
     if (target) {
       useHistoryStore.getState().addCheckpoint(`采纳新版前备份: ${target.name}`, {
@@ -1667,31 +1745,32 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       });
       get().updateScreenHtml(staged.targetScreenId, staged.newHtml, `采纳 AI 生成新版: ${staged.screenName}`);
     }
-    set({ stagedScreen: null });
+    set({ stagedScreen: null, stagedRenderQuality: null });
   },
 
   discardStagedChange: () => {
-    set({ stagedScreen: null });
+    set({ stagedScreen: null, stagedRenderQuality: null });
   },
 
   keepBothScreens: () => {
     const staged = get().stagedScreen;
-    if (!staged) return;
+    if (!staged || !canAdoptStagedScreen(get())) return;
     const newId = `screen-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     get().addScreen({
       name: `${staged.screenName} (AI 方案)`,
       htmlContent: staged.newHtml
     }, newId, { referencedScreenId: staged.targetScreenId });
-    set({ stagedScreen: null });
+    set({ stagedScreen: null, stagedRenderQuality: null });
   },
 
   saveProject: () => {
-    const { id, name, settings, designSystem, screens, overrides, decisions, components, assets, panelStates, coverImage, quickPrompts } =
+    const { id, name, settings, designSystem, screens, overrides, decisions, components, assets, panelStates, coverImage, quickPrompts, projectDocuments } =
       get();
     const data = {
       id,
       name,
       schemaVersion: 1,
+      projectDocuments,
       savedAt: Date.now(),
       settings,
       designSystem,
@@ -1788,12 +1867,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       ),
       components: {},
       assets: {},
+      projectDocuments: {},
       panelStates: {},
       activeScreenId,
       selectedNid: null,
       hoveredNid: null,
       selectedNode: null,
       stagedScreen: null,
+      stagedRenderQuality: null,
       pendingNodeRef: null,
       pendingAuditReport: null,
       coverImage: null,
@@ -1853,10 +1934,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         hoveredNid: null,
         selectedNode: null,
         stagedScreen: null,
+      stagedRenderQuality: null,
         overrides: data.overrides || {},
         decisions: data.decisions || {},
         components: data.components || {},
         assets: data.assets || {},
+        projectDocuments: data.projectDocuments || {},
         panelStates: data.panelStates || {},
         coverImage: data.coverImage || null,
         quickPrompts: Array.isArray(data.quickPrompts) ? data.quickPrompts : []
@@ -1882,6 +1965,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const nextDecisions = { ...state.decisions };
       const nextComponents = { ...state.components };
       const nextAssets = { ...state.assets };
+      const nextProjectDocuments = { ...state.projectDocuments };
       // screenOrder 补丁优先于 screens 增删推导出的顺序 (BR-HIS-09)
       let orderOverride: ScreenId[] | null = null;
 
@@ -1932,6 +2016,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           } else if (patch.value) {
             nextAssets[key] = patch.value as Asset;
           }
+        } else if (root === 'projectDocuments') {
+          if (patch.op === 'remove') delete nextProjectDocuments[key];
+          else if (patch.value) nextProjectDocuments[key] = patch.value as ProjectDocumentEntry;
         } else if (root === 'screenOrder') {
           if (Array.isArray(patch.value)) {
             orderOverride = [...(patch.value as ScreenId[])];
@@ -1954,7 +2041,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         designSystem: nextDesignSystem,
         decisions: nextDecisions,
         components: nextComponents,
-        assets: nextAssets
+        assets: nextAssets,
+        projectDocuments: nextProjectDocuments
       };
     });
     get().saveProject();

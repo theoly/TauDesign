@@ -4,6 +4,8 @@ export interface EngineMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
   imageUrl?: string;
+  /** Official native assistant prefix completion only. */
+  partial?: true;
 }
 
 export interface StreamTextOptions {
@@ -34,6 +36,8 @@ export interface StreamTextResult {
   usagePromise: Promise<TokenUsage | undefined>;
   /** 连接异常后从完整 artifact 恢复时的原始错误；正常完成时为空 */
   recoveryPromise?: Promise<string | undefined>;
+  /** Provider的真实结束原因，保留length等输出上限信息。 */
+  finishReasonPromise?: Promise<string | undefined>;
   abort: () => void;
 }
 

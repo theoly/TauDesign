@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { DesignBriefCard } from './DesignBriefCard';
+import { QualityReportCard } from './QualityReportCard';
 import { ModificationReviewCard } from './ModificationReviewCard';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useAIConfigStore } from '../../stores/useAIConfigStore';
@@ -1072,12 +1074,15 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 onConfirm={(selected, extra, mode) => engine.confirmModification(m.id, selected, extra, mode)}
                 onCancel={() => engine.cancelModification(m.id)} onRetry={() => engine.retryModificationAnalysis(m.id)} />}
 
+              {m.designBrief && <DesignBriefCard brief={m.designBrief} />}
+              {m.qualityReport && <QualityReportCard report={m.qualityReport} />}
+
               {/* Text / Result Bubble */}
               {(m.text || m.htmlOutput || m.isStopped || isCurrentGenerating) && (
                 <div
                   className={`p-3 rounded-xl leading-relaxed whitespace-pre-wrap break-words max-h-72 overflow-y-auto ${
                     m.sender === 'user'
-                      ? 'bg-blue-600 text-white ml-4 shadow-sm'
+                      ? 'bg-slate-800/90 text-slate-200 border border-slate-600/50 ml-4 shadow-sm'
                       : 'bg-slate-800 text-slate-200 mr-2 border border-slate-700/60'
                   }`}
                 >
@@ -1088,22 +1093,22 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       return (
                         <div className="space-y-2">
                           {refElem ? (
-                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-blue-700/80 border border-blue-400/40 rounded-lg text-[11px] text-blue-100 font-medium select-none shadow-xs">
+                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-slate-700/60 border border-slate-500/40 rounded-lg text-[11px] text-slate-300 font-medium select-none shadow-xs">
                               <Pin className="w-3 h-3 text-blue-200 flex-shrink-0" />
                               <span>
-                                引用元素: <code className="font-mono bg-blue-800/90 px-1 py-0.5 rounded text-blue-100 font-semibold">{'<'}{refElem.tagName}#{refElem.nid}{'>'}</code>
+                                引用元素: <code className="font-mono bg-slate-800/70 px-1 py-0.5 rounded text-slate-200 font-medium">{'<'}{refElem.tagName}#{refElem.nid}{'>'}</code>
                               </span>
                               {refElem.screenName && (
                                 <span className="text-blue-200/80 text-[10px]">(@{refElem.screenName})</span>
                               )}
                             </div>
                           ) : m.referencedScreen ? (
-                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-blue-700/80 border border-blue-400/40 rounded-lg text-[11px] text-blue-100 font-medium select-none shadow-xs">
+                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-slate-700/60 border border-slate-500/40 rounded-lg text-[11px] text-slate-300 font-medium select-none shadow-xs">
                               <AtSign className="w-3 h-3 text-blue-200 flex-shrink-0" />
                               {m.referencedScreen.viaActiveScreen ? (
-                                <span>作用于当前画框: <span className="font-semibold text-white">{m.referencedScreen.name}</span></span>
+                                <span>作用于当前画框: <span className="font-medium text-slate-200">{m.referencedScreen.name}</span></span>
                               ) : (
-                                <span>引用画框: <span className="font-semibold text-white">@{m.referencedScreen.name}</span></span>
+                                <span>引用画框: <span className="font-medium text-slate-200">@{m.referencedScreen.name}</span></span>
                               )}
                             </div>
                           ) : null}
@@ -1128,13 +1133,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           )}
 
                           {m.textFileNames?.map((name, index) => (
-                            <div key={`${name}-${index}`} className="inline-flex items-center gap-1.5 px-2 py-1 mr-1 rounded-lg border border-blue-300/40 bg-blue-700/60 text-[11px] text-blue-50 max-w-full">
+                            <div key={`${name}-${index}`} className="inline-flex items-center gap-1.5 px-2 py-1 mr-1 rounded-lg border border-slate-500/40 bg-slate-700/60 text-[11px] text-slate-300 max-w-full">
                               <FileCode className="w-3 h-3 flex-shrink-0" />
                               <span className="truncate" title={name}>{name}</span>
                             </div>
                           ))}
 
-                          <div className="text-sm leading-relaxed text-white select-text">{displayPrompt}</div>
+                          <div className="text-[13px] font-normal leading-relaxed text-slate-200 select-text">{displayPrompt}</div>
                         </div>
                       );
                     })()
@@ -1494,6 +1499,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               </div>
 
               {/* Single Message Token Usage */}
+              {m.generationWarnings?.map((warning, index) => (
+                <div key={index} className="pl-1 pt-1 text-[10px] text-amber-300" role="status">{warning}</div>
+              ))}
               {m.streamRecovered && (
                 <div className="pl-1 pt-1 text-[10px] text-amber-300" role="status">
                   连接中断；已使用完整接收的页面结果，请检查生成内容。

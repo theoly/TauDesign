@@ -68,6 +68,24 @@ describe('旧页面分析选择与比较聚焦', () => {
     expect(useProjectStore.getState().screens[targetId].htmlContent).toBe(html);
   });
 
+  test('项目需求同时进入修改分析和确认后的生成请求', async () => {
+    useProjectStore.getState().upsertProjectDocument({ id: 'member-contract', title: '会员需求', content: '会员详情必须保留合同进度。', source: 'manual', enabled: true, createdAt: 1, updatedAt: 1 });
+    await render(<Harness />); await start();
+    const context = JSON.parse(objectMock.mock.calls[0][1].messages[1].content);
+    expect(context.projectKnowledge).toContain('会员详情必须保留合同进度');
+    const plan = latestPlan();
+    await act(async () => { await engine.confirmModification(plan.id, ['suggestion-1'], ''); });
+    expect(pipelineMock.mock.calls[0][0].projectKnowledge).toContain('会员详情必须保留合同进度');
+  });
+
+  test('分析后项目需求编辑使旧修改计划失效，不能用旧依据生成', async () => {
+    await render(<Harness />); await start(); const plan = latestPlan();
+    act(() => useProjectStore.getState().upsertProjectDocument({ id: 'requirement', title: '新增需求', content: '保留业务字段', source: 'manual', enabled: true, createdAt: 1, updatedAt: 1 }));
+    await act(async () => { await engine.confirmModification(plan.id, ['suggestion-1'], ''); });
+    expect(pipelineMock).not.toHaveBeenCalled();
+    expect(engine.messages.find(m => m.id === plan.id)?.modificationReview?.summary).toContain('重新分析');
+  });
+
   test('取消或原HTML改变后不执行旧计划，可重新分析', async () => {
     await render(<Harness />); await start();
     const cancelled = latestPlan(); act(() => engine.cancelModification(cancelled.id));
@@ -176,6 +194,7 @@ describe('旧页面分析选择与比较聚焦', () => {
     for (const action of ['adoptStagedChange', 'keepBothScreens'] as const) {
       act(() => useProjectStore.getState().stageScreenChange(targetId, html, '再次比较'));
       expect(host.querySelector('[data-testid="comparison-backdrop"]')).not.toBeNull();
+      act(() => useProjectStore.getState().setStagedRenderQuality(useProjectStore.getState().getStagedRenderContextKey(), {status:'complete',findings:[],inspected:1}));
       act(() => { useProjectStore.getState()[action](); });
       expect(host.querySelector('[data-testid="comparison-backdrop"]')).toBeNull();
       expect(host.querySelector('[data-comparison-focus]')).toBeNull();

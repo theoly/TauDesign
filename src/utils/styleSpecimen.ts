@@ -279,6 +279,9 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
         </div>
         <div class="row wrap gap-3 items-center">
           <span class="badge-soft">badge-soft</span>
+          <button class="btn btn-ghost notification-control" aria-label="通知，3条未读">${ICONS.mail}<span class="badge-count text-primary" aria-hidden="true">3</span></button>
+          <button class="btn btn-ghost notification-control" aria-label="有新更新">${ICONS.mail}<span class="badge-dot" aria-hidden="true"></span></button>
+          <span class="badge-count">12</span><span class="badge-count text-danger">2</span>
           <span class="badge-soft text-success">${ICONS.check}已完成</span>
           <span class="badge-soft text-warning">${ICONS.alert}待处理</span>
         </div>

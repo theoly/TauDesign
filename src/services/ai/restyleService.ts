@@ -1,3 +1,4 @@
+import { checkGenerationQuality, qualitySummary, type QualityOptions, type QualityReport } from './generationQuality';
 import { compareStructure, type StructureDiff } from '../../utils/structureGuard';
 
 /**
@@ -33,6 +34,7 @@ export interface RestyleOutcome {
   status: 'applied' | 'skipped_structure' | 'skipped_conflict' | 'failed';
   html?: string;
   diff?: StructureDiff;
+  qualityReport?: QualityReport;
   message?: string;
 }
 
@@ -74,23 +76,24 @@ export function planRestyle(
  * 结构变化即拒绝——这不是保守，是因为模型删掉一个容器时用户丢的是内容，
  * 而 Restyle 的承诺只是「换个样子」。
  */
-export function acceptRestyleResult(target: RestyleTarget, rewritten: string | null): RestyleOutcome {
+export function acceptRestyleResult(target: RestyleTarget, rewritten: string | null, options: QualityOptions = {}): RestyleOutcome {
   if (!rewritten || !rewritten.trim()) {
     return { target, status: 'failed', message: '模型未返回有效 HTML' };
   }
 
   const diff = compareStructure(target.html, rewritten);
-  if (!diff.ok) {
-    return { target, status: 'skipped_structure', diff, message: diff.reason };
-  }
+  const qualityReport = checkGenerationQuality(rewritten, { ...options, baselineHtml: target.html, preserveNids: true, protectedNids: target.protectedNids });
+  if (!diff.ok) return { target, status: 'skipped_structure', qualityReport, diff, message: diff.reason };
+  if (!qualityReport.passed) return { target, status: 'failed', qualityReport, message: qualitySummary(qualityReport) };
 
   // 文案漂移不阻断，但要如实报告——用户有权知道哪些页面的文字被动过
   return {
     target,
     status: 'applied',
+    qualityReport,
     html: rewritten,
     diff,
-    message: diff.textChanged > 0 ? `已应用，但检测到 ${diff.textChanged} 处文案变化，建议核对` : undefined
+    message: [diff.textChanged > 0 ? `已应用，但检测到 ${diff.textChanged} 处文案变化，建议核对` : '', qualitySummary(qualityReport)].filter(Boolean).join('；') || undefined
   };
 }
 
@@ -107,7 +110,7 @@ export function summarizeOutcomes(outcomes: RestyleOutcome[]) {
     failed: failed.length,
     textDrift: textDrift.length,
     details: outcomes
-      .filter((o) => o.status !== 'applied' || (o.diff?.textChanged ?? 0) > 0)
+      .filter((o) => o.status !== 'applied' || Boolean(o.message))
       .map((o) => `${o.target.kind === 'component' ? '组件' : '画框'}「${o.target.name}」：${o.message ?? o.status}`)
   };
 }

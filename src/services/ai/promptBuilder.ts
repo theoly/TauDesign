@@ -1,8 +1,10 @@
+import { renderDesignBrief, type DesignBrief } from './designBrief';
+import { renderComponentContracts, renderProjectComponents } from './componentContracts';
 import { DesignSystem } from '../../types/designSystem';
 import { ComponentDefinition, Decision } from '../../types/project';
 import { compileTokensToCss, extractClassWhitelist } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
-import { GOLDEN_HIERARCHY, NEW_SCREEN_STATE_RULES, getDeviceAestheticRules, getFewShotExample } from './aestheticRules';
+import { GOLDEN_HIERARCHY, NEW_SCREEN_STATE_RULES, getDeviceAestheticRules } from './aestheticRules';
 import { renderCraftSection } from './craft';
 import { resolveDesignProse } from './engine/context/designProseProvider';
 
@@ -108,6 +110,10 @@ export interface PromptBuildOptions {
    * 若附带参考图，必须抑制通用的登录 Few-Shot 范例，避免将锁头图标、固定吸底等代码污染进复刻结果。
    */
   hasAttachment?: boolean;
+  componentRequest?: string;
+  taskBrief?: DesignBrief;
+  /** 润色共享完整设计上下文，但使用自己的输出格式。 */
+  outputContract?: string;
 }
 
 export class PromptBuilder {
@@ -149,7 +155,7 @@ You generate production-ready HTML and styles for web and mobile applications us
 
     // 2. design_spec (BR-03 / REQ-OD-03)
     const prose = options.designProseMarkdown
-      ? { rulesMarkdown: options.designProseMarkdown, source: options.designProseSource || 'builtin_preset' }
+      ? { rulesMarkdown: options.designProseMarkdown, source: options.designProseSource || 'project_override' }
       : resolveDesignProse({ presetId: options.designSystem.id });
     const sourceTag = prose.source === 'project_override' ? '工程覆盖' : '内置预设';
     const specContent = `### DESIGN SPECIFICATION (DESIGN.md - [${sourceTag}]):\n${prose.rulesMarkdown}`;
@@ -167,20 +173,12 @@ You generate production-ready HTML and styles for web and mobile applications us
     const whitelistContent = `### CLASS WHITELIST (derived from base.css — these are the ONLY classes that exist):\n${classWhitelist}`;
     sections.push({ id: 'class_whitelist', content: whitelistContent });
 
-    // 5. component_library
-    if (options.components && options.components.length > 0) {
-      const activeComponents = options.components
-        .map(
-          (c) =>
-            `- 组件名称: ${c.name} (${c.id})\n  结构摘要: ${c.templateHtml
-              .replace(/\s+/g, ' ')
-              .slice(0, 160)}...`
-        )
-        .join('\n');
-      sections.push({
-        id: 'component_library',
-        content: `### COMPONENT LIBRARY (REUSABLE PROJECT COMPONENTS - PRD §3.7.4 MANDATORY REUSE):\nWhen generating layouts that include repeating widgets or cards, you MUST adopt the structure and styling of these existing components:\n${activeComponents}`
-      });
+    // 5. 完整组件范例：新建提供结构，修改仅提供行为约束。
+    if (intent === 'create_screen' || intent === 'modify_screen') {
+      sections.push({ id: 'component_library', content: `### COMPONENT LIBRARY (REUSABLE PROJECT COMPONENTS)
+${renderComponentContracts(intent === 'create_screen' && !options.hasAttachment, options.componentRequest)}${options.components?.length ? `
+
+${renderProjectComponents(options.components)}` : ''}` });
     }
 
     // 6. craft_references (REQ-OD-06 / BR-06.1~6.2)
@@ -194,17 +192,18 @@ You generate production-ready HTML and styles for web and mobile applications us
 
     // 7. reference_example (T-AE-10 / 仅无参考图的纯文本 create_screen 时注入)
     if (intent === 'create_screen' && !options.hasAttachment) {
-      const exampleContent = `### REFERENCE EXAMPLE (match this level of polish, not its content):\n\`\`\`html\n${getFewShotExample(
-        options.deviceProfile
-      )}\n\`\`\``;
+      const exampleContent = `### REFERENCE EXAMPLE (component patterns):
+完整结构示例见 COMPONENT LIBRARY。按当前业务组合组件，勿照搬示例姓名、数据或页面用途。
+${options.deviceProfile === 'mobile' ? '移动端保持单列，按设备规范提供状态栏、导航与安全区。' : 'PC页面使用container-max，正文层级与操作区分组。'}
+用户提供的文案必须完整保留；自拟短标签应控制长度，业务数据按场景换行。`;
       sections.push({ id: 'reference_example', content: exampleContent });
     }
 
     // 8. project_conventions (PRD D18)
-    if (options.designRules && options.designRules.length > 0) {
-      const rulesContent = `### PROJECT CONVENTIONS (D18):\n${options.designRules
+    if (options.designRules?.length || options.taskBrief) {
+      const rulesContent = `### PROJECT CONVENTIONS (D18):\n${(options.designRules || [])
         .map((r, i) => `${i + 1}. ${r}`)
-        .join('\n')}`;
+        .join('\n')}${options.taskBrief ? `\n${renderDesignBrief(options.taskBrief)}` : ''}`;
       sections.push({ id: 'project_conventions', content: rulesContent });
     }
 
@@ -230,7 +229,7 @@ You generate production-ready HTML and styles for web and mobile applications us
     }
 
     // 10. output_contract (恒为末位 / 末位铁律)
-    sections.push({ id: 'output_contract', content: ARTIFACT_OUTPUT_CONTRACT });
+    sections.push({ id: 'output_contract', content: options.outputContract ?? ARTIFACT_OUTPUT_CONTRACT });
 
     return sections.map((s) => s.content).join('\n\n');
   }

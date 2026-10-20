@@ -1,6 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { handleHistoryShortcut } from '../../utils/historyShortcuts';
+import { checkGenerationQuality } from '../../services/ai/generationQuality';
+import type { RenderedQualityReport } from '../../utils/renderedQuality';
+import { RenderedQualityCard } from '../chat/RenderedQualityCard';
+import { QualityReportCard } from '../chat/QualityReportCard';
 import { ScreenFrame } from './ScreenFrame';
 import { CanvasMinimap } from './CanvasMinimap';
 import { Check, Copy, Plus, Sparkles, X } from 'lucide-react';
@@ -17,13 +21,17 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
   const [isSpacePressed, setIsSpacePressed] = useState(false);
 
   const {
+    id: projectId,
     screens,
     screenOrder,
     activeScreenId,
     settings,
+    designSystem,
+    overrides,
     viewportTransform,
     setViewportTransform,
     stagedScreen,
+    stagedRenderQuality,
     adoptStagedChange,
     discardStagedChange,
     keepBothScreens,
@@ -146,6 +154,38 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
 
   // Find target screen position for staged screen
   const targetScreen = stagedScreen ? screens[stagedScreen.targetScreenId] : null;
+  const candidateQuality = useMemo(() => stagedScreen ? checkGenerationQuality(stagedScreen.newHtml, {
+    deviceProfile: settings.deviceProfile, designSystem, baselineHtml: targetScreen?.htmlContent,
+    modificationRequest: stagedScreen.modificationRequest,
+    protectedNids: useProjectStore.getState().getProtectedNids(stagedScreen.targetScreenId)
+  }) : null, [stagedScreen, targetScreen?.htmlContent, settings.deviceProfile, designSystem, overrides]);
+
+  const [renderReports, setRenderReports] = useState<Record<string, { key: string; report: RenderedQualityReport }>>({});
+  const [qualityFocus, setQualityFocus] = useState<{ screenId: string; nid: string } | null>(null);
+  const activeRenderKey = useMemo(() => JSON.stringify([projectId, settings.deviceProfile, settings.colorMode, designSystem.tokens, overrides,
+    activeScreenId, screens[activeScreenId || '']?.htmlContent, screens[activeScreenId || '']?.scopedCss,
+    stagedScreen?.targetScreenId, stagedScreen?.newHtml, targetScreen?.scopedCss]),
+    [projectId, settings.deviceProfile, settings.colorMode, designSystem.tokens, overrides, activeScreenId, screens, stagedScreen, targetScreen?.scopedCss]);
+  const renderKey = stagedScreen ? useProjectStore.getState().getStagedRenderContextKey() : activeRenderKey;
+  const currentRenderKey = useRef(renderKey);
+  currentRenderKey.current = renderKey;
+  const receiveRenderReport = useCallback((id: string, key: string, report: RenderedQualityReport) => {
+    if (key !== currentRenderKey.current) return;
+    if (id === 'staged-screen-preview') useProjectStore.getState().setStagedRenderQuality(key, report);
+    setRenderReports(prev => ({ ...Object.fromEntries(Object.entries(prev).filter(([, value]) => value.key === key)), [id]: { key, report } }));
+  }, []);
+  const reportId = stagedScreen ? 'staged-screen-preview' : activeScreenId;
+  const renderedReport = stagedScreen
+    ? (stagedRenderQuality?.key === renderKey ? stagedRenderQuality.report : undefined)
+    : (reportId && renderReports[reportId]?.key === renderKey ? renderReports[reportId].report : undefined);
+  const renderPending = Boolean(stagedScreen && (!renderedReport || renderedReport.status === 'pending'));
+  const adoptionBlocked = candidateQuality?.findings.some(f => f.severity === 'error')
+    || renderedReport?.findings.some(f => f.severity === 'error') || renderPending;
+  const locateRenderIssue = (nid: string) => {
+    if (!reportId) return;
+    setQualityFocus({ screenId: reportId, nid });
+    if (!stagedScreen) useProjectStore.getState().panToScreen(reportId);
+  };
 
   // 新候选出现时让两版同时进入视口；后续平移/缩放仍由用户控制。
   useEffect(() => {
@@ -207,6 +247,8 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
           else if (isActive) lodLevel = 2;
 
           return <ScreenFrame key={id} screen={screen} lodLevel={lodLevel} onPolish={onPolish}
+            renderQualityKey={renderKey} onRenderQuality={receiveRenderReport}
+            qualityFocusNid={qualityFocus?.screenId === id ? qualityFocus.nid : undefined}
             isComparisonTarget={Boolean(stagedScreen && targetScreen?.id === id)}
             isComparisonBackground={Boolean(stagedScreen && targetScreen && targetScreen.id !== id)} />;
         })}
@@ -231,6 +273,8 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
               }}
               lodLevel={2}
               isStaged={true}
+              renderQualityKey={renderKey} onRenderQuality={receiveRenderReport}
+              qualityFocusNid={qualityFocus?.screenId === 'staged-screen-preview' ? qualityFocus.nid : undefined}
               overrideSourceScreenId={targetScreen.id}
             />
           );
@@ -278,9 +322,14 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
             <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping" />
             <span className="font-semibold text-purple-200">AI 新方案已在右侧画框并排就绪</span>
           </div>
+          {candidateQuality && candidateQuality.findings.length > 0 && <QualityReportCard report={candidateQuality} />}
+          {renderPending && <span role="status" className="text-slate-300">正在检查当前方案渲染…</span>}
+          {renderedReport?.findings.some(f => f.severity === 'error') && <span role="alert" className="text-red-300">存在严重渲染问题，请修复后采纳。</span>}
+          {renderedReport && <RenderedQualityCard report={renderedReport} onLocate={locateRenderIssue} />}
           <div className="h-4 w-px bg-slate-700" />
           <div className="flex flex-wrap justify-center items-center gap-2">
             <button
+              disabled={adoptionBlocked}
               onClick={adoptStagedChange}
               className="flex shrink-0 whitespace-nowrap items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-1.5 rounded-lg shadow transition"
             >
@@ -288,6 +337,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
               <span>采纳新版 (替换原版)</span>
             </button>
             <button
+              disabled={adoptionBlocked}
               onClick={keepBothScreens}
               className="flex shrink-0 whitespace-nowrap items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-4 py-1.5 rounded-lg border border-slate-700 transition"
             >
@@ -305,6 +355,9 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
         </div>
       )}
 
+      {!stagedScreen && activeScreenId && renderedReport && <div className="absolute right-4 top-4 z-40 max-w-sm">
+        <RenderedQualityCard report={renderedReport} onLocate={locateRenderIssue} />
+      </div>}
       <CanvasMinimap canvasRef={containerRef} />
 
       {/* 纯净工作区空画布引导 (OpenDesign / PRD 体验升级) */}

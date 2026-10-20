@@ -1,3 +1,5 @@
+import { ProjectDocumentEntry } from './projectDocument';
+export type { ProjectDocumentEntry } from './projectDocument';
 import { DesignSystem } from './designSystem';
 import { QuickPromptItem } from './quickPrompt';
 
@@ -105,5 +107,6 @@ export interface ProjectData {
   decisions: Decision[];
   coverImage?: string;
   quickPrompts?: QuickPromptItem[];
+  projectDocuments?: Record<string, ProjectDocumentEntry>;
 }
 

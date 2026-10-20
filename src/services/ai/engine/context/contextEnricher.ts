@@ -17,6 +17,7 @@ export interface ContextEnricherParams {
   baseSystemPrompt: string;
   attachment?: { name: string; dataUrl: string };
   textReferences?: TextReference[];
+  projectKnowledge?: string;
   designRules?: string[]; // PRD D18
   decisions?: Array<{ id: string; rule: string; rationale: string }>; // PRD D20
   presetId?: string;
@@ -342,6 +343,8 @@ ${elementDirective}${regionDirective}
       .join('\n\n');
     userPrompt = `${refsBlock}\n\n${userPrompt}`;
   }
+
+  if (params.projectKnowledge) userPrompt = `${params.projectKnowledge}\n\n[本轮用户要求]\n${userPrompt}`;
 
   const messages: EngineMessage[] = [
     { role: 'system', content: systemContent },

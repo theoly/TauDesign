@@ -35,7 +35,7 @@ describe('Element Modify & Structure Guard Interception & Loop Prevention', () =
   </div>
 </main>`;
 
-  test('CHK-LP-01: prompt with [引用元素 nid=...] bypasses structure guard even if node counts change drastically', () => {
+  test('CHK-LP-01: 引用子树内可改变节点数量，不能放行目标之外的新增', () => {
     const rawPrompt = `[引用元素 nid="ho2m25cl" 画框="送花表达心意 - 牵手币充值" 标签=<div>]
 元素片段:
 <div data-nid="ho2m25cl" class="card">...</div>
@@ -58,7 +58,7 @@ describe('Element Modify & Structure Guard Interception & Loop Prevention', () =
 
     const res = checkStructureIntegrity(context, newHtmlWithDifferentNodeCount);
     expect(res.passed).toBe(true);
-    expect(res.reason).toContain('针对特定元素');
+    expect(checkStructureIntegrity(context, newHtmlWithDifferentNodeCount.replace('</main>', '<p>越界新增内容</p></main>')).passed).toBe(false);
   });
 
   test('CHK-LP-02: keywords like "填充", "修改", "替换" mark hasExplicitStructuralChangeIntent as true and bypass guard', () => {

@@ -2,6 +2,7 @@ import { useProjectStore } from '../../stores/useProjectStore';
 import { useHistoryStore } from '../../stores/useHistoryStore';
 import { NidEngine } from '../../utils/nidEngine';
 import { patchElementByNid } from '../../utils/domPatcher';
+import { checkGenerationQuality, qualitySummary } from '../ai/generationQuality';
 
 export type CanvasToolCall =
   | {
@@ -20,6 +21,7 @@ export type CanvasToolCall =
         title?: string;
         html: string;
         forceInPlace?: boolean;
+        modificationRequest?: string;
       };
     }
   | {
@@ -124,7 +126,7 @@ export class CanvasToolExecutor {
         }
 
         case 'modify_screen': {
-          const { screenId, title, html, forceInPlace } = call.params;
+          const { screenId, title, html, forceInPlace, modificationRequest } = call.params;
           const target = store.screens[screenId];
           if (!target) {
             return {
@@ -136,6 +138,15 @@ export class CanvasToolExecutor {
           }
 
           const formattedHtml = NidEngine.injectNids(html);
+          const quality = checkGenerationQuality(html, { deviceProfile: store.settings.deviceProfile, designSystem: store.designSystem,
+            baselineHtml: target.htmlContent, protectedNids: store.getProtectedNids(screenId), modificationRequest });
+          if (!quality.passed) return { success: false, tool: 'modify_screen', status: 'failed', error: qualitySummary(quality) };
+          if (forceInPlace && store.stagedScreen?.targetScreenId === screenId && store.stagedScreen.newHtml === formattedHtml && store.stagedRenderQuality) {
+            const rendered = store.stagedRenderQuality;
+            if (rendered.key !== store.getStagedRenderContextKey() || rendered.report.status === 'pending' || rendered.report.findings.some(f => f.severity === 'error')) {
+              return { success: false, tool: 'modify_screen', status: 'failed', error: '候选页面渲染检查未完成或存在严重问题，不能强制覆盖原页。' };
+            }
+          }
           const isGenericTitle =
             !title ||
             ['画框', '新页面', '新设计页', '未命名', '新画框'].includes(title.trim()) ||
@@ -169,7 +180,7 @@ export class CanvasToolExecutor {
           }
 
           // D17 & BR-SSR-01: 页面修改统一在原画框右侧暂存候选新页面，供用户直观观测与比选替换
-          store.stageScreenChange(target.id, formattedHtml, `${finalTitle} (AI 调整候选)`);
+          store.stageScreenChange(target.id, formattedHtml, `${finalTitle} (AI 调整候选)`, modificationRequest);
           store.panToScreen(target.id);
 
           return {
@@ -195,6 +206,9 @@ export class CanvasToolExecutor {
             };
           }
 
+          // 必须先检查原始片段，DOMParser会吞掉半截标签，事后序列化无法发现截断。
+          const fragmentQuality = checkGenerationQuality(elementHtml, { deviceProfile: store.settings.deviceProfile, designSystem: store.designSystem });
+          if (!fragmentQuality.passed) return { success: false, tool: 'patch_element', status: 'failed', error: qualitySummary(fragmentQuality) };
           // 外科手术式局部 DOM 补丁
           const patchResult = patchElementByNid(target.htmlContent, nid, elementHtml);
           if (!patchResult.success) {
@@ -207,6 +221,9 @@ export class CanvasToolExecutor {
           }
 
           const tagLabel = patchResult.replacedTagName || nid;
+          const quality = checkGenerationQuality(patchResult.html, { deviceProfile: store.settings.deviceProfile,
+            designSystem: store.designSystem, baselineHtml: target.htmlContent, protectedNids: store.getProtectedNids(screenId) });
+          if (!quality.passed) return { success: false, tool: 'patch_element', status: 'failed', error: qualitySummary(quality) };
           const checkpointId = history.addCheckpoint(`修改元素 <${tagLabel}>: ${target.name}`, {
             screenId: target.id,
             htmlContent: target.htmlContent

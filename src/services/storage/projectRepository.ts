@@ -1,3 +1,4 @@
+import { type ProjectDocumentEntry, validateProjectDocument, isSafeProjectDocumentId, MAX_PROJECT_DOCUMENTS } from '../../types/projectDocument';
 import { ProjectStorage } from './projectStorage';
 import { getBaseCss } from '../../styles/baseCss';
 import { getBuiltinDesignProse } from '../../styles/presets/designProse';
@@ -92,13 +93,62 @@ export interface ProjectDocument {
   panelStates?: unknown;
   coverImage?: string;
   quickPrompts?: unknown;
+  projectDocuments?: Record<string, ProjectDocumentEntry>;
 }
+
+type DocumentMeta = Omit<ProjectDocumentEntry, 'content' | 'originalContent'> & { contentFile?: string; originalFile?: string };
+// Store autosave creates repositories per action; serialize across those instances.
+const projectSaves = new Map<string, Promise<void>>();
 
 export class ProjectRepository {
   constructor(private readonly storage: ProjectStorage) {}
 
   /** 写入工程。画框正文外置为独立文件，project.json 只留元信息 */
   async save(doc: ProjectDocument): Promise<void> {
+    const snapshot = structuredClone(doc);
+    const previous = projectSaves.get(doc.id) ?? Promise.resolve();
+    const operation = previous.catch(() => {}).then(() => this.saveSnapshot(snapshot));
+    projectSaves.set(doc.id, operation);
+    try { await operation; }
+    finally { if (projectSaves.get(doc.id) === operation) projectSaves.delete(doc.id); }
+  }
+
+  private async saveSnapshot(doc: ProjectDocument): Promise<void> {
+    const documents = Object.entries(doc.projectDocuments ?? {});
+    if (documents.length > MAX_PROJECT_DOCUMENTS) throw new Error('最多保存 20 份项目文档');
+    for (const [id, entry] of documents) {
+      validateProjectDocument(entry);
+      if (entry.id !== id) throw new Error('文档 ID 与索引不一致');
+    }
+    const oldRaw = await this.storage.readText(PROJECT_JSON);
+    let previousMetas: Record<string, DocumentMeta> = {};
+    try { previousMetas = oldRaw ? JSON.parse(oldRaw).projectDocuments ?? {} : {}; } catch { /* recoverable metadata */ }
+    const documentMetas: Record<string, DocumentMeta> = {};
+    if (documents.length) await this.storage.ensureDir('documents');
+    for (const [id, entry] of documents) {
+      const { content, originalContent, ...meta } = entry;
+      const previous = previousMetas[id];
+      if (entry.missing) {
+        // Never turn a missing body into a successful empty requirements document.
+        documentMetas[id] = { ...previous, ...meta, missing: true, enabled: false };
+        continue;
+      }
+      const previousFile = previous?.contentFile;
+      const reusableFile = typeof previousFile === 'string' &&
+        previousFile.startsWith(`documents/${id}.`) &&
+        /^[a-zA-Z0-9_-]+\.[a-f0-9-]+\.md$/.test(previousFile.slice('documents/'.length)) &&
+        await this.storage.readText(previousFile) === content;
+      const contentFile = reusableFile ? previousFile : `documents/${id}.${crypto.randomUUID()}.md`;
+      if (!reusableFile) {
+        await this.storage.writeTextAtomic(contentFile, content);
+        await this.storage.writeTextAtomic(`documents/${id}.md`, content);
+      }
+      const originalFile = `documents/${id}.original.md`;
+      const hasOriginal = await this.storage.exists(originalFile);
+      if (!hasOriginal && originalContent !== undefined) await this.storage.writeTextAtomic(originalFile, originalContent);
+      documentMetas[id] = { ...meta, contentFile,
+        ...(hasOriginal || originalContent !== undefined || previous?.originalFile ? { originalFile } : {}) };
+    }
     await this.storage.ensureDir('screens');
 
     const deviceProfile = (doc.settings as { deviceProfile?: 'pc' | 'mobile' }).deviceProfile ?? 'pc';
@@ -142,7 +192,7 @@ export class ProjectRepository {
 
     await this.storage.writeTextAtomic(
       PROJECT_JSON,
-      JSON.stringify({ ...doc, screens: screenMetas, savedAt: Date.now() }, null, 2)
+      JSON.stringify({ ...doc, projectDocuments: documentMetas, screens: screenMetas, savedAt: Date.now() }, null, 2)
     );
   }
 
@@ -191,7 +241,25 @@ export class ProjectRepository {
         ...(scopedCss ? { scopedCss } : {})
       };
     }
-    return { ...doc, screens };
+    const projectDocuments: Record<string, ProjectDocumentEntry> = {};
+    for (const [id, rawMeta] of Object.entries(doc.projectDocuments ?? {})) {
+      if (!isSafeProjectDocumentId(id)) continue;
+      const meta = rawMeta as unknown as DocumentMeta;
+      // Only accept paths generated for this exact document; never trust JSON paths.
+      const safeContentFile = meta.contentFile === `documents/${id}.md` ||
+        (typeof meta.contentFile === 'string' && meta.contentFile.startsWith(`documents/${id}.`) &&
+          /^[a-zA-Z0-9_-]+\.[a-f0-9-]+\.md$/.test(meta.contentFile.slice('documents/'.length)));
+      const content = meta.contentFile && !safeContentFile ? null :
+        await this.storage.readText(meta.contentFile ?? `documents/${id}.md`);
+      const originalContent = await this.storage.readText(`documents/${id}.original.md`);
+      const { contentFile: _contentFile, originalFile: _originalFile, ...entry } = meta;
+      projectDocuments[id] = {
+        ...entry, id, content: content ?? '',
+        ...(originalContent !== null ? { originalContent } : {}),
+        ...(content === null || meta.missing ? { missing: true, enabled: false } : {})
+      };
+    }
+    return { ...doc, screens, projectDocuments };
   }
 
   async isValidProjectFolder(): Promise<boolean> {

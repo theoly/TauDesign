@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { observeRenderedQuality, type RenderedQualityReport } from '../../utils/renderedQuality';
 import { Screen } from '../../types/project';
 import { compileTokensToCss } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
@@ -17,11 +18,14 @@ interface ScreenFrameProps {
   isComparisonTarget?: boolean;
   isComparisonBackground?: boolean;
   overrideSourceScreenId?: string;
+  renderQualityKey?: string;
+  onRenderQuality?: (id: string, key: string, report: RenderedQualityReport) => void;
+  qualityFocusNid?: string;
   /** T-AE-26: 触发单画框 AI 质感润色 */
   onPolish?: (screenId: string) => void;
 }
 
-export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isStaged, isComparisonTarget, isComparisonBackground, overrideSourceScreenId, onPolish }) => {
+export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isStaged, isComparisonTarget, isComparisonBackground, overrideSourceScreenId, renderQualityKey, onRenderQuality, qualityFocusNid, onPolish }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [measuredHeight, setMeasuredHeight] = useState<number>(screen.measuredHeight || 800);
@@ -86,12 +90,17 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     })
     .join('\n');
 
+  // load可能晚于样式热更新；回调始终读取当前值，避免把新版样式回滚。
+  const runtimeStylesRef = useRef({ scopedCss: screen.scopedCss || '', tokensCss, screenOverrides });
+  runtimeStylesRef.current = { scopedCss: screen.scopedCss || '', tokensCss, screenOverrides };
+
   /**
    * 编辑器 chrome 样式：选中/悬浮描边。
    * 刻意**不放入 base.css**——它不是设计系统的一部分，
    * 进入权威源会污染类名白名单并泄漏到导出产物 (T-AE-02)。
    */
   const editorChromeCss = `
+    .aidesign-quality-target { outline: 3px solid #f59e0b !important; outline-offset: 3px; }
     .aidesign-hovered {
       outline: 2px dashed #3b82f6 !important;
       outline-offset: 1px;
@@ -104,15 +113,15 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
   `;
 
   // Construct full frame document (preserve existing nids if already injected)
-  const htmlWithNids = screen.htmlContent.includes('data-nid=')
+  const htmlWithNids = useMemo(() => screen.htmlContent.includes('data-nid=')
     ? screen.htmlContent
-    : NidEngine.injectNids(screen.htmlContent);
+    : NidEngine.injectNids(screen.htmlContent), [screen.htmlContent]);
 
   useEffect(() => {
-    if (!screen.htmlContent.includes('data-nid=')) {
+    if (!isStaged && !screen.htmlContent.includes('data-nid=')) {
       updateScreen(screen.id, { htmlContent: htmlWithNids });
     }
-  }, [screen.htmlContent, screen.id, htmlWithNids, updateScreen]);
+  }, [screen.htmlContent, screen.id, htmlWithNids, updateScreen, isStaged]);
 
   /**
    * 画框静态骨架文档 (D2 / D13)。
@@ -140,6 +149,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
   <meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
   <style id="base-css">${getBaseCss(settings.deviceProfile)}</style>
   <style id="editor-chrome">${editorChromeCss}</style>
+  <style id="scoped-css">${screen.scopedCss || ''}</style>
   <style id="tokens">${tokensCss}</style>
   <style id="overrides">${screenOverrides}</style>
   <style id="frame-fill">html { background-color: var(--color-bg, #f8fafc); }</style>
@@ -149,6 +159,34 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
 </body>
 </html>`;
   }, [htmlWithNids, settings.deviceProfile]);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe || !onRenderQuality || !renderQualityKey || !(isStaged || isActive) || lodLevel === 0) return;
+    return observeRenderedQuality(iframe, report => onRenderQuality(screen.id, renderQualityKey, report));
+  }, [screen.id, fullSrcDoc, renderQualityKey, onRenderQuality, isStaged, isActive, lodLevel]);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+    const focus = () => {
+      const doc = iframe.contentDocument;
+      if (!doc) return;
+      doc.querySelectorAll('.aidesign-quality-target').forEach(el => el.classList.remove('aidesign-quality-target'));
+      if (!qualityFocusNid) return;
+      const target = Array.from(doc.querySelectorAll('[data-nid]')).find(el => el.getAttribute('data-nid') === qualityFocusNid);
+      target?.classList.add('aidesign-quality-target');
+      target?.scrollIntoView?.({ block: 'center', inline: 'nearest' });
+    };
+    focus(); iframe.addEventListener('load', focus);
+    return () => iframe.removeEventListener('load', focus);
+  }, [qualityFocusNid, fullSrcDoc, lodLevel]);
+
+  useEffect(() => {
+    const doc = iframeRef.current?.contentDocument;
+    const style = doc?.getElementById('scoped-css');
+    if (style) style.textContent = screen.scopedCss || '';
+  }, [screen.scopedCss, lodLevel]);
 
   // Hot update Tokens when theme changes (under 100ms, no DOM rebuild)
   useEffect(() => {
@@ -265,10 +303,12 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       }
 
       // 同步初始/重载后的动态样式与选中高亮 (ISSUE-019)
+      const scopedEl = doc.getElementById('scoped-css');
+      if (scopedEl) scopedEl.textContent = runtimeStylesRef.current.scopedCss;
       const tokensEl = doc.getElementById('tokens');
-      if (tokensEl) tokensEl.textContent = tokensCss;
+      if (tokensEl) tokensEl.textContent = runtimeStylesRef.current.tokensCss;
       const overridesEl = doc.getElementById('overrides');
-      if (overridesEl) overridesEl.textContent = screenOverrides;
+      if (overridesEl) overridesEl.textContent = runtimeStylesRef.current.screenOverrides;
 
       doc.querySelectorAll('.aidesign-selected').forEach(el => el.classList.remove('aidesign-selected'));
       doc.querySelectorAll('.aidesign-hovered').forEach(el => el.classList.remove('aidesign-hovered'));

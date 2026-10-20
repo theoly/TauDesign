@@ -1,3 +1,4 @@
+import { supportsNativeContinuation } from '../../boundedContinuation';
 import { AIProviderConfig } from '../../../../types/provider';
 import { EngineMessage, StreamTextOptions } from './types';
 import { TransportRequest } from '../transport/types';
@@ -38,12 +39,13 @@ export function prepareModelRequest(options: StreamTextOptions): PreparedRequest
           ]
         };
       }
-      return { role: m.role, content: m.content };
+      return { role: m.role, content: m.content, ...(m.partial && supportsNativeContinuation(provider, model) && m === messages.at(-1) && m.role === 'assistant' ? { partial: true } : {}) };
     });
 
     const body: Record<string, unknown> = {
       model,
       messages: openAiMessages,
+      ...(openAiMessages.some(m => 'partial' in m) ? { enable_thinking: false } : {}),
       stream: true,
       temperature,
       max_tokens: maxTokens
@@ -191,7 +193,8 @@ export function prepareModelRequest(options: StreamTextOptions): PreparedRequest
       signal: options.signal,
       provider: options.provider,
       model: options.model,
-      messages: options.messages
+      messages: options.messages,
+      generationOptions: { maxTokens, temperature }
     },
     estimatedInputChars
   };

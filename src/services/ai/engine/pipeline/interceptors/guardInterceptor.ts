@@ -1,5 +1,6 @@
 import { compareStructure, StructureDiff } from '../../../../../utils/structureGuard';
 import { PipelineContext } from '../types';
+import { parseHtmlCopy } from '../../../../../utils/htmlDocument';
 
 export interface GuardCheckResult {
   passed: boolean;
@@ -27,12 +28,18 @@ export function checkStructureIntegrity(
   }
 
   const prompt = context.input.rawPrompt;
-  // 1. 用户显式引用特定元素，明确要求针对该区域进行局部修改或内容填充，守卫直接放行
-  if (prompt.includes('[引用元素') || prompt.includes('nid=')) {
-    return {
-      passed: true,
-      reason: '用户针对特定元素进行针对性修改/填充，结构守卫自动放行'
-    };
+  // 引用只授权该子树，不能让无关操作或兄弟内容消失。
+  const nid = context.input.decision?.elementNid || /\bnid=["']([^"']+)["']/.exec(prompt)?.[1];
+  if (nid) {
+    const original = parseHtmlCopy(context.targetScreen.htmlContent);
+    const candidate = parseHtmlCopy(generatedHtml);
+    const find = (doc: Document) => Array.from(doc.querySelectorAll('[data-nid]')).find(el => el.getAttribute('data-nid') === nid);
+    const before = find(original.doc), after = find(candidate.doc);
+    if (!before || (!after && !/(删除|移除|去掉)/.test(prompt))) return { passed: false, reason: '引用目标不存在或被意外删除，无法确认局部修改范围。' };
+    before.remove(); after?.remove();
+    const diff = compareStructure(original.serialize(), candidate.serialize());
+    return { passed: diff.ok && diff.textChanged === 0, structureDiff: diff,
+      reason: diff.ok && diff.textChanged === 0 ? '修改限定在引用节点子树内' : '结构守卫拦截：修改超出了引用节点范围。' };
   }
 
   // 1.5 用户上传参考图并显式要求「按图精准修改」，整页按图重绘即为其本意，守卫放行 (BR-GRM-01)
