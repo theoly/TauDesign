@@ -1,13 +1,16 @@
 import { Screen, ProjectSettings, ArtifactManifest } from '../types/project';
 import { NidEngine } from './nidEngine';
+import { buildScreenDocument } from './screenDocument';
+import type { MobileNavigationPolicy } from './mobileNavigation';
 
-export interface StandaloneHtmlOptions {
+export interface StandaloneHtmlOptions extends MobileNavigationPolicy {
   tokensCss: string;
   baseCss: string;
   screenOverrides: string;
 }
 
-export interface ExportSvgOptions {
+export interface ExportSvgOptions extends MobileNavigationPolicy {
+  viewportHeight?: number;
   tokensCss: string;
   baseCss: string;
   screenOverrides: string;
@@ -17,7 +20,8 @@ export interface ExportSvgOptions {
   bgColor: string;
 }
 
-export interface ExportPngOptions {
+export interface ExportPngOptions extends MobileNavigationPolicy {
+  viewportHeight?: number;
   tokensCss: string;
   baseCss: string;
   screenOverrides: string;
@@ -50,27 +54,17 @@ export function stripEditorChromeClasses(html: string): string {
  * 具备零构建依赖、剥离内部 data-nid 标记、内联 Token 与基座样式。
  */
 export function buildStandaloneHtml(screen: Screen, options: StandaloneHtmlOptions): string {
-  const cleanBodyHtml = screen ? NidEngine.stripInternalAttributes(screen.htmlContent || '') : '';
-  const title = screen?.name || 'Exported Design';
-
-  return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title}</title>
-  <style>
-${options.tokensCss}
-
-${options.baseCss}
-
-${options.screenOverrides}
-  </style>
-</head>
-<body>
-${cleanBodyHtml}
-</body>
-</html>`;
+  const doc = new DOMParser().parseFromString(stripEditorChromeClasses(screen.htmlContent || ''), 'text/html');
+  // L4 selectors (and authored selectors in imported pages) require stable NIDs.
+  const keepNids = !!screen.metadata?.importedHtml;
+  for (const el of Array.from(doc.querySelectorAll('*'))) {
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.name === 'data-nid' && !keepNids && options.screenOverrides.trim()) el.setAttribute('data-export-id', attr.value);
+      if ((attr.name === 'data-nid' && !keepNids) || attr.name === 'data-asset-id' || attr.name.startsWith('data-component-')) el.removeAttribute(attr.name);
+    }
+  }
+  const screenOverrides = keepNids ? options.screenOverrides : options.screenOverrides.replace(/\[data-nid(?=[\s=\]])/g, '[data-export-id');
+  return buildScreenDocument({ ...screen, htmlContent: doc.documentElement.outerHTML }, { ...options, screenOverrides, title: screen?.name || 'Exported Design', viewportHeight: undefined, viewportWidth: undefined, includeMobileChrome: false, staticImage: false });
 }
 
 /**
@@ -106,6 +100,8 @@ export function buildExportSvg(screen: Screen, options: ExportSvgOptions): strin
   // 保留 data-nid：screenOverrides 依赖它作选择器，剥离会丢掉全部 L4 手动样式
   const cleanBodyHtml = screen ? stripEditorChromeClasses(screen.htmlContent || '') : '';
   const { width, height, bgColor, tokensCss, baseCss, screenOverrides, scale = 1 } = options;
+  const policy = { deviceProfile: options.deviceProfile ?? (width === 390 ? 'mobile' as const : undefined), useCustomNavigation: options.useCustomNavigation };
+  const fullDocument = !!screen.metadata?.importedHtml || policy.deviceProfile === 'mobile' || options.viewportHeight !== undefined;
   const scaledWidth = width * scale;
   const scaledHeight = height * scale;
 
@@ -144,10 +140,18 @@ export function buildExportSvg(screen: Screen, options: ExportSvgOptions): strin
     ${baseCss}
     ${screenOverrides}
   `;
-  container.appendChild(styleEl);
+  if (!fullDocument) container.appendChild(styleEl);
 
   const htmlParser = new DOMParser();
-  const htmlDoc = htmlParser.parseFromString(cleanBodyHtml, 'text/html');
+  const htmlDoc = htmlParser.parseFromString(fullDocument
+    ? buildScreenDocument({ ...screen, htmlContent: cleanBodyHtml }, { tokensCss, baseCss, screenOverrides, ...policy, includeMobileChrome: true, viewportWidth: width, viewportHeight: options.viewportHeight ?? (policy.deviceProfile === 'mobile' ? 844 : 900), staticImage: true })
+    : cleanBodyHtml, 'text/html');
+
+  if (fullDocument && !screen.metadata?.importedHtml) {
+    const imageSizing = htmlDoc.createElement('style');
+    imageSizing.textContent = 'svg.full-img, img.full-img { width: 100% !important; height: auto !important; display: block !important; }';
+    htmlDoc.head.append(imageSizing);
+  }
 
   // 将 data:image/svg+xml 形式的 <img> 自动转换为内联 <svg> 元素 (消除 WebKit foreignObject 屏蔽图片导致的排版坍塌)
   const imgElements = Array.from(htmlDoc.body.querySelectorAll('img'));
@@ -195,9 +199,16 @@ export function buildExportSvg(screen: Screen, options: ExportSvgOptions): strin
   }
 
   // 将 HTML DOM 节点逐一移入 XHTML 容器
-  Array.from(htmlDoc.body.childNodes).forEach((node) => {
-    container.appendChild(node.cloneNode(true));
-  });
+  if (fullDocument) {
+    // Preserve html/body selectors and attributes in imported documents too.
+    const root = htmlDoc.documentElement.cloneNode(true) as HTMLElement;
+    root.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
+    container.appendChild(root);
+  } else {
+    Array.from(htmlDoc.body.childNodes).forEach((node) => {
+      container.appendChild(node.cloneNode(true));
+    });
+  }
 
   foreignObject.appendChild(container);
   svg.appendChild(foreignObject);
@@ -260,7 +271,9 @@ export async function renderScreenToPngDataUrl(screen: Screen, options: ExportPn
     width,
     height,
     scale,
-    bgColor
+    bgColor,
+    viewportHeight: options.viewportHeight,
+    deviceProfile: options.deviceProfile, useCustomNavigation: options.useCustomNavigation
   });
 
   const canvas = document.createElement('canvas');

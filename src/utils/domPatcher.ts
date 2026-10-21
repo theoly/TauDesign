@@ -1,4 +1,5 @@
 import { NidEngine } from './nidEngine';
+import { parseHtmlCopy } from './htmlDocument';
 
 export interface PatchElementResult {
   success: boolean;
@@ -27,8 +28,8 @@ export function patchElementByNid(
   }
 
   try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(`<body>${originalHtml}</body>`, 'text/html');
+    const copy = parseHtmlCopy(originalHtml);
+    const doc = copy.doc;
 
     // 转义转义符防止选择器注入
     const safeNid = nid.replace(/["\\]/g, '\\$&');
@@ -75,7 +76,7 @@ export function patchElementByNid(
 
     return {
       success: true,
-      html: doc.body.innerHTML,
+      html: copy.serialize(),
       replacedTagName
     };
   } catch (err: any) {
@@ -115,8 +116,8 @@ export function deleteElementByNid(
   }
 
   try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(`<body>${originalHtml}</body>`, 'text/html');
+    const copy = parseHtmlCopy(originalHtml);
+    const doc = copy.doc;
 
     const safeNid = nid.replace(/["\\]/g, '\\$&');
     const targetEl = doc.querySelector(`[data-nid="${safeNid}"]`);
@@ -158,7 +159,7 @@ export function deleteElementByNid(
 
     return {
       success: true,
-      html: doc.body.innerHTML,
+      html: copy.serialize(),
       deletedNids,
       deletedTagName: tagName
     };
@@ -195,8 +196,8 @@ export function duplicateElementByNid(
   }
 
   try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(`<body>${originalHtml}</body>`, 'text/html');
+    const copy = parseHtmlCopy(originalHtml);
+    const doc = copy.doc;
 
     const safeNid = nid.replace(/["\\]/g, '\\$&');
     const targetEl = doc.querySelector(`[data-nid="${safeNid}"]`);
@@ -214,7 +215,7 @@ export function duplicateElementByNid(
 
     targetEl.after(clone);
 
-    return { success: true, html: doc.body.innerHTML, newNid: newRootNid };
+    return { success: true, html: copy.serialize(), newNid: newRootNid };
   } catch (err: any) {
     return { success: false, html: originalHtml, error: err?.message || '节点复制异常' };
   }
@@ -244,8 +245,8 @@ export function wrapElementByNid(
   }
 
   try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(`<body>${originalHtml}</body>`, 'text/html');
+    const copy = parseHtmlCopy(originalHtml);
+    const doc = copy.doc;
 
     const safeNid = nid.replace(/["\\]/g, '\\$&');
     const targetEl = doc.querySelector(`[data-nid="${safeNid}"]`);
@@ -262,7 +263,7 @@ export function wrapElementByNid(
     targetEl.replaceWith(wrapper);
     wrapper.appendChild(targetEl);
 
-    return { success: true, html: doc.body.innerHTML, containerNid };
+    return { success: true, html: copy.serialize(), containerNid };
   } catch (err: any) {
     return { success: false, html: originalHtml, error: err?.message || '容器包裹异常' };
   }

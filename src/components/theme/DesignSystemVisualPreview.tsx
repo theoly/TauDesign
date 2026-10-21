@@ -1,5 +1,7 @@
+import { buildThemePreview } from '../../utils/themePreview';
+import type { DeviceProfile } from '../../styles/baseCss';
 import React, { useMemo, useState } from 'react';
-import { DesignSystem } from '../../types/designSystem';
+import { DesignSystem, DENSITY_SCALE } from '../../types/designSystem';
 import { compileTokensToCss } from '../../utils/cssCompiler';
 import { resolveColorRoles } from '../../utils/colorHarmony';
 import { Check, Copy, Eye, Moon, Sun, Terminal } from 'lucide-react';
@@ -10,6 +12,7 @@ interface DesignSystemVisualPreviewProps {
   onColorModeChange?: (mode: 'light' | 'dark') => void;
   className?: string;
   compact?: boolean;
+  device?: DeviceProfile;
 }
 
 export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps> = ({
@@ -17,7 +20,8 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
   colorMode: controlledMode,
   onColorModeChange,
   className = '',
-  compact = false
+  compact = false,
+  device = 'pc'
 }) => {
   const [internalMode, setInternalMode] = useState<'light' | 'dark'>('light');
   const [viewTab, setViewTab] = useState<'visual' | 'token'>('visual');
@@ -30,16 +34,17 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
   };
 
   const tokens = theme.tokens;
+  const spacing = (key: string) => Math.round((tokens.spacing[key] ?? 16) * DENSITY_SCALE[tokens.personality.density]);
   const roles = useMemo(() => resolveColorRoles(tokens, mode), [tokens, mode]);
   const compiledCss = useMemo(() => compileTokensToCss(tokens, mode), [tokens, mode]);
 
   // 取代表性色值供卡片直接显示 Hex
-  const primaryHex = tokens.colors.primary['500'] || '#2563eb';
-  const bgHex = mode === 'dark' ? tokens.colors.background.dark : tokens.colors.background.light;
-  const surfaceHex = mode === 'dark' ? tokens.colors.surface.dark : tokens.colors.surface.light;
-  const surfaceAltHex = mode === 'dark' ? tokens.colors.surfaceAlt.dark : tokens.colors.surfaceAlt.light;
+  const primaryHex = roles.primary;
+  const bgHex = roles.background;
+  const surfaceHex = roles.surface;
+  const surfaceAltHex = roles.surfaceAlt;
   const textPrimaryHex = roles.textPrimary;
-  const borderHex = mode === 'dark' ? tokens.colors.border.dark : tokens.colors.border.light;
+  const borderHex = roles.border;
 
   const handleCopyCss = () => {
     navigator.clipboard.writeText(compiledCss);
@@ -109,11 +114,13 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
       <div className="flex-1 overflow-y-auto p-5">
         {viewTab === 'visual' ? (
           <div
+            data-design-sample="system"
             className="rounded-xl border p-6 transition-colors shadow-inner"
             style={{
               backgroundColor: bgHex,
               borderColor: borderHex,
-              color: textPrimaryHex
+              color: textPrimaryHex,
+              fontFamily: tokens.typography.fontFamilySans
             }}
           >
             {/* Section 1: Palette */}
@@ -159,32 +166,37 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
               >
                 <div>
                   <span className="text-[9px] uppercase tracking-wider font-mono opacity-50 block mb-1">Display</span>
-                  <div className="text-xl font-bold tracking-tight">The grid carries weight; the line carries pace.</div>
+                  <div data-design-sample="display" style={{ fontSize: tokens.typography.sizes['2xl'], fontWeight: tokens.typography.weights.bold, lineHeight: tokens.typography.lineHeights.tight }}>The grid carries weight; the line carries pace.</div>
                 </div>
                 <div className="pt-2 border-t" style={{ borderColor: borderHex }}>
                   <span className="text-[9px] uppercase tracking-wider font-mono opacity-50 block mb-1">Body</span>
-                  <div className="text-xs leading-relaxed opacity-85">
+                  <div data-design-sample="body" className="opacity-85" style={{ fontSize: tokens.typography.sizes.md, lineHeight: tokens.typography.lineHeights.normal }}>
                     标准正文文本采用高可读性字族与严谨行高，克制与韵律在设计系统中优于盲目繁复。
                   </div>
                 </div>
                 <div className="pt-2 border-t" style={{ borderColor: borderHex }}>
                   <span className="text-[9px] uppercase tracking-wider font-mono opacity-50 block mb-1">Mono</span>
-                  <code className="text-[11px] font-mono opacity-80 block truncate">
+                  <code className="text-[11px] opacity-80 block truncate" style={{ fontFamily: tokens.typography.fontFamilyMono }}>
                     const theme = &#123; density: &quot;{tokens.personality.density}&quot;, radius: &quot;{tokens.radius.md}&quot; &#125;;
                   </code>
                 </div>
               </div>
             </div>
 
+            <iframe title="主题真实组件预览" srcDoc={buildThemePreview(tokens, mode, device)}
+              className="w-full rounded-xl border-0 mb-6" style={{ height: compact ? 480 : 620 }} />
             {/* Section 3: Components */}
             <div>
               <h4 className="text-[11px] font-bold uppercase tracking-wider mb-3 opacity-60">核心组件 (Components)</h4>
               <div
+                data-design-sample="card"
                 className="p-5 transition shadow-sm"
                 style={{
                   backgroundColor: surfaceHex,
                   border: `1px solid ${borderHex}`,
-                  borderRadius: tokens.radius.lg
+                  borderRadius: tokens.radius.lg,
+                  boxShadow: tokens.shadows.card[mode],
+                  padding: spacing('4')
                 }}
               >
                 <div className="flex items-center justify-between mb-2">
@@ -206,7 +218,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
                 </div>
 
                 <h5 className="font-semibold text-sm mb-1">Production-quality artifact</h5>
-                <p className="text-xs opacity-75 mb-4 leading-relaxed">
+                <p className="text-xs mb-4 leading-relaxed" style={{ color: roles.textSecondary }}>
                   展示当前设计系统在卡片底色、边框细微透明度、间距节奏与主色调交互下的综合真实质感。
                 </p>
 
@@ -218,7 +230,11 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
                     style={{
                       backgroundColor: primaryHex,
                       color: roles.onPrimary,
-                      borderRadius: tokens.radius.md
+                      borderRadius: tokens.radius.md,
+                      padding: `${spacing('2')}px ${spacing('3')}px`,
+                      fontSize: tokens.typography.sizes.sm,
+                      fontWeight: tokens.typography.weights.semibold,
+                      lineHeight: tokens.typography.lineHeights.normal
                     }}
                   >
                     主操作 (Primary)
@@ -241,7 +257,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
                     type="button"
                     className="px-2.5 py-1.5 text-xs font-medium transition hover:underline"
                     style={{
-                      color: primaryHex
+                      color: roles.primaryText
                     }}
                   >
                     幽灵链接 (Link →)

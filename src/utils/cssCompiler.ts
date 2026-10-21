@@ -1,54 +1,22 @@
 import { DENSITY_SCALE, DesignSystemTokens } from '../types/designSystem';
-import { resolveColorRoles } from './colorHarmony';
-
-/** #rrggbb -> rgba(r,g,b,alpha)；非法输入原样返回 */
-function withAlpha(hex: string, alpha: number): string {
-  const m = /^#([0-9a-fA-F]{6})$/.exec(hex.trim());
-  if (!m || alpha >= 1) return hex;
-  const n = parseInt(m[1], 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-}
+import { resolveThemeColors } from './semanticColors';
+import { COLOR_ROLES, colorRoleKeys } from '../types/colorRoles';
 
 export function compileTokensToCss(tokens: DesignSystemTokens, mode: 'light' | 'dark' = 'light', device: 'pc' | 'mobile' | 'all' = 'all'): string {
-  const c = tokens.colors;
   const t = tokens.typography;
   const s = tokens.spacing;
   const r = tokens.radius;
   const sh = tokens.shadows;
 
-  const bg = mode === 'light' ? c.background.light : c.background.dark;
-  const surface = mode === 'light' ? c.surface.light : c.surface.dark;
-  const surfaceAlt = mode === 'light' ? c.surfaceAlt.light : c.surfaceAlt.dark;
-  const roles = resolveColorRoles(tokens, mode);
-  const border = mode === 'light' ? c.border.light : c.border.dark;
+  const roles = resolveThemeColors(tokens, mode).cssValues;
   const pick = (p: { light: string; dark: string }) => (mode === 'light' ? p.light : p.dark);
   const density = DENSITY_SCALE[tokens.personality.density];
   const sp = (k: string, fallback: number) => Math.round((s[k] ?? fallback) * density);
 
   return `:root {
+  color-scheme: ${mode};
   /* Colors */
-  --color-primary: ${roles.primary};
-  --color-primary-text: ${roles.primaryText};
-  --color-on-primary: ${roles.onPrimary};
-  --color-primary-light: ${roles.primaryLight};
-  --color-bg: ${bg};
-  --color-surface: ${surface};
-  --color-surface-alt: ${surfaceAlt};
-  --color-text-primary: ${roles.textPrimary};
-  --color-text-secondary: ${roles.textSecondary};
-  --color-border: ${border};
-  --color-border-subtle: ${withAlpha(border, tokens.personality.borderAlpha)};
-  --color-success: ${roles.success.text};
-  --color-success-light: ${roles.success.light};
-  --color-warning: ${roles.warning.text};
-  --color-warning-light: ${roles.warning.light};
-  --color-danger: ${roles.danger.text};
-  --color-danger-light: ${roles.danger.light};
-  --color-accent: ${roles.accent};
-  --color-accent-text: ${roles.accentText};
-  --color-on-accent: ${roles.onAccent};
-  --color-accent-light: ${roles.accentLight};
-  --color-text-muted: ${roles.textMuted};
+  ${colorRoleKeys.map(role => `--color-${COLOR_ROLES[role][1]}: ${roles[role]};`).join('\n  ')}
 
   /* Typography */
   --font-sans: ${t.fontFamilySans};

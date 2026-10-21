@@ -15,17 +15,18 @@
     "package:desktop": "bash scripts/package-desktop.sh"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.11.1",
-    "@tauri-apps/plugin-dialog": "^2.7.3",
+    "@tauri-apps/api": "2.12.3",
+    "@tauri-apps/plugin-dialog": "2.7.3",
     "immer": "^10.1.1",
     "lucide-react": "^0.475.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tailwindcss-import": "npm:tailwindcss@4.3.1",
     "zustand": "^4.5.5"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.14.5",
-    "@tauri-apps/cli": "^2.11.4",
+    "@tauri-apps/cli": "2.12.2",
     "@types/node": "^22.13.4",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",

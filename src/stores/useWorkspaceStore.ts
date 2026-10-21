@@ -53,7 +53,7 @@ interface WorkspaceState {
   missingIds: string[];
 
   refresh: () => void;
-  createProject: (name: string, deviceProfile: 'pc' | 'mobile', designSystem: DesignSystem, initialDecisions?: string[], folderPath?: string) => void;
+  createProject: (name: string, deviceProfile: 'pc' | 'mobile', designSystem: DesignSystem, initialDecisions?: string[], folderPath?: string, referenceDeviceId?: string) => void;
   openProject: (id: string) => boolean;
   backToManager: () => void;
   renameProject: (id: string, name: string) => void;
@@ -181,9 +181,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     });
   },
 
-  createProject: (name, deviceProfile, designSystem, initialDecisions, folderPath) => {
+  createProject: (name, deviceProfile, designSystem, initialDecisions, folderPath, referenceDeviceId) => {
     resetHistory();
-    const id = useProjectStore.getState().initNewProject({ name, deviceProfile, designSystem, initialDecisions, folderPath });
+    const id = useProjectStore.getState().initNewProject({ name, deviceProfile, designSystem, initialDecisions, folderPath, referenceDeviceId });
     // 新工程以空栈起步，立即恢复落盘
     resumeHistoryPersistence();
     get().refresh();

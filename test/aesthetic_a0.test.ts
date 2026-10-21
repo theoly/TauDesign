@@ -50,8 +50,8 @@ describe('T-AE-03 · Prompt 白名单自动派生', () => {
   });
 
   test('白名单中每个类都真实存在于基座 CSS', () => {
-    const promised = (prompt.match(/^\.[a-z][a-z0-9-]*(?:, \.[a-z][a-z0-9-]*)*$/m)?.[0] || '')
-      .split(', ')
+    const promised = (prompt.match(/^\.[a-z][a-z0-9-]*(?:,\s*\.[a-z][a-z0-9-]*)*$/m)?.[0] || '')
+      .split(/,\s*/)
       .map((c) => c.replace(/^\./, ''))
       .filter(Boolean);
     expect(promised.length).toBeGreaterThan(100);

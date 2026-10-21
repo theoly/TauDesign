@@ -1,3 +1,4 @@
+import type { ReferenceDevice } from '../../types/project';
 import type { DesignSystem } from '../../types/designSystem';
 import type { DeviceProfile } from '../../styles/baseCss';
 import type { ComponentDefinition, Decision } from '../../types/project';
@@ -16,7 +17,10 @@ import { PromptBuilder } from './promptBuilder';
 export interface PolishOptions {
   designSystem: DesignSystem;
   deviceProfile: DeviceProfile;
+  useCustomNavigation?: boolean;
   frameWidth: number;
+  referenceDevice?: ReferenceDevice;
+  viewportGuideHeight?: number;
   colorMode?: 'light' | 'dark';
   /** Restyle 时附加的目标风格描述；Polish 留空表示只提升质感、不改风格调性 */
   styleDirective?: string;

@@ -1,6 +1,8 @@
+import type { ReferenceDevice } from '../../../../types/project';
+import { normalizeMobileNavigation, mobileNavigationPrompt } from '../../../../utils/mobileNavigation';
 import { streamWithContinuation } from '../../boundedContinuation';
 import { buildDesignBrief, type DesignBrief } from '../../designBrief';
-import { checkGenerationQuality, qualitySummary } from '../../generationQuality';
+import { checkGenerationQuality, checkGenerationSourceSafety, qualitySummary } from '../../generationQuality';
 import { AIEngineCore } from '../core/types';
 import { enrichContext } from '../context/contextEnricher';
 import { analyzePipelineIntent } from './interceptors/intentInterceptor';
@@ -20,7 +22,10 @@ export interface ExecutePipelineOptions {
   engineCore: AIEngineCore;
   screens: Record<string, { id: string; name: string; htmlContent: string; scopedCss?: string }>;
   deviceProfile: 'pc' | 'mobile';
+  useCustomNavigation?: boolean;
   frameWidth: number;
+  referenceDevice?: ReferenceDevice;
+  viewportGuideHeight?: number;
   baseSystemPrompt: string;
   designTokens?: any;
   /**
@@ -48,7 +53,7 @@ export class PipelineExecutor {
       provider,
       model,
       engineCore,
-      screens,
+      screens: sourceScreens,
       deviceProfile,
       frameWidth,
       baseSystemPrompt,
@@ -64,6 +69,11 @@ export class PipelineExecutor {
       onReasoningDelta,
       signal
     } = options;
+
+    const navigationPolicy = { deviceProfile, useCustomNavigation: options.useCustomNavigation };
+    const screens = Object.fromEntries(Object.entries(sourceScreens).map(([id, screen]) => [id, {
+      ...screen, htmlContent: normalizeMobileNavigation(screen.htmlContent, navigationPolicy).html
+    }]));
 
     // 1. Intent Analysis
     const intentResult = analyzePipelineIntent(input, designTokens);
@@ -88,7 +98,10 @@ export class PipelineExecutor {
       ? PromptBuilder.buildSystemPrompt({
           designSystem,
           deviceProfile,
+          useCustomNavigation: options.useCustomNavigation,
           frameWidth,
+          referenceDevice: options.referenceDevice,
+          viewportGuideHeight: options.viewportGuideHeight,
           colorMode,
           designProseMarkdown,
           components,
@@ -99,7 +112,7 @@ export class PipelineExecutor {
           componentRequest: input.rawPrompt,
           taskBrief: designBrief
         })
-      : baseSystemPrompt;
+      : `${baseSystemPrompt}\n${mobileNavigationPrompt(navigationPolicy)}`;
 
     // 3. Context Enrichment (ISSUE-011 + ISSUE-012 + D18 + D20)
     const enriched = enrichContext({
@@ -171,7 +184,7 @@ export class PipelineExecutor {
         errorMessage: '模型未输出有效的 HTML 代码块'
       };
     }
-    const extractedHtml = artifact.html;
+    const rawHtml = artifact.html;
     if (!artifact.isComplete) {
       const atLimit = /length|max[_-]?(?:output[_-]?)?tokens/i.test(finishReason ?? '');
       const message = atLimit ? '模型达到输出上限，页面未完整返回，原页面未修改。' : '模型输出未完整返回（页面产物未闭合），原页面未修改。';
@@ -188,8 +201,13 @@ export class PipelineExecutor {
       isFallback: artifact.isFallback
     };
 
+    // Never let DOMParser repair truncated or unsafe output before the quality gate.
+    const rawQuality = checkGenerationSourceSafety(rawHtml, { deviceProfile, designSystem });
+    if (!rawQuality.passed) return { status: 'rejected_by_quality', rawResponse, qualityReport: rawQuality,
+      reasoningText, usage, recoveredStreamError, warnings: recoveryWarnings, errorMessage: qualitySummary(rawQuality) };
+    const extractedHtml = normalizeMobileNavigation(rawHtml, navigationPolicy).html;
     const qualityReport = checkGenerationQuality(extractedHtml, {
-      deviceProfile, designSystem, baselineHtml: enriched.targetScreen ? screens[enriched.targetScreen.id]?.htmlContent : undefined, protectedNids,
+      deviceProfile, useCustomNavigation: options.useCustomNavigation, designSystem, baselineHtml: enriched.targetScreen ? screens[enriched.targetScreen.id]?.htmlContent : undefined, protectedNids,
       modificationRequest: input.rawPrompt
     });
     if (!qualityReport.passed) return {

@@ -10,6 +10,7 @@
 //!      因而不会出现吸顶/吸底元素在接缝处重复；也不需要录屏权限；
 //!   3. CoreGraphics 按倍率把 PDF 栅格化为位图，`png` crate 编码。
 //!
+//! 导入页使用 WKWebView 屏幕位图快照，避免复合径向渐变在 PDF 转译中失真。
 //! 仅 macOS 实现；其他平台返回 `unsupported_platform`，由前端回退旧路径 (BR-PX-05)。
 
 use std::collections::HashMap;
@@ -69,6 +70,7 @@ pub async fn export_screen_png(
     height: f64,
     scale: f64,
     settle_ms: Option<u64>,
+    prefer_snapshot: Option<bool>,
 ) -> Result<ExportPngResult, String> {
     if width <= 0.0 || height <= 0.0 {
         return Err("导出尺寸非法：宽高必须为正数".to_string());
@@ -79,7 +81,15 @@ pub async fn export_screen_png(
     {
         let settle = settle_ms.unwrap_or(400);
         tauri::async_runtime::spawn_blocking(move || {
-            macos::render(app, html, width, height, scale, settle)
+            macos::render(
+                app,
+                html,
+                width,
+                height,
+                scale,
+                settle,
+                prefer_snapshot.unwrap_or(false),
+            )
         })
         .await
         .map_err(|e| format!("导出任务调度失败: {e}"))?
@@ -87,7 +97,7 @@ pub async fn export_screen_png(
 
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = (app, html, width, height, scale, settle_ms);
+        let _ = (app, html, width, height, scale, settle_ms, prefer_snapshot);
         Err("unsupported_platform: 原生高保真导出目前仅支持 macOS".to_string())
     }
 }
@@ -98,13 +108,14 @@ mod macos {
     use base64::Engine as _;
     use block2::RcBlock;
     use objc2::MainThreadMarker;
+    use objc2_app_kit::NSImage;
     use objc2_core_foundation::{CFData, CGPoint, CGRect, CGSize};
     use objc2_core_graphics::{
-        CGBitmapContextCreate, CGColorSpace, CGContext, CGDataProvider, CGImageAlphaInfo, CGPDFBox,
-        CGPDFDocument, CGPDFPage,
+        CGBitmapContextCreate, CGColorSpace, CGContext, CGDataProvider, CGImage, CGImageAlphaInfo,
+        CGPDFBox, CGPDFDocument, CGPDFPage,
     };
-    use objc2_foundation::{NSData, NSError};
-    use objc2_web_kit::{WKPDFConfiguration, WKWebView};
+    use objc2_foundation::{NSData, NSError, NSNumber};
+    use objc2_web_kit::{WKPDFConfiguration, WKSnapshotConfiguration, WKWebView};
     use std::sync::mpsc;
     use std::sync::Mutex;
     use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -126,6 +137,7 @@ mod macos {
         height: f64,
         scale: f64,
         settle_ms: u64,
+        prefer_snapshot: bool,
     ) -> Result<ExportPngResult, String> {
         let token = format!(
             "exp{}",
@@ -136,7 +148,15 @@ mod macos {
         );
         put_html(&token, html);
 
-        let result = render_inner(&app, &token, width, height, scale, settle_ms);
+        let result = render_inner(
+            &app,
+            &token,
+            width,
+            height,
+            scale,
+            settle_ms,
+            prefer_snapshot,
+        );
 
         drop_html(&token);
         if let Some(win) = app.get_webview_window(&window_label(&token)) {
@@ -156,6 +176,7 @@ mod macos {
         height: f64,
         scale: f64,
         settle_ms: u64,
+        prefer_snapshot: bool,
     ) -> Result<ExportPngResult, String> {
         let url = format!("{EXPORT_SCHEME}://localhost/{token}")
             .parse()
@@ -192,16 +213,119 @@ mod macos {
         // 字体与图片解码、首帧合成都发生在 load 之后，留一段沉降时间 (BR-PX-02)
         std::thread::sleep(Duration::from_millis(settle_ms));
 
-        let pdf = capture_pdf(&win, width, height)?;
-        let (pixels, px_w, px_h) = rasterize_pdf(&pdf, scale, Some(height))?;
+        let (pixels, px_w, px_h) = if prefer_snapshot {
+            capture_snapshot(&win, width, height, scale)?
+        } else {
+            let pdf = capture_pdf(&win, width, height)?;
+            rasterize_pdf(&pdf, scale, Some(height))?
+        };
         let png = encode_png(&pixels, px_w, px_h)?;
 
         Ok(ExportPngResult {
             png_base64: base64::engine::general_purpose::STANDARD.encode(png),
             width: px_w,
             height: px_h,
-            engine: "native-webview-pdf".to_string(),
+            engine: if prefer_snapshot {
+                "native-webview-snapshot"
+            } else {
+                "native-webview-pdf"
+            }
+            .to_string(),
         })
+    }
+
+    /// Imported pages use the screen raster backend: createPDF can turn layered
+    /// radial gradients into opaque black/white masks on older system WebKit.
+    /// The offscreen viewport already covers the whole page, so no scrolling or
+    /// stitching is required (fixed headers/footers are captured only once).
+    fn capture_snapshot(
+        win: &tauri::WebviewWindow,
+        width: f64,
+        height: f64,
+        scale: f64,
+    ) -> Result<(Vec<u8>, u32, u32), String> {
+        let (tx, rx) = mpsc::channel();
+        win.with_webview(move |platform| {
+            let mtm = unsafe { MainThreadMarker::new_unchecked() };
+            let view: &WKWebView = unsafe { &*platform.inner().cast() };
+            let config = unsafe { WKSnapshotConfiguration::new(mtm) };
+            unsafe {
+                config.setRect(CGRect::new(
+                    CGPoint::new(0.0, 0.0),
+                    CGSize::new(width, height),
+                ));
+                config.setSnapshotWidth(Some(&NSNumber::new_f64(width * scale)));
+                config.setAfterScreenUpdates(true);
+            }
+            let handler = RcBlock::new(move |image: *mut NSImage, err: *mut NSError| {
+                let result = if image.is_null() {
+                    let reason = if err.is_null() {
+                        "WKWebView 未返回快照".to_string()
+                    } else {
+                        unsafe { &*err }.localizedDescription().to_string()
+                    };
+                    Err(reason)
+                } else {
+                    let image = unsafe { &*image };
+                    rasterize_snapshot(image, width, height, scale)
+                };
+                let _ = tx.send(result);
+            });
+            unsafe {
+                view.takeSnapshotWithConfiguration_completionHandler(Some(&config), &handler);
+            }
+        })
+        .map_err(|e| format!("无法访问快照 WebView: {e}"))?;
+        rx.recv_timeout(PDF_TIMEOUT)
+            .map_err(|_| "原生整页快照超时".to_string())?
+    }
+
+    fn rasterize_snapshot(
+        image: &NSImage,
+        width: f64,
+        height: f64,
+        scale: f64,
+    ) -> Result<(Vec<u8>, u32, u32), String> {
+        let cg =
+            unsafe { image.CGImageForProposedRect_context_hints(std::ptr::null_mut(), None, None) }
+                .ok_or_else(|| "原生快照没有位图数据".to_string())?;
+        let px_w = (width * scale).round().max(1.0) as usize;
+        let px_h = (height * scale).round().max(1.0) as usize;
+        // Snapshot width is in points; backing pixels depend on the display.
+        // Normalize to the requested output size instead of leaking Retina scale.
+        let src_w = CGImage::width(Some(&cg)) as f64;
+        let src_h = CGImage::height(Some(&cg)) as f64;
+        if src_w < px_w as f64
+            || src_h < px_h as f64
+            || (src_h / src_w - height / width).abs() > 0.02
+        {
+            return Err("原生快照尺寸不足或比例不符，无法交付截断/放大图片".to_string());
+        }
+        let mut pixels = vec![0u8; px_w * px_h * 4];
+        let color_space =
+            CGColorSpace::new_device_rgb().ok_or_else(|| "快照颜色空间创建失败".to_string())?;
+        let ctx = unsafe {
+            CGBitmapContextCreate(
+                pixels.as_mut_ptr().cast(),
+                px_w,
+                px_h,
+                8,
+                px_w * 4,
+                Some(&color_space),
+                CGImageAlphaInfo::PremultipliedLast.0,
+            )
+        }
+        .ok_or_else(|| "快照位图上下文创建失败".to_string())?;
+        let rect = CGRect::new(
+            CGPoint::new(0.0, 0.0),
+            CGSize::new(px_w as f64, px_h as f64),
+        );
+        CGContext::set_rgb_fill_color(Some(&ctx), 1.0, 1.0, 1.0, 1.0);
+        CGContext::fill_rect(Some(&ctx), rect);
+        CGContext::draw_image(Some(&ctx), rect, Some(&cg));
+        CGContext::flush(Some(&ctx));
+        drop(ctx);
+        Ok((pixels, px_w as u32, px_h as u32))
     }
 
     /// 调 `WKWebView.createPDF` 拿整页矢量快照。闭包在主线程执行，

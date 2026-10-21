@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>发送小纸条</title>
+    <style id="theme-vars">
+:root {
+  --amf-background: #f5f5f5;
+  --amf-page: #f5f5f5;
+  --amf-card: #ffffff;
+  --amf-muted: #f0f0f0;
+  --amf-soft: #fff1e8;
+  --amf-foreground: #1f1f1f;
+  --amf-muted-foreground: #4a4a4a;
+  --amf-faint: #999999;
+  --amf-border: rgba(31, 31, 31, 0.07);
+  --amf-border-strong: rgba(31, 31, 31, 0.14);
+  --amf-primary: #ff7a45;
+  --amf-primary-soft: #fff1e8;
+  --amf-primary-deep: #d95a24;
+  --amf-mint: #2ec76a;
+  --amf-lilac: oklch(0.78 0.09 295);
+  --amf-sun: #f5a623;
+  --amf-sky: oklch(0.82 0.08 230);
+  --amf-rose: #ff4d4f;
+  --amf-success: #2ec76a;
+  --amf-warning: #f5a623;
+  --amf-danger: #ff4d4f;
+  --amf-font-primary: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --amf-radius-sm: 8px;
+  --amf-radius-md: 12px;
+  --amf-radius-lg: 16px;
+  --amf-radius-xl: 20px;
+  --amf-shadow-card: 0 4px 16px rgba(0, 0, 0, 0.04);
+  --amf-shadow-float: 0 12px 28px rgba(60, 32, 16, 0.12);
+}
+html, body { font-family: var(--amf-font-primary); }
+    </style>
+    <style id="semantic-token-fallback">
+.bg-background { background-color: var(--amf-background); }
+.text-foreground { color: var(--amf-foreground); }
+.bg-card { background-color: var(--amf-card); }
+.bg-primary { background-color: var(--amf-primary); }
+.text-primary { color: var(--amf-primary); }
+.bg-muted { background-color: var(--amf-muted); }
+.text-muted-foreground { color: var(--amf-muted-foreground); }
+.border-border { border-color: var(--amf-border); }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--amf-background);
+    --color-foreground: var(--amf-foreground);
+    --color-card: var(--amf-card);
+    --color-primary: var(--amf-primary);
+    --color-muted: var(--amf-muted);
+    --color-muted-foreground: var(--amf-muted-foreground);
+    --color-border: var(--amf-border);
+  }
+  @layer base {
+    body { background: var(--amf-background); color: var(--amf-foreground); }
+  }
+    </style>
+    <style>
+        :root {
+            --primary: #ff7a45;
+            --primary-deep: #d95a24;
+            --ink-3: #999999;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; -webkit-font-smoothing: antialiased; background: #171310; }
+        .ns-frame {
+            position: relative; max-width: 420px; margin: 0 auto; background: #171310;
+        }
+
+        /* ---- Dimmed backdrop (TA 主页虚化，自然流区块) ---- */
+        .ns-backdrop { position: relative; height: 420px; cursor: pointer; }
+        .ns-bg-hero {
+            position: absolute; inset: 0;
+            background: linear-gradient(165deg, #f2c9a0 0%, #d09a6a 46%, #8a5a3c 100%);
+        }
+        .ns-bg-card {
+            position: absolute; left: 16px; right: 16px; border-radius: 16px;
+            background: rgba(255, 255, 255, .82);
+        }
+        .ns-bg-c1 { top: 236px; height: 76px; }
+        .ns-bg-c2 { top: 324px; height: 76px; }
+        .ns-dim {
+            position: absolute; inset: 0;
+            background: rgba(12, 8, 5, .58);
+            -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+        }
+
+        /* ---- Bottom sheet (自然流) ---- */
+        .ns-sheet {
+            position: relative; z-index: 5;
+            min-height: 448px;
+            background: linear-gradient(180deg, #ffffff 0%, #fff7f0 100%);
+            border-radius: 24px 24px 0 0;
+            margin-top: -24px;
+            padding: 10px 20px calc(22px + env(safe-area-inset-bottom));
+            box-shadow: 0 -18px 48px rgba(0, 0, 0, .35);
+            animation: ns-rise .45s cubic-bezier(.22, 1, .36, 1);
+        }
+        @keyframes ns-rise { from { transform: translateY(60%); opacity: .4; } }
+        .ns-handle {
+            width: 40px; height: 4px; border-radius: 4px;
+            background: #eadfd6; margin: 0 auto 6px;
+        }
+
+        /* Recipient row */
+        .ns-user { display: flex; align-items: center; gap: 12px; margin: 18px 0 16px; }
+        .ns-avatar {
+            width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0;
+            background: linear-gradient(165deg, #f2c9a0 0%, #d09a6a 46%, #8a5a3c 100%);
+            border: 2.5px solid #fff; box-shadow: 0 4px 12px rgba(60, 32, 16, .18);
+            display: flex; align-items: center; justify-content: center;
+            color: #fff; font-size: 20px; font-weight: 700;
+        }
+        .ns-name { font-size: 17px; font-weight: 700; color: #1f1f1f; }
+        .ns-meta { font-size: 12px; color: var(--ink-3); margin-top: 3px; }
+
+        /* Textarea */
+        .ns-input-wrap { position: relative; }
+        .ns-textarea {
+            width: 100%; min-height: 118px; resize: none;
+            border: 1.5px solid #ffd9c2; border-radius: 14px;
+            background: #fffaf6; padding: 14px 14px 30px;
+            font-size: 14px; line-height: 1.6; color: #1f1f1f;
+            font-family: inherit; outline: none;
+            transition: border-color .15s, box-shadow .15s;
+        }
+        .ns-textarea::placeholder { color: #c9beb4; }
+        .ns-textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(255, 122, 69, .12); }
+        .ns-count {
+            position: absolute; right: 12px; bottom: 10px;
+            font-size: 11px; color: #c9beb4;
+        }
+
+        /* Cost + send */
+        .ns-send-row { display: flex; align-items: stretch; gap: 10px; margin-top: 14px; }
+        .ns-cost-card {
+            flex: 1; min-width: 0;
+            background: #fff4ec; border-radius: 14px; padding: 9px 12px;
+            display: flex; align-items: center; gap: 9px;
+        }
+        .ns-cube {
+            width: 30px; height: 30px; border-radius: 9px; flex-shrink: 0;
+            background: linear-gradient(135deg, #ffb27a, var(--primary));
+            color: #fff; display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 3px 8px rgba(255, 122, 69, .35);
+        }
+        .ns-cube svg { width: 15px; height: 15px; }
+        .ns-cost-main { min-width: 0; }
+        .ns-cost-top {
+            display: flex; align-items: baseline; gap: 4px;
+            font-size: 13px; font-weight: 700; color: var(--primary-deep);
+        }
+        .ns-cost-top b { font-size: 15px; }
+        .ns-cost-sub {
+            font-size: 10px; color: #9a8f86; margin-top: 2px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .ns-send-btn {
+            flex-shrink: 0; border: none; cursor: pointer;
+            height: 48px; padding: 0 24px; border-radius: 24px;
+            background: linear-gradient(135deg, #ffa268 0%, var(--primary) 60%, #f56325 100%);
+            color: #fff; font-size: 15px; font-weight: 700; font-family: inherit;
+            display: inline-flex; align-items: center; gap: 6px;
+            box-shadow: 0 6px 16px rgba(255, 122, 69, .38);
+            transition: transform .12s, filter .12s;
+        }
+        .ns-send-btn:active { transform: scale(.95); filter: brightness(.94); }
+        .ns-send-btn svg { width: 16px; height: 16px; }
+
+        /* Direct-delivery highlight block */
+        .ns-direct {
+            margin-top: 12px;
+            background: linear-gradient(135deg, #fff4ec 0%, #ffeadd 100%);
+            border: 1px solid #ffd9c2; border-radius: 14px;
+            padding: 10px 13px;
+        }
+        .ns-direct-desc {
+            font-size: 11px; line-height: 1.55; color: #9a8f86;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation: none !important; transition: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <main class="max-w-[420px] mx-auto">
+        <div class="ns-frame">
+            <!-- Dimmed TA 主页 backdrop -->
+            <div class="ns-backdrop" data-dom-id="close-note" role="button" aria-label="关闭">
+                <div class="ns-bg-hero"></div>
+                <div class="ns-bg-card ns-bg-c1"></div>
+                <div class="ns-bg-card ns-bg-c2"></div>
+                <div class="ns-dim"></div>
+            </div>
+
+            <!-- Bottom sheet -->
+            <div class="ns-sheet">
+                <div class="ns-handle"></div>
+
+                <!-- Recipient -->
+                <div class="ns-user">
+                    <div class="ns-avatar">图</div>
+                    <div>
+                        <div class="ns-name">图</div>
+                        <div class="ns-meta">32岁 · 云南·昆明</div>
+                    </div>
+                </div>
+
+                <!-- Message input (no AI write helper) -->
+                <div class="ns-input-wrap">
+                    <textarea class="ns-textarea" maxlength="60" placeholder="看到你的幽默和猫系标签啦！我也超爱猫，家里主子两只，有机会一起交流养猫心得呀！"></textarea>
+                    <span class="ns-count">0/60</span>
+                </div>
+
+                <!-- Cost + send -->
+                <div class="ns-send-row">
+                    <div class="ns-cost-card">
+                        <span class="ns-cube"><i data-lucide="box"></i></span>
+                        <div class="ns-cost-main">
+                            <div class="ns-cost-top">魔方点余额 <b>128</b></div>
+                            <div class="ns-cost-sub">本条消耗 20 魔方点</div>
+                        </div>
+                    </div>
+                    <button class="ns-send-btn" type="button">
+                        <i data-lucide="send"></i>
+                        发送小纸条
+                    </button>
+                </div>
+
+                <!-- Direct-delivery highlight block -->
+                <div class="ns-direct">
+                    <div class="ns-direct-desc">纸条将直达 TA 的私信列表并优先展示，无需互相匹配即可开启聊天，主动出击配对成功率提升约 2 倍。</div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>

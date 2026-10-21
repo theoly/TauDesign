@@ -67,7 +67,7 @@ describe('简表展示与画框渲染接线',()=>{
     const render=(css:string,focus?:string)=>root.render(<><ScreenFrame screen={original} lodLevel={2}/><ScreenFrame screen={{...original,id:'preview',scopedCss:css}} lodLevel={2} isStaged qualityFocusNid={focus}/></>);
     await act(async()=>{render('.row{gap:var(--space-4)}');});
     const frames=host.querySelectorAll('iframe');const candidate=frames[1],doc=candidate.contentDocument!;
-    doc.head.innerHTML='<style id="scoped-css"></style>';doc.body.innerHTML=original.htmlContent;
+    doc.head.innerHTML='<style id="scoped-css" data-taudesign-runtime="scoped-css"></style>';doc.body.innerHTML=original.htmlContent;
     frames[0].contentDocument!.body.innerHTML=original.htmlContent;
     const srcdoc=candidate.srcdoc;
     await act(async()=>{render('.row{gap:var(--space-6)}','text');});
@@ -84,7 +84,7 @@ describe('简表展示与画框渲染接线',()=>{
     const render=(css:string)=>root.render(<ScreenFrame screen={{...source,scopedCss:css}} lodLevel={2}/>);
     await act(async()=>{render('.before{gap:var(--space-2)}');});
     const iframe=host.querySelector('iframe')!,doc=iframe.contentDocument!;
-    doc.head.innerHTML='<style id="scoped-css"></style><style id="tokens"></style><style id="overrides"></style>';
+    doc.head.innerHTML='<style id="scoped-css" data-taudesign-runtime="scoped-css"></style><style id="tokens" data-taudesign-runtime="tokens"></style><style id="overrides" data-taudesign-runtime="overrides"></style>';
     doc.body.innerHTML=source.htmlContent;
     await act(async()=>{
       useProjectStore.getState().setOverride(id,'text',{color:'var(--color-danger)'});

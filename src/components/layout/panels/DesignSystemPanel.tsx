@@ -1,7 +1,10 @@
+import { ReferenceDeviceOption } from '../../theme/ReferenceDeviceOption';
+import { resolveThemeColors } from '../../../utils/semanticColors';
 import React, { useState } from 'react';
 import { useProjectStore } from '../../../stores/useProjectStore';
 import { Accordion } from '../Accordion';
 import { Palette, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { MobileNavigationOption } from '../../theme/MobileNavigationOption';
 
 interface DesignSystemPanelProps {
   /** 打开完整主题编辑器：色阶推导、预设切换等留在弹窗 */
@@ -18,6 +21,7 @@ export const DesignSystemPanel: React.FC<DesignSystemPanelProps> = ({ onOpenThem
 
   const t = designSystem.tokens;
   const mode = settings.colorMode;
+  const colors = resolveThemeColors(t, mode).values;
   const decisionList = Object.values(decisions);
 
   const swatch = (label: string, color: string) => (
@@ -51,18 +55,23 @@ export const DesignSystemPanel: React.FC<DesignSystemPanelProps> = ({ onOpenThem
         </button>
       </div>
 
+      <div className="p-2 border-b border-slate-800"><ReferenceDeviceOption settings={settings} onChange={id => useProjectStore.getState().setReferenceDevice(id)} /></div>
+      {settings.deviceProfile === 'mobile' && <div className="p-2"><MobileNavigationOption /></div>}
       <Accordion panelKey="design.colors" title="色彩">
         <div className="px-1">
-          {swatch('Primary 500', t.colors.primary['500'])}
-          {swatch('Primary 700', t.colors.primary['700'])}
-          {swatch('Success', t.colors.success)}
-          {swatch('Warning', t.colors.warning)}
-          {swatch('Danger', t.colors.danger)}
+          {swatch('品牌识别色 · Primary 500', colors.brand)}
+          {swatch('主按钮背景', colors.primary)}
+          {swatch('主按钮文字', colors.onPrimary)}
+          {swatch('品牌文字', colors.primaryText)}
           <div className="h-px bg-slate-850 my-1 mx-2" />
-          {swatch(`背景 (${mode})`, t.colors.background[mode])}
-          {swatch(`表面 (${mode})`, t.colors.surface[mode])}
-          {swatch(`主文本 (${mode})`, t.colors.textPrimary[mode])}
-          {swatch(`边框 (${mode})`, t.colors.border[mode])}
+          {swatch(`背景 (${mode})`, colors.background)}
+          {swatch(`表面 (${mode})`, colors.surface)}
+          {swatch(`主文本 (${mode})`, colors.textPrimary)}
+          {swatch(`副文本 (${mode})`, colors.textSecondary)}
+          {swatch(`边框 (${mode})`, colors.border)}
+          {swatch('成功文字', colors.successText)}
+          {swatch('警告文字', colors.warningText)}
+          {swatch('危险文字', colors.dangerText)}
         </div>
       </Accordion>
 

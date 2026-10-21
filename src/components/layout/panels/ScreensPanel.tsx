@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
+import { HtmlImportDialog } from '../../canvas/HtmlImportDialog';
 import { useProjectStore } from '../../../stores/useProjectStore';
 import { Accordion } from '../Accordion';
-import { Copy, Plus, Search, Trash2 } from 'lucide-react';
+import { Copy, Plus, Search, Trash2, FileCode } from 'lucide-react';
 
 /** 侧边栏「页面」视图 (PRD §3.0.3 / §3.3.2) */
 export const ScreensPanel: React.FC = () => {
@@ -19,6 +21,7 @@ export const ScreensPanel: React.FC = () => {
   } = useProjectStore();
 
   const [search, setSearch] = useState('');
+  const [showImport, setShowImport] = useState(false);
 
   const filteredIds = screenOrder.filter((id) => {
     const s = screens[id];
@@ -34,11 +37,13 @@ export const ScreensPanel: React.FC = () => {
   };
 
   return (
-    <Accordion
+    <><Accordion
       panelKey="screens.list"
       title="页面画框"
       badge={screenOrder.length}
       actions={
+        <>
+        <button onClick={() => setShowImport(true)} className="p-0.5 text-slate-400 hover:text-blue-400 rounded" title="导入 HTML 页面" aria-label="导入 HTML 页面"><FileCode className="w-3.5 h-3.5" /></button>
         <button
           onClick={handleAddNewScreen}
           className="p-0.5 text-slate-400 hover:text-blue-400 rounded"
@@ -46,6 +51,7 @@ export const ScreensPanel: React.FC = () => {
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
+        </>
       }
     >
       <div className="px-2 pb-1.5">
@@ -117,5 +123,7 @@ export const ScreensPanel: React.FC = () => {
         })}
       </div>
     </Accordion>
+    {showImport && createPortal(<HtmlImportDialog onClose={() => setShowImport(false)} />, document.body)}
+    </>
   );
 };

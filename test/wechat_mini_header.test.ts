@@ -14,7 +14,7 @@ describe('微信小程序式移动端页面头部', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
     try {
-      for (const html of [getFewShotExample('mobile'), buildStyleSpecimenHtml('mobile')]) {
+      for (const html of [getFewShotExample('mobile', true), buildStyleSpecimenHtml('mobile')]) {
         host.innerHTML = html;
         const capsule = host.querySelector<HTMLElement>('.appbar > .appbar-capsule')!;
         expect(capsule).not.toBeNull();
@@ -51,24 +51,21 @@ describe('微信小程序式移动端页面头部', () => {
     expect(css).toContain('.appbar-capsule-more { border-right:');
 
     const example = getFewShotExample('mobile');
-    const statusIndex = example.indexOf('class="status-bar"');
-    const navIndex = example.indexOf('class="appbar"');
-    const bodyIndex = example.indexOf('class="col gap-6 p-4 flex-1"');
-    expect(statusIndex).toBeGreaterThan(0);
-    expect(navIndex).toBeGreaterThan(statusIndex);
-    expect(bodyIndex).toBeGreaterThan(navIndex);
-    expect(example).toContain('class="appbar-title"');
-    expect(example).toContain('class="appbar-capsule-more"');
-    expect(example).toContain('class="appbar-capsule-home"');
-    expect(example).not.toContain('appbar safe-top');
+    expect(example).not.toContain('class="status-bar"');
+    expect(example).not.toContain('class="appbar"');
+    expect(example).toContain('class="col gap-6 p-4 flex-1"');
+    const custom = getFewShotExample('mobile', true);
+    expect(custom).not.toContain('class="status-bar"');
+    expect(custom).toContain('class="appbar-title"');
+    expect(custom).toContain('class="appbar-capsule-home"');
   });
 
   test('移动端规则覆盖登录页与 Hero 页，避免重复安全区', () => {
     const rules = getDeviceAestheticRules('mobile');
-    expect(rules).toContain('EVERY mobile screen, including landing/login and hero pages');
-    expect(rules).toContain('Do NOT combine .safe-top');
+    expect(rules).toContain('WECHAT NATIVE NAVIGATION');
+    expect(rules).toContain('不预留顶部44/48/92px或safe-top');
     expect(rules).toContain('.status-bar');
-    expect(rules).toContain('.appbar-capsule');
+    expect(getDeviceAestheticRules('mobile', true)).toContain('CUSTOM MOBILE NAVIGATION ENABLED');
   });
 
   test('新增类名只进入移动端白名单且出现在样张', () => {

@@ -1,3 +1,5 @@
+import { referenceDevicePrompt } from '../../../../utils/referenceDevice';
+import { normalizeMobileNavigation, mobileNavigationPrompt } from '../../../../utils/mobileNavigation';
 import { buildProjectKnowledgeContext } from '../../projectKnowledge';
 import { buildDesignBrief, type DesignBrief } from '../../designBrief';
 import type { QualityReport } from '../../generationQuality';
@@ -437,7 +439,7 @@ export function useAIEngineChat() {
       return;
     }
 
-    const projectKnowledge = buildProjectKnowledgeContext(useProjectStore.getState(), textToSend, effectiveScreenId ?? undefined);
+    const projectKnowledge = [referenceDevicePrompt(settings), mobileNavigationPrompt(settings), buildProjectKnowledgeContext(useProjectStore.getState(), textToSend, effectiveScreenId ?? undefined)].filter(Boolean).join('\n\n');
 
     const modifiesExisting = (decision.action === 'modify_screen' || decision.action === 'patch_element') && effectiveScreenId;
     const modificationSnapshot = approved?.snapshot ?? (modifiesExisting
@@ -465,7 +467,8 @@ export function useAIEngineChat() {
         const screen = current.screens[effectiveScreenId];
         const analysis = await analyzeScreenModification(engineCoreRef.current, {
           provider: activeRole.provider, model: activeRole.modelId, signal: controller.signal,
-          html: screen.htmlContent, name: screen.name, request: textToSend,
+          html: normalizeMobileNavigation(screen.htmlContent, current.settings).html, name: screen.name, request: textToSend,
+          useCustomNavigation: current.settings.useCustomNavigation,
           designSystem: current.designSystem, mode: current.settings.colorMode, elementNid: decision.elementNid,
           deviceProfile: current.settings.deviceProfile, frameWidth: current.settings.frameWidth,
           protectedNids: current.getProtectedNids(effectiveScreenId),
@@ -510,7 +513,7 @@ export function useAIEngineChat() {
       try {
         const candidate = await generateElementCopyEdits(engineCoreRef.current,{
           provider:activeRole.provider,model:activeRole.modelId,signal:controller.signal,
-          html:screen.htmlContent,targetNid:decision.elementNid,request:extractCleanUserPrompt(textToSend),device:current.settings.deviceProfile,
+          html:normalizeMobileNavigation(screen.htmlContent,current.settings).html,targetNid:decision.elementNid,request:extractCleanUserPrompt(textToSend),device:current.settings.deviceProfile,useCustomNavigation:current.settings.useCustomNavigation,
           designSystem:current.designSystem,mode:current.settings.colorMode,protectedNids:current.getProtectedNids(screen.id),
           imageUrl:attachment?.dataUrl,projectKnowledge:[projectKnowledge,formatTextReferences(textReferences)].filter(Boolean).join('\n\n'),
           context:JSON.stringify({scopedCss:screen.scopedCss,overrides:Object.entries(current.overrides).filter(([key])=>key.startsWith(`${screen.id}:`))})
@@ -658,7 +661,10 @@ export function useAIEngineChat() {
         engineCore: engineCoreRef.current,
         screens,
         deviceProfile: settings.deviceProfile,
+        useCustomNavigation: settings.useCustomNavigation,
         frameWidth: settings.frameWidth,
+        referenceDevice: settings.referenceDevice,
+        viewportGuideHeight: settings.viewportGuideHeight,
         baseSystemPrompt: '你是一名顶级前端与UI设计系统专家，负责输出高质感现代 Web 设计。',
         // ISSUE-015: 必须把完整设计系统与当前明暗模式交给管道，
         // 否则模型拿不到 Token 与类名白名单，只能自行发挥并写死颜色
@@ -925,7 +931,7 @@ export function useAIEngineChat() {
         const screen = current.screens[plan.snapshot.screenId];
         const conversationStore = current.getConversationStore();
         const attachmentStore = current.getAttachmentStore();
-        const confirmedKnowledge = [buildProjectKnowledgeContext(current, scope, screen.id),
+        const confirmedKnowledge = [referenceDevicePrompt(current.settings), mobileNavigationPrompt(current.settings), buildProjectKnowledgeContext(current, scope, screen.id),
           formatTextReferences(plan.options?.textReferences ?? [])].filter(Boolean).join('\n\n');
         let operations: unknown = localPlan?.operations;
         let regionCandidate: Awaited<ReturnType<typeof generateRegionCopyEdits>> | undefined;
@@ -934,23 +940,23 @@ export function useAIEngineChat() {
           if (plan.attachment && (!binding || !supportsVision(binding.provider, binding.modelId))) binding = getActiveProviderForRole('vision');
           if (!binding?.provider || (!binding.provider.apiKey && binding.provider.protocol !== 'ollama_native')) throw new Error('请先配置可用的 AI Provider 以解析补充要求。');
           if (mode === 'region') regionCandidate = await generateRegionCopyEdits(engineCoreRef.current, {
-            provider: binding.provider, model: binding.modelId, signal: controller.signal, html: screen.htmlContent,
-            request: scope, targetNids: regionPlan!.targetNids, allowedNids: regionPlan!.targetNids, device: current.settings.deviceProfile,
+            provider: binding.provider, model: binding.modelId, signal: controller.signal, html: normalizeMobileNavigation(screen.htmlContent, current.settings).html,
+            request: scope, targetNids: regionPlan!.targetNids, allowedNids: regionPlan!.targetNids, device: current.settings.deviceProfile, useCustomNavigation: current.settings.useCustomNavigation,
             protectedNids: current.getProtectedNids(screen.id), modificationRequest: scope,
             designSystem: current.designSystem, mode: current.settings.colorMode, imageUrl: plan.attachment?.dataUrl,
             projectKnowledge: confirmedKnowledge
           });
           else operations = mergeLocalEditOperations(localPlan!.operations, await generateSupplementedLocalEdits(engineCoreRef.current, {
-            provider: binding.provider, model: binding.modelId, signal: controller.signal, html: screen.htmlContent,
-            request: scope, allowedNids: localPlan!.allowedNids, device: current.settings.deviceProfile,
+            provider: binding.provider, model: binding.modelId, signal: controller.signal, html: normalizeMobileNavigation(screen.htmlContent, current.settings).html,
+            request: scope, allowedNids: localPlan!.allowedNids, device: current.settings.deviceProfile, useCustomNavigation: current.settings.useCustomNavigation,
             designSystem: current.designSystem, mode: current.settings.colorMode, imageUrl: plan.attachment?.dataUrl,
             projectKnowledge: confirmedKnowledge
           }));
         }
         if (controller.signal.aborted) throw new Error('局部修改已取消。');
         if (!isModificationSnapshotCurrent(useProjectStore.getState(), plan.snapshot)) throw new Error('原页面或工程已变化，请重新分析。');
-        const candidate = regionCandidate ?? applyLocalCopyEdits(screen.htmlContent, operations, {
-          device: current.settings.deviceProfile, allowedNids: localPlan!.allowedNids, protectedNids: current.getProtectedNids(screen.id)
+        const candidate = regionCandidate ?? applyLocalCopyEdits(normalizeMobileNavigation(screen.htmlContent, current.settings).html, operations, {
+          device: current.settings.deviceProfile, useCustomNavigation: current.settings.useCustomNavigation, allowedNids: localPlan!.allowedNids, protectedNids: current.getProtectedNids(screen.id)
         });
         current.stageScreenChange(screen.id, candidate.html, `${screen.name}（${modeName}修改候选）`, scope);
         current.panToScreen(screen.id);

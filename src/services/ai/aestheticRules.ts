@@ -1,3 +1,5 @@
+import { mobileNavigationPrompt, normalizeMobileNavigation } from '../../utils/mobileNavigation';
+import { colorUsageRules } from '../../utils/semanticColors';
 import type { DeviceProfile } from '../../styles/baseCss';
 
 /**
@@ -15,6 +17,7 @@ import type { DeviceProfile } from '../../styles/baseCss';
 export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY — these rules are what separate a polished UI from a rough prototype):
 - 配色可见性与美观度：文字、图标和关键控件必须与实际背景清晰区分，严禁同色或近似色导致内容难以辨认。更换背景时同步检查并调整前景色；图片、渐变、半透明背景按叠加效果判断，必要时使用 Token 底色或遮罩。浅色/深色模式均须清晰可辨，并保持品牌色协调、语义一致和主次层级，不为柔和、低饱和或装饰效果牺牲可见性。
 - COLOR ROLES: 背景 bg，卡片 surface，分组 surface-alt；品牌强调约5–10%，集中于主操作/选中。普通指标/图标用中性色，语义色仅表示状态。主色文字用 .text-primary，主按钮用 .btn-primary；勿写死白字、蓝链接或整段彩色正文。
+- ${colorUsageRules()}
 - TYPOGRAPHY LADDER (3 levels):
   * Heading: .text-xl / .text-2xl + .font-bold
   * Subtitle / helper: .text-xs / .text-sm + .text-muted
@@ -49,18 +52,17 @@ const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
 - Page section spacing: .mt-4 / .mt-6 (NOT .mt-8); page padding .p-4 / .px-4 (NOT .p-8).
 - Card padding: .p-3 / .p-4. Body text: .text-md (16px) — 14px is too small on a phone.
 - TOUCH TARGETS: inputs use .input .input-touch (48px). Any icon-only button must carry .tap-target (44x44 minimum).
-- SAFE AREAS: every screen has a separate .status-bar (44px) and .appbar (48px) at the top; use .safe-bottom (34px) for the home indicator. Do NOT combine .safe-top with this two-row header or reserve the status height twice.
+- SAFE AREAS: use .safe-bottom for the home indicator. System status and default WeChat navigation belong to the runtime shell, never reserve their top height in business HTML.
 - STRUCTURE & APPBAR (STRICT LAYOUT CONTRACT):
-  * EVERY mobile screen, including landing/login and hero pages, MUST begin with a separate .status-bar row followed by a .appbar row. The status row contains time on the left and signal/Wi-Fi/battery icons on the right. The appbar contains a left .tap-target back/close control (or an empty 44px placeholder on a root page), a centered .appbar-title, and a fixed .appbar-capsule at the right with .appbar-capsule-more and .appbar-capsule-home. Treat the capsule as a visual mock of the WeChat native control; do not invent working Mini Program APIs.
-  * BODY CONTAINMENT & NO OVERLAP: The page body must sit in its own container directly below .appbar. Body content MUST NEVER overlap with or slide under the .appbar. Never use negative margins (e.g. -mt-*) on elements below .appbar.
+  * BODY CONTAINMENT & NO OVERLAP: business content starts at its own origin; the renderer reserves system chrome. Never use negative margins or fixed top offsets to slide content under that chrome.
   * FULL-BLEED HERO BANNERS & GRADIENTS: When a screen features an immersive brand/gradient header (e.g. certification/profile/store banner), let the hero block span the full width without horizontal margins and without bottom rounded corners (0 bottom radius). List cards beneath it sit on the canvas with standard spacing or gentle overlap.
   * Bottom navigation uses .tabbar with .tabbar-item (mark active as .is-active).
   * CTA BUTTON PLACEMENT: In card forms or bottom sheet dialogs, form submit buttons belong inline within the card flow (e.g. under inputs, above social proof). Use .cta-fixed when a sticky full-screen bottom bar is explicitly requested or appropriate. When reproducing a design reference, ALWAYS match the button placement in the reference!
   * RIBBON BADGES & STATUS STRIPS: Card corner labels need their own reserved area; never cover the title, image subject or body content. Notification badges use .notification-control with a reserved top band and an absolute top-right badge; center the icon horizontally, never overlap it or use side-by-side columns. Use .badge-dot for a subtle update and .badge-count for small counts, reserving danger color for urgent issues. Notice bars use subtle background tint (.bg-warning-light or .bg-surface-alt) with semantic icons.
-  * SEMANTIC REGION DECOUPLING: Status bar (.status-bar, 9:41/signals), navigation bar (.appbar, title/back), and hero marketing section (.hero-section, slogan/badges) MUST be rendered as decoupled semantic containers. Never fuse status bar and hero into a single indivisible container. Contrast rule: Never emit invisible white-on-white text when changing backgrounds!`;
+  * SEMANTIC REGION DECOUPLING: Keep business Hero (.hero-section), headings, search and actions independent from optional custom navigation. Never fuse system status with a business header. Never emit invisible white-on-white text when changing backgrounds!`;
 
-export function getDeviceAestheticRules(device: DeviceProfile): string {
-  return device === 'pc' ? PC_RULES : MOBILE_RULES;
+export function getDeviceAestheticRules(device: DeviceProfile, useCustomNavigation = false): string {
+  return device === 'pc' ? PC_RULES : `${MOBILE_RULES}\n${mobileNavigationPrompt({ deviceProfile: device, useCustomNavigation })}`;
 }
 
 /**
@@ -123,6 +125,6 @@ const MOBILE_EXAMPLE = `<main class="col bg-surface-alt" style="min-height:100%;
   <div class="cta-fixed"><button class="btn btn-primary">登录</button></div>
 </main>`;
 
-export function getFewShotExample(device: DeviceProfile): string {
-  return device === 'pc' ? PC_EXAMPLE : MOBILE_EXAMPLE;
+export function getFewShotExample(device: DeviceProfile, useCustomNavigation = false): string {
+  return device === 'pc' ? PC_EXAMPLE : normalizeMobileNavigation(MOBILE_EXAMPLE, { deviceProfile: device, useCustomNavigation }).html;
 }

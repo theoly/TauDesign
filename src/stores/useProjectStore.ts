@@ -1,3 +1,4 @@
+import { defaultReferenceDevice, REFERENCE_DEVICES, resolveProjectViewport, validReferenceDevice, normalizeReferenceSettings } from '../utils/referenceDevice';
 import { type ProjectDocumentEntry, validateProjectDocument, MAX_PROJECT_DOCUMENTS } from '../types/projectDocument';
 import { create } from 'zustand';
 import { DesignSystem } from '../types/designSystem';
@@ -50,8 +51,14 @@ import {
   CANVAS_LAYOUT_CONSTANTS
 } from '../utils/canvasLayout';
 import { deleteElementByNid } from '../utils/domPatcher';
-import { checkGenerationQuality } from '../services/ai/generationQuality';
+import { checkGenerationQuality, checkGenerationSourceSafety } from '../services/ai/generationQuality';
 import type { RenderedQualityReport } from '../utils/renderedQuality';
+import { buildScreenDocument } from '../utils/screenDocument';
+import { getBaseCss } from '../styles/baseCss';
+import { parseHtmlCopy } from '../utils/htmlDocument';
+import { replaceCssResourceUrl } from '../services/import/importResources';
+import { imageSrcsetCandidates } from '../services/import/htmlImportCss';
+import { normalizeMobileNavigation, normalizeScreenNavigation } from '../utils/mobileNavigation';
 
 /** 新建工程时的空白起始画框 (PRD §3.0.1) */
 const blankScreenHtml = (name: string) => `<div class="p-8" style="min-height: 800px; background: var(--color-bg);">
@@ -107,6 +114,14 @@ export interface PanToScreenOptions {
   offsetX?: number;
   center?: boolean;
   viewportWidth?: number;
+}
+
+export interface HtmlScreenImportSetup {
+  projectId: string;
+  designSystem?: DesignSystem;
+  colorMode?: 'light' | 'dark';
+  assets?: Asset[];
+  useCustomNavigation?: boolean;
 }
 
 export interface ComputedBoxModel {
@@ -217,6 +232,7 @@ interface ProjectState {
     newHtml: string;
     screenName: string;
     modificationRequest?: string;
+    navigationTitle?: string;
   } | null;
   /** 仅当前候选的渲染证据；不进入历史或存盘。 */
   stagedRenderQuality: { key: string; report: RenderedQualityReport } | null;
@@ -246,6 +262,8 @@ interface ProjectState {
   setName: (name: string) => void;
   setDeviceProfile: (profile: 'pc' | 'mobile') => void;
   setColorMode: (mode: 'light' | 'dark') => void;
+  setUseCustomNavigation: (enabled: boolean) => void;
+  setReferenceDevice: (presetId: string) => void;
   toggleColorMode: () => void;
   setShowViewportGuide: (show: boolean) => void;
   setPanelOpen: (key: string, open: boolean) => void;
@@ -259,8 +277,9 @@ interface ProjectState {
   addScreen: (
     screen: (Omit<Screen, 'id' | 'position'> & { position?: { x: number; y: number } }) | Screen,
     customId?: string,
-    options?: { referencedScreenId?: string; anchorScreenId?: string; autoPan?: boolean }
+    options?: { referencedScreenId?: string; anchorScreenId?: string; autoPan?: boolean; importSetup?: HtmlScreenImportSetup }
   ) => ScreenId;
+  importHtmlScreen: (screen: Omit<Screen, 'id' | 'position'>, setup: HtmlScreenImportSetup) => ScreenId;
   /** 画框是否为风格样张页（doc/aesthetic/spec.md §6.6.7） */
   isSpecimen: (id: ScreenId) => boolean;
   /** 某画框中被 L4 手动覆盖的 nid —— Polish/Restyle 不应改动它们 (T-AE-26) */
@@ -349,7 +368,7 @@ interface ProjectState {
   // Persistence & Recovery (T-02, T-03, T-04)
   saveProject: () => void;
   loadProject: (jsonString: string) => void;
-  initNewProject: (opts: { name: string; deviceProfile: 'pc' | 'mobile'; designSystem: DesignSystem; initialDecisions?: string[]; folderPath?: string; createSpecimen?: boolean }) => string;
+  initNewProject: (opts: { name: string; deviceProfile: 'pc' | 'mobile'; designSystem: DesignSystem; initialDecisions?: string[]; folderPath?: string; createSpecimen?: boolean; referenceDeviceId?: string }) => string;
   loadProjectById: (id: string) => boolean;
   /** 从文件夹读回的工程文档载入 (T-AE-43) */
   loadProjectDocument: (doc: unknown, folderPath: string) => boolean;
@@ -434,7 +453,7 @@ function canAdoptStagedScreen(state: ProjectState): boolean {
   const staged = state.stagedScreen;
   if (!staged || !state.screens[staged.targetScreenId]) return false;
   const source = checkGenerationQuality(staged.newHtml, {
-    deviceProfile: state.settings.deviceProfile, designSystem: state.designSystem,
+    deviceProfile: state.settings.deviceProfile, useCustomNavigation: state.settings.useCustomNavigation, designSystem: state.designSystem,
     baselineHtml: state.screens[staged.targetScreenId].htmlContent,
     protectedNids: state.getProtectedNids(staged.targetScreenId),
     modificationRequest: staged.modificationRequest
@@ -454,9 +473,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     deviceProfile: 'pc',
     frameWidth: 1440,
     viewportGuideHeight: 900,
+    referenceDevice: defaultReferenceDevice('pc'),
     showViewportGuide: true,
     colorMode: 'light',
-    lodBudget: 12
+    lodBudget: 12,
+    useCustomNavigation: false
   },
   designSystem: neutralModernTheme,
 
@@ -550,7 +571,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const frameWidth = profile === 'pc' ? 1440 : 390;
     const viewportGuideHeight = profile === 'pc' ? 900 : 844;
     set((state) => ({
-      settings: { ...state.settings, deviceProfile: profile, frameWidth, viewportGuideHeight }
+      settings: { ...state.settings, deviceProfile: profile, frameWidth, viewportGuideHeight, referenceDevice: defaultReferenceDevice(profile) }
     }));
     get().saveProject();
   },
@@ -570,6 +591,27 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   toggleColorMode: () => {
     const cur = get().settings.colorMode;
     get().setColorMode(cur === 'light' ? 'dark' : 'light');
+  },
+
+  setReferenceDevice: (presetId) => {
+    const previous = get().settings;
+    const preset = REFERENCE_DEVICES.find(device => device.id === presetId && device.deviceProfile === previous.deviceProfile);
+    if (!preset) return;
+    const next = { ...previous, referenceDevice: { ...preset } };
+    next.viewportGuideHeight = resolveProjectViewport(next).height;
+    if (JSON.stringify(previous.referenceDevice) === JSON.stringify(next.referenceDevice) && previous.viewportGuideHeight === next.viewportGuideHeight) return;
+    useHistoryStore.getState().commit('更改参考设备', [{ op: 'replace', path: ['settings'], value: next }], [{ op: 'replace', path: ['settings'], value: previous }]);
+    set({ settings: next, selectedNid: null, selectedNode: null, hoveredNid: null });
+    get().saveProject();
+  },
+
+  setUseCustomNavigation: (enabled) => {
+    const previous = get().settings;
+    if (previous.deviceProfile !== 'mobile' || !!previous.useCustomNavigation === enabled) return;
+    const next = { ...previous, useCustomNavigation: enabled };
+    useHistoryStore.getState().commit('切换自定义导航栏', [{ op: 'replace', path: ['settings'], value: next }], [{ op: 'replace', path: ['settings'], value: previous }]);
+    set({ settings: next, selectedNid: null, selectedNode: null, hoveredNid: null });
+    get().saveProject();
   },
 
 
@@ -739,7 +781,19 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return id;
   },
 
+  importHtmlScreen: (screen, setup) => {
+    if (!screen.metadata?.importedHtml || !screen.htmlContent.trim()) throw new Error('缺少有效 HTML 导入结果');
+    return get().addScreen(screen, undefined, { autoPan: true, importSetup: setup });
+  },
+
   addScreen: (screenData, customId, options) => {
+    const setup = options?.importSetup;
+    if (setup) {
+      if (setup.projectId !== get().id) throw new Error('工程已切换，请重新导入');
+      if ((setup.designSystem || setup.colorMode) && Object.values(get().screens).some(sc => sc.metadata?.kind !== 'specimen')) {
+        throw new Error('已有页面的工程不能通过导入替换项目风格');
+      }
+    }
     const id = customId || `screen-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     const rawHtml = screenData.htmlContent || '<div class="p-8"><h1>新画板</h1></div>';
     const htmlContent = rawHtml.includes('data-nid=') ? rawHtml : NidEngine.injectNids(rawHtml);
@@ -759,7 +813,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       shiftedScreens = layout.shiftedScreens;
     }
 
-    const screen: Screen = { ...screenData, id, position, htmlContent };
+    const screen: Screen = normalizeScreenNavigation({ ...screenData, id, position, htmlContent }, { ...get().settings, useCustomNavigation: setup?.useCustomNavigation ?? get().settings.useCustomNavigation });
     const prevScreens = get().screens;
     const prevOrder = [...get().screenOrder];
 
@@ -772,6 +826,23 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       { op: 'remove', path: ['screens', id] },
       { op: 'replace', path: ['screenOrder'], value: prevOrder }
     ];
+
+    if (setup?.designSystem) {
+      forwardOps.push({ op: 'replace', path: ['designSystem'], value: setup.designSystem });
+      backwardOps.push({ op: 'replace', path: ['designSystem'], value: get().designSystem });
+    }
+    const importSettings = { ...get().settings, ...(setup?.colorMode ? { colorMode: setup.colorMode } : {}), ...(setup?.useCustomNavigation !== undefined ? { useCustomNavigation: setup.useCustomNavigation } : {}) };
+    if (setup?.colorMode || setup?.useCustomNavigation !== undefined) {
+      forwardOps.push({ op: 'replace', path: ['settings'], value: importSettings });
+      backwardOps.push({ op: 'replace', path: ['settings'], value: get().settings });
+    }
+    const importedAssets = { ...get().assets };
+    for (const asset of setup?.assets ?? []) {
+      if (importedAssets[asset.id]) continue;
+      forwardOps.push({ op: 'add', path: ['assets', asset.id], value: asset });
+      backwardOps.push({ op: 'remove', path: ['assets', asset.id] });
+      importedAssets[asset.id] = asset;
+    }
 
     for (const shift of shiftedScreens) {
       if (prevScreens[shift.id]) {
@@ -789,7 +860,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
 
     useHistoryStore.getState().commit(
-      `新建画框: ${screen.name}`,
+      `${setup ? '导入 HTML' : '新建画框'}: ${screen.name}`,
       forwardOps as any,
       backwardOps as any
     );
@@ -807,7 +878,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       return {
         screens: nextScreens,
         screenOrder: [...state.screenOrder, id],
-        activeScreenId: id
+        activeScreenId: id,
+        ...(setup ? { assets: importedAssets } : {}),
+        ...(setup?.designSystem ? { designSystem: setup.designSystem } : {}),
+        ...(setup?.colorMode || setup?.useCustomNavigation !== undefined ? { settings: importSettings } : {})
       };
     });
     get().saveProject();
@@ -822,7 +896,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   updateScreen: (id, updates, historyLabel) => {
     const prevScreen = get().screens[id];
     if (!prevScreen) return;
-    const updated = { ...prevScreen, ...updates };
+    const merged = { ...prevScreen, ...updates };
+    const updated = updates.htmlContent === undefined ? merged : normalizeScreenNavigation(merged, get().settings);
 
     if (historyLabel) {
       useHistoryStore.getState().commit(
@@ -1310,7 +1385,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         content = NidEngine.injectNids(content);
       }
       const parser = new DOMParser();
-      let doc = parser.parseFromString(`<body>${content}</body>`, 'text/html');
+      const parsed = parseHtmlCopy(content);
+      const doc = parsed.doc;
       let el = doc.querySelector(`[data-nid="${nid}"]`) as HTMLElement;
 
       if (!el) {
@@ -1344,7 +1420,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       el.setAttribute('data-component-id', compId);
       el.setAttribute('data-component-instance', instId);
 
-      const updatedHtml = doc.body.innerHTML;
+      const updatedHtml = parsed.serialize();
 
       const comp: ComponentDefinition = {
         id: compId,
@@ -1421,7 +1497,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
       const htmlWithNids = NidEngine.injectNids(el.outerHTML);
 
-      const screenDoc = parser.parseFromString(`<body>${screen.htmlContent}</body>`, 'text/html');
+      const parsedScreen = parseHtmlCopy(screen.htmlContent);
+      const screenDoc = parsedScreen.doc;
       const rootContainer = screenDoc.body.firstElementChild || screenDoc.body;
       const tmpDiv = screenDoc.createElement('div');
       tmpDiv.innerHTML = htmlWithNids;
@@ -1429,7 +1506,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         rootContainer.appendChild(tmpDiv.firstElementChild);
       }
 
-      get().updateScreenHtml(screenId, screenDoc.body.innerHTML, `插入组件实例: ${comp.name}`);
+      get().updateScreenHtml(screenId, parsedScreen.serialize(), `插入组件实例: ${comp.name}`);
     } catch (e) {
       console.error('insertComponent error:', e);
     }
@@ -1441,7 +1518,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     try {
       const parser = new DOMParser();
-      const doc = parser.parseFromString(`<body>${screen.htmlContent}</body>`, 'text/html');
+      const parsedScreen = parseHtmlCopy(screen.htmlContent);
+      const doc = parsedScreen.doc;
       const el = doc.querySelector(`[data-nid="${nid}"]`);
       if (!el) return;
 
@@ -1451,7 +1529,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       compRoot.removeAttribute('data-component-id');
       compRoot.removeAttribute('data-component-instance');
 
-      get().updateScreenHtml(screenId, doc.body.innerHTML, '从组件分离实例');
+      get().updateScreenHtml(screenId, parsedScreen.serialize(), '从组件分离实例');
 
       const curSel = get().selectedNode;
       if (curSel && curSel.nid === nid) {
@@ -1474,7 +1552,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const parser = new DOMParser();
 
     Object.values(screens).forEach((screen) => {
-      const doc = parser.parseFromString(`<body>${screen.htmlContent}</body>`, 'text/html');
+      const parsedScreen = parseHtmlCopy(screen.htmlContent);
+      const doc = parsedScreen.doc;
       const instances = doc.querySelectorAll(`[data-component-id="${componentId}"]`);
       if (instances.length === 0) return;
 
@@ -1546,7 +1625,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       });
 
       if (screenModified) {
-        get().updateScreenHtml(screen.id, doc.body.innerHTML, `同步组件实例: ${comp.name}`);
+        get().updateScreenHtml(screen.id, parsedScreen.serialize(), `同步组件实例: ${comp.name}`);
       }
     });
 
@@ -1632,11 +1711,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   replaceAssetGlobally: (oldAssetId, newAssetUrl) => {
     const { screens } = get();
+    const oldRelPath = get().assets[oldAssetId]?.relPath;
     let count = 0;
     const parser = new DOMParser();
 
     Object.values(screens).forEach((screen) => {
-      const doc = parser.parseFromString(`<body>${screen.htmlContent}</body>`, 'text/html');
+      const parsedScreen = parseHtmlCopy(screen.htmlContent);
+      const doc = parsedScreen.doc;
       let changed = false;
 
       // 1. Elements with data-asset-id
@@ -1660,8 +1741,42 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         }
       });
 
+      // Imported sources use stable relative asset URLs, including in CSS and templates.
+      if (oldRelPath) {
+        const replaceUrl = (url: string) => url === oldRelPath ? newAssetUrl : url.startsWith(oldRelPath + '#') ? newAssetUrl + url.slice(oldRelPath.length) : url;
+        const visit = (root: ParentNode) => {
+          for (const element of Array.from(root.querySelectorAll('*'))) {
+            for (const attribute of ['src', 'href', 'xlink:href', 'poster', 'background']) {
+              const value = element.getAttribute(attribute);
+              if (value && replaceUrl(value) !== value) { element.setAttribute(attribute, replaceUrl(value)); changed = true; count++; }
+            }
+            for (const attribute of ['srcset', 'imagesrcset']) {
+              const value = element.getAttribute(attribute);
+              if (!value) continue;
+              const candidates = imageSrcsetCandidates(value);
+              if (candidates.some(item => replaceUrl(item.url) !== item.url)) {
+                element.setAttribute(attribute, candidates.map(item => replaceUrl(item.url) + (item.descriptor ? ` ${item.descriptor}` : '')).join(', ')); changed = true; count++;
+              }
+            }
+            const css = element.localName === 'style' ? element.textContent : element.getAttribute('style');
+            if (css) {
+              const nextCss = replaceCssResourceUrl(css, oldRelPath, newAssetUrl);
+              if (nextCss !== css) {
+                if (element.localName === 'style') element.textContent = nextCss; else element.setAttribute('style', nextCss);
+                changed = true; count++;
+              }
+            }
+            if (element.localName === 'template') visit((element as HTMLTemplateElement).content);
+          }
+        };
+        visit(doc);
+      }
+
+      const nextScopedCss = oldRelPath && screen.scopedCss ? replaceCssResourceUrl(screen.scopedCss, oldRelPath, newAssetUrl) : screen.scopedCss;
+      if (nextScopedCss !== screen.scopedCss) { changed = true; count++; }
+
       if (changed) {
-        get().updateScreenHtml(screen.id, doc.body.innerHTML, `全局替换素材: ${oldAssetId}`);
+        get().updateScreen(screen.id, { htmlContent: parsedScreen.serialize(), scopedCss: nextScopedCss }, `全局替换素材: ${oldAssetId}`);
       }
     });
 
@@ -1727,8 +1842,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   stageScreenChange: (targetScreenId, newHtml, screenName, modificationRequest) => {
+    const normalized = checkGenerationSourceSafety(newHtml).passed ? normalizeMobileNavigation(newHtml, get().settings) : { html: newHtml, title: undefined };
     set({
-      stagedScreen: { targetScreenId, newHtml, screenName, modificationRequest },
+      stagedScreen: { targetScreenId, newHtml: normalized.html, screenName, modificationRequest, navigationTitle: normalized.title },
       stagedRenderQuality: null, stagedRenderRevision: get().stagedRenderRevision + 1
     });
   },
@@ -1743,7 +1859,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         htmlContent: target.htmlContent,
         scopedCss: target.scopedCss
       });
-      get().updateScreenHtml(staged.targetScreenId, staged.newHtml, `采纳 AI 生成新版: ${staged.screenName}`);
+      get().updateScreen(staged.targetScreenId, { htmlContent: staged.newHtml.includes('data-nid=') ? staged.newHtml : NidEngine.injectNids(staged.newHtml),
+        ...(staged.navigationTitle ? { metadata: { ...target.metadata, navigationTitle: staged.navigationTitle } } : {})
+      }, `采纳 AI 生成新版: ${staged.screenName}`);
     }
     set({ stagedScreen: null, stagedRenderQuality: null });
   },
@@ -1758,7 +1876,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const newId = `screen-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     get().addScreen({
       name: `${staged.screenName} (AI 方案)`,
-      htmlContent: staged.newHtml
+      htmlContent: staged.newHtml,
+      scopedCss: get().screens[staged.targetScreenId]?.scopedCss,
+      metadata: { ...get().screens[staged.targetScreenId]?.metadata, ...(staged.navigationTitle ? { navigationTitle: staged.navigationTitle } : {}) }
     }, newId, { referencedScreenId: staged.targetScreenId });
     set({ stagedScreen: null, stagedRenderQuality: null });
   },
@@ -1805,11 +1925,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       name,
       deviceProfile: settings.deviceProfile,
       frameWidth: settings.frameWidth,
+      referenceViewportHeight: resolveProjectViewport(settings).height,
       createdAt: get().createdAt,
       updatedAt: data.savedAt,
       screenCount: Object.keys(screens).length,
-      previewHtml: firstScreen?.htmlContent,
-      previewCss: designSystem?.tokens ? compileTokensToCss(designSystem.tokens, settings.colorMode) : '',
+      previewHtml: firstScreen ? buildScreenDocument(firstScreen, { baseCss: getBaseCss(settings.deviceProfile), tokensCss: compileTokensToCss(designSystem.tokens, settings.colorMode), screenOverrides: '', deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation, includeMobileChrome: true, viewportHeight: resolveProjectViewport(settings).height, viewportWidth: settings.frameWidth }) : undefined,
+      previewCss: '',
       folderPath: get().folderPath,
       coverImage: coverImage || undefined
     };
@@ -1817,10 +1938,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   /** 新建空白工程并切换为当前工程 (PRD §3.0.1)。默认纯净画布 (0 画框，保证工作区只有有效产物) */
-  initNewProject: ({ name, deviceProfile, designSystem: ds, initialDecisions, folderPath, createSpecimen }) => {
+  initNewProject: ({ name, deviceProfile, designSystem: ds, initialDecisions, folderPath, createSpecimen, referenceDeviceId }) => {
     const id = `proj_${Date.now().toString(36)}`;
     const now = Date.now();
     const effectiveDs = ds || defaultTheme;
+    const referenceDevice = { ...(REFERENCE_DEVICES.find(device => device.id === referenceDeviceId && device.deviceProfile === deviceProfile) ?? defaultReferenceDevice(deviceProfile)) };
+    const referenceHeight = Math.round(referenceDevice.height * (deviceProfile === 'mobile' ? 390 : 1440) / referenceDevice.width);
     let screens: Record<ScreenId, Screen> = {};
     let screenOrder: ScreenId[] = [];
     let activeScreenId: ScreenId | null = null;
@@ -1848,10 +1971,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       settings: {
         deviceProfile,
         frameWidth: deviceProfile === 'pc' ? 1440 : 390,
-        viewportGuideHeight: deviceProfile === 'pc' ? 900 : 844,
+        viewportGuideHeight: referenceHeight,
+        referenceDevice,
         showViewportGuide: true,
         colorMode: 'light',
-        lodBudget: 12
+        lodBudget: 12,
+        useCustomNavigation: false
       },
       designSystem: effectiveDs,
       screens,
@@ -1925,7 +2050,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         id: data.id || get().id,
         createdAt: data.createdAt || data.savedAt || Date.now(),
         name: data.name || 'Untitled',
-        settings: data.settings || get().settings,
+        settings: normalizeReferenceSettings({ ...(data.settings || get().settings), useCustomNavigation: data.settings?.useCustomNavigation === true, referenceDevice: data.settings?.referenceDevice }),
         designSystem: data.designSystem || get().designSystem,
         screens: data.screens || {},
         screenOrder: order,
@@ -1962,6 +2087,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       let nextScreenOrder = [...state.screenOrder];
       const nextOverrides = { ...state.overrides };
       let nextDesignSystem = state.designSystem;
+      let nextSettings = state.settings;
       const nextDecisions = { ...state.decisions };
       const nextComponents = { ...state.components };
       const nextAssets = { ...state.assets };
@@ -1998,6 +2124,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           if (patch.value) {
             nextDesignSystem = patch.value as DesignSystem;
           }
+        } else if (root === 'settings' && patch.value) {
+          // History may change the visual mode; device profile remains project-immutable.
+          const incoming = patch.value as ProjectSettings;
+          nextSettings = normalizeReferenceSettings({ ...state.settings, colorMode: incoming.colorMode, useCustomNavigation: incoming.useCustomNavigation === true,
+            referenceDevice: validReferenceDevice(incoming.referenceDevice, state.settings.deviceProfile) ? { ...incoming.referenceDevice } : undefined,
+            viewportGuideHeight: Number.isFinite(incoming.viewportGuideHeight) && incoming.viewportGuideHeight >= 240 && incoming.viewportGuideHeight <= 7680 ? incoming.viewportGuideHeight : state.settings.viewportGuideHeight });
         } else if (root === 'decisions') {
           if (patch.op === 'remove') {
             delete nextDecisions[key];
@@ -2039,6 +2171,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         screenOrder: nextScreenOrder,
         overrides: nextOverrides,
         designSystem: nextDesignSystem,
+        settings: nextSettings,
         decisions: nextDecisions,
         components: nextComponents,
         assets: nextAssets,

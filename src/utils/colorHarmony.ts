@@ -1,59 +1,11 @@
 import type { DesignSystemTokens, Ramp } from '../types/designSystem';
 
-type RGB = [number, number, number];
-const rgb = (hex: string): RGB => {
-  const value = hex.replace(/^#/, '');
-  const full = value.length === 3 ? value.split('').map(c => c + c).join('') : value;
-  if (!/^[\da-f]{6}$/i.test(full)) throw new Error(`Invalid hex color: ${hex}`);
-  return [0, 2, 4].map(i => parseInt(full.slice(i, i + 2), 16)) as RGB;
-};
-const hex = (color: RGB) => '#' + color.map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
-
-/** sRGB 插值，用于生成低饱和表面和确定性的品牌色阶。 */
-export function mixColor(a: string, b: string, weight: number): string {
-  const x = rgb(a), y = rgb(b);
-  const w = Math.max(0, Math.min(1, weight));
-  return hex(x.map((v, i) => v * (1 - w) + y[i] * w) as RGB);
-}
-
-function luminance(color: string): number {
-  const linear = rgb(color).map(v => {
-    const s = v / 255;
-    return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-  });
-  return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
-}
-
-export function contrastRatio(a: string, b: string): number {
-  const x = luminance(a), y = luminance(b);
-  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
-}
-
-export function onColor(fill: string): string {
-  return contrastRatio('#ffffff', fill) >= contrastRatio('#111111', fill) ? '#ffffff' : '#111111';
-}
-
-/** 在同一明暗表面组上选择最小幅度的明度修正；不改变填充种子色。 */
-export function readableColor(foreground: string, backgrounds: string[], minimum = 4.5): string {
-  const passes = (color: string) => backgrounds.every(bg => contrastRatio(color, bg) >= minimum);
-  if (passes(foreground)) return foreground;
-  const targets = ['#000000', '#ffffff'].filter(passes);
-  if (!targets.length) return foreground; // 自定义混合明暗表面无法用单一前景满足，留给局部设计。
-  let best = targets[0], bestWeight = Infinity;
-  for (const target of targets) {
-    let low = 0, high = 1;
-    for (let i = 0; i < 16; i++) {
-      const mid = (low + high) / 2;
-      if (passes(mixColor(foreground, target, mid))) high = mid;
-      else low = mid;
-    }
-    if (high < bestWeight) { bestWeight = high; best = mixColor(foreground, target, high); }
-  }
-  return best;
-}
+import { mixColor, rgb } from './colorMath';
+export { mixColor, contrastRatio, onColor, readableColor } from './colorMath';
+import { resolveThemeColors } from './semanticColors';
 
 export function buildPrimaryRamp(seed: string): Ramp {
-  const normalized = hex(rgb(seed));
+  const normalized = mixColor(seed, seed, 0);
   return {
     '50': mixColor(normalized, '#ffffff', 0.96),
     '100': mixColor(normalized, '#ffffff', 0.9),
@@ -98,26 +50,14 @@ export function applyBrandColor(tokens: DesignSystemTokens, seed: string, harmon
   };
 }
 
-/** 所有标准组件和预览共享的语义配色。仅处理实体 Hex 表面。 */
+/** 兼容既有消费方；所有结果由统一角色引擎解析。 */
 export function resolveColorRoles(tokens: DesignSystemTokens, mode: 'light' | 'dark') {
-  const c = tokens.colors;
-  const surfaces = [c.background[mode], c.surface[mode], c.surfaceAlt[mode]];
-  const seed = c.primary['500'] || '#2563eb';
-  const accent = c.primary['600'] || seed;
-  const container = (color: string) => mixColor(c.surface[mode], color, mode === 'light' ? 0.09 : 0.18);
-  const primaryLight = mode === 'light' ? c.primary['100'] || container(seed) : container(seed);
-  const semantic = (color: string) => {
-    const light = container(color);
-    return { text: readableColor(color, [...surfaces, light]), light };
-  };
+  const r = resolveThemeColors(tokens, mode).values;
   return {
-    primary: seed, onPrimary: onColor(seed), primaryLight,
-    primaryText: readableColor(seed, [...surfaces, primaryLight]),
-    accent, onAccent: onColor(accent), accentLight: container(accent),
-    accentText: readableColor(accent, [...surfaces, container(accent)]),
-    textPrimary: readableColor(c.textPrimary[mode], surfaces),
-    textSecondary: readableColor(c.textSecondary[mode], surfaces),
-    textMuted: readableColor(mixColor(c.textSecondary[mode], c.surface[mode], 0.12), surfaces),
-    success: semantic(c.success), warning: semantic(c.warning), danger: semantic(c.danger)
+    ...r,
+    success: { text: r.successText, light: r.successLight },
+    warning: { text: r.warningText, light: r.warningLight },
+    danger: { text: r.dangerText, light: r.dangerLight },
+    info: { text: r.infoText, light: r.infoLight }
   };
 }

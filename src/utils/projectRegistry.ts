@@ -18,6 +18,7 @@ export interface ProjectMeta {
   name: string;
   deviceProfile: 'pc' | 'mobile';
   frameWidth: number;
+  referenceViewportHeight?: number;
   createdAt: number;
   updatedAt: number;
   screenCount: number;

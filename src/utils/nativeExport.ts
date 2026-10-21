@@ -1,9 +1,10 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { importedViewportHeight, measureImportedFrame } from './importViewport';
 
 /**
  * 原生高保真导出的前端接口 (doc/feature/high-fidelity-png-export/spec.md)
  *
- * 真正的渲染发生在 Rust 侧：离屏窗口 + `WKWebView.createPDF` + CoreGraphics 栅格化。
+ * 真正的渲染发生在 Rust 侧：离屏窗口 + WebKit 原生快照（导入页）或 PDF + CoreGraphics。
  * 这里只负责两件事——判断能力可用性，以及把整页高度**实测**出来交给原生侧，
  * 不再沿用可能过期的 `screen.measuredHeight` (BR-PX-03)。
  */
@@ -14,6 +15,8 @@ export interface NativeExportArgs {
   height: number;
   scale: number;
   settleMs?: number;
+  /** Imported CSS may contain gradients that WebKit's PDF backend mispaints. */
+  preferSnapshot?: boolean;
 }
 
 export interface NativeExportResult {
@@ -46,7 +49,8 @@ export async function exportPngNative(args: NativeExportArgs): Promise<NativeExp
     width: args.width,
     height: args.height,
     scale: args.scale,
-    settleMs: args.settleMs
+    settleMs: args.settleMs,
+    preferSnapshot: args.preferSnapshot
   });
 
   if (!raw?.pngBase64) {
@@ -129,6 +133,8 @@ export async function measureDocumentHeight(
 
     await waitForFonts(doc, 3000);
     await waitForImages(doc, 5000);
+
+    if (importedViewportHeight(doc)) return measureImportedFrame(iframe);
 
     return Math.ceil(
       Math.max(doc.body?.scrollHeight || 0, doc.documentElement?.scrollHeight || 0)

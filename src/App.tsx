@@ -1,3 +1,5 @@
+import { bindHtmlImportMenu } from './services/desktop/htmlImportMenu';
+import { HtmlImportDialog } from './components/canvas/HtmlImportDialog';
 import React, { useEffect, useState } from 'react';
 import { Header } from './components/layout/Header';
 import { SideBar } from './components/layout/SideBar';
@@ -135,7 +137,10 @@ const Workspace: React.FC = () => {
  * 全部无意义，直接进工作空间只会得到一屏空壳。
  */
 export const App: React.FC = () => {
-  const { view, refresh } = useWorkspaceStore();
+  const { view, refresh, activeProjectId } = useWorkspaceStore();
+  const [showHtmlImport, setShowHtmlImport] = useState(false);
+  useEffect(() => bindHtmlImportMenu(() => setShowHtmlImport(true)), []);
+  useEffect(() => setShowHtmlImport(false), [view, activeProjectId]);
 
   useEffect(() => {
     refresh();
@@ -151,6 +156,7 @@ export const App: React.FC = () => {
       }}
     >
       {view === 'workspace' ? <Workspace /> : <ProjectManager />}
+      {view === 'workspace' && showHtmlImport && <HtmlImportDialog key={activeProjectId} onClose={() => setShowHtmlImport(false)} />}
     </ErrorBoundary>
   );
 };

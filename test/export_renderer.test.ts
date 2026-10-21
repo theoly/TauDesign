@@ -62,7 +62,9 @@ describe('ExportRenderer Specification (BR-01 / BR-02 / ISSUE-024)', () => {
       expect(html).toContain('<title>会员中心 · 开通线下会员</title>');
       expect(html).toContain(mockTokensCss);
       expect(html).toContain(mockBaseCss);
-      expect(html).toContain(mockOverrides);
+      // Export removes engineering NIDs while preserving effective L4 styling.
+      expect(html).toContain(mockOverrides.replace('[data-nid=', '[data-export-id='));
+      expect(html).toContain('data-export-id="title1"');
 
       // 验证 body 内部的 DOM 节点上的 data-nid 已被剥离干净
       const bodyContent = html.slice(html.indexOf('<body>'), html.indexOf('</body>'));

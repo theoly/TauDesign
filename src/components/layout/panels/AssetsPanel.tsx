@@ -2,6 +2,8 @@ import React from 'react';
 import { useProjectStore } from '../../../stores/useProjectStore';
 import { Accordion } from '../Accordion';
 import { Boxes, Image as ImageIcon, Settings2, Shapes } from 'lucide-react';
+import { parseHtmlCopy } from '../../../utils/htmlDocument';
+import { AssetPreviewImage } from '../../assets/AssetPreviewImage';
 
 interface AssetsPanelProps {
   /** 打开完整资源中心：上传、AI 生图、批量管理等重操作仍走弹窗 */
@@ -38,7 +40,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
     }
     const cur = screens[activeScreenId];
     if (!cur) return;
-    const doc = new DOMParser().parseFromString(`<body>${cur.htmlContent}</body>`, 'text/html');
+    const parsed = parseHtmlCopy(cur.htmlContent), doc = parsed.doc;
     const el = doc.querySelector(`[data-nid="${selectedNode.nid}"]`) as HTMLElement | null;
     if (!el) return;
 
@@ -49,7 +51,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
       el.style.backgroundSize = 'cover';
       el.style.backgroundPosition = 'center';
     }
-    updateScreenHtml(activeScreenId, doc.body.innerHTML, `应用素材到 #${selectedNode.nid}`);
+    updateScreenHtml(activeScreenId, parsed.serialize(), `应用素材到 #${selectedNode.nid}`);
   };
 
   const empty = (text: string) => (
@@ -80,7 +82,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
                   title={`${a.name}\n点击应用到当前选中元素`}
                   className="aspect-square rounded-md overflow-hidden border border-slate-800 hover:border-blue-500 bg-slate-950 transition"
                 >
-                  <img src={a.relPath} alt={a.name} className="w-full h-full object-cover" />
+                  <AssetPreviewImage asset={a} className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>

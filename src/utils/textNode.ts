@@ -1,3 +1,5 @@
+import { parseHtmlCopy } from './htmlDocument';
+
 /**
  * 文本节点取值与写回的唯一入口 (doc/issues.md ISSUE-002/003/004)
  *
@@ -106,11 +108,12 @@ export function setDirectText(el: Element, next: string): boolean {
  */
 export function setTextByNid(html: string, nid: string, next: string): string | null {
   if (typeof DOMParser === 'undefined') return null;
-  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  const copy = parseHtmlCopy(html);
+  const doc = copy.doc;
   const el = doc.querySelector(`[data-nid="${CSS_escape(nid)}"]`);
   if (!el) return null;
   if (!setDirectText(el, next)) return null;
-  return doc.body.innerHTML;
+  return copy.serialize();
 }
 
 /** nid 由 NidEngine 生成（base36），理论上无需转义；仍做一层防护避免选择器注入 */

@@ -1,3 +1,5 @@
+import { referenceDevicePrompt } from '../../utils/referenceDevice';
+import { normalizeMobileNavigation } from '../../utils/mobileNavigation';
 import { buildProjectKnowledgeContext } from '../../services/ai/projectKnowledge';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, Check, Loader2, Sparkles, X } from 'lucide-react';
@@ -47,13 +49,17 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
   // Polish 就是队列只含一项的 Restyle——同一套结构守卫与 Checkpoint 保护
   const plan = useMemo(
     () => {
-      if (!isSingle) return buildRestylePlan();
+      if (!isSingle) {
+        const plan = buildRestylePlan();
+        const queue = plan.queue.map(target => target.kind === 'screen' ? { ...target, html: normalizeMobileNavigation(target.html, settings).html } : target);
+        return { ...plan, queue, dryRun: queue[0] ?? null };
+      }
       const screen = screens[scope];
-      const target: RestyleTarget | null = screen ? { kind: 'screen', id: scope, name: screen.name, html: screen.htmlContent,
+      const target: RestyleTarget | null = screen ? { kind: 'screen', id: scope, name: screen.name, html: normalizeMobileNavigation(screen.htmlContent, settings).html,
         protectedNids: useProjectStore.getState().getProtectedNids(scope) } : null;
       return { queue: target ? [target] : [], dryRun: target, estimatedCalls: target ? 1 : 0, naiveCalls: target ? 1 : 0 };
     },
-    [buildRestylePlan, isSingle, scope, screens, overrides]
+    [buildRestylePlan, isSingle, scope, screens, overrides, settings.deviceProfile, settings.useCustomNavigation]
   );
   const [phase, setPhase] = useState<'plan' | 'analysis' | 'dryrun' | 'review' | 'batch' | 'done'>('plan');
   const [busy, setBusy] = useState(false);
@@ -73,10 +79,14 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
     const binding = getActiveProviderForRole('code');
     if (!binding?.provider) return { target, status: 'failed', message: '未配置可用的 AI Provider' };
 
+    if (target.kind === 'screen') target = { ...target, html: normalizeMobileNavigation(target.html, settings).html };
     const systemPrompt = buildPolishPrompt({
       designSystem,
       deviceProfile: settings.deviceProfile,
+      useCustomNavigation: settings.useCustomNavigation,
       frameWidth: settings.frameWidth,
+      referenceDevice: settings.referenceDevice,
+      viewportGuideHeight: settings.viewportGuideHeight,
       colorMode: settings.colorMode,
       styleDirective: confirmedScope ? `${styleDirective}\n${confirmedScope}` : styleDirective,
       protectedNids: target.protectedNids,
@@ -84,13 +94,13 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
       decisions: Object.values(useProjectStore.getState().decisions).filter(d => d.active && (d.scope === 'global' || d.screenId === target.id))
     });
 
-    const projectKnowledge = buildProjectKnowledgeContext(useProjectStore.getState(), confirmedScope || '仅润色当前页面UI，保留功能结构文案', target.id);
+    const projectKnowledge = [referenceDevicePrompt(settings), buildProjectKnowledgeContext(useProjectStore.getState(), confirmedScope || '仅润色当前页面UI，保留功能结构文案', target.id)].join('\n\n');
     if (confirmedScope) {
       const result = coreRef.current.streamText({ provider: binding.provider, model: binding.modelId,
         signal: controllerRef.current?.signal, messages: [
           { role: 'system', content: systemPrompt }, { role: 'user', content: `${projectKnowledge}\n\n仅按已确认范围润色，严格保持元素树与文案：\n${target.html}` }
         ] });
-      return acceptRestyleResult(target, extractHtml(await result.textPromise), { designSystem, deviceProfile: settings.deviceProfile });
+      return acceptRestyleResult(target, extractHtml(await result.textPromise), { designSystem, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation });
     }
     let raw = '';
     const { promise } = AIService.stream(
@@ -105,7 +115,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
       }
     );
     await promise;
-    return acceptRestyleResult(target, extractHtml(raw), { designSystem, deviceProfile: settings.deviceProfile });
+    return acceptRestyleResult(target, extractHtml(raw), { designSystem, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation });
   };
 
   const analyzeSingle = async () => {
@@ -122,9 +132,9 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
       const result = await analyzeScreenModification(coreRef.current, {
         provider: binding.provider, model: binding.modelId, signal: controller.signal, html: screen.htmlContent, name: screen.name,
         request: '分析可改善的视觉表现，仅建议调整已有节点的class；保持元素结构、文案、data-nid不变，不修改带手动样式覆盖的节点。',
-        designSystem, mode: settings.colorMode, deviceProfile: settings.deviceProfile, frameWidth: settings.frameWidth,
+        designSystem, mode: settings.colorMode, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation, frameWidth: settings.frameWidth,
         protectedNids: current.getProtectedNids(scope), allowText: false,
-        projectKnowledge: buildProjectKnowledgeContext(current, '仅改善UI视觉表现', scope),
+        projectKnowledge: [referenceDevicePrompt(current.settings), buildProjectKnowledgeContext(current, '仅改善UI视觉表现', scope)].join('\n\n'),
         context: JSON.stringify({ scopedCss: screen.scopedCss, overrides: Object.entries(current.overrides).filter(([key]) => key.startsWith(`${scope}:`)) })
       });
       if (!isModificationSnapshotCurrent(useProjectStore.getState(), snapshot)) throw new Error('原页面或工程已变化，请重新分析。');
@@ -154,14 +164,14 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
           if (!binding?.provider || (!binding.provider.apiKey && binding.provider.protocol !== 'ollama_native')) throw new Error('请先配置可用的 AI Provider。');
           operations = mergeLocalEditOperations(local.operations, await generateSupplementedLocalEdits(coreRef.current, {
             provider: binding.provider, model: binding.modelId, signal: controllerRef.current.signal,
-            html: plan.dryRun.html, request, allowedNids: local.allowedNids, device: settings.deviceProfile,
+            html: plan.dryRun.html, request, allowedNids: local.allowedNids, device: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation,
             designSystem, mode: settings.colorMode, allowText: false,
-            projectKnowledge: buildProjectKnowledgeContext(useProjectStore.getState(), request, scope)
+            projectKnowledge: [referenceDevicePrompt(useProjectStore.getState().settings), buildProjectKnowledgeContext(useProjectStore.getState(), request, scope)].join('\n\n')
           }));
         }
-        const candidate = applyLocalCopyEdits(plan.dryRun.html, operations, { device: settings.deviceProfile,
+        const candidate = applyLocalCopyEdits(plan.dryRun.html, operations, { device: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation,
           allowedNids: local.allowedNids, protectedNids: plan.dryRun.protectedNids, allowText: false });
-        outcome = acceptRestyleResult(plan.dryRun, candidate.html, { designSystem, deviceProfile: settings.deviceProfile });
+        outcome = acceptRestyleResult(plan.dryRun, candidate.html, { designSystem, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation });
       } else outcome = await runOne(plan.dryRun, request);
       if (controllerRef.current?.signal.aborted) return;
       if (!isModificationSnapshotCurrent(useProjectStore.getState(), snapshotRef.current)) throw new Error('生成期间原页面或工程已变化，请重新分析。');

@@ -1,10 +1,16 @@
+import { resolveProjectViewport } from '../../utils/referenceDevice';
+import { normalizeMobileNavigation } from '../../utils/mobileNavigation';
+import { measureImportedFrame, observeImportedFrame, resolveViewportCss } from '../../utils/importViewport';
+import { resolveThemeColors } from '../../utils/semanticColors';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { observeRenderedQuality, type RenderedQualityReport } from '../../utils/renderedQuality';
 import { Screen } from '../../types/project';
 import { compileTokensToCss } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
 import { NidEngine } from '../../utils/nidEngine';
-import { inspectText, setTextByNid } from '../../utils/textNode';
+import { buildScreenDocument, projectCssForScreen, runtimeStyle } from '../../utils/screenDocument';
+import { useScreenResources } from '../../hooks/useScreenResources';
+import { inspectText, setDirectText, setTextByNid } from '../../utils/textNode';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { handleHistoryShortcut } from '../../utils/historyShortcuts';
 import { resolveOverlapAfterManualMove, calculateDragSnap } from '../../utils/canvasLayout';
@@ -59,9 +65,16 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
   const isActive = activeScreenId === screen.id;
   const frameWidth = settings.frameWidth;
   const showGuide = settings.showViewportGuide;
-  const guideHeight = settings.viewportGuideHeight;
 
-  const tokensCss = compileTokensToCss(designSystem.tokens, settings.colorMode);
+  const { screen: renderScreen, error: resourceError } = useScreenResources(screen);
+  const imported = !!screen.metadata?.importedHtml;
+  const viewport = resolveProjectViewport(settings);
+  const viewportHeight = viewport.height;
+  // The fold guide is a view of the selected reference device, rather than an
+  // independent cached number. This also keeps legacy projects deterministic.
+  const guideHeight = viewport.height;
+  const viewportCss = (css: string) => resolveViewportCss(css, viewport.contentHeight, viewport.width);
+  const tokensCss = viewportCss(projectCssForScreen(screen, compileTokensToCss(designSystem.tokens, settings.colorMode)));
   const isLight = settings.colorMode === 'light';
 
   /**
@@ -69,17 +82,12 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
    * 此前二者写死 #ffffff / bg-slate-100，深色模式下画框在 iframe 绘制完成前
    * 以及整个 L0 降级档位都是一块白板，用户直观看到的就是「新建页面不遵循主题」。
    */
-  const frameBg =
-    settings.colorMode === 'light'
-      ? designSystem.tokens.colors.background.light
-      : designSystem.tokens.colors.background.dark;
-  const frameFg =
-    settings.colorMode === 'light'
-      ? designSystem.tokens.colors.textSecondary.light
-      : designSystem.tokens.colors.textSecondary.dark;
+  const resolvedColors = resolveThemeColors(designSystem.tokens, settings.colorMode).values;
+  const frameBg = resolvedColors.background;
+  const frameFg = resolvedColors.textSecondary;
 
   // Compile L4 Overrides for this screen
-  const screenOverrides = Object.entries(overrides)
+  const screenOverrides = viewportCss(projectCssForScreen(screen, Object.entries(overrides)
     .filter(([key]) => key.startsWith(`${overrideSourceScreenId || screen.id}:`))
     .map(([key, ov]) => {
       const declarationsStr = Object.entries(ov.declarations)
@@ -88,11 +96,12 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
         .join(' ');
       return `[data-nid="${ov.nid}"] { ${declarationsStr} }`;
     })
-    .join('\n');
+    .join('\n')));
 
   // load可能晚于样式热更新；回调始终读取当前值，避免把新版样式回滚。
-  const runtimeStylesRef = useRef({ scopedCss: screen.scopedCss || '', tokensCss, screenOverrides });
-  runtimeStylesRef.current = { scopedCss: screen.scopedCss || '', tokensCss, screenOverrides };
+  const scopedCss = viewportCss(renderScreen?.scopedCss || '');
+  const runtimeStylesRef = useRef({ scopedCss, tokensCss, screenOverrides });
+  runtimeStylesRef.current = { scopedCss, tokensCss, screenOverrides };
 
   /**
    * 编辑器 chrome 样式：选中/悬浮描边。
@@ -141,24 +150,27 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
    * 2. tokensCss 与 screenOverrides 统一走内联 <style> 的 textContent 热更新（0ms，无 DOM 重建）；
    * 3. handleLoad 与 overrides effect 双重守卫当前选区的 .aidesign-selected 高亮。
    */
+  const navigationTitle = useMemo(() => screen.metadata?.navigationTitle ?? screen.metadata?.importedHtml?.navigationTitle
+    ?? normalizeMobileNavigation(htmlWithNids, settings).title ?? screen.name,
+    [htmlWithNids, screen.name, screen.metadata?.navigationTitle, screen.metadata?.importedHtml?.navigationTitle, settings.deviceProfile, settings.useCustomNavigation]);
+  const runtimeTitleRef = useRef({ title: navigationTitle, name: screen.name });
+  runtimeTitleRef.current = { title: navigationTitle, name: screen.name };
+  const syncRuntimeTitle = (doc: Document) => {
+    doc.title = runtimeTitleRef.current.name;
+    const title = doc.querySelector('.td-mini-title');
+    if (title) setDirectText(title, runtimeTitleRef.current.title);
+  };
+  useEffect(() => {
+    const doc = iframeRef.current?.contentDocument;
+    if (doc) syncRuntimeTitle(doc);
+  }, [screen.name, navigationTitle]);
+
   const fullSrcDoc = useMemo(() => {
-    return `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
-  <style id="base-css">${getBaseCss(settings.deviceProfile)}</style>
-  <style id="editor-chrome">${editorChromeCss}</style>
-  <style id="scoped-css">${screen.scopedCss || ''}</style>
-  <style id="tokens">${tokensCss}</style>
-  <style id="overrides">${screenOverrides}</style>
-  <style id="frame-fill">html { background-color: var(--color-bg, #f8fafc); }</style>
-</head>
-<body>
-  ${htmlWithNids}
-</body>
-</html>`;
-  }, [htmlWithNids, settings.deviceProfile]);
+    return buildScreenDocument({ ...screen, ...renderScreen, htmlContent: renderScreen?.htmlContent === screen.htmlContent ? htmlWithNids : renderScreen?.htmlContent ?? htmlWithNids }, {
+      baseCss: getBaseCss(settings.deviceProfile), editorCss: editorChromeCss,
+      tokensCss, screenOverrides, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation, includeMobileChrome: true, viewportHeight, viewportWidth: frameWidth
+    });
+  }, [htmlWithNids, renderScreen?.htmlContent, imported, settings.deviceProfile, settings.useCustomNavigation, viewportHeight]);
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -184,15 +196,15 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
 
   useEffect(() => {
     const doc = iframeRef.current?.contentDocument;
-    const style = doc?.getElementById('scoped-css');
-    if (style) style.textContent = screen.scopedCss || '';
-  }, [screen.scopedCss, lodLevel]);
+    const style = doc && runtimeStyle(doc, 'scoped-css');
+    if (style) style.textContent = scopedCss;
+  }, [scopedCss, lodLevel]);
 
   // Hot update Tokens when theme changes (under 100ms, no DOM rebuild)
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe || !iframe.contentDocument) return;
-    const tokensEl = iframe.contentDocument.getElementById('tokens');
+    const tokensEl = runtimeStyle(iframe.contentDocument, 'tokens');
     if (tokensEl) {
       tokensEl.textContent = tokensCss;
     }
@@ -202,7 +214,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe || !iframe.contentDocument) return;
-    const overridesEl = iframe.contentDocument.getElementById('overrides');
+    const overridesEl = runtimeStyle(iframe.contentDocument, 'overrides');
     if (overridesEl) {
       overridesEl.textContent = screenOverrides;
     }
@@ -302,12 +314,13 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
         cleanupListeners();
       }
 
+      syncRuntimeTitle(doc);
       // 同步初始/重载后的动态样式与选中高亮 (ISSUE-019)
-      const scopedEl = doc.getElementById('scoped-css');
+      const scopedEl = runtimeStyle(doc, 'scoped-css');
       if (scopedEl) scopedEl.textContent = runtimeStylesRef.current.scopedCss;
-      const tokensEl = doc.getElementById('tokens');
+      const tokensEl = runtimeStyle(doc, 'tokens');
       if (tokensEl) tokensEl.textContent = runtimeStylesRef.current.tokensCss;
-      const overridesEl = doc.getElementById('overrides');
+      const overridesEl = runtimeStyle(doc, 'overrides');
       if (overridesEl) overridesEl.textContent = runtimeStylesRef.current.screenOverrides;
 
       doc.querySelectorAll('.aidesign-selected').forEach(el => el.classList.remove('aidesign-selected'));
@@ -322,14 +335,17 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       }
 
       // Measure content height (D13)
-      const h = Math.max(doc.body.scrollHeight, 700);
-      setMeasuredHeight(h);
-      if (h !== screen.measuredHeight) {
-        updateScreen(screen.id, { measuredHeight: h });
-      }
+      const measure = () => {
+        const h = measureImportedFrame(iframe, Math.min(700, viewportHeight));
+        setMeasuredHeight(h);
+        if (!isStaged && h !== useProjectStore.getState().screens[screen.id]?.measuredHeight) updateScreen(screen.id, { measuredHeight: h });
+      };
+      measure();
+      const cleanupHeight = observeImportedFrame(iframe, measure);
 
       // Mouse Hover listener
       const onMouseOver = (e: MouseEvent) => {
+        if ((e.target as Element).closest('[data-taudesign-mobile-chrome]')) { e.preventDefault(); e.stopPropagation(); return; }
         e.stopPropagation();
         const target = (e.target as HTMLElement).closest('[data-nid]');
         if (target) {
@@ -344,6 +360,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
 
       // Mouse Click listener
       const onClick = (e: MouseEvent) => {
+        if ((e.target as Element).closest('[data-taudesign-mobile-chrome]')) { e.preventDefault(); e.stopPropagation(); return; }
         e.preventDefault();
         e.stopPropagation();
         setActiveScreen(screen.id);
@@ -440,6 +457,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
 
       // Double-click listener for inline text editing (PRD §3.6.1)
       const onDblClick = (e: MouseEvent) => {
+        if ((e.target as Element).closest('[data-taudesign-mobile-chrome]')) { e.preventDefault(); e.stopPropagation(); return; }
         const target = (e.target as HTMLElement).closest('[data-nid]') as HTMLElement;
         if (!target) return;
         if (inspectText(target).editable) {
@@ -496,6 +514,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       doc.body.addEventListener('keydown', onKeyDown);
 
       cleanupListeners = () => {
+        cleanupHeight();
         if (doc && doc.body) {
           doc.body.removeEventListener('mouseover', onMouseOver);
           doc.body.removeEventListener('mouseout', onMouseOut);
@@ -521,7 +540,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     // 从 L0 回到 L1/L2 时 React 挂载的是一个**全新的 iframe 元素**，
     // 而旧元素上的监听器随之消失。若不在此重新绑定，画框将永久失去
     // 点选/悬浮/行内编辑能力，表现为「点了没反应、检查器显示未选中任何元素」。
-  }, [screen.htmlContent, screen.id, lodLevel]);
+  }, [screen.htmlContent, screen.id, lodLevel, imported, viewportHeight]);
 
   // Synchronize selection & hover highlights inside iframe
   useEffect(() => {
@@ -646,6 +665,8 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     try {
       const dataUrl = await captureScreenSnippetAsDataUrl(screen, {
         frameWidth: settings.frameWidth,
+        viewportHeight,
+        useCustomNavigation: settings.useCustomNavigation,
         deviceProfile: settings.deviceProfile,
         tokensCss,
         baseCss: getBaseCss(settings.deviceProfile),
@@ -794,6 +815,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       </div>
 
       {/* 原型画框卡片主体 (圆角无内嵌顶栏) */}
+      {resourceError && <p role="alert" className="mb-2 rounded-lg border border-red-800 bg-red-950 p-2 text-xs text-red-200">{resourceError}</p>}
       <div
         className={`relative w-full overflow-hidden transition-shadow duration-200 ${
           isStaged
@@ -837,14 +859,18 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
           />
         )}
 
-        {/* Device Viewport Guide (D13: 首屏虚线参考 - 减淡视觉效果) */}
+        {/* Device Viewport Guide (D13): quiet auxiliary annotation */}
         {showGuide && guideHeight < measuredHeight && (
           <div
-            className="absolute left-0 right-0 border-b border-dashed border-slate-400/30 pointer-events-none z-30 flex items-center justify-end px-3"
+            className="absolute left-0 right-0 border-b border-dashed border-slate-400/20 pointer-events-none z-30 flex items-center justify-end px-3"
             style={{ top: `${guideHeight}px` }}
+            data-testid="first-viewport-guide"
           >
-            <span className="text-[10px] text-slate-400/80 bg-slate-900/70 border border-slate-700/50 px-1.5 py-0.5 rounded shadow-sm">
-              首屏参考线 ({guideHeight}px)
+            <span
+              className="text-[9px] font-normal leading-none text-slate-500/55 bg-slate-950/35 px-1.5 py-1 rounded-sm backdrop-blur-[1px]"
+              title={`首屏参考线 · ${viewport.reference.name} · ${guideHeight}px`}
+            >
+              首屏 · {guideHeight}px
             </span>
           </div>
         )}

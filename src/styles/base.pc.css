@@ -28,9 +28,18 @@
 }
 
 .link-hover {
-  color: var(--color-primary, #2563eb);
+  color: var(--color-primary-text);
   cursor: pointer;
 }
 .link-hover:hover {
   text-decoration: underline;
 }
+
+.btn-primary:hover:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-hover); }
+.btn-danger:hover:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-danger-hover); }
+.btn-secondary:hover:not(:disabled):not([aria-disabled="true"]), .btn-outline:hover:not(:disabled):not([aria-disabled="true"]), .btn-text:hover:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-light); }
+/* Keep pressed feedback above hover when both states match. */
+.btn-primary:active:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-active); }
+.btn-danger:active:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-danger-active); }
+
+.btn-ghost:hover:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-surface-alt); }

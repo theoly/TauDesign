@@ -73,7 +73,7 @@ describe('ScreenFrame 标题栏防溢出与首屏辅助线视觉弱化', () => {
     expect(actionsContainer?.className).toContain('flex-shrink-0');
   });
 
-  test('首屏参考线视觉弱化：使用中性半透明 slate-400/30 虚线，不出现刺眼 rose 红色', async () => {
+  test('首屏参考线跟随参考设备，并使用无边框、无阴影的低对比辅助标记', async () => {
     const mockScreen = {
       id: 'screen-guide-test',
       name: '测试首屏线',
@@ -95,29 +95,41 @@ describe('ScreenFrame 标题栏防溢出与首屏辅助线视觉弱化', () => {
         deviceProfile: 'mobile',
         frameWidth: 390,
         showViewportGuide: true,
-        viewportGuideHeight: 500
+        viewportGuideHeight: 500,
+        referenceDevice: {
+          id: 'mobile-test',
+          name: '测试设备',
+          deviceProfile: 'mobile',
+          width: 390,
+          height: 400
+        }
       }
     });
 
     await act(async () => {
-      root.render(<ScreenFrame screen={mockScreen} lodLevel={2} />);
+      root.render(<ScreenFrame screen={mockScreen} lodLevel={0} />);
     });
 
-    // 查找参考线容器
+    // L0 不挂载 iframe，避免测试环境的布局测量覆盖显式长页高度。
+    // 参考线本身位于 iframe 外层，所有 LOD 均使用同一实现。
     const guideLine = container.querySelector('.border-dashed');
     expect(guideLine).not.toBeNull();
     // 验证不包含刺眼的 rose-500 或 rose-600
     expect(guideLine?.className).not.toContain('rose-500');
     expect(guideLine?.className).not.toContain('rose-600');
-    // 验证包含减淡的 slate-400/30
-    expect(guideLine?.className).toContain('border-slate-400/30');
+    // 设备快照优先于旧缓存高度，线条保持低对比。
+    expect((guideLine as HTMLElement)?.style.top).toBe('400px');
+    expect(guideLine?.className).toContain('border-slate-400/20');
 
     // 查找文字提示 pill
     const guideBadge = guideLine?.querySelector('span');
     expect(guideBadge).not.toBeNull();
-    expect(guideBadge?.textContent).toContain('首屏参考线 (500px)');
-    expect(guideBadge?.className).toContain('bg-slate-900/70');
-    expect(guideBadge?.className).toContain('text-slate-400/80');
+    expect(guideBadge?.textContent).toContain('首屏 · 400px');
+    expect(guideBadge?.getAttribute('title')).toContain('测试设备');
+    expect(guideBadge?.className).toContain('bg-slate-950/35');
+    expect(guideBadge?.className).toContain('text-slate-500/55');
+    expect(guideBadge?.className).not.toContain('border');
+    expect(guideBadge?.className).not.toContain('shadow');
     expect(guideBadge?.className).not.toContain('bg-rose-600');
   });
 });

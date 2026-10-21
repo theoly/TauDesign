@@ -2,6 +2,7 @@ import { ProjectDocumentEntry } from './projectDocument';
 export type { ProjectDocumentEntry } from './projectDocument';
 import { DesignSystem } from './designSystem';
 import { QuickPromptItem } from './quickPrompt';
+import type { HtmlImportMetadata } from './htmlImport';
 
 export type ScreenId = string;
 export type Nid = string;
@@ -9,12 +10,22 @@ export type AssetId = string;
 export type ComponentId = string;
 export type DecisionId = string;
 
+export interface ReferenceDevice {
+  id: string;
+  name: string;
+  deviceProfile: 'pc' | 'mobile';
+  width: number;
+  height: number;
+}
+
 export interface ProjectSettings {
   deviceProfile: 'pc' | 'mobile';     // PC: 1440, Mobile: 390
   frameWidth: number;                 // 1440 | 390
   viewportGuideHeight: number;        // PC 900, Mobile 844
+  referenceDevice?: ReferenceDevice; // Immutable preset snapshot; absent in legacy projects
   showViewportGuide: boolean;
   colorMode: 'light' | 'dark';
+  useCustomNavigation?: boolean;
   lodBudget: number;                  // default 12
 }
 
@@ -27,7 +38,7 @@ export interface Screen {
   scopedCss?: string;
   thumbnail?: string;
   /** 'specimen' 为风格样张页（doc/aesthetic/spec.md §6.6），非业务画框 */
-  metadata?: { description?: string; promptOrigin?: string; kind?: 'specimen' };
+  metadata?: { description?: string; promptOrigin?: string; kind?: 'specimen'; importedHtml?: HtmlImportMetadata; navigationTitle?: string };
 }
 
 /**

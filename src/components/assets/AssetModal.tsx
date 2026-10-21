@@ -5,6 +5,8 @@ import { AIService } from '../../services/ai/aiService';
 import { Asset, ComponentDefinition } from '../../types/project';
 import { ComponentDetector, ComponentCandidate } from '../../utils/componentDetector';
 import { ImageGenerator, ImageGenOptions } from '../../utils/imageGenerator';
+import { parseHtmlCopy } from '../../utils/htmlDocument';
+import { AssetPreviewImage } from './AssetPreviewImage';
 import {
   Activity,
   AlertCircle,
@@ -207,8 +209,7 @@ No explanations.`;
     if (!curScreen) return;
 
     try {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(`<body>${curScreen.htmlContent}</body>`, 'text/html');
+      const parsed = parseHtmlCopy(curScreen.htmlContent), doc = parsed.doc;
       const el = doc.querySelector(`[data-nid="${selectedNode.nid}"]`);
       if (!el) return;
 
@@ -220,7 +221,7 @@ No explanations.`;
         (el as HTMLElement).style.backgroundPosition = 'center';
       }
 
-      updateScreenHtml(activeScreenId, doc.body.innerHTML, `应用素材图片到 #${selectedNode.nid}`);
+      updateScreenHtml(activeScreenId, parsed.serialize(), `应用素材图片到 #${selectedNode.nid}`);
       showFeedback('素材图片已成功应用至选中元素');
     } catch (e) {
       console.error(e);
@@ -608,7 +609,7 @@ No explanations.`;
                       >
                         <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center border border-slate-800/80">
                           {ast.relPath ? (
-                            <img src={ast.relPath} alt={ast.name} className="w-full h-full object-cover" />
+                            <AssetPreviewImage asset={ast} className="w-full h-full object-cover" />
                           ) : (
                             <ImageIcon className="w-6 h-6 text-slate-600" />
                           )}

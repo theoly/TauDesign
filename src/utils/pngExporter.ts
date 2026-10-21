@@ -1,4 +1,6 @@
 import { Screen } from '../types/project';
+import { buildScreenDocument } from './screenDocument';
+import type { MobileNavigationPolicy } from './mobileNavigation';
 import { renderScreenToPngDataUrl, stripEditorChromeClasses } from './exportRenderer';
 import {
   exportPngNative,
@@ -11,13 +13,14 @@ import {
 /**
  * PNG 导出编排 (doc/feature/high-fidelity-png-export/spec.md)
  *
- * 主路径走原生渲染器（离屏 WebView + createPDF），失败自动回退旧的
+ * 主路径走原生渲染器（导入页使用屏幕位图快照，其余页面使用 createPDF），失败自动回退旧的
  * SVG foreignObject 路径；两条都失败才报错，绝不返回空白图冒充成功 (BR-PX-05)。
  */
 
-export type PngExportEngine = 'native-webview-pdf' | 'foreign-object';
+export type PngExportEngine = 'native-webview-pdf' | 'native-webview-snapshot' | 'foreign-object';
 
-export interface PngExportOptions {
+export interface PngExportOptions extends MobileNavigationPolicy {
+  viewportHeight?: number;
   tokensCss: string;
   baseCss: string;
   screenOverrides: string;
@@ -57,30 +60,14 @@ export interface PngExportDeps {
  */
 export function buildExportRenderDocument(
   screen: Screen,
-  options: Pick<PngExportOptions, 'tokensCss' | 'baseCss' | 'screenOverrides' | 'bgColor' | 'width'>
+  options: Pick<PngExportOptions, 'tokensCss' | 'baseCss' | 'screenOverrides' | 'bgColor' | 'width' | 'deviceProfile' | 'useCustomNavigation' | 'viewportHeight'>
 ): string {
   // 保留 data-nid：screenOverrides 以 [data-nid="..."] 作选择器，
   // 剥了它等于把用户在检查器里调的每一处样式都丢掉
   const cleanBodyHtml = screen ? stripEditorChromeClasses(screen.htmlContent || '') : '';
 
-  return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <title>${screen?.name || 'Export'}</title>
-  <style id="reset">
-    html, body { margin: 0; padding: 0; background-color: ${options.bgColor}; }
-    html { width: ${options.width}px; }
-    * { box-sizing: border-box; }
-  </style>
-  <style id="base-css">${options.baseCss}</style>
-  <style id="tokens">${options.tokensCss}</style>
-  <style id="overrides">${options.screenOverrides}</style>
-</head>
-<body>
-${cleanBodyHtml}
-</body>
-</html>`;
+  const deviceProfile = options.deviceProfile ?? (options.width === 390 ? 'mobile' : undefined);
+  return buildScreenDocument({ ...screen, htmlContent: cleanBodyHtml }, { ...options, title: screen?.name || 'Export', deviceProfile, viewportHeight: options.viewportHeight ?? (deviceProfile === 'mobile' ? 844 : 900), viewportWidth: options.width, includeMobileChrome: true, staticImage: true });
 }
 
 /** 解析本次导出的 CSS 高度：裁切模式取参考线，整页模式取实测值 (BR-PX-03) */
@@ -127,11 +114,12 @@ export async function exportScreenPng(
         html: renderHtml,
         width: options.width,
         height: cssHeight,
-        scale: options.scale
+        scale: options.scale,
+        preferSnapshot: !!screen.metadata?.importedHtml
       });
       return {
         dataUrl: result.dataUrl,
-        engine: 'native-webview-pdf',
+        engine: result.engine === 'native-webview-snapshot' ? 'native-webview-snapshot' : 'native-webview-pdf',
         cssHeight
       };
     } catch (err: any) {
@@ -149,7 +137,9 @@ export async function exportScreenPng(
       width: options.width,
       height: cssHeight,
       scale: options.scale,
-      bgColor: options.bgColor
+      bgColor: options.bgColor,
+      deviceProfile: options.deviceProfile, useCustomNavigation: options.useCustomNavigation,
+      viewportHeight: options.viewportHeight
     });
     return { dataUrl, engine: 'foreign-object', cssHeight, fallbackReason };
   } catch (legacyErr: any) {

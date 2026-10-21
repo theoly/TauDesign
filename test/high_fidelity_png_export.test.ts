@@ -125,6 +125,36 @@ describe('高保真 PNG 导出 (High-Fidelity PNG Export)', () => {
   });
 
   describe('CHK-F-04 ~ CHK-F-06: 引擎选择与回退链 (BR-PX-04/05)', () => {
+    test('导入页请求屏幕快照保留复杂背景，并如实回显引擎；普通页保留PDF路径', async () => {
+      const imported: Screen = { ...SCREEN, metadata: { importedHtml: { fileName: 'gradient.html', mode: 'preserve', categories: [], changes: [], retained: [], version: 1 } } };
+      const preferences: boolean[] = [];
+      const deps: PngExportDeps = {
+        isNativeAvailable: () => true,
+        measureHeight: async () => 1200,
+        nativeExport: async args => {
+          preferences.push(!!args.preferSnapshot);
+          return { dataUrl: PNG_DATA_URL, width: args.width * args.scale, height: args.height * args.scale,
+            engine: args.preferSnapshot ? 'native-webview-snapshot' : 'native-webview-pdf' };
+        },
+        legacyExport: async () => { throw new Error('不应降级'); }
+      };
+      expect((await exportScreenPng(imported, BASE_OPTIONS, deps)).engine).toBe('native-webview-snapshot');
+      expect((await exportScreenPng(SCREEN, BASE_OPTIONS, deps)).engine).toBe('native-webview-pdf');
+      expect(preferences).toEqual([true, false]);
+    });
+
+    test('导入页快照失败时保留兼容回退和明确原因，不返回已知会失真的PDF', async () => {
+      const imported = { ...SCREEN, metadata: { importedHtml: {} as any } };
+      const result = await exportScreenPng(imported, BASE_OPTIONS, {
+        isNativeAvailable: () => true,
+        measureHeight: async () => 1200,
+        nativeExport: async args => { expect(args.preferSnapshot).toBe(true); throw new Error('原生整页快照超时'); },
+        legacyExport: async () => LEGACY_DATA_URL
+      });
+      expect(result.engine).toBe('foreign-object');
+      expect(result.fallbackReason).toContain('原生整页快照超时');
+    });
+
     test('桌面端优先走原生渲染，结果标记为 native-webview-pdf', async () => {
       const deps: PngExportDeps = {
         isNativeAvailable: () => true,

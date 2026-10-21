@@ -1,9 +1,12 @@
+import { resolveProjectViewport } from '../../utils/referenceDevice';
+import { resolveThemeColors } from '../../utils/semanticColors';
 import React, { useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { compileTokensToCss } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
 import { buildStandaloneHtml, buildArtifactManifest } from '../../utils/exportRenderer';
 import { exportScreenPng, PngExportEngine } from '../../utils/pngExporter';
+import { useScreenResources } from '../../hooks/useScreenResources';
 import {
   dataUrlToBytes,
   saveExportFile,
@@ -40,8 +43,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
   const [isSavingHtml, setIsSavingHtml] = useState(false);
   const [lastEngine, setLastEngine] = useState<PngExportEngine | null>(null);
   const [copied, setCopied] = useState(false);
+  const referenceViewport = resolveProjectViewport(settings);
 
-  const screen = screens[selectedScreenId];
+  const { screen, loading: loadingResources, error: resourceError } = useScreenResources(screens[selectedScreenId]);
 
   // 1. Inlined Tokens (Current mode only, PRD D14)
   const tokensCss = compileTokensToCss(designSystem.tokens, settings.colorMode);
@@ -59,13 +63,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
     .join('\n');
 
   const standaloneHtml = screen
-    ? buildStandaloneHtml(screen, { tokensCss, baseCss, screenOverrides })
+    ? buildStandaloneHtml(screen, { tokensCss, baseCss, screenOverrides, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation })
     : '';
 
   const handleDownloadHtml = async () => {
     setExportError(null);
     setSaveResult(null);
-    if (!screen || isSavingHtml) return;
+    if (!screen || isSavingHtml || loadingResources || resourceError) return;
     setIsSavingHtml(true);
 
     try {
@@ -104,6 +108,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
   };
 
   const handleCopy = () => {
+    if (loadingResources || resourceError) return;
     navigator.clipboard.writeText(standaloneHtml);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -111,24 +116,24 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
 
   // --- PNG 导出：原生渲染器优先，失败回退 foreignObject (doc/feature/high-fidelity-png-export) ---
   const handleExportPng = async () => {
-    if (!screen) return;
+    if (!screen || loadingResources || resourceError) return;
     setIsExportingPng(true);
     setExportError(null);
     setExportNotice(null);
     setSaveResult(null);
 
     try {
-      const bgColor = settings.colorMode === 'light'
-        ? (designSystem.tokens.colors.background.light || '#ffffff')
-        : (designSystem.tokens.colors.background.dark || '#0f172a');
+      const bgColor = resolveThemeColors(designSystem.tokens, settings.colorMode).values.background;
 
       const outcome = await exportScreenPng(screen, {
+        viewportHeight: referenceViewport.height,
+        deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation,
         tokensCss,
         baseCss,
         screenOverrides,
         width: settings.frameWidth,
         clipToHeight: clipFirstScreen,
-        clipHeight: settings.viewportGuideHeight,
+        clipHeight: referenceViewport.height,
         fallbackHeight: screen.measuredHeight || 800,
         scale: pngScale,
         bgColor
@@ -143,7 +148,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
       });
       setSaveResult({ ...pngRes, label: `PNG ${pngScale}x` });
 
-      if (outcome.engine !== 'native-webview-pdf') {
+      if (outcome.engine === 'foreign-object') {
         setExportNotice(
           `已使用兼容渲染导出（${outcome.fallbackReason || '原生渲染不可用'}）。桌面端原生渲染可获得更高保真度。`
         );
@@ -198,6 +203,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
         </div>
 
         <div className="p-6 space-y-4 overflow-y-auto text-xs">
+          {loadingResources && <p className="text-xs text-blue-300">正在读取页面资源…</p>}
+          {resourceError && <p role="alert" className="rounded-lg bg-red-950/40 p-3 text-xs text-red-200">{resourceError}</p>}
           {saveResult && !exportError && (
             saveResult.status === 'canceled' ? (
               <div
@@ -374,7 +381,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                         checked={clipFirstScreen}
                         onChange={() => setClipFirstScreen(true)}
                       />
-                      <span>仅导出首屏 ({settings.viewportGuideHeight}px)</span>
+                      <span>仅导出首屏 ({referenceViewport.height}px)</span>
                     </label>
                   </div>
                 </div>
@@ -388,11 +395,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                 <p>
                   输出宽度: {settings.frameWidth * pngScale}px ·
                   {clipFirstScreen
-                    ? ` 高度按首屏参考线裁切 ${settings.viewportGuideHeight * pngScale}px`
+                    ? ` 高度按首屏参考线裁切 ${referenceViewport.height * pngScale}px`
                     : ' 高度于导出时实测整页内容，不受画布缓存值影响'}
                   {lastEngine && (
                     <span className="text-slate-500">
-                      {' '}· 上次引擎: {lastEngine === 'native-webview-pdf' ? '原生整页渲染' : '兼容渲染'}
+                      {' '}· 上次引擎: {lastEngine === 'foreign-object' ? '兼容渲染' : '原生整页渲染'}
                     </span>
                   )}
                 </p>
@@ -406,6 +413,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
           {exportType === 'html' ? (
             <button
               onClick={handleCopy}
+              disabled={loadingResources || !!resourceError}
               className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl text-xs transition border border-slate-700"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -420,7 +428,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
             {exportType === 'html' ? (
               <button
                 onClick={handleDownloadHtml}
-                disabled={isSavingHtml}
+                disabled={isSavingHtml || loadingResources || !!resourceError}
                 className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-xl text-xs transition shadow"
               >
                 {isSavingHtml ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
@@ -429,7 +437,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
             ) : (
               <button
                 onClick={handleExportPng}
-                disabled={isExportingPng}
+                disabled={isExportingPng || loadingResources || !!resourceError}
                 className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-xl text-xs transition shadow"
               >
                 {isExportingPng ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}

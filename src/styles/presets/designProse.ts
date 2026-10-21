@@ -51,5 +51,9 @@ export function getBuiltinDesignProse(presetId?: string): DesignProse {
   if (key && BUILTIN_DESIGN_PROSES[key]) {
     return BUILTIN_DESIGN_PROSES[key];
   }
+  if (key && /^(?:custom|import)-/.test(key)) {
+    return neutralProse(key, '项目自定义设计系统', '以用户选择与当前 Token 为准',
+      '遵循用户选定的设计系统：主色、背景层次、字体、圆角、阴影和密度均以当前 Token 为准。保留已有页面可复用的视觉语言；不要擅自套用其他预设的品牌色、装饰或信息密度。');
+  }
   return BUILTIN_DESIGN_PROSES['tech-blue'];
 }

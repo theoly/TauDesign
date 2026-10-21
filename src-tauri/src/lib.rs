@@ -1,3 +1,4 @@
+mod app_menu;
 mod export_save;
 mod png_export;
 mod project_fs;
@@ -158,6 +159,7 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            app_menu::install(app)?;
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
@@ -167,9 +169,11 @@ pub fn run() {
             }
             Ok(())
         })
+        .on_menu_event(app_menu::handle_event)
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             proxy_stream_request,
+            app_menu::set_html_import_menu_enabled,
             project_fs::project_ensure_dir,
             project_fs::project_exists,
             project_fs::project_read_text,

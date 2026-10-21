@@ -1,3 +1,5 @@
+import { ReferenceDeviceOption } from '../theme/ReferenceDeviceOption';
+import { defaultReferenceDevice, REFERENCE_DEVICES } from '../../utils/referenceDevice';
 import React, { useEffect, useMemo, useState } from 'react';
 import { BrandMark } from '../common/BrandMark';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
@@ -15,6 +17,10 @@ import {
 import { ProjectMeta } from '../../utils/projectRegistry';
 import { folderDisplayName, isDesktopRuntime, pickProjectFolder } from '../../services/storage/folderPicker';
 import { DesignSystemVisualPreview } from '../theme/DesignSystemVisualPreview';
+import { useProjectStore } from '../../stores/useProjectStore';
+import { CustomDesignSystemBuilder } from './CustomDesignSystemBuilder';
+import { DEFAULT_CUSTOM_DESIGN_SYSTEM, generateCustomDesignSystems } from '../../utils/customDesignSystem';
+import type { DesignSystem } from '../../types/designSystem';
 import {
   AlertTriangle,
   Check,
@@ -41,6 +47,8 @@ const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
 
   const srcDoc = useMemo(() => {
     if (!meta.previewHtml) return null;
+    // Imported thumbnails already include their original document, styles and CSP.
+    if (/^\s*(?:<!doctype\s+html\b|<html\b)/i.test(meta.previewHtml)) return meta.previewHtml;
     return `<!doctype html><html><head><meta charset="utf-8">
 <style>${meta.previewCss || ''}
   html,body{margin:0;padding:0;background:var(--color-bg,#fff);overflow:hidden;}
@@ -69,7 +77,7 @@ const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
     if (isMobile) {
       // 移动端：居中呈现精美手机壳体微缩视图，全屏排版一览无余，杜绝局部盲目放大
       const phoneH = 132;
-      const phoneScale = phoneH / 760; // ~0.1737
+      const phoneScale = phoneH / (meta.referenceViewportHeight ?? 760); // ~0.1737
       const phoneW = Math.round(meta.frameWidth * phoneScale); // ~68px
       return (
         <div className="w-full h-full relative overflow-hidden bg-gradient-to-b from-slate-900/80 via-slate-950 to-slate-950 flex items-center justify-center" data-testid="project-screen-cover">
@@ -87,7 +95,7 @@ const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
               className="border-0 pointer-events-none origin-top-left"
               style={{
                 width: `${meta.frameWidth}px`,
-                height: '760px',
+                height: `${meta.referenceViewportHeight ?? 760}px`,
                 transform: `scale(${phoneScale})`
               }}
             />
@@ -109,7 +117,7 @@ const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
           className="border-0 pointer-events-none origin-top"
           style={{
             width: `${meta.frameWidth}px`,
-            height: '600px',
+            height: `${meta.referenceViewportHeight ?? 600}px`,
             transform: `scale(${pcScale})`
           }}
         />
@@ -155,10 +163,15 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
   const [name, setName] = useState(() => (initialFolderPath ? folderDisplayName(initialFolderPath) : '未命名工程'));
   const [folderPath, setFolderPath] = useState<string | undefined>(initialFolderPath);
   const [device, setDevice] = useState<'pc' | 'mobile'>('pc');
+  const [useCustomNavigation, setUseCustomNavigation] = useState(false);
+  const [referenceDeviceId, setReferenceDeviceId] = useState('pc-standard');
+  const referenceDevice = REFERENCE_DEVICES.find(item => item.id === referenceDeviceId && item.deviceProfile === device) ?? defaultReferenceDevice(device);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('neutral-modern');
   const [searchPreset, setSearchPreset] = useState('');
   const [shape, setShape] = useState<Shape>('standard');
   const [domain, setDomain] = useState<Domain>('none');
+  const [designSystemMode, setDesignSystemMode] = useState<'preset' | 'custom'>('preset');
+  const [customTheme, setCustomTheme] = useState<DesignSystem | null>(() => generateCustomDesignSystems(DEFAULT_CUSTOM_DESIGN_SYSTEM, 0)[0].theme);
 
   const filteredPresets = useMemo(() => {
     const q = searchPreset.trim().toLowerCase();
@@ -173,6 +186,7 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
   }, [selectedPresetId]);
 
   const currentTheme = useMemo(() => {
+    if (designSystemMode === 'custom') return customTheme;
     const base = activePreset.theme;
     if (shape === 'standard') return base;
     const r =
@@ -186,7 +200,7 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
         radius: r
       }
     };
-  }, [activePreset, shape]);
+  }, [activePreset, shape, designSystemMode, customTheme]);
 
   const handlePickFolder = async () => {
     const picked = await pickProjectFolder('选择新工程的保存目录');
@@ -199,6 +213,7 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
   };
 
   const submit = () => {
+    if (!currentTheme) return;
     const trimmed = name.trim() || (folderPath ? folderDisplayName(folderPath) : '未命名工程');
     const decisions: string[] = [];
     if (domain !== 'none') {
@@ -210,7 +225,8 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
       };
       if (dMap[domain]) decisions.push(...dMap[domain]);
     }
-    createProject(trimmed, device, currentTheme, decisions, folderPath);
+    createProject(trimmed, device, currentTheme, decisions, folderPath, referenceDevice.id);
+    if (device === 'mobile' && useCustomNavigation) useProjectStore.getState().setUseCustomNavigation(true);
     onClose();
   };
 
@@ -263,7 +279,7 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
                   <button
                     key={opt.key}
                     type="button"
-                    onClick={() => setDevice(opt.key)}
+                    onClick={() => { setDevice(opt.key); setReferenceDeviceId(`${opt.key}-standard`); }}
                     className={`flex items-center gap-2 p-2.5 rounded-xl border transition text-left ${
                       device === opt.key
                         ? 'border-blue-500 bg-blue-950/40 text-blue-300'
@@ -280,6 +296,8 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
               </div>
             </div>
 
+            <ReferenceDeviceOption settings={{ deviceProfile: device, frameWidth: device === 'mobile' ? 390 : 1440, viewportGuideHeight: device === 'mobile' ? 844 : 900, referenceDevice, useCustomNavigation, showViewportGuide: true, colorMode: 'light', lodBudget: 12 }} onChange={setReferenceDeviceId} />
+            {device === 'mobile' && <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" aria-label="使用自定义导航栏" checked={useCustomNavigation} onChange={event => setUseCustomNavigation(event.target.checked)} />使用自定义导航栏<span className="text-[10px] text-slate-500">默认使用微信顶部栏预览</span></label>}
             {/* 3. Folder Path (Desktop) */}
             {isDesktop && (
               <div className="space-y-1.5">
@@ -318,8 +336,17 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
               </div>
             )}
 
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800" role="group" aria-label="设计系统来源">
+              {([{ value: 'preset', label: '现有预设' }, { value: 'custom', label: '自定义生成' }] as const).map(option => (
+                <button key={option.value} type="button" aria-pressed={designSystemMode === option.value} onClick={() => setDesignSystemMode(option.value)} className={`py-2 rounded-lg text-xs transition ${designSystemMode === option.value ? 'bg-slate-800 text-slate-100 font-semibold' : 'text-slate-400 hover:text-slate-200'}`}>{option.label}</button>
+              ))}
+            </div>
+            <div hidden={designSystemMode !== 'custom'}>
+              <CustomDesignSystemBuilder onChange={setCustomTheme} />
+            </div>
+
             {/* 4. Design System Presets Selector (OpenDesign style) */}
-            <div className="space-y-2 pt-1 border-t border-slate-800/80">
+            <div hidden={designSystemMode !== 'preset'} className="space-y-2 pt-1 border-t border-slate-800/80">
               <div className="flex items-center justify-between">
                 <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                   设计系统预设
@@ -376,7 +403,7 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
             </div>
 
             {/* 5. Radius Tuning */}
-            <div className="space-y-1.5 pt-1 border-t border-slate-800/80">
+            <div hidden={designSystemMode !== 'preset'} className="space-y-1.5 pt-1 border-t border-slate-800/80">
               <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">圆角微调</label>
               <div className="grid grid-cols-3 gap-1.5">
                 {SHAPE_OPTIONS.map((opt) => (
@@ -399,7 +426,7 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
 
           {/* Right Column: Visual Preview */}
           <div className="flex-1 flex flex-col min-w-0 bg-slate-950 overflow-hidden">
-            <DesignSystemVisualPreview theme={currentTheme} />
+            {currentTheme ? <DesignSystemVisualPreview theme={currentTheme} device={device} /> : <div className="flex-1 flex items-center justify-center p-8 text-sm text-slate-400">请输入有效主色，以预览并创建自定义设计系统。</div>}
           </div>
         </div>
 
@@ -417,7 +444,8 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
             </button>
             <button
               onClick={submit}
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-xs shadow transition flex items-center gap-1.5"
+              disabled={!currentTheme}
+              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-xs shadow transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>创建并进入工程</span>

@@ -155,17 +155,17 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
   // Find target screen position for staged screen
   const targetScreen = stagedScreen ? screens[stagedScreen.targetScreenId] : null;
   const candidateQuality = useMemo(() => stagedScreen ? checkGenerationQuality(stagedScreen.newHtml, {
-    deviceProfile: settings.deviceProfile, designSystem, baselineHtml: targetScreen?.htmlContent,
+    deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation, designSystem, baselineHtml: targetScreen?.htmlContent,
     modificationRequest: stagedScreen.modificationRequest,
     protectedNids: useProjectStore.getState().getProtectedNids(stagedScreen.targetScreenId)
-  }) : null, [stagedScreen, targetScreen?.htmlContent, settings.deviceProfile, designSystem, overrides]);
+  }) : null, [stagedScreen, targetScreen?.htmlContent, settings.deviceProfile, settings.useCustomNavigation, designSystem, overrides]);
 
   const [renderReports, setRenderReports] = useState<Record<string, { key: string; report: RenderedQualityReport }>>({});
   const [qualityFocus, setQualityFocus] = useState<{ screenId: string; nid: string } | null>(null);
-  const activeRenderKey = useMemo(() => JSON.stringify([projectId, settings.deviceProfile, settings.colorMode, designSystem.tokens, overrides,
+  const activeRenderKey = useMemo(() => JSON.stringify([projectId, settings.deviceProfile, settings.useCustomNavigation, settings.colorMode, designSystem.tokens, overrides,
     activeScreenId, screens[activeScreenId || '']?.htmlContent, screens[activeScreenId || '']?.scopedCss,
     stagedScreen?.targetScreenId, stagedScreen?.newHtml, targetScreen?.scopedCss]),
-    [projectId, settings.deviceProfile, settings.colorMode, designSystem.tokens, overrides, activeScreenId, screens, stagedScreen, targetScreen?.scopedCss]);
+    [projectId, settings.deviceProfile, settings.useCustomNavigation, settings.colorMode, designSystem.tokens, overrides, activeScreenId, screens, stagedScreen, targetScreen?.scopedCss]);
   const renderKey = stagedScreen ? useProjectStore.getState().getStagedRenderContextKey() : activeRenderKey;
   const currentRenderKey = useRef(renderKey);
   currentRenderKey.current = renderKey;
@@ -269,6 +269,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
                 },
                 htmlContent: stagedScreen.newHtml,
                 scopedCss: targetScreen.scopedCss,
+                metadata: { ...targetScreen.metadata, ...(stagedScreen.navigationTitle ? { navigationTitle: stagedScreen.navigationTitle } : {}) },
                 measuredHeight: targetScreen.measuredHeight
               }}
               lodLevel={2}

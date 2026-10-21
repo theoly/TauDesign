@@ -1,3 +1,5 @@
+import { referenceDevicePrompt } from '../../utils/referenceDevice';
+import type { ReferenceDevice } from '../../types/project';
 import { renderDesignBrief, type DesignBrief } from './designBrief';
 import { renderComponentContracts, renderProjectComponents } from './componentContracts';
 import { DesignSystem } from '../../types/designSystem';
@@ -93,7 +95,10 @@ export interface PromptBuildOptions {
   designProseMarkdown?: string;
   designProseSource?: 'project_override' | 'builtin_preset';
   deviceProfile: 'pc' | 'mobile';
+  useCustomNavigation?: boolean;
   frameWidth: number;
+  referenceDevice?: ReferenceDevice;
+  viewportGuideHeight?: number;
   components?: ComponentDefinition[];
   /**
    * 当前工程生效的明暗模式 (ISSUE-015)。Token 必须按此模式编译，
@@ -123,27 +128,16 @@ export class PromptBuilder {
 
     // 1. role_core
     const roleContent = `### ROLE & CORE CONSTRAINTS:
-You are the Expert AI UI/UX Design Engine for "TauDesign".
-You generate production-ready HTML and styles for web and mobile applications using modern, token-driven, pixel-perfect design standards.
-1. STYLING ARCHITECTURE:
-   - Output ONLY clean, valid HTML5 with semantic structures.
-   - You MUST use the provided utility class names and CSS variables.
-   - ABSOLUTELY NO arbitrary inline styles with hardcoded hex/rgb colors (e.g. style="color: #123456" is FORBIDDEN).
-   - All colors, margins, fonts, radii, and shadows MUST reference CSS variables or white-listed classes.
-   - DO NOT include <script> tags.
-2. ICONS & IMAGES:
-   - Use inline SVG icons with stroke="currentColor" and class="icon" (default 20x20px).
-   - NEVER output bare, unconstrained SVGs inside input fields or cards without class="icon".
-   - When placing icons inside text inputs, ALWAYS wrap them in <div class="input-group"><svg class="icon" .../><input class="input" .../></div>.
-   - For images, you may use placeholder SVG data URLs or valid image URLs.
+You are TauDesign's expert UI/UX engine. Generate polished, semantic HTML5 for web/mobile.
+1. STYLING ARCHITECTURE: Use ONLY the supplied utility classes and CSS variables for colors, spacing, fonts, radii and shadows. No hardcoded hex/rgb or <script> tags.
+2. ICONS & IMAGES: Inline SVG uses class="icon" (20x20px), stroke="currentColor"; never unconstrained SVG. Input icons: <div class="input-group"><svg class="icon" .../><input class="input" .../></div>. Images: valid URLs or placeholder SVG data URLs.
 3. TARGET DEVICE PROFILE:
    - Width: ${options.frameWidth}px (${options.deviceProfile.toUpperCase()})
    - Height: Content driven (natural height)
+   - ${referenceDevicePrompt({ ...options, viewportGuideHeight: options.viewportGuideHeight ?? (options.deviceProfile === 'mobile' ? 844 : 900) })}
 4. COLOR MODE (CRITICAL):
-   - The project is currently rendering in ${(options.colorMode ?? 'light').toUpperCase()} mode.
-   - The token values below are already resolved for ${(options.colorMode ?? 'light').toUpperCase()} mode. Do NOT infer a different mode from them.
-   - NEVER hardcode a color literal. The user can toggle light/dark at any time, and the page MUST follow that toggle automatically.
-   - This only works if every color comes from var(--color-*) or a white-listed class. A literal such as background:#0b1020 permanently freezes the page in one mode and is a defect.${
+   - Render in ${(options.colorMode ?? 'light').toUpperCase()} mode; tokens below resolve this mode.
+   - NEVER hardcode a color literal. Every color must use var(--color-*) or a whitelisted class so pages follow toggle light/dark automatically.${
      options.hasAttachment
        ? `\n5. REFERENCE IMAGE FIDELITY:
    - Faithfully reproduce visual warmth and palette (.bg-ambient-warm, .bg-ambient-cool, .bg-gradient-soft).
@@ -162,14 +156,15 @@ You generate production-ready HTML and styles for web and mobile applications us
     sections.push({ id: 'design_spec', content: specContent });
 
     // 3. design_tokens
-    const tokensCss = compileTokensToCss(options.designSystem.tokens, options.colorMode ?? 'light', options.deviceProfile);
+    const tokensCss = compileTokensToCss(options.designSystem.tokens, options.colorMode ?? 'light', options.deviceProfile)
+      .replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n\s*/g, '').trim();
     const tokensContent = `### DESIGN TOKENS:\n\`\`\`css\n${tokensCss}\n\`\`\``;
     sections.push({ id: 'design_tokens', content: tokensContent });
 
     // 4. class_whitelist
     const classWhitelist = extractClassWhitelist(getBaseCss(options.deviceProfile))
       .map((c) => `.${c}`)
-      .join(', ');
+      .join(',');
     const whitelistContent = `### CLASS WHITELIST (derived from base.css — these are the ONLY classes that exist):\n${classWhitelist}`;
     sections.push({ id: 'class_whitelist', content: whitelistContent });
 
@@ -185,7 +180,7 @@ ${renderProjectComponents(options.components)}` : ''}` });
     const wantsCraft = intent === 'create_screen' || intent === 'modify_screen';
     if (wantsCraft) {
       const craftBase = renderCraftSection(intent);
-      const deviceRules = getDeviceAestheticRules(options.deviceProfile);
+      const deviceRules = getDeviceAestheticRules(options.deviceProfile, options.useCustomNavigation);
       const craftContent = `${craftBase}\n\n#### 设备档位专属工艺约束 (${options.deviceProfile.toUpperCase()} Profile)\n${deviceRules}\n\n#### 视觉层次金律 (VISUAL HIERARCHY)\n${GOLDEN_HIERARCHY}${intent === 'create_screen' ? `\n\n${NEW_SCREEN_STATE_RULES}` : ''}`;
       sections.push({ id: 'craft_references', content: craftContent });
     }
@@ -194,7 +189,7 @@ ${renderProjectComponents(options.components)}` : ''}` });
     if (intent === 'create_screen' && !options.hasAttachment) {
       const exampleContent = `### REFERENCE EXAMPLE (component patterns):
 完整结构示例见 COMPONENT LIBRARY。按当前业务组合组件，勿照搬示例姓名、数据或页面用途。
-${options.deviceProfile === 'mobile' ? '移动端保持单列，按设备规范提供状态栏、导航与安全区。' : 'PC页面使用container-max，正文层级与操作区分组。'}
+${options.deviceProfile === 'mobile' ? '移动端保持单列并遵守当前导航策略；系统顶部栏不写入页面HTML。' : 'PC页面使用container-max，正文层级与操作区分组。'}
 用户提供的文案必须完整保留；自拟短标签应控制长度，业务数据按场景换行。`;
       sections.push({ id: 'reference_example', content: exampleContent });
     }

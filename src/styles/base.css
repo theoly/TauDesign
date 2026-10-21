@@ -154,7 +154,7 @@ a { color: var(--color-primary-text); }
 .text-primary { color: var(--color-primary-text, var(--color-primary)); }
 .text-secondary { color: var(--color-text-secondary, #475569); }
 .text-muted { color: var(--color-text-muted, #94a3b8); }
-.text-inverse { color: #ffffff; }
+.text-inverse { color: var(--color-inverse-text); }
 .text-success { color: var(--color-success, #16a34a); }
 .text-warning { color: var(--color-warning, #d97706); }
 .text-danger { color: var(--color-danger, #dc2626); }
@@ -261,7 +261,7 @@ a { color: var(--color-primary-text); }
   transition: background-color 0.15s ease, opacity 0.15s ease;
 }
 
-.btn:hover { opacity: 0.9; }
+
 
 .btn-sm {
   padding: 4px 10px;
@@ -286,9 +286,7 @@ a { color: var(--color-primary-text); }
   border-color: var(--color-border, #e2e8f0);
 }
 
-.btn-ghost:hover {
-  background-color: var(--color-surface-alt, #f1f5f9);
-}
+
 
 .input, .select {
   min-width: 0;
@@ -296,7 +294,7 @@ a { color: var(--color-primary-text); }
   font-size: var(--font-size-sm, 14px);
   padding: 8px 12px;
   border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--color-border, #e2e8f0);
+  border: 1px solid var(--color-control-border);
   background-color: var(--color-surface, #ffffff);
   color: var(--color-text-primary, #0f172a);
   outline: none;
@@ -304,8 +302,8 @@ a { color: var(--color-primary-text); }
 }
 
 .input:focus, .select:focus {
-  border-color: var(--color-primary, #2563eb);
-  box-shadow: 0 0 0 2px var(--color-primary-light, #dbeafe);
+  border-color: var(--color-focus-ring);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 
 .badge {
@@ -427,8 +425,8 @@ a { color: var(--color-primary-text); }
   border-radius: var(--radius-md, 8px);
 }
 .input-group:focus-within {
-  border-color: var(--color-primary, #2563eb);
-  box-shadow: 0 0 0 2px var(--color-primary-light, #dbeafe);
+  border-color: var(--color-focus-ring);
+  box-shadow: 0 0 0 2px var(--color-focus-ring);
 }
 .input-group > .input {
   flex: 1 1 0%;
@@ -457,7 +455,7 @@ a { color: var(--color-primary-text); }
   font-size: var(--font-size-xs, 12px);
   font-weight: 600;
   border-radius: var(--radius-full, 9999px);
-  border: 1px solid var(--color-border, #e2e8f0);
+  border: 1px solid var(--color-control-border);
   background-color: var(--color-surface-alt, #f1f5f9);
   color: var(--color-text-secondary, #475569);
 }
@@ -551,3 +549,29 @@ a { color: var(--color-primary-text); }
   background-color: var(--color-surface-alt, #f1f5f9);
   border-radius: var(--radius-sm, 4px);
 }
+
+/* Semantic component pairs. State colors preserve foreground/background pairing. */
+.btn-secondary { background-color: var(--color-primary-light); color: var(--color-primary-text); }
+.btn-outline { background-color: transparent; color: var(--color-primary-text); border-color: var(--color-primary-text); }
+.btn-text { background-color: transparent; color: var(--color-primary-text); }
+.btn-danger { background-color: var(--color-danger-fill); color: var(--color-on-danger); }
+.btn-primary:active:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-active); }
+.btn-danger:active:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-danger-active); }
+.btn-secondary:active:not(:disabled):not([aria-disabled="true"]), .btn-outline:active:not(:disabled):not([aria-disabled="true"]), .btn-text:active:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-light); }
+.btn:focus-visible, .input:focus-visible, .select:focus-visible {
+  outline: var(--space-1) solid var(--color-focus-ring);
+  outline-offset: var(--space-1);
+}
+.btn:disabled, .btn[aria-disabled="true"], .input:disabled, .select:disabled {
+  background-color: var(--color-disabled-bg); color: var(--color-disabled-text);
+  border-color: var(--color-border); cursor: not-allowed; box-shadow: none;
+}
+.input::placeholder { color: var(--color-text-muted); opacity: 1; }
+.is-selected { background-color: var(--color-selected-bg); color: var(--color-selected-text); }
+.bg-overlay { background-color: var(--color-overlay-surface); color: var(--color-text-primary); }
+.bg-inverse { background-color: var(--color-inverse-bg); color: var(--color-inverse-text); }
+.bg-scrim { background-color: color-mix(in srgb, var(--color-scrim) 60%, transparent); }
+.bg-info-light { background-color: var(--color-info-light); color: var(--color-info); }
+.text-info { color: var(--color-info); }
+
+.input:disabled::placeholder { color: var(--color-disabled-text); }

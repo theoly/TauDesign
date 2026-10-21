@@ -1,3 +1,4 @@
+import type { ColorRole } from './colorRoles';
 export type ModePair = { light: string; dark: string };
 export type Ramp = { [step: string]: string };
 
@@ -15,6 +16,8 @@ export interface DesignSystemTokens {
     textSecondary: ModePair;
     border: ModePair;
   };
+  /** 缺省为自动；可选字段保持旧工程兼容。 */
+  colorRoles?: Partial<Record<'light' | 'dark', Partial<Record<ColorRole, ColorBinding>>>>;
   typography: {
     fontFamilySans: string;
     fontFamilyMono: string;
@@ -93,3 +96,5 @@ export interface DesignProse {
   rulesMarkdown: string;
   source: 'project_override' | 'builtin_preset';
 }
+
+export type ColorBinding = { source: 'custom'; value: string } | { source: 'alias'; role: ColorRole };

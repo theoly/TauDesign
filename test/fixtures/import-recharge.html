@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>充值魔方点</title>
+    <style id="theme-vars">
+:root {
+  --amf-background: #fdf6ee;
+  --amf-page: #f7efe5;
+  --amf-card: #ffffff;
+  --amf-muted: #f5ecdf;
+  --amf-soft: #faf2e6;
+  --amf-foreground: #2a1f14;
+  --amf-muted-foreground: #6b5a45;
+  --amf-faint: #a89578;
+  --amf-border: rgba(42, 31, 20, 0.08);
+  --amf-border-strong: rgba(42, 31, 20, 0.16);
+  --amf-primary: oklch(0.72 0.16 42);
+  --amf-primary-soft: oklch(0.92 0.06 42);
+  --amf-primary-deep: oklch(0.55 0.17 42);
+  --amf-mint: oklch(0.82 0.09 165);
+  --amf-lilac: oklch(0.78 0.09 295);
+  --amf-sun: oklch(0.86 0.11 85);
+  --amf-sky: oklch(0.82 0.08 230);
+  --amf-rose: oklch(0.8 0.11 15);
+  --amf-success: oklch(0.65 0.13 160);
+  --amf-warning: oklch(0.74 0.14 75);
+  --amf-danger: oklch(0.62 0.18 25);
+  --state-success: var(--amf-success);
+  --state-warning: var(--amf-warning);
+  --state-error: var(--amf-danger);
+  --state-info: var(--amf-sky);
+  --amf-font-primary: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Alibaba PuHuiTi", system-ui, sans-serif;
+  --amf-font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --amf-radius-sm: 10px;
+  --amf-radius-md: 14px;
+  --amf-radius-lg: 20px;
+  --amf-radius-xl: 28px;
+  --amf-shadow-card: 0 14px 28px rgba(42, 31, 20, 0.05);
+  --amf-shadow-float: 0 24px 48px rgba(42, 31, 20, 0.12);
+}
+
+.dark {
+  --amf-background: #201812;
+  --amf-page: #261d16;
+  --amf-card: #2c221b;
+  --amf-muted: #362a22;
+  --amf-soft: #3d3027;
+  --amf-foreground: #f7efe5;
+  --amf-muted-foreground: rgba(247, 239, 229, 0.75);
+  --amf-faint: rgba(247, 239, 229, 0.48);
+  --amf-border: rgba(247, 239, 229, 0.1);
+  --amf-border-strong: rgba(247, 239, 229, 0.16);
+  --amf-shadow-card: 0 14px 28px rgba(0, 0, 0, 0.22);
+  --amf-shadow-float: 0 24px 56px rgba(0, 0, 0, 0.34);
+}
+
+html,
+body {
+  font-family: var(--amf-font-primary);
+}
+
+.amf-h1 {
+  font-family: var(--amf-font-primary);
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.amf-h2 {
+  font-family: var(--amf-font-primary);
+  font-size: 20px;
+  line-height: 1.24;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.amf-h3 {
+  font-family: var(--amf-font-primary);
+  font-size: 17px;
+  line-height: 1.35;
+  font-weight: 650;
+}
+
+.amf-body {
+  font-family: var(--amf-font-primary);
+  font-size: 14px;
+  line-height: 1.6;
+  font-weight: 400;
+}
+
+.amf-caption {
+  font-family: var(--amf-font-primary);
+  font-size: 12px;
+  line-height: 1.45;
+  font-weight: 500;
+}
+    </style>
+    <style id="semantic-token-fallback">
+.bg-background { background-color: var(--amf-background); }
+.text-foreground { color: var(--amf-foreground); }
+.bg-card { background-color: var(--amf-card); }
+.bg-primary { background-color: var(--amf-primary); }
+.text-primary { color: var(--amf-primary); }
+.bg-muted { background-color: var(--amf-muted); }
+.text-muted-foreground { color: var(--amf-muted-foreground); }
+.border-border { border-color: var(--amf-border); }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.1/dist/index.global.js"></script>
+    <script src="https://unpkg.com/lucide@1.8.0/dist/umd/lucide.min.js"></script>
+    <style type="text/tailwindcss">
+  @theme inline {
+    --color-background: var(--amf-background);
+    --color-foreground: var(--amf-foreground);
+    --color-card: var(--amf-card);
+    --color-primary: var(--amf-primary);
+    --color-muted: var(--amf-muted);
+    --color-muted-foreground: var(--amf-muted-foreground);
+    --color-border: var(--amf-border);
+  }
+  @layer base {
+    body { background: var(--amf-background); color: var(--amf-foreground); }
+    td, th { @apply break-words; word-break: break-all; word-break: auto-phrase; }
+    th { @apply whitespace-nowrap; }
+  }
+    </style>
+    <style>
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+      .no-wrap {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* ===== Balance Card ===== */
+      .balance-gradient {
+        background: linear-gradient(145deg, #ff8a5c 0%, #ff6b35 40%, #e85d2a 100%);
+        position: relative;
+      }
+      .balance-gradient::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 85% 15%, rgba(255,255,255,0.18) 0%, transparent 50%),
+          radial-gradient(circle at 10% 85%, rgba(255,255,255,0.08) 0%, transparent 40%);
+        pointer-events: none;
+      }
+      .balance-deco {
+        position: absolute;
+        border-radius: 18px;
+        border: 1.5px solid rgba(255,255,255,0.18);
+        pointer-events: none;
+      }
+      .balance-sparkle {
+        position: absolute;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.5);
+        pointer-events: none;
+      }
+
+      /* ===== Package Cards ===== */
+      .pkg-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        border-radius: 18px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        border: 2px solid transparent;
+      }
+      .pkg-card .pkg-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 24px 10px 30px;
+        position: relative;
+        background: linear-gradient(170deg, #f0e0cc 0%, #d4b896 100%);
+      }
+      .pkg-card .pkg-body .diamond-watermark {
+        position: absolute;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 90px;
+        height: 90px;
+        opacity: 0.12;
+        pointer-events: none;
+      }
+      .pkg-card .pkg-body .coin-amount {
+        font-size: 26px;
+        font-weight: 800;
+        color: #3a2a1a;
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+        position: relative;
+        z-index: 1;
+      }
+      .pkg-card .pkg-body .coin-amount .unit {
+        font-size: 15px;
+        font-weight: 700;
+        margin-left: 1px;
+      }
+      .pkg-card .pkg-body .pkg-price {
+        margin-top: 10px;
+        font-size: 16px;
+        font-weight: 700;
+        color: #5a4530;
+        position: relative;
+        z-index: 1;
+      }
+      .pkg-card .pkg-body .pkg-price .yuan {
+        font-size: 13px;
+      }
+      .pkg-card .pkg-footer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 10px;
+        background: linear-gradient(180deg, #2a1f14 0%, #1a1208 100%);
+        font-size: 13px;
+        font-weight: 700;
+        color: #fff;
+        letter-spacing: 0.02em;
+      }
+      .pkg-card.selected {
+        border-color: var(--amf-primary);
+        box-shadow: 0 0 0 1.5px var(--amf-primary), 0 8px 24px rgba(255, 122, 69, 0.22);
+        transform: translateY(-2px);
+      }
+      .pkg-card.selected .pkg-body {
+        background: linear-gradient(170deg, #fce8d4 0%, #f5d5b8 100%);
+      }
+      .pkg-card.deselected {
+        opacity: 0.78;
+      }
+      .pkg-card .pkg-badge {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(135deg, #ffb347, #ff6b35);
+        z-index: 2;
+      }
+
+      /* ===== Rules ===== */
+      .rules-card {
+        background: var(--amf-card);
+        border: 1px solid var(--amf-border);
+        border-radius: 16px;
+        position: relative;
+        overflow: hidden;
+      }
+      .rules-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--amf-primary), var(--amf-sun), var(--amf-primary));
+        opacity: 0.5;
+      }
+
+      /* ===== Bottom CTA ===== */
+      .cta-btn {
+        position: relative;
+        display: inline-flex;
+        height: 52px;
+        width: 100%;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        border-radius: 26px;
+        font-size: 16px;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(135deg, #ff8a5c, #e85d2a);
+        box-shadow: 0 8px 28px rgba(255, 107, 53, 0.35), 0 2px 8px rgba(255, 107, 53, 0.2);
+        letter-spacing: 0.01em;
+        transition: all 0.2s;
+      }
+      .cta-btn::after {
+        content: '';
+        position: absolute;
+        inset: -2px;
+        border-radius: 28px;
+        background: linear-gradient(135deg, rgba(255,138,92,0.4), rgba(232,93,42,0.4));
+        filter: blur(8px);
+        opacity: 0.5;
+        z-index: -1;
+      }
+    </style>
+</head>
+<body class="font-sans antialiased">
+    <main>
+        <div class="min-h-screen bg-[var(--amf-background)] text-[var(--amf-foreground)]">
+            <!-- Header -->
+            <header class="sticky top-0 z-40 bg-[var(--amf-background)]/95 backdrop-blur-md">
+                <div class="h-11"></div>
+                <div class="flex h-11 items-center px-4">
+                    <div class="flex w-[88px] items-center justify-start">
+                        <button data-dom-id="back" class="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-[var(--amf-muted)] transition-colors" aria-label="返回">
+                            <i data-lucide="chevron-left" class="h-5 w-5 text-[var(--amf-foreground)]"></i>
+                        </button>
+                    </div>
+                    <div class="min-w-0 flex-1 text-center text-[16px] font-semibold tracking-[-0.02em] text-[var(--amf-foreground)]">充值魔方点</div>
+                    <div class="flex w-[88px] items-center justify-end">
+                        <button data-dom-id="history" class="inline-flex h-8 w-8 items-center justify-center rounded-full hover:bg-[var(--amf-muted)] transition-colors" aria-label="充值记录">
+                            <i data-lucide="clock" class="h-4.5 w-4.5 text-[var(--amf-muted-foreground)]"></i>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <div class="px-4 pb-[180px]">
+                <!-- Balance Card -->
+                <section class="balance-gradient rounded-[22px] px-5 py-5 mb-5 relative overflow-hidden" style="box-shadow: 0 12px 32px rgba(255, 107, 53, 0.2), 0 4px 12px rgba(255, 107, 53, 0.1);">
+                    <!-- Decorative cubes -->
+                    <div class="balance-deco" style="width: 80px; height: 80px; top: -20px; right: -15px; transform: rotate(15deg);"></div>
+                    <div class="balance-deco" style="width: 50px; height: 50px; bottom: -10px; left: -8px; transform: rotate(-8deg);"></div>
+                    <div class="balance-deco" style="width: 30px; height: 30px; top: 12px; right: 60px; transform: rotate(30deg); opacity: 0.5;"></div>
+                    <!-- Sparkles -->
+                    <div class="balance-sparkle" style="top: 18px; right: 40px;"></div>
+                    <div class="balance-sparkle" style="top: 45px; right: 90px; width: 3px; height: 3px; opacity: 0.7;"></div>
+                    <div class="balance-sparkle" style="bottom: 20px; left: 50px; width: 3px; height: 3px; opacity: 0.6;"></div>
+                    <div class="relative z-10">
+                        <p class="text-[12px] font-medium text-white/60 mb-1.5 tracking-wide">当前余额</p>
+                        <div class="flex items-baseline gap-1.5">
+                            <span class="text-[40px] font-extrabold text-white leading-none" style="letter-spacing: -0.04em; text-shadow: 0 2px 8px rgba(0,0,0,0.1);">128</span>
+                            <span class="text-[14px] font-semibold text-white/80 ml-0.5">魔方点</span>
+                        </div>
+                        <div class="mt-3 flex items-center gap-1.5">
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium text-white/80" style="background: rgba(255,255,255,0.15);">
+                                <i data-lucide="sparkles" class="h-3 w-3"></i>
+                                发送小纸条 · 解锁嘉宾 · 赠送礼物
+                            </span>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Coin Usage Hint -->
+
+
+                <!-- Package Selection -->
+                <section class="mb-5">
+                    <h2 class="amf-h3 mb-3 px-0.5">选择充值套餐</h2>
+                    <div class="grid grid-cols-3 gap-3">
+                        <!-- 60 币 - 默认选中 -->
+                        <button data-dom-id="pkg-60" class="pkg-card selected">
+                            <div class="pkg-body">
+                                <svg class="diamond-watermark" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M60 10L100 45L60 110L20 45L60 10Z" fill="#fff"/>
+                                    <path d="M60 10L80 45L60 110L40 45L60 10Z" fill="rgba(255,255,255,0.3)"/>
+                                    <path d="M20 45L60 55L100 45" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                                    <path d="M40 45L60 110" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+                                    <path d="M80 45L60 110" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+                                </svg>
+                                <span class="coin-amount">60<span class="unit">币</span></span>
+                                <span class="pkg-price"><span class="yuan">¥</span>6.00元</span>
+                            </div>
+                            <div class="pkg-footer">首充+60币</div>
+                        </button>
+                        <!-- 300 币 -->
+                        <button data-dom-id="pkg-300" class="pkg-card deselected">
+                            <div class="pkg-body">
+                                <svg class="diamond-watermark" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M60 10L100 45L60 110L20 45L60 10Z" fill="#fff"/>
+                                    <path d="M60 10L80 45L60 110L40 45L60 10Z" fill="rgba(255,255,255,0.3)"/>
+                                    <path d="M20 45L60 55L100 45" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                                    <path d="M40 45L60 110" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+                                    <path d="M80 45L60 110" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+                                </svg>
+                                <span class="coin-amount">300<span class="unit">币</span></span>
+                                <span class="pkg-price"><span class="yuan">¥</span>30.00元</span>
+                            </div>
+                            <div class="pkg-footer">首充+300币</div>
+                        </button>
+                        <!-- 980 币 - 9折 -->
+                        <button data-dom-id="pkg-980" class="pkg-card deselected">
+                            <div class="pkg-body" style="background: linear-gradient(170deg, #faf0e0 0%, #f0ddb8 100%);">
+                                <span class="pkg-badge">9折</span>
+                                <svg class="diamond-watermark" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M60 10L100 45L60 110L20 45L60 10Z" fill="#fff"/>
+                                    <path d="M60 10L80 45L60 110L40 45L60 10Z" fill="rgba(255,255,255,0.3)"/>
+                                    <path d="M20 45L60 55L100 45" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+                                    <path d="M40 45L60 110" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+                                    <path d="M80 45L60 110" stroke="rgba(255,255,255,0.15)" stroke-width="1"/>
+                                </svg>
+                                <span class="coin-amount">980<span class="unit">币</span></span>
+                                <span class="pkg-price"><span class="yuan">¥</span>88.00元</span>
+                            </div>
+                            <div class="pkg-footer">首充+980币</div>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Rules -->
+                <section class="mb-4">
+                    <h2 class="amf-h3 mb-2 px-0.5">充值说明</h2>
+                    <div class="rules-card px-4 py-4">
+                        <ul class="space-y-2.5 text-[12px] text-[var(--amf-muted-foreground)] leading-[1.6]">
+                            <li class="flex gap-2.5">
+                                <span class="mt-1 flex-shrink-0 flex h-4 w-4 items-center justify-center rounded-full" style="background: var(--amf-primary-soft);">
+                                    <i data-lucide="check" class="h-2.5 w-2.5 text-[var(--amf-primary)]" style="stroke-width: 3;"></i>
+                                </span>
+                                <span>魔方点充值后立即到账，可用于发送小纸条、解锁心动嘉宾资料、赠送虚拟礼物等</span>
+                            </li>
+                            <li class="flex gap-2.5">
+                                <span class="mt-1 flex-shrink-0 flex h-4 w-4 items-center justify-center rounded-full" style="background: var(--amf-primary-soft);">
+                                    <i data-lucide="check" class="h-2.5 w-2.5 text-[var(--amf-primary)]" style="stroke-width: 3;"></i>
+                                </span>
+                                <span>首次充值任意套餐可享额外赠送，赠送魔方点随套餐一同到账</span>
+                            </li>
+                            <li class="flex gap-2.5">
+                                <span class="mt-1 flex-shrink-0 flex h-4 w-4 items-center justify-center rounded-full" style="background: var(--amf-primary-soft);">
+                                    <i data-lucide="check" class="h-2.5 w-2.5 text-[var(--amf-primary)]" style="stroke-width: 3;"></i>
+                                </span>
+                                <span>大额充值享更多赠送，请根据需要选择合适的套餐</span>
+                            </li>
+                            <li class="flex gap-2.5">
+                                <span class="mt-1 flex-shrink-0 flex h-4 w-4 items-center justify-center rounded-full" style="background: var(--amf-primary-soft);">
+                                    <i data-lucide="check" class="h-2.5 w-2.5 text-[var(--amf-primary)]" style="stroke-width: 3;"></i>
+                                </span>
+                                <span>魔方点一经充值不可退换，如遇异常请联系客服处理</span>
+                            </li>
+                        </ul>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Bottom CTA + Agreement -->
+            <div class="fixed inset-x-0 bottom-0 z-40 px-4 pb-4 pt-3" style="background: linear-gradient(to top, var(--amf-background) 65%, transparent);">
+                <!-- Agreement -->
+                <div data-dom-id="agreement-toggle" class="flex items-center justify-center gap-1.5 mb-3">
+                    <button data-dom-id="agree-check" class="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] flex-shrink-0" style="background: var(--amf-primary); box-shadow: 0 2px 6px rgba(255, 122, 69, 0.3);">
+                        <i data-lucide="check" class="h-2.5 w-2.5 text-white" style="stroke-width: 3;"></i>
+                    </button>
+                    <span class="text-[11px] text-[var(--amf-muted-foreground)]">点击支付即代表阅读和同意</span>
+                    <button data-dom-id="view-agreement" class="text-[11px] text-[var(--amf-primary)] font-semibold">《增值服务协议》</button>
+                </div>
+                <!-- CTA -->
+                <button data-dom-id="cta-recharge" class="cta-btn no-wrap">
+                    获取魔方点 · ¥6.00
+                </button>
+                <div style="height: calc(env(safe-area-inset-bottom, 0px) + 8px);"></div>
+            </div>
+        </div>
+    </main>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

@@ -1,3 +1,4 @@
+import { ColorRoleEditor } from './ColorRoleEditor';
 import React, { useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { themePresets } from '../../utils/themePresets';
@@ -186,7 +187,8 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               </div>
 
               {/* Theme Presets */}
-              <div className="space-y-3">
+              <details className="space-y-3">
+                <summary className="cursor-pointer text-slate-300 font-semibold">选择主题风格预设</summary>
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-semibold text-slate-300 block">主题风格预设包 (一键切换全画板联动)</span>
                   <button
@@ -226,7 +228,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                     );
                   })}
                 </div>
-              </div>
+              </details>
 
               {/* Primary Color Picker */}
               <div className="space-y-3 p-4 bg-slate-950 border border-slate-800 rounded-xl">
@@ -263,6 +265,9 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                 </div>
                 <p className="text-[11px] leading-relaxed text-slate-400">背景保持低饱和，卡片用表面色；品牌色集中用于主操作和选中态，成功、警告、危险色只表达状态。</p>
               </div>
+
+              <ColorRoleEditor tokens={designSystem.tokens} mode={settings.colorMode}
+                onChange={tokens => setDesignSystem({ ...designSystem, tokens })} />
 
               {/* 风格性格参数 (T-AE-24) */}
               <div className="space-y-3 p-4 bg-slate-950 border border-slate-800 rounded-xl">
@@ -520,7 +525,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
 
           {/* Right Panel: OpenDesign-style Realtime Visual Preview */}
           <div className="hidden lg:flex lg:col-span-7 min-h-0 overflow-hidden flex-col bg-slate-950/40">
-            <DesignSystemVisualPreview
+            <DesignSystemVisualPreview device={settings.deviceProfile}
               theme={designSystem}
               colorMode={settings.colorMode}
               onColorModeChange={setColorMode}

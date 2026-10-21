@@ -1,7 +1,10 @@
+import { buildExportSvg } from './exportRenderer';
 import { Screen } from '../types/project';
 
 export interface ScreenCaptureOptions {
   frameWidth?: number;
+  viewportHeight?: number;
+  useCustomNavigation?: boolean;
   deviceProfile?: 'pc' | 'mobile';
   tokensCss?: string;
   baseCss?: string;
@@ -114,65 +117,16 @@ export async function captureScreenSnippetAsDataUrl(
 
   if (!ctx) return renderFallback();
 
-  // 提取纯净 HTML 并转义为严格 XHTML (避免 unclosed <img>, <br>, <input> 导致 SVG 语法解析失败)
-  let rawHtml = screen.htmlContent || '';
-  let serializedBody = rawHtml;
-  if (typeof DOMParser !== 'undefined') {
-    try {
-      const parser = new DOMParser();
-      const parsedDoc = parser.parseFromString(rawHtml, 'text/html');
-      if (typeof XMLSerializer !== 'undefined') {
-        const serializer = new XMLSerializer();
-        serializedBody = serializer.serializeToString(parsedDoc.body);
-      }
-    } catch {
-      // 保持原始
-    }
-  }
-
-  const tokensCss = options.tokensCss || '';
-  const baseCss = options.baseCss || '';
-  const overrides = options.screenOverrides || '';
-
-  const phoneX = Math.round((targetW - 104) / 2);
-  const wrappedSvg = isMobile
-    ? `<svg xmlns="http://www.w3.org/2000/svg" width="${targetW}" height="${targetH}" viewBox="0 0 ${targetW} ${targetH}">
-        <rect width="100%" height="100%" fill="${isDark ? '#0b0f19' : '#f8fafc'}" />
-        <g transform="translate(${phoneX}, 12)">
-          <rect width="104" height="216" rx="14" fill="${bgColor}" stroke="${isDark ? 'rgba(71,85,105,0.4)' : 'rgba(203,213,225,0.8)'}" stroke-width="1.5" />
-          <clipPath id="mobileClip">
-            <rect width="104" height="216" rx="14" />
-          </clipPath>
-          <g clip-path="url(#mobileClip)">
-            <foreignObject x="0" y="0" width="390" height="810" transform="scale(0.2667)">
-              <div xmlns="http://www.w3.org/1999/xhtml" style="width:390px;height:810px;overflow:hidden;background:${bgColor};box-sizing:border-box;margin:0;padding:0;">
-                <style>
-                  ${tokensCss}
-                  ${baseCss}
-                  ${overrides}
-                  * { box-sizing: border-box; }
-                  html, body { margin: 0; padding: 0; background: ${bgColor}; width: 100%; height: 100%; }
-                </style>
-                ${serializedBody}
-              </div>
-            </foreignObject>
-          </g>
-        </g>
-      </svg>`
-    : `<svg xmlns="http://www.w3.org/2000/svg" width="${targetW}" height="${targetH}" viewBox="0 0 ${targetW} ${targetH}">
-        <foreignObject x="0" y="0" width="1440" height="720" transform="scale(0.3333)">
-          <div xmlns="http://www.w3.org/1999/xhtml" style="width:1440px;height:720px;overflow:hidden;background:${bgColor};box-sizing:border-box;margin:0;padding:0;">
-            <style>
-              ${tokensCss}
-              ${baseCss}
-              ${overrides}
-              * { box-sizing: border-box; }
-              html, body { margin: 0; padding: 0; background: ${bgColor}; width: 100%; height: 100%; }
-            </style>
-            ${serializedBody}
-          </div>
-        </foreignObject>
-      </svg>`;
+  const width = options.frameWidth ?? (isMobile ? 390 : 1440);
+  const height = options.viewportHeight ?? (isMobile ? 844 : 900);
+  const scale = Math.min((isMobile ? 104 : targetW) / width, (targetH - 24) / height);
+  const x = (targetW - width * scale) / 2;
+  const pageSvg = buildExportSvg(screen, { tokensCss: options.tokensCss ?? '', baseCss: options.baseCss ?? '', screenOverrides: options.screenOverrides ?? '',
+    width, height, viewportHeight: height, bgColor, deviceProfile: isMobile ? 'mobile' : 'pc', useCustomNavigation: options.useCustomNavigation });
+  const wrappedSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${targetW}" height="${targetH}" viewBox="0 0 ${targetW} ${targetH}">
+    <rect width="100%" height="100%" fill="${isDark ? '#0b0f19' : '#f8fafc'}" />
+    <g transform="translate(${x},12) scale(${scale})">${pageSvg}</g>
+  </svg>`;
 
   try {
     const svgBlob = new Blob([wrappedSvg], { type: 'image/svg+xml;charset=utf-8' });
@@ -195,12 +149,12 @@ export async function captureScreenSnippetAsDataUrl(
 
       img.onload = () => {
         if (resolved) return;
-        resolved = true;
         clearTimeout(timer);
         try {
           ctx.drawImage(img, 0, 0, targetW, targetH);
           URL.revokeObjectURL(svgUrl);
           const dataUrl = canvas.toDataURL('image/jpeg', 0.88);
+          resolved = true;
           resolve(dataUrl);
         } catch {
           finishFallback();
