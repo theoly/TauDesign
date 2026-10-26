@@ -1,3 +1,4 @@
+import { collectNodePresentation, reconcileInlinePriority } from '../../utils/inspectorStyle';
 import { resolveProjectViewport } from '../../utils/referenceDevice';
 import { normalizeMobileNavigation } from '../../utils/mobileNavigation';
 import { measureImportedFrame, observeImportedFrame, resolveViewportCss } from '../../utils/importViewport';
@@ -48,6 +49,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     hoveredNid,
     overrides,
     setActiveScreen,
+    panToScreen,
     selectNode,
     setHoveredNid,
     updateScreen,
@@ -66,7 +68,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
   const frameWidth = settings.frameWidth;
   const showGuide = settings.showViewportGuide;
 
-  const { screen: renderScreen, error: resourceError } = useScreenResources(screen);
+  const { screen: renderScreen, loading: resourcesLoading, error: resourceError } = useScreenResources(screen);
   const imported = !!screen.metadata?.importedHtml;
   const viewport = resolveProjectViewport(settings);
   const viewportHeight = viewport.height;
@@ -171,12 +173,16 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       tokensCss, screenOverrides, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation, includeMobileChrome: true, viewportHeight, viewportWidth: frameWidth
     });
   }, [htmlWithNids, renderScreen?.htmlContent, imported, settings.deviceProfile, settings.useCustomNavigation, viewportHeight]);
+  // WebKit may finish an older srcdoc navigation after its replacement. Mount only
+  // resolved documents and give each authored document its own browsing context.
+  // Tokens, scoped CSS and L4 keep their existing hot-update path.
+  const frameDocument = resourcesLoading || resourceError ? null : fullSrcDoc;
 
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe || !onRenderQuality || !renderQualityKey || !(isStaged || isActive) || lodLevel === 0) return;
     return observeRenderedQuality(iframe, report => onRenderQuality(screen.id, renderQualityKey, report));
-  }, [screen.id, fullSrcDoc, renderQualityKey, onRenderQuality, isStaged, isActive, lodLevel]);
+  }, [screen.id, frameDocument, renderQualityKey, onRenderQuality, isStaged, isActive, lodLevel]);
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -192,7 +198,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     };
     focus(); iframe.addEventListener('load', focus);
     return () => iframe.removeEventListener('load', focus);
-  }, [qualityFocusNid, fullSrcDoc, lodLevel]);
+  }, [qualityFocusNid, frameDocument, lodLevel]);
 
   useEffect(() => {
     const doc = iframeRef.current?.contentDocument;
@@ -218,6 +224,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     if (overridesEl) {
       overridesEl.textContent = screenOverrides;
     }
+    reconcileInlinePriority(iframe.contentDocument, screenOverrides);
 
     // 样式覆盖更新后，立即确保选中元素的 .aidesign-selected 高亮不丢失 (ISSUE-019)
     if (isActive && selectedNid) {
@@ -243,47 +250,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
           useProjectStore.getState().selectNode({
             ...cur,
             screenId: cur.screenId || screen.id,
-            computedBox: {
-              width: Math.round(rect.width) || 0,
-              height: Math.round(rect.height) || 0,
-              top: Math.round(rect.top) || 0,
-              left: Math.round(rect.left) || 0,
-              padding: {
-                top: (style && parseInt(style.paddingTop, 10)) || 0,
-                right: (style && parseInt(style.paddingRight, 10)) || 0,
-                bottom: (style && parseInt(style.paddingBottom, 10)) || 0,
-                left: (style && parseInt(style.paddingLeft, 10)) || 0
-              },
-              margin: {
-                top: (style && parseInt(style.marginTop, 10)) || 0,
-                right: (style && parseInt(style.marginRight, 10)) || 0,
-                bottom: (style && parseInt(style.marginBottom, 10)) || 0,
-                left: (style && parseInt(style.marginLeft, 10)) || 0
-              }
-            },
-            computedLayout: {
-              display: style?.display || 'block',
-              flexDirection: style?.flexDirection || 'row',
-              alignItems: style?.alignItems || 'stretch',
-              justifyContent: style?.justifyContent || 'flex-start',
-              flexWrap: style?.flexWrap || 'nowrap',
-              gap: style?.gap || '0px',
-              rowGap: style?.rowGap,
-              columnGap: style?.columnGap,
-              position: style?.position,
-              top: style?.top,
-              right: style?.right,
-              bottom: style?.bottom,
-              left: style?.left,
-              zIndex: style?.zIndex,
-              width: style?.width,
-              height: style?.height,
-              borderRadius: style?.borderRadius,
-              borderTopLeftRadius: style?.borderTopLeftRadius,
-              borderTopRightRadius: style?.borderTopRightRadius,
-              borderBottomRightRadius: style?.borderBottomRightRadius,
-              borderBottomLeftRadius: style?.borderBottomLeftRadius
-            }
+            ...collectNodePresentation(target)
           });
         }
       }
@@ -322,6 +289,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       if (tokensEl) tokensEl.textContent = runtimeStylesRef.current.tokensCss;
       const overridesEl = runtimeStyle(doc, 'overrides');
       if (overridesEl) overridesEl.textContent = runtimeStylesRef.current.screenOverrides;
+      reconcileInlinePriority(doc, runtimeStylesRef.current.screenOverrides);
 
       doc.querySelectorAll('.aidesign-selected').forEach(el => el.classList.remove('aidesign-selected'));
       doc.querySelectorAll('.aidesign-hovered').forEach(el => el.classList.remove('aidesign-hovered'));
@@ -363,6 +331,14 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
         if ((e.target as Element).closest('[data-taudesign-mobile-chrome]')) { e.preventDefault(); e.stopPropagation(); return; }
         e.preventDefault();
         e.stopPropagation();
+        if (e.shiftKey) {
+          const linked = (e.target as HTMLElement).closest('[data-target-screen-id]');
+          const targetScreenId = linked?.getAttribute('data-target-screen-id')?.trim();
+          if (targetScreenId && useProjectStore.getState().screens[targetScreenId]) {
+            panToScreen(targetScreenId);
+            return;
+          }
+        }
         setActiveScreen(screen.id);
 
         const target = (e.target as HTMLElement).closest('[data-nid]') as HTMLElement;
@@ -410,47 +386,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
             parentChain,
             componentId,
             componentInstanceId,
-            computedBox: {
-              width: Math.round(rect.width) || 0,
-              height: Math.round(rect.height) || 0,
-              top: Math.round(rect.top) || 0,
-              left: Math.round(rect.left) || 0,
-              padding: {
-                top: (style && parseInt(style.paddingTop, 10)) || 0,
-                right: (style && parseInt(style.paddingRight, 10)) || 0,
-                bottom: (style && parseInt(style.paddingBottom, 10)) || 0,
-                left: (style && parseInt(style.paddingLeft, 10)) || 0
-              },
-              margin: {
-                top: (style && parseInt(style.marginTop, 10)) || 0,
-                right: (style && parseInt(style.marginRight, 10)) || 0,
-                bottom: (style && parseInt(style.marginBottom, 10)) || 0,
-                left: (style && parseInt(style.marginLeft, 10)) || 0
-              }
-            },
-            computedLayout: {
-              display: style?.display || 'block',
-              flexDirection: style?.flexDirection || 'row',
-              alignItems: style?.alignItems || 'stretch',
-              justifyContent: style?.justifyContent || 'flex-start',
-              flexWrap: style?.flexWrap || 'nowrap',
-              gap: style?.gap || '0px',
-              rowGap: style?.rowGap,
-              columnGap: style?.columnGap,
-              position: style?.position,
-              top: style?.top,
-              right: style?.right,
-              bottom: style?.bottom,
-              left: style?.left,
-              zIndex: style?.zIndex,
-              width: style?.width,
-              height: style?.height,
-              borderRadius: style?.borderRadius,
-              borderTopLeftRadius: style?.borderTopLeftRadius,
-              borderTopRightRadius: style?.borderTopRightRadius,
-              borderBottomRightRadius: style?.borderBottomRightRadius,
-              borderBottomLeftRadius: style?.borderBottomLeftRadius
-            }
+            ...collectNodePresentation(target)
           });
         }
       };
@@ -540,7 +476,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     // 从 L0 回到 L1/L2 时 React 挂载的是一个**全新的 iframe 元素**，
     // 而旧元素上的监听器随之消失。若不在此重新绑定，画框将永久失去
     // 点选/悬浮/行内编辑能力，表现为「点了没反应、检查器显示未选中任何元素」。
-  }, [screen.htmlContent, screen.id, lodLevel, imported, viewportHeight]);
+  }, [screen.htmlContent, screen.id, lodLevel, imported, viewportHeight, frameDocument]);
 
   // Synchronize selection & hover highlights inside iframe
   useEffect(() => {
@@ -846,11 +782,17 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
             <span>[L0 位图降级缩略视图]</span>
             <span className="text-xs opacity-70">{screen.name}</span>
           </div>
+        ) : frameDocument === null ? (
+          <div role="status" className="flex h-full items-center justify-center text-xs text-slate-400">
+            {resourceError ? '页面资源不可用' : '正在读取页面资源…'}
+          </div>
         ) : (
           // L1 (Frozen) or L2 (Active) Iframe: 保持完整高保真视觉渲染
           <iframe
+            key={frameDocument}
             ref={iframeRef}
-            srcDoc={fullSrcDoc}
+            data-inspector-screen={screen.id}
+            srcDoc={frameDocument}
             className="w-full h-full border-none block"
             style={{
               pointerEvents: lodLevel === 2 ? 'auto' : 'none'
@@ -867,7 +809,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
             data-testid="first-viewport-guide"
           >
             <span
-              className="text-[9px] font-normal leading-none text-slate-500/55 bg-slate-950/35 px-1.5 py-1 rounded-sm backdrop-blur-[1px]"
+              className="text-[9px] font-normal leading-none text-slate-500/55 bg-slate-950/20 px-1.5 py-1 rounded-sm backdrop-blur-[1px]"
               title={`首屏参考线 · ${viewport.reference.name} · ${guideHeight}px`}
             >
               首屏 · {guideHeight}px

@@ -3,10 +3,16 @@ import { EngineMessage, TokenUsage } from '../core/types';
 import { StructureDiff } from '../../../../utils/structureGuard';
 import { DeviationNote } from './interceptors/streamTransform';
 import type { TextReference } from '../../textFileContext';
+import type { DesignTaskContract } from '../../designWorkflow';
+import type { DesignExecutionRecord } from '../../designExecutionRecord';
+import type { ContinuationCheckpoint } from '../../generationContinuation';
+import type { FailedPageDraft } from '../../qualityDraft';
+import type { ImageAttachment } from '../../../../types/referenceImage';
+import type { SectionedCheckpoint } from '../../sectionedGeneration';
 
 export interface PipelineInput {
   rawPrompt: string;
-  attachment?: { name: string; dataUrl: string };
+  attachment?: ImageAttachment;
   textReferences?: TextReference[];
   activeScreenId: string | null;
   styleTagIds?: string[];
@@ -52,6 +58,7 @@ export interface PipelineContext {
   estimatedChars: number;
   isContextTrimmed: boolean;
   warnings: string[];
+  workflowContract?: DesignTaskContract;
 }
 
 export interface PipelineOutput {
@@ -90,6 +97,13 @@ export interface PipelineOutput {
     isFallback: boolean;
   };
   warnings?: string[];
+  workflowContract?: DesignTaskContract;
+  executionRecord?: DesignExecutionRecord;
+  /** In-memory recovery only; never persist model context or attachments into conversation JSONL. */
+  continuationCheckpoint?: ContinuationCheckpoint;
+  sectionedCheckpoint?: SectionedCheckpoint;
+  /** Source-safe rejected copy, never a candidate or an adoption bypass. */
+  failedDraft?: FailedPageDraft;
 }
 
 export type PipelineInterceptor<T = any> = (

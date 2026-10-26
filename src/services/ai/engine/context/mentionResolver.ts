@@ -1,47 +1,10 @@
-import { PromptBuilder } from '../..//promptBuilder';
-import { htmlSkeletonize } from './htmlSkeleton';
-
-export interface ReferencedScreen {
-  id: string;
-  name: string;
-  skeletonHtml: string;
-}
-
-export interface MentionResolveResult {
-  referencedScreens: ReferencedScreen[];
-  unmatchedMentions: string[];
-}
-
-export function resolveMentions(
-  rawPrompt: string,
-  screens: Record<string, { id: string; name: string; htmlContent: string }>
-): MentionResolveResult {
-  const mentionNames = PromptBuilder.parseMentions(rawPrompt);
-  const referencedScreens: ReferencedScreen[] = [];
-  const unmatchedMentions: string[] = [];
-
-  const screenList = Object.values(screens);
-
-  for (const name of mentionNames) {
-    const cleanName = name.trim().toLowerCase();
-    // Match by exact name or case-insensitive fuzzy match
-    const found = screenList.find(
-      (s) => s.name.trim().toLowerCase() === cleanName || s.name.trim().toLowerCase().includes(cleanName)
-    );
-
-    if (found) {
-      referencedScreens.push({
-        id: found.id,
-        name: found.name,
-        skeletonHtml: htmlSkeletonize(found.htmlContent)
-      });
-    } else {
-      unmatchedMentions.push(name);
-    }
-  }
-
-  return {
-    referencedScreens,
-    unmatchedMentions
-  };
+import { resolveScreenReferences } from '../../screenReferenceResolver';
+import { buildPageReferenceSnapshot, type PageReferenceSnapshot, type PageReferenceSource } from './pageReferenceContext';
+import type { StyleOverride } from '../../../../types/project';
+export type ReferencedScreen=PageReferenceSnapshot;
+export interface MentionResolveResult { referencedScreens:ReferencedScreen[];unmatchedMentions:string[];ambiguousNames:string[] }
+export function resolveMentions(rawPrompt:string,screens:Record<string,PageReferenceSource>,options:{referenceScreenId?:string|null;overrides?:Record<string,StyleOverride>}={}):MentionResolveResult {
+  const resolved=resolveScreenReferences(rawPrompt,screens);
+  const ids=[...new Set([...(options.referenceScreenId&&screens[options.referenceScreenId]?[options.referenceScreenId]:[]),...resolved.ids])];
+  return {referencedScreens:ids.map(id=>buildPageReferenceSnapshot(screens[id],options.overrides)),unmatchedMentions:resolved.unmatchedNames,ambiguousNames:resolved.ambiguousNames.filter(name=>!options.referenceScreenId || screens[options.referenceScreenId]?.name.trim().toLocaleLowerCase()!==name.trim().toLocaleLowerCase())};
 }

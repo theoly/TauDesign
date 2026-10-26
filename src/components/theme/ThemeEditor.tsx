@@ -9,6 +9,7 @@ import { Bookmark, Check, ChevronDown, Code, FileText, Moon, Palette, Plus, Sear
 import rawBaseCss from '../../styles/base.css?raw';
 import { resolveDesignProse } from '../../services/ai/engine/context/designProseProvider';
 import { applyBrandColor, COLOR_SCHEMES } from '../../utils/colorHarmony';
+import { DesignLibraryImportPanel } from './DesignLibraryImportPanel';
 
 interface ThemeEditorProps {
   onClose: () => void;
@@ -17,6 +18,7 @@ interface ThemeEditorProps {
 export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
   const {
     designSystem,
+    designLibraryBinding,
     setDesignSystem,
     settings,
     setColorMode,
@@ -29,6 +31,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
   const [newRuleInput, setNewRuleInput] = useState('');
   const [baseCssFilter, setBaseCssFilter] = useState('');
   const [aiEvolveInput, setAiEvolveInput] = useState('');
+  const libraryReadOnly=designLibraryBinding?.mode==='pinned_reference';
   const [showStylePicker, setShowStylePicker] = useState(false);
   const [evolveResult, setEvolveResult] = useState<string | null>(null);
   const [showProseCard, setShowProseCard] = useState(false);
@@ -138,6 +141,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
 
           <div className="flex items-center gap-2 py-2">
             <button
+              disabled={libraryReadOnly} title={libraryReadOnly?'固定版本参考只读，请先转为项目副本':undefined}
               onClick={() => setShowStylePicker(true)}
               className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border border-slate-700"
             >
@@ -154,6 +158,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
           {/* Tab 1: Tokens */}
           {activeTab === 'tokens' && (
             <>
+              <DesignLibraryImportPanel />
               {/* Color Mode */}
               <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-xl">
                 <div>
@@ -187,11 +192,13 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               </div>
 
               {/* Theme Presets */}
+              <fieldset disabled={libraryReadOnly} className="space-y-5 disabled:opacity-50" aria-label="设计 Token 编辑">
               <details className="space-y-3">
                 <summary className="cursor-pointer text-slate-300 font-semibold">选择主题风格预设</summary>
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-semibold text-slate-300 block">主题风格预设包 (一键切换全画板联动)</span>
                   <button
+                    disabled={libraryReadOnly} title={libraryReadOnly?'固定版本参考只读，请先转为项目副本':undefined}
                     onClick={() => setShowStylePicker(true)}
                     className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] font-medium whitespace-nowrap"
                   >
@@ -202,10 +209,10 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                   {themePresets.map((preset) => {
                     const isSelected = designSystem.id === preset.theme.id;
                     return (
-                      <div
+                      <button type="button" disabled={libraryReadOnly}
                         key={preset.id}
                         onClick={() => handleSelectPreset(preset.theme)}
-                        className={`p-4 rounded-xl border cursor-pointer transition flex flex-col gap-2 ${
+                        className={`p-4 text-left rounded-xl border cursor-pointer transition flex flex-col gap-2 ${
                           isSelected
                             ? 'border-blue-500 bg-blue-950/40 ring-1 ring-blue-500'
                             : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
@@ -224,7 +231,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                         <p className="text-[11px] text-slate-400 leading-relaxed">
                           {preset.description}
                         </p>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -382,6 +389,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                   </div>
                 </div>
               </div>
+              </fieldset>
             </>
           )}
 

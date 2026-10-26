@@ -7,6 +7,7 @@ import { useAIEngineChat } from '../src/services/ai/engine/react/useAIEngineChat
 import { DefaultAIEngineCore } from '../src/services/ai/engine/core';
 import { PipelineExecutor } from '../src/services/ai/engine/pipeline/executor';
 import { useProjectStore } from '../src/stores/useProjectStore';
+import { passStagedRenderCheck } from './helpers/stagedQuality';
 import { useAIConfigStore, defaultProviders, defaultBindings } from '../src/stores/useAIConfigStore';
 import { useHistoryStore } from '../src/stores/useHistoryStore';
 
@@ -73,7 +74,12 @@ describe('引用元素直接副本路径',()=>{
   expect(request.messages[0].content).toContain('JSON Schema');expect(request.messages[0].content).toContain('右上');
   expect(engine.messages.some(m=>m.modificationReview)).toBe(false);
   expect(useProjectStore.getState().screens[id].htmlContent).toBe(before);expect(useProjectStore.getState().stagedScreen?.newHtml).toContain('28px');
-  act(()=>useProjectStore.getState().adoptStagedChange());expect(useProjectStore.getState().screens[id].htmlContent).toContain('28px');
+  expect(useProjectStore.getState().stagedScreen?.executionRecord).toMatchObject({
+    source: 'local-edit', continuationCount: 0, localEdit: { mode: 'element', operationCount: operations.length, targetNids: ['notice', 'bell', 'count'] }
+  });
+  expect(useProjectStore.getState().stagedScreen?.executionRecord?.completeHtml).toBe(useProjectStore.getState().stagedScreen?.newHtml);
+  expect(useProjectStore.getState().stagedScreen?.executionRecord?.qualityReport?.passed).toBe(true);
+  passStagedRenderCheck();await act(async ()=>{ await useProjectStore.getState().adoptStagedChange(); });expect(useProjectStore.getState().screens[id].htmlContent).toContain('28px');
   act(()=>useHistoryStore.getState().undo());expect(useProjectStore.getState().screens[id].htmlContent).toBe(before);
  });
  test('模型越界或无法局部完成时停止，不退回整页或分析列表',async()=>{

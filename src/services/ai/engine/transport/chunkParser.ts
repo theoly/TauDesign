@@ -25,7 +25,7 @@ export class SSEChunkParser {
             this.onEvent({ type: 'Delta', text: parsed.message.content });
           }
           if (parsed.done) {
-            this.onEvent({ type: 'Done', finish_reason: 'stop' });
+            this.onEvent({ type: 'Done', finish_reason: parsed.done_reason || 'stop' });
           }
           continue;
         } catch {
@@ -110,6 +110,7 @@ export class SSEChunkParser {
         const finishReason =
           data.choices?.[0]?.finish_reason ??
           data.candidates?.[0]?.finishReason ??
+          data.delta?.stop_reason ?? data.stop_reason ??
           (data.type === 'message_stop' ? 'stop' : null);
 
         if (finishReason) {

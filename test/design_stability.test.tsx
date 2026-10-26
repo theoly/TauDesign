@@ -65,6 +65,7 @@ describe('设计上下文与组件结构参考', () => {
   });
   test('完整项目模板不截断；超预算整项省略并说明，不丢后续小组件', () => {
     expect(renderProjectComponents([component])).toContain(component.templateHtml);
+    expect(renderProjectComponents([{ ...component, version: 4, origin: { kind: 'extracted', sourceScreenId: 'home', sourceNid: 'card' } }])).toContain('v4；来源 extracted / home#card');
     const short = { ...component, id: 'short', templateHtml: '<button class="btn">短组件</button>' };
     const text = renderProjectComponents([component, short], 180);
     expect(text).not.toContain('<article'); expect(text).toContain(short.templateHtml); expect(text).toContain('1个组件超出');
@@ -101,6 +102,7 @@ describe('统一离线质量检查', () => {
   test('主流程保留警告报告，手动覆盖冲突拒绝', async () => {
     const warning = await pipeline('<main><span class="tag flex-1">长标签</span></main>');
     expect(warning.status).toBe('applied'); expect(warning.qualityReport?.findings[0].code).toBe('compressed_label');
+    expect(warning.executionRecord).toMatchObject({ source: 'model', continuationCount: 0, completeHtml: warning.extractedHtml });
     const rejected = await pipeline(target.html.replace('text-sm', 'text-xl'), true);
     expect(rejected.status).toBe('rejected_by_quality'); expect(rejected.qualityReport?.findings.some(f => f.code === 'protected_style_changed')).toBe(true);
   });

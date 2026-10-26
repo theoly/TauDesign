@@ -98,6 +98,14 @@ export function setDirectText(el: Element, next: string): boolean {
   return true;
 }
 
+/** Missing action copy beside icon-only children; append a text node without flattening SVG. */
+export function appendMissingIconActionText(el: Element, text: string): boolean {
+  if (!text.trim() || !el.matches('button,a,[role="button"]') || directTextNodes(el).length || !el.children.length
+    || Array.from(el.children).some(child=>!child.matches('svg,img,.icon'))) return false;
+  el.appendChild(el.ownerDocument.createTextNode(text));
+  return true;
+}
+
 /**
  * 在 HTML 字符串中按 nid 写回文本，返回新的 HTML；不适用或无变化时返回 null。
  *

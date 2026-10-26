@@ -1,9 +1,12 @@
+import {stubPageCreationRender} from './helpers/pageCreation';
+stubPageCreationRender();
 import { mockModificationAnalysis, confirmLatestModification } from './modification_review_helpers';
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { ChatDrawer } from '../src/components/chat/ChatDrawer';
 import { useProjectStore } from '../src/stores/useProjectStore';
+import { passStagedRenderCheck } from './helpers/stagedQuality';
 import { useAIConfigStore, defaultProviders, defaultBindings } from '../src/stores/useAIConfigStore';
 import { defaultTheme } from '../src/utils/themePresets';
 import {
@@ -290,6 +293,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       expect(chatText).not.toContain('设计画框已挂载至画板');
 
       // 3. 点击采纳新版，原画框正式更新
+      await act(async () => { passStagedRenderCheck(); });
       const adoptBtn = Array.from(container.querySelectorAll('button')).find((b) =>
         b.textContent?.includes('采纳新版')
       );
@@ -373,6 +377,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
 
       expect(callCount).toBe(1);
       // 采纳新版候选方案 (BR-SSR-01)
+      await act(async () => { passStagedRenderCheck(); });
       const adoptBtn = Array.from(container.querySelectorAll('button')).find((b) =>
         b.textContent?.includes('采纳新版')
       );
@@ -401,7 +406,8 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       expect(useProjectStore.getState().stagedScreen?.newHtml).toContain('Run 2');
 
       // 采纳 Run 2 候选方案
-      useProjectStore.getState().adoptStagedChange();
+      passStagedRenderCheck();
+      await useProjectStore.getState().adoptStagedChange();
       expect(useProjectStore.getState().screens[screenId].htmlContent).toContain('Run 2');
     });
 

@@ -10,8 +10,12 @@ import { ModificationReviewCard } from '../src/components/chat/ModificationRevie
 import { RestylePanel } from '../src/components/theme/RestylePanel';
 import { InfiniteCanvas } from '../src/components/canvas/InfiniteCanvas';
 import { useProjectStore } from '../src/stores/useProjectStore';
+import { passStagedRenderCheck } from './helpers/stagedQuality';
 import { useAIConfigStore, defaultProviders, defaultBindings } from '../src/stores/useAIConfigStore';
 import { useHistoryStore } from '../src/stores/useHistoryStore';
+import { loadStagedCandidate } from '../src/services/storage/candidateRepository';
+import { DeliveryRepository } from '../src/services/storage/deliveryRepository';
+import { createProjectStorage } from '../src/services/storage/projectStorage';
 import { defaultTheme } from '../src/utils/themePresets';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -75,6 +79,7 @@ describe('局部模式选择与实际接线', () => {
   const start=async()=>{await render(<Harness/>);await act(async()=>{await engine.sendMessage('修改当前页面的标题',undefined,{referencedScreenId:id});});return engine.messages.find(m=>m.modificationReview?.status==='ready')!;};
   beforeEach(()=>{
     localStorage.clear();useProjectStore.getState().initNewProject({name:'局部测试',deviceProfile:'mobile',designSystem:defaultTheme,createSpecimen:false});
+    useProjectStore.setState({components:{shared:{id:'shared',name:'共享按钮',templateHtml:'<button class="btn">模板按钮</button>',version:1,createdAt:1,updatedAt:1}}});
     id=useProjectStore.getState().addScreen({name:'原页面',htmlContent:original});
     useAIConfigStore.setState({providers:defaultProviders.map(p=>p.id==='prov-deepseek'?{...p,apiKey:'test'}:p),bindings:defaultBindings});
     objects=spyOn(DefaultAIEngineCore.prototype,'generateObject').mockResolvedValue(rawAnalysis);
@@ -96,7 +101,15 @@ describe('局部模式选择与实际接线', () => {
     expect(objects).toHaveBeenCalledTimes(1);expect(pipeline).not.toHaveBeenCalled();
     expect(useProjectStore.getState().screens[id].htmlContent).toBe(original);expect(useHistoryStore.getState().past.length).toBe(historyBefore);
     expect(useProjectStore.getState().stagedScreen?.newHtml).toContain('text-xl font-bold');
-    act(()=>useProjectStore.getState().adoptStagedChange());expect(useProjectStore.getState().screens[id].htmlContent).not.toBe(original);
+    expect(useProjectStore.getState().stagedScreen?.executionRecord).toMatchObject({ source: 'local-edit',
+      localEdit: { mode: 'local', targetNids: ['title'], operationCount: 2 }, qualityReport: { passed: true } });
+    const state=useProjectStore.getState();
+    const saved=await loadStagedCandidate(state.id);
+    expect(saved?.workflowContract?.modificationReview).toMatchObject({selectedIds:['suggestion-1'],analysis:{evidence:{attempts:1,workflow:{status:'ready'}}}});
+    passStagedRenderCheck();await act(async ()=>{ await useProjectStore.getState().adoptStagedChange(); });expect(useProjectStore.getState().screens[id].htmlContent).not.toBe(original);
+    const records=await new DeliveryRepository(createProjectStorage(state.id),state.id).listForScreen(id);
+    expect(records.records[0].candidate.workflowContract?.modificationReview).toEqual(saved?.workflowContract?.modificationReview);
+
     act(()=>{useHistoryStore.getState().undo();});expect(useProjectStore.getState().screens[id].htmlContent).toBe(original);
   });
   test('补充文字额外调用受限操作模型，拒绝未授权节点且不进入整页兜底',async()=>{
@@ -153,6 +166,8 @@ describe('局部模式选择与实际接线', () => {
       await act(async()=>{Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('按所选内容生成新版'))!.click();});
       expect(closed).toBe(true);expect(stream).not.toHaveBeenCalled();expect(objects).toHaveBeenCalledTimes(1);
       expect(useProjectStore.getState().stagedScreen?.newHtml).toContain('text-xl font-bold');expect(useProjectStore.getState().screens[id].htmlContent).toBe(original);
+      expect(useProjectStore.getState().stagedScreen?.executionRecord).toMatchObject({ source: 'local-edit',
+        localEdit: { mode: 'local', targetNids: ['title'], operationCount: 2 }, qualityReport: { passed: true } });
     }finally{stream.mockRestore();}
   });
   test('副本比较预览继承原页的手动样式覆盖',async()=>{

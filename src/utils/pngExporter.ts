@@ -42,6 +42,7 @@ export interface PngExportOutcome {
   cssHeight: number;
   /** 主路径失败时的原因，用于在 UI 上说明为何降级 */
   fallbackReason?: string;
+  warnings?: string[];
 }
 
 /** 可注入的依赖，便于在无浏览器渲染器的测试环境下验证编排逻辑 */
@@ -130,7 +131,9 @@ export async function exportScreenPng(
   }
 
   try {
+    const warnings: string[] = [];
     const dataUrl = await legacy(screen, {
+      onWarning: text => warnings.push(text),
       tokensCss: options.tokensCss,
       baseCss: options.baseCss,
       screenOverrides: options.screenOverrides,
@@ -141,7 +144,7 @@ export async function exportScreenPng(
       deviceProfile: options.deviceProfile, useCustomNavigation: options.useCustomNavigation,
       viewportHeight: options.viewportHeight
     });
-    return { dataUrl, engine: 'foreign-object', cssHeight, fallbackReason };
+    return { dataUrl, engine: 'foreign-object', cssHeight, fallbackReason, ...(warnings.length ? { warnings } : {}) };
   } catch (legacyErr: any) {
     const legacyMessage = legacyErr?.message || String(legacyErr);
     throw new Error(

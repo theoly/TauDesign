@@ -1,3 +1,4 @@
+import {LibraryEditingBanner} from './components/workspace/LibraryEditingBanner';
 import { bindHtmlImportMenu } from './services/desktop/htmlImportMenu';
 import { HtmlImportDialog } from './components/canvas/HtmlImportDialog';
 import React, { useEffect, useState } from 'react';
@@ -93,6 +94,7 @@ const Workspace: React.FC = () => {
         onOpenSettings={() => handleOpenSettings('provider')}
       />
 
+      <LibraryEditingBanner/>
       {uncleanShutdownAt !== null && (
         <RecoveryBanner
           uncleanShutdownAt={uncleanShutdownAt}
@@ -155,7 +157,7 @@ export const App: React.FC = () => {
         refresh();
       }}
     >
-      {view === 'workspace' ? <Workspace /> : <ProjectManager />}
+      {view === 'workspace' ? <Workspace key={activeProjectId}/> : <ProjectManager />}
       {view === 'workspace' && showHtmlImport && <HtmlImportDialog key={activeProjectId} onClose={() => setShowHtmlImport(false)} />}
     </ErrorBoundary>
   );

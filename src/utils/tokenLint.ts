@@ -2,6 +2,14 @@ import { DesignSystem } from '../types/designSystem';
 import { extractClassWhitelist } from './cssCompiler';
 import { getBaseCss, type DeviceProfile } from '../styles/baseCss';
 import { parseHtmlCopy } from './htmlDocument';
+import type { Screen } from '../types/project';
+
+/** Diagnostic wording only: this never changes the whitelist, findings or severity. */
+export type TokenLintContext = 'project-tokens' | 'retained-source';
+export function getTokenLintContext(screen: Pick<Screen, 'metadata'>): TokenLintContext {
+  const mode = screen.metadata?.importedHtml?.mode;
+  return mode === 'preserve' || mode === 'selective' ? 'retained-source' : 'project-tokens';
+}
 
 /** 编辑器注入的运行时类，不属于设计基座，不应报为 unknown_class */
 const IGNORED_CLASS_PREFIXES = ['aidesign-'];
@@ -26,7 +34,7 @@ export class TokenLintEngine {
   /**
    * Scans HTML content and returns structured lint report
    */
-  public static scan(html: string, designSystem: DesignSystem, deviceProfile: DeviceProfile = 'pc'): LintReport {
+  public static scan(html: string, designSystem: DesignSystem, deviceProfile: DeviceProfile = 'pc', context: TokenLintContext = 'project-tokens'): LintReport {
     const issues: LintIssue[] = [];
     let totalNodes = 0;
     const whitelist = new Set(extractClassWhitelist(getBaseCss(deviceProfile)));
@@ -49,9 +57,9 @@ export class TokenLintEngine {
             nid,
             tagName: tag,
             issueType: 'literal_color',
-            description: `发现硬编码字面量色值 "${hexMatch[0]}"，破坏主题统一`,
+            description: context === 'retained-source' ? `保留源页面色值 "${hexMatch[0]}"，不会自动跟随项目主题` : `发现硬编码字面量色值 "${hexMatch[0]}"，破坏主题统一`,
             rawSnippet: hexMatch[0],
-            suggestedFix: 'var(--color-primary)'
+            suggestedFix: context === 'retained-source' ? '如需跟随项目主题，请选择统一配色；保留原貌时无需替换' : 'var(--color-primary)'
           });
         }
 
@@ -61,9 +69,9 @@ export class TokenLintEngine {
             nid,
             tagName: tag,
             issueType: 'literal_color',
-            description: `发现字面量 RGB 声明 "${rgbMatch[0]}"`,
+            description: context === 'retained-source' ? `保留源页面 RGB 声明 "${rgbMatch[0]}"，不会自动跟随项目主题` : `发现字面量 RGB 声明 "${rgbMatch[0]}"`,
             rawSnippet: rgbMatch[0],
-            suggestedFix: 'var(--color-surface)'
+            suggestedFix: context === 'retained-source' ? '如需跟随项目主题，请选择统一配色；保留原貌时无需替换' : 'var(--color-surface)'
           });
         }
 
@@ -74,9 +82,9 @@ export class TokenLintEngine {
             nid,
             tagName: tag,
             issueType: 'literal_radius',
-            description: `非阶梯圆角 "${radiusMatch[1]}"`,
+            description: context === 'retained-source' ? `保留源页面圆角 "${radiusMatch[1]}"，未使用项目圆角 Token` : `非阶梯圆角 "${radiusMatch[1]}"`,
             rawSnippet: radiusMatch[0],
-            suggestedFix: 'border-radius: var(--radius-md)'
+            suggestedFix: context === 'retained-source' ? '如需统一圆角，请选择对应 Token 类别；保留原貌时无需替换' : 'border-radius: var(--radius-md)'
           });
         }
       }
@@ -95,9 +103,9 @@ export class TokenLintEngine {
             nid,
             tagName: tag,
             issueType: 'unknown_class',
-            description: `类名 "${c}" 不在基座样式表中，渲染时不会产生任何样式`,
+            description: `类名 "${c}" 未由项目基座定义；页面自带 CSS 是否提供样式需另行核验`,
             rawSnippet: c,
-            suggestedFix: '改用白名单内的类名，或经设计系统面板申请基座演进 (PRD §3.5.6)'
+            suggestedFix: context === 'retained-source' ? '保留原貌时核对源 CSS 和实际预览；如需统一规范，再映射到项目基座类名' : '使用项目基座类名；若页面自带 CSS，核对其定义及实际预览 (PRD §3.5.6)'
           });
         }
       }
@@ -233,11 +241,11 @@ export interface ScreenAuditReport {
  * - 若页面有多个逃逸元素：定位包含多个元素的最小父区块（LCA），若无独立区块则定位该页面
  */
 export function computeScreenAuditReport(
-  screen: { id: string; name: string; htmlContent: string },
+  screen: Pick<Screen, 'id' | 'name' | 'htmlContent' | 'metadata'>,
   designSystem: DesignSystem,
   deviceProfile: DeviceProfile = 'pc'
 ): ScreenAuditReport {
-  const lint = TokenLintEngine.scan(screen.htmlContent, designSystem, deviceProfile);
+  const lint = TokenLintEngine.scan(screen.htmlContent, designSystem, deviceProfile, getTokenLintContext(screen));
   const issues = lint.issues;
   const distinctNids = Array.from(new Set(issues.map((i) => i.nid).filter((n) => n && n !== 'unknown')));
 

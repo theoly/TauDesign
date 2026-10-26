@@ -16,13 +16,14 @@ test('native suffix uses exact full prefix and aggregates usage/reasoning once',
  expect(result.rawResponse).toBe(prefix+' world</div></artifact>'); expect(deltas.join('')).toBe(result.rawResponse);
  expect(calls[1].messages.at(-1)).toEqual({role:'assistant',content:prefix,partial:true});
  expect(result.usage).toEqual({inputTokens:4,outputTokens:6});expect(result.reasoningText).toBe('rr');expect(result.recoveredStreamError).toBeUndefined();expect(result.warnings.some(w=>w.includes('续写'))).toBe(true);
+ expect(result.continuationCount).toBe(1);expect(result.finishReason).toBe('stop');
  const body=prepareModelRequest(calls[1]).transportRequest.body as any;expect(body.messages.at(-1).partial).toBe(true);expect(body.enable_thinking).toBe(false);
  expect((prepareModelRequest(options).transportRequest.body as any).messages[0].partial).toBeUndefined();
 });
-test('unknown model/proxy, natural stop and complete output never continue',async()=>{
+test('native capability remains narrow; natural stop and complete output never continue',async()=>{
  expect(supportsNativeContinuation({...provider,baseUrl:'https://proxy.example/v1'},'qwen-plus')).toBe(false);
  expect(supportsNativeContinuation(provider,'qwen3.8-flash')).toBe(false);
- for(const [model,text,reason] of [['unknown',prefix,'length'],['qwen-plus',prefix,'stop'],['qwen-plus','<artifact><div>ok</div></artifact>','length']]){
+ for(const [model,text,reason] of [['qwen-plus',prefix,'stop'],['qwen-plus','<artifact><div>ok</div></artifact>','length']]){
  const {core,calls}=engine([[text,reason]]);await streamWithContinuation(core,{...options,model});expect(calls).toHaveLength(1);
  }
 });
@@ -59,6 +60,10 @@ test('assembled continuation still passes source safety and action integrity gat
  const e=engine([['<artifact><main class="container-max"><h1>Title</h1>','length'],['<script>alert(1)</script></main></artifact>','stop']]);
  const result=await PipelineExecutor.execute({input:{rawPrompt:'创建页面'},provider,model:'qwen-plus',engineCore:e.core,screens:{},deviceProfile:'pc',frameWidth:1440,baseSystemPrompt:'test'});
  expect(e.calls).toHaveLength(2);expect(result.status).toBe('rejected_by_quality');expect(result.qualityReport?.passed).toBe(false);expect(result.warnings?.some(w=>w.includes('续写'))).toBe(true);expect(result.usage?.outputTokens).toBe(6);
+ expect(result.workflowContract?.workflowId).toBe('create-page');
+ expect(result.executionRecord).toMatchObject({source:'model',finishReason:'stop',continuationCount:1});
+ expect(result.executionRecord?.completeHtml).toBeUndefined();
+ expect(e.calls[0].messages.map(message=>message.content).join('\n')).toContain('DESIGN TASK CONTRACT');
 });
 test('transport failure after a prefix retains observed bytes and billed usage without another request',async()=>{
  let count=0;const core=new DefaultAIEngineCore({id:'failed',stream(_request,onEvent){count++;onEvent({type:'Delta',text:count===1?prefix:' world'});onEvent({type:'Usage',input_tokens:5,output_tokens:7});onEvent(count===1?{type:'Done',finish_reason:'length'}:{type:'Error',kind:'auth_failed',message:'denied'});return {abort(){},promise:Promise.resolve()};}});
@@ -74,6 +79,7 @@ test('continuation cannot remove protected original actions',async()=>{
  const e=engine([['<artifact><main class="container-max"><h1 data-nid="title001">New','length'],['</h1></main></artifact>','stop']]);
  const result=await PipelineExecutor.execute({input:{rawPrompt:'修改页面文案',activeScreenId:'s'},provider,model:'qwen-plus',engineCore:e.core,screens:{s:{id:'s',name:'Page',htmlContent:original}},deviceProfile:'pc',frameWidth:1440,baseSystemPrompt:'test'});
  expect(result.status).toBe('rejected_by_quality');expect(result.qualityReport?.findings.some(f=>f.code.includes('action'))).toBe(true);expect(result.changeSet).toBeUndefined();
+ expect(result.workflowContract?.workflowId).toBe('edit-page-copy');
 });
 test('a recovered network failure during native continuation never triggers further recovery or a candidate',async()=>{
  const e=engine([[prefix,'length'],[' x','length'],[' y','length']]);const stream=e.core.streamText.bind(e.core);let count=0;e.core.streamText=o=>{const result=stream(o);count++;if(count===2)result.recoveryPromise=Promise.resolve('network disconnected');return result;};

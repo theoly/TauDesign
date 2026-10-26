@@ -301,11 +301,6 @@ describe('节点级联删除与 DOM 结构安全 (Delete Node Cascade - T-DNC-01
     renderComponent(<PropertyInspector />);
 
     // 结构操作已归入「操作」分组 (doc/feature/inspector-geometry-tabs BR-INS-01)，先切换过去
-    const actionsTab = container.querySelector('[data-testid="inspector-tab-actions"]') as HTMLButtonElement;
-    expect(actionsTab).not.toBeNull();
-    act(() => {
-      actionsTab.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
 
     // 查找并点击「删除此节点」
     const deleteBtn = Array.from(container.querySelectorAll('button')).find((b) =>

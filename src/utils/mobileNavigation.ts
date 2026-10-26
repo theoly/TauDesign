@@ -8,14 +8,30 @@ const statusToken = /^(?:(?:ios|system)[-_]?)?status[-_]?bar$/i;
 const titleSelector = '.appbar-title,.nav-title,.navbar-title,.navigation-title,.title,h1,h2,[data-navigation-title]';
 const trimText = (el: Element | null) => el ? (inspectText(el).text || Array.from(el.children).filter(child => child.localName !== 'svg').map(child => inspectText(child).text).join(' ')).trim() : '';
 const backControl = (el: Element) => /^(?:返回|后退|关闭|back|close|menu|更多|more|‹|〈|←|×|···|\.{3}|…)?$/i.test(el.getAttribute('aria-label') || el.getAttribute('title') || trimText(el));
+const explicitNavigation = (el: Element) => [...Array.from(el.classList), el.id].some(token => navToken.test(token));
+const nonVisual = (el: Element) => el.matches('style,link,script,meta,template,input[type="hidden"]')
+  || el.hasAttribute('hidden') || (el as HTMLElement).style?.display === 'none';
+
+/** Legacy rows without a status class need both clock/icon evidence and an adjacent known navbar. */
+function legacyStatusRow(el: Element): boolean {
+  if (!el.matches('div') || !/^\d{1,2}:\d{2}$/.test(trimText(el)) || el.querySelector('button,a,input,select,textarea,[role],h1,h2,h3')) return false;
+  let next = el.nextElementSibling;
+  while (next && nonVisual(next)) next = next.nextElementSibling;
+  return !!next && explicitNavigation(next) && el.querySelectorAll('svg').length >= 2;
+}
 
 function navigationTitle(el: Element): Element | null {
   const known = el.querySelector(titleSelector);
   if (known) return known;
   // Common imported mobile headers use a centered plain div rather than a heading.
-  return Array.from(el.querySelectorAll('.text-center,[style*="text-align"]')).find(candidate =>
+  const centered = Array.from(el.querySelectorAll('.text-center,[style*="text-align"]')).find(candidate =>
     candidate.children.length === 0 && !candidate.matches('button,a,input') && !!trimText(candidate)
     && trimText(candidate).length <= 40 && (candidate.classList.contains('text-center') || (candidate as HTMLElement).style.textAlign === 'center')) ?? null;
+  if (centered) return centered;
+  if (!explicitNavigation(el)) return null;
+  // Some older appbars use a plain span between named back/close controls.
+  return Array.from(el.children).find(candidate => candidate.matches('span,div') && candidate.children.length === 0
+    && !candidate.matches('.appbar-capsule,[role]') && !!trimText(candidate) && trimText(candidate).length <= 40 && !backControl(candidate)) ?? null;
 }
 
 /** Only leading screen-level chrome is eligible. Business sections/cards are never inferred as navigation. */
@@ -24,7 +40,7 @@ function leading(el: Element, body: HTMLElement): boolean {
   for (let depth = 0; node && node !== body && depth < 8; depth++, node = node.parentElement) {
     if (node !== el && (node.matches('article,form,dialog') || node.classList.contains('card') || node.classList.contains('panel'))) return false;
     for (let prev = node.previousElementSibling; prev; prev = prev.previousElementSibling) {
-      if (!prev.matches('style,link,script,meta') && !Array.from(prev.classList).some(token => statusToken.test(token))) return false;
+      if (!nonVisual(prev) && !Array.from(prev.classList).some(token => statusToken.test(token))) return false;
     }
     if (node.parentElement === body) return true;
   }
@@ -45,7 +61,7 @@ export function normalizeMobileNavigation(html: string, policy: MobileNavigation
   for (const el of Array.from(doc.body.querySelectorAll('*'))) {
     if (!doc.body.contains(el) || !leading(el, doc.body)) continue;
     const tokens = [...Array.from(el.classList), el.id];
-    const status = tokens.some(token => statusToken.test(token)) && (/\b\d{1,2}:\d{2}\b|wi-?fi|电量|信号|battery/i.test(el.textContent || '') || !!el.querySelector('[aria-label*="电量"],[aria-label*="信号"],[aria-label*="Wi-Fi"],[aria-label*="battery"]'));
+    const status = legacyStatusRow(el) || tokens.some(token => statusToken.test(token)) && (/\b\d{1,2}:\d{2}\b|wi-?fi|电量|信号|battery/i.test(el.textContent || '') || !!el.querySelector('[aria-label*="电量"],[aria-label*="信号"],[aria-label*="Wi-Fi"],[aria-label*="battery"]'));
     if (status) { remove(el); continue; }
     const titleEl = navigationTitle(el);
     const semanticNav = el.matches('header,nav,[role="navigation"]') && !!titleEl

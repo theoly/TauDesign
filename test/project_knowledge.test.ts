@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { buildProjectKnowledgeContext, generateProjectKnowledge, knowledgeFingerprint, collectKnowledgeSources, type KnowledgeState } from '../src/services/ai/projectKnowledge';
+import { buildProjectKnowledgeBundle, buildProjectKnowledgeContext, generateProjectKnowledge, knowledgeFingerprint, collectKnowledgeSources, type KnowledgeState } from '../src/services/ai/projectKnowledge';
 import { defaultTheme } from '../src/utils/themePresets';
 import { defaultProviders } from '../src/stores/useAIConfigStore';
 import { DefaultAIEngineCore } from '../src/services/ai/engine/core';
@@ -26,6 +26,18 @@ describe('项目功能与UI知识上下文', () => {
     const context = buildProjectKnowledgeContext(s, '设计会员详情');
     expect(context).toContain('合同进度'); expect(context).toContain('我的会员'); expect(context).toContain('UI');
     expect(context).toContain('本轮'); expect(context).toContain('推断'); expect(context).not.toContain('DISABLED_SECRET');
+  });
+  test('打包上下文只记录真正注入的来源，并暴露过期归纳与来源指纹', () => {
+    const s = state();
+    s.projectDocuments['project-analysis'] = { ...s.projectDocuments.req, id: 'project-analysis', source: 'ai', content: '旧归纳', sourceFingerprint: 'old' };
+    const bundle = buildProjectKnowledgeBundle(s, '会员详情', 'members');
+    expect(bundle.content).toContain('screen:members');
+    expect(bundle.sources.some(source => source.id === 'doc:req' && !!source.fingerprint)).toBe(true);
+    expect(bundle.sources.find(source => source.id === 'doc:project-analysis')?.stale).toBe(true);
+    expect(bundle.fingerprint).toBe(knowledgeFingerprint(s));
+    s.projectDocuments.req.content = '改变后的要求';
+    expect(buildProjectKnowledgeBundle(s, '会员详情', 'members').sources.find(source => source.id === 'doc:req')?.fingerprint)
+      .not.toBe(bundle.sources.find(source => source.id === 'doc:req')?.fingerprint);
   });
   test('大项目按相关性挑选，预算封顶并披露省略', () => {
     const s = state();

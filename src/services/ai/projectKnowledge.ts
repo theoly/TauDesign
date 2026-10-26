@@ -1,5 +1,5 @@
 import type { ProjectDocumentEntry } from '../../types/projectDocument';
-import type { ComponentDefinition, Decision, Screen, StyleOverride } from '../../types/project';
+import type { ComponentDefinition, Decision, DesignLibraryBinding, Screen, StyleOverride } from '../../types/project';
 import type { DesignSystem } from '../../types/designSystem';
 import type { AIEngineCore, StreamTextOptions } from './engine/core/types';
 
@@ -9,10 +9,11 @@ export interface KnowledgeState {
   screens: Record<string, Pick<Screen, 'id' | 'name' | 'htmlContent' | 'scopedCss' | 'metadata'> & { position?: Screen['position'] }>;
   settings: { deviceProfile: 'pc' | 'mobile'; colorMode: 'light' | 'dark' };
   designSystem: DesignSystem;
+  designLibraryBinding?: DesignLibraryBinding;
   decisions: Record<string, Decision>; components: Record<string, ComponentDefinition>;
   overrides?: Record<string, StyleOverride>;
 }
-interface KnowledgeSource { id: string; title: string; kind: 'document' | 'page'; content: string; stale?: boolean }
+export interface KnowledgeSource { id: string; title: string; kind: 'document' | 'page'; content: string; fingerprint?: string; stale?: boolean }
 const LIMIT = 12000;
 
 function hash(value: string) {
@@ -28,8 +29,11 @@ export function knowledgeFingerprint(state: KnowledgeState): string {
     documents: ordered(state.projectDocuments).filter(([id, d]) => id !== 'project-analysis' && d.source !== 'ai')
       .map(([id, d]) => [id, d.title, d.content, d.enabled, d.missing]),
     pages: ordered(state.screens).filter(([, s]) => s.metadata?.kind !== 'specimen')
-      .map(([id, s]) => [id, s.name, s.htmlContent, s.scopedCss]),
+      .map(([id, s]) => [id, s.name, s.htmlContent, s.scopedCss,
+        s.metadata?.pageGroup, s.metadata?.stateLabel, s.metadata?.audienceRole, s.metadata?.basedOnScreenId]),
     settings: state.settings, theme: state.designSystem,
+    designLibrary: state.designLibraryBinding ? [state.designLibraryBinding.mode, state.designLibraryBinding.sourceProjectId,
+      state.designLibraryBinding.sourceFingerprint, state.designLibraryBinding.sourceTokenVersion, state.designLibraryBinding.referenceSnapshot] : null,
     decisions: ordered(state.decisions).filter(([, d]) => d.active).map(([id, d]) => [id, d.text, d.scope, d.screenId]),
     components: ordered(state.components), overrides: ordered(state.overrides ?? {})
   }));
@@ -86,13 +90,14 @@ export function collectKnowledgeSources(state: KnowledgeState, request: string, 
   const fingerprint = knowledgeFingerprint(state);
   const documents: KnowledgeSource[] = Object.values(state.projectDocuments ?? {})
     .filter(d => d.enabled && !d.missing && d.content.trim() && (!forAnalysis || (d.source !== 'ai' && d.id !== 'project-analysis')))
-    .map(d => ({ id: `doc:${d.id}`, title: d.title.slice(0, 150), kind: 'document', content: excerpt(d.content, request, 2000),
+    .map(d => ({ id: `doc:${d.id}`, title: d.title.slice(0, 150), kind: 'document', content: excerpt(d.content, request, 2000), fingerprint: hash(d.content),
       stale: d.source === 'ai' && d.sourceFingerprint !== fingerprint }));
   const pages = Object.values(state.screens).filter(s => s.metadata?.kind !== 'specimen');
   // 先按名称匹配再读DOM，避免大型工程每轮解析全部HTML。
   const selected = pages.sort((a, b) => Number(b.id === targetId) - Number(a.id === targetId)
     || relevance(b.name, request) - relevance(a.name, request) || a.id.localeCompare(b.id)).slice(0, 20);
-  const evidence: KnowledgeSource[] = selected.map(s => ({ id: `screen:${s.id}`, title: s.name.slice(0, 150), kind: 'page', content: excerpt(pageEvidence(s.htmlContent), request, 2000) }));
+  const evidence: KnowledgeSource[] = selected.map(s => ({ id: `screen:${s.id}`, title: s.name.slice(0, 150), kind: 'page', content: excerpt(pageEvidence(s.htmlContent), request, 2000),
+    fingerprint: hash(JSON.stringify([s.htmlContent, s.scopedCss, s.metadata?.pageGroup, s.metadata?.stateLabel, s.metadata?.audienceRole, s.metadata?.basedOnScreenId])) }));
   return [...documents, ...evidence].sort((a, b) => Number(b.id === `screen:${targetId}`) - Number(a.id === `screen:${targetId}`)
     || relevance(`${b.title} ${b.content}`, request) - relevance(`${a.title} ${a.content}`, request) || a.id.localeCompare(b.id));
 }
@@ -112,6 +117,8 @@ function packageContext(state: KnowledgeState, request: string, targetId?: strin
     + Object.values(state.screens).filter(s => s.metadata?.kind !== 'specimen').length;
   const chosen: KnowledgeSource[] = [];
   const theme = { name: state.designSystem.name.slice(0, 150), device: state.settings.deviceProfile, mode: state.settings.colorMode,
+    library: state.designLibraryBinding ? { mode: state.designLibraryBinding.mode,
+      source: state.designLibraryBinding.sourceName.slice(0, 150), fingerprint: state.designLibraryBinding.sourceFingerprint } : undefined,
     density: state.designSystem.tokens.personality.density, primary: state.designSystem.tokens.colors.primary['500'],
     rules: Object.values(state.decisions).filter(d => d.active && d.scope === 'global').slice(0, 16).map(d => d.text.slice(0, 200)),
     components: Object.values(state.components).slice(0, 20).map(c => c.name.slice(0, 100)) };
@@ -126,6 +133,13 @@ function packageContext(state: KnowledgeState, request: string, targetId?: strin
 }
 export function buildProjectKnowledgeContext(state: KnowledgeState, request: string, targetId?: string): string {
   return packageContext(state, request, targetId).content;
+}
+
+/** The same bounded selection used by the prompt, with traceable source identities. */
+export function buildProjectKnowledgeBundle(state: KnowledgeState, request: string, targetId?: string): {
+  content: string; sources: KnowledgeSource[]; fingerprint: string;
+} {
+  return packageContext(state, request, targetId);
 }
 
 const requirementSchema = { type: 'object', additionalProperties: false, required: ['text', 'basis', 'sourceIds'], properties: {

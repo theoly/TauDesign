@@ -1,0 +1,29 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>候选操作验证</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {InfiniteCanvas} from '/src/components/canvas/InfiniteCanvas.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {buildDesignTaskContract} from '/src/services/ai/designWorkflow.ts';
+import {ProjectRepository} from '/src/services/storage/projectRepository.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {DeliveryRepository} from '/src/services/storage/deliveryRepository.ts';
+const params=new URL(location.href).searchParams,mode=params.get('mode')||'synthetic';
+const baseline='<main class="container-max p-6 col gap-4" data-nid="root0001"><section class="card p-4 col gap-4" data-nid="section1"><h1 class="text-xl">公开资料</h1><button class="btn btn-primary" data-nid="action01">打开资料</button></section></main>';
+const replacement='<main class="container-max p-6 col gap-4" data-nid="root0001"><article class="card p-4 col gap-4" data-nid="article1"><h1 class="text-xl">隐私提示</h1><button class="btn btn-primary" data-nid="action01">登录查看</button></article></main>';
+let target='page',newHtml=replacement,request='隐藏真实信息，展示登录提示',name='候选',contract;
+if(mode==='real'){
+ const inputs=await window.fixtureIO({op:'inputs'}),storage=createProjectStorage(inputs.id,inputs.folder),doc=await new ProjectRepository(storage).load();
+ if(!doc||!useProjectStore.getState().loadProjectDocument(doc,inputs.folder))throw Error('Failed to load isolated copy');
+ const saved=JSON.parse(await storage.readText('candidates/current.json')).candidate;target=saved.targetScreenId;newHtml=saved.newHtml;request=saved.modificationRequest;name=saved.screenName;contract=saved.workflowContract;
+ useProjectStore.getState().setActiveScreen(target);
+}else{
+ useProjectStore.getState().initNewProject({name:'候选操作独立验证',deviceProfile:'pc',createSpecimen:false});useProjectStore.getState().addScreen({name:'原版',htmlContent:baseline,position:{x:0,y:0}},target);
+}
+useHistoryStore.getState().restore(null);
+function stage(){const s=useProjectStore.getState();const c=contract||buildDesignTaskContract({intent:'modify_screen',request,target:s.screens[target],deviceProfile:s.settings.deviceProfile,frameWidth:s.settings.frameWidth,designSystem:s.designSystem,allowedChanges:['screen:'+target]});s.stageScreenChange(target,newHtml,name,request,c);}
+stage();
+window.fixture={mode,target,original:useProjectStore.getState().screens[target].htmlContent,newHtml,stage,state:()=>useProjectStore.getState(),report:()=>useProjectStore.getState().getStagedDeliveryReport(),key:()=>useProjectStore.getState().getStagedRenderContextKey(),undo:()=>useHistoryStore.getState().undo(),redo:()=>useHistoryStore.getState().redo(),archives:async id=>{const s=useProjectStore.getState();return (await new DeliveryRepository(createProjectStorage(s.id,s.folderPath),s.id).listForScreen(id)).records;}};
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(InfiniteCanvas));
+</script></body></html>

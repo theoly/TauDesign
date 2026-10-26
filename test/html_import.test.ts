@@ -37,6 +37,7 @@ describe('HTML import analysis', () => {
     expect(doc.querySelectorAll('style')[1].parentElement).toBe(doc.body);
     expect(doc.querySelector('path')!.getAttribute('d')).toBe('M0 0h1v1Z');
     expect(result.scopedCss).toBe('');
+    expect(result.executionRecord).toMatchObject({ source: 'html-import', completeHtml: result.htmlContent, continuationCount: 0 });
     expect(result.changes).toEqual([]);
     expect(analysis.title).toBe('账单');
   });

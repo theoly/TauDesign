@@ -1,6 +1,7 @@
 import { AIProviderConfig, ErrorKind, StreamEvent } from '../../types/provider';
 import { createUsageTracker } from './usageTracker';
-import { isTauri, invoke, Channel } from '@tauri-apps/api/core';
+import { isTauri } from '@tauri-apps/api/core';
+import { streamNativeProxy } from './nativeProxy';
 import { supportsNativeContinuation } from './boundedContinuation';
 import { ModelDiscoveryService } from './modelDiscoveryService';
 import { DiscoveredModel } from './engine/core/multimodalGuard';
@@ -47,7 +48,7 @@ class StreamChunkProcessor {
             this.onEvent({ type: 'Usage', input_tokens: parsed.prompt_eval_count, output_tokens: parsed.eval_count });
           }
           if (parsed.done) {
-            this.onEvent({ type: 'Done', finish_reason: 'stop' });
+            this.onEvent({ type: 'Done', finish_reason: parsed.done_reason || 'stop' });
           }
         } catch (e) {
           /* partial */
@@ -165,12 +166,13 @@ class StreamChunkProcessor {
                 this.onEvent({ type: 'Usage', input_tokens: this.lastInputTokens, output_tokens: this.lastOutputTokens });
               }
             }
-            if (this.currentEvent === 'message_stop' || data.type === 'message_stop') {
+            const stopReason = data.delta?.stop_reason ?? data.stop_reason;
+            if (stopReason || this.currentEvent === 'message_stop' || data.type === 'message_stop') {
               if (this.isInsideThinkTag) {
                 this.isInsideThinkTag = false;
                 this.onEvent({ type: 'Delta', text: '\n</think>\n\n' });
               }
-              this.onEvent({ type: 'Done', finish_reason: 'stop' });
+              this.onEvent({ type: 'Done', finish_reason: stopReason || 'stop' });
             }
           } else if (this.provider.protocol === 'gemini') {
             const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -412,8 +414,13 @@ export class AIService {
         // Strategy 1: If running inside Tauri desktop app, use native Rust proxy to completely bypass CORS
         if (isTauri()) {
           try {
-            const channel = new Channel<{ type: 'Chunk' | 'Error' | 'Done'; data?: string }>();
-            channel.onmessage = (payload) => {
+            await streamNativeProxy({
+              url,
+              method: 'POST',
+              headers,
+              body: JSON.stringify(bodyJson),
+              allow_private_network: false,
+            }, (payload) => {
               if (isAborted) return;
               if (payload.type === 'Chunk' && payload.data) {
                 refreshInactivityTimer();
@@ -431,19 +438,10 @@ export class AIService {
                 processor.finish();
                 emitEvent({ type: 'Done', finish_reason: 'stop' });
               }
-            };
-
-            await invoke('proxy_stream_request', {
-              url,
-              method: 'POST',
-              headers,
-              body: JSON.stringify(bodyJson),
-              allow_private_network: false,
-              channel
-            });
+            }, controller.signal);
             return;
           } catch (tauriErr) {
-            if (!streamFailed) {
+            if (!isAborted && !streamFailed) {
               emitEvent({ type: 'Error', kind: 'network_error', message: `原生代理中断: ${String(tauriErr)}` });
             }
             return;
@@ -540,6 +538,7 @@ export class AIService {
           message: msg
         });
       } finally {
+        clearAllTimers();
         usageTracker.settle(isAborted ? 'aborted' : streamFailed ? 'error' : 'completed');
       }
     })();

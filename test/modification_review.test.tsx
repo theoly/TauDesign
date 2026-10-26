@@ -11,6 +11,7 @@ import { InfiniteCanvas } from '../src/components/canvas/InfiniteCanvas';
 import { useProjectStore } from '../src/stores/useProjectStore';
 import { useAIConfigStore, defaultProviders, defaultBindings } from '../src/stores/useAIConfigStore';
 import { defaultTheme } from '../src/utils/themePresets';
+import * as renderedQuality from '../src/utils/renderedQuality';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 const analysis = { summary: '页面结构分析', items: [
@@ -32,7 +33,7 @@ describe('旧页面分析选择与比较聚焦', () => {
     useProjectStore.getState().initNewProject({ name: '分析测试', deviceProfile: 'mobile', designSystem: defaultTheme, createSpecimen: false });
     targetId = useProjectStore.getState().addScreen({ name: '原页面', htmlContent: html });
     useAIConfigStore.setState({ providers: defaultProviders.map(p => p.id === 'prov-deepseek' ? { ...p, apiKey: 'test' } : p), bindings: defaultBindings });
-    objectMock = spyOn(DefaultAIEngineCore.prototype, 'generateObject').mockResolvedValue(analysis);
+    objectMock = spyOn(DefaultAIEngineCore.prototype, 'generateObject').mockResolvedValue({summary:analysis.summary,items:analysis.items.map(({id,...item})=>({...item,scope:'page',operations:[]}))});
     pipelineMock = spyOn(PipelineExecutor, 'execute').mockResolvedValue({ status: 'staged_side_by_side', rawResponse: `<artifact type="screen">${html}</artifact>`, extractedHtml: html });
     host = document.createElement('div'); document.body.append(host); root = createRoot(host);
   });
@@ -55,11 +56,15 @@ describe('旧页面分析选择与比较聚焦', () => {
   });
 
   test('确认前不生成；仅传递所选建议与补充，切换激活画框不改变目标，重复确认只执行一次', async () => {
+    const otherId=useProjectStore.getState().addScreen({name:'其他页面',htmlContent:'<main>其他</main>'});
     await render(<Harness />); await start();
     expect(pipelineMock).not.toHaveBeenCalled(); expect(useProjectStore.getState().stagedScreen).toBeNull();
     expect(useProjectStore.getState().screens[targetId].htmlContent).toBe(html);
     const plan = latestPlan();
-    act(() => { useProjectStore.getState().addScreen({ name: '其他页面', htmlContent: '<main>其他</main>' }); });
+    expect(plan.workflowContract?.workflowId).toBe('review-page-modification');
+    expect(plan.workflowContract?.allowedChanges).toEqual([]);
+    expect(objectMock.mock.calls[0][1].messages[0].content).toContain('workflow=review-page-modification');
+    act(() => { useProjectStore.getState().setActiveScreen(otherId); });
     await act(async () => { await Promise.all([engine.confirmModification(plan.id, ['suggestion-1'], '保留配色'), engine.confirmModification(plan.id, ['suggestion-1'], '')]); });
     expect(pipelineMock).toHaveBeenCalledTimes(1);
     const input = pipelineMock.mock.calls[0][0].input;
@@ -140,6 +145,30 @@ describe('旧页面分析选择与比较聚焦', () => {
     expect(useProjectStore.getState().stagedScreen).toBeNull();
   });
 
+  test('分析期间原页改变时，错误格式不触发第二次纠正请求', async () => {
+    await render(<Harness />);
+    let resolve!: (value: any) => void;
+    objectMock.mockImplementationOnce(() => new Promise(r => { resolve = r; }));
+    let pending!: Promise<void>;
+    await act(async () => { pending = engine.sendMessage('优化当前页面', undefined, { referencedScreenId: targetId }); });
+    act(() => useProjectStore.getState().updateScreenHtml(targetId, '<main>分析期间修改</main>'));
+    await act(async () => { resolve({invalid:true}); await pending; });
+    expect(objectMock).toHaveBeenCalledTimes(1);
+    expect(engine.messages.find(m=>m.modificationReview)?.modificationReview?.summary).toContain('已变化');
+    expect(pipelineMock).not.toHaveBeenCalled();
+  });
+
+  test('确认拒绝未知选择和被改写的分析建议，不调用模型或写候选', async () => {
+    await render(<Harness />); await start(); const review=latestPlan();
+    await act(async()=>{await engine.confirmModification(review.id,['unknown'],'补充要求');});
+    expect(pipelineMock).not.toHaveBeenCalled();
+    expect(engine.messages.find(m=>m.id===review.id)?.modificationReview?.summary).toContain('未知');
+    review.modificationReview!.items[0].change='篡改未确认要求';
+    await act(async()=>{await engine.confirmModification(review.id,['suggestion-1'],'');});
+    expect(engine.messages.find(m=>m.id===review.id)?.modificationReview?.summary).toContain('分析证据');
+    expect(useProjectStore.getState().stagedScreen).toBeNull();
+  });
+
   test('原目标删除后重新分析不转向其他激活画框', async () => {
     await render(<Harness />); await start(); const plan = latestPlan();
     act(() => {
@@ -165,7 +194,13 @@ describe('旧页面分析选择与比较聚焦', () => {
 
   test('单页润色先选择，再生成候选，原HTML不变', async () => {
     let closed = false;
-    const streamMock = spyOn(DefaultAIEngineCore.prototype, 'streamText').mockReturnValue({ textPromise: Promise.resolve(`\`\`\`html\n${html}\n\`\`\``) } as any);
+    const response = `\`\`\`html\n${html}\n\`\`\``;
+    const empty = async function* () {};
+    const streamMock = spyOn(DefaultAIEngineCore.prototype, 'streamText').mockReturnValue({
+      textPromise: Promise.resolve(response), textStream: (async function* () { yield response; })(),
+      reasoningStream: empty(), reasoningPromise: Promise.resolve(undefined), usagePromise: Promise.resolve(undefined),
+      recoveryPromise: Promise.resolve(undefined), finishReasonPromise: Promise.resolve('stop'), abort: () => {}
+    } as any);
     try {
       await render(<RestylePanel scope={targetId} onClose={() => { closed = true; }} />);
       const analyze = Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('分析原页面'))!;
@@ -174,12 +209,19 @@ describe('旧页面分析选择与比较聚焦', () => {
       act(() => host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
       await act(async () => { Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('按所选内容生成新版'))!.click(); });
       expect(streamMock).toHaveBeenCalledTimes(1); expect(closed).toBe(true);
+      const sentMessages = (streamMock.mock.calls[0][0] as any).messages;
+      expect(sentMessages.map((message: any) => message.content).join('\n')).toContain('workflow=restyle-page');
       expect(useProjectStore.getState().stagedScreen?.targetScreenId).toBe(targetId);
+      expect(useProjectStore.getState().stagedScreen?.workflowContract?.modificationReview?.selectedIds).toEqual(['suggestion-1']);
+      expect(host.textContent).toContain('查看分析检查记录');
       expect(useProjectStore.getState().screens[targetId].htmlContent).toBe(html);
     } finally { streamMock.mockRestore(); }
   });
 
   test('对比蒙版盖住其他画框，原版只挂载一次，退出比较恢复', async () => {
+    // This fixture tests comparison UI; happy-dom has no actual layout to complete a render audit.
+    const observer = spyOn(renderedQuality, 'observeRenderedQuality').mockImplementation(() => () => {});
+    try {
     const otherId = useProjectStore.getState().addScreen({ name: '其他页', htmlContent: '<main>其他</main>' });
     useProjectStore.getState().stageScreenChange(targetId, html, '新版');
     await render(<InfiniteCanvas />);
@@ -195,9 +237,11 @@ describe('旧页面分析选择与比较聚焦', () => {
       act(() => useProjectStore.getState().stageScreenChange(targetId, html, '再次比较'));
       expect(host.querySelector('[data-testid="comparison-backdrop"]')).not.toBeNull();
       act(() => useProjectStore.getState().setStagedRenderQuality(useProjectStore.getState().getStagedRenderContextKey(), {status:'complete',findings:[],inspected:1}));
-      act(() => { useProjectStore.getState()[action](); });
+      await act(async () => { await useProjectStore.getState()[action](); });
+      expect(useProjectStore.getState().stagedAdoptionError).toBeNull();
       expect(host.querySelector('[data-testid="comparison-backdrop"]')).toBeNull();
       expect(host.querySelector('[data-comparison-focus]')).toBeNull();
     }
+    } finally { observer.mockRestore(); }
   });
 });

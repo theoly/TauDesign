@@ -20,6 +20,7 @@ import { computeRetraceability } from '../../utils/tokenLint';
 export const StylePicker: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const { designSystem, settings, setDesignSystem, screens, screenOrder, overrides, scanThemeConflicts, clearOverridesForTheme } =
     useProjectStore();
+  const libraryReadOnly=useProjectStore(state=>state.designLibraryBinding?.mode==='pinned_reference');
   const [picked, setPicked] = useState<string>(designSystem.id);
   // 换肤前的预期管理：先告诉用户有多少内容其实跟不上新主题 (T-AE-22/23)
   const [confirming, setConfirming] = useState(false);
@@ -51,6 +52,7 @@ export const StylePicker: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const scale = previewWidth / frameWidth;
 
   const applyTheme = (clearConflicts: boolean) => {
+    if(useProjectStore.getState().designLibraryBinding?.mode==='pinned_reference')return;
     if (clearConflicts) {
       // escaped 覆盖是用户显式逃逸，不在清除范围内
       clearOverridesForTheme(clearable.map((c) => c.key));
@@ -157,6 +159,7 @@ export const StylePicker: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 返回
               </button>
               <button
+                disabled={libraryReadOnly}
                 onClick={() => applyTheme(false)}
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg"
               >
@@ -182,6 +185,7 @@ export const StylePicker: React.FC<{ onClose: () => void }> = ({ onClose }) => {
                 稍后再说
               </button>
               <button
+                disabled={libraryReadOnly} title={libraryReadOnly?'固定版本参考只读，请先转为项目副本':undefined}
                 onClick={onApplyClick}
                 className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg"
               >

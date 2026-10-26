@@ -29,6 +29,39 @@ export interface ProjectSettings {
   lodBudget: number;                  // default 12
 }
 
+export interface DesignSystemOrigin {
+  kind: 'project' | 'html_import' | 'project_override';
+  sourceId?: string;
+  sourceName?: string;
+  sourceFingerprint?: string;
+  /** Version of the effective token set; undo restores the previous version with the token snapshot. */
+  tokenVersion?: number;
+  /** Stable identity of the effective token set, independent of object key insertion order. */
+  tokenFingerprint?: string;
+  updatedAt: number;
+}
+
+/** A materialized copy of another local project's design assets. No writes to the source project. */
+export interface DesignLibraryBinding {
+  mode: 'project_copy' | 'pinned_reference';
+  sourceProjectId: string;
+  sourceName: string;
+  sourceDeviceProfile: 'pc' | 'mobile';
+  sourceFingerprint: string;
+  sourceFingerprintVersion?: 2;
+  sourceTokenVersion: number;
+  importedAt: number;
+  /** Pinned local cache; old resource/definition members remain protected after explicit updates. */
+  referenceSnapshot?: {
+    version: 1; designSystemId: string; designSystemName: string; tokenFingerprint: string;
+    components: Record<string, string>; assets: Record<string, string>; files: Record<string, string>;
+  };
+  importEvidence?: {
+    version: 1; checkedAt: number; sourceFingerprint: string; previewFingerprint: string; targetContextFingerprint: string;
+    files: Array<{relPath:string;fingerprint:string}>;
+  };
+}
+
 export interface Screen {
   id: ScreenId;
   name: string;
@@ -38,7 +71,18 @@ export interface Screen {
   scopedCss?: string;
   thumbnail?: string;
   /** 'specimen' 为风格样张页（doc/aesthetic/spec.md §6.6），非业务画框 */
-  metadata?: { description?: string; promptOrigin?: string; kind?: 'specimen'; importedHtml?: HtmlImportMetadata; navigationTitle?: string };
+  metadata?: { description?: string; promptOrigin?: string; kind?: 'specimen'; importedHtml?: HtmlImportMetadata; navigationTitle?: string; scopedStyleAsset?: ScopedStyleAssetIdentity;
+    /** Static design taxonomy only; no runtime role or state transitions are implied. */
+    pageGroup?: string; stateLabel?: string; audienceRole?: string; basedOnScreenId?: ScreenId;
+    multiPageDelivery?:import('../services/ai/multiPageContract').MultiPageDelivery;
+    creationEvidence?: import('../services/ai/pageCreationValidation').PageCreationEvidence };
+}
+
+export interface ScopedStyleAssetIdentity {
+  id: string;
+  version: number;
+  fingerprint: string;
+  source: 'imported' | 'generated' | 'edited';
 }
 
 /**
@@ -60,6 +104,7 @@ export interface StyleOverride {
   nid: Nid;
   declarations: Record<string, string>;
   escaped?: boolean;
+  escapedProperties?: string[];
 }
 
 export interface Asset {
@@ -100,8 +145,14 @@ export interface ComponentDefinition {
   description?: string;
   templateHtml: string;
   slotDefs?: SlotDef[];
+  /** Explicit fixed-template/typed-slot validation. Missing keeps legacy compatibility. */
+  templateContract?: { version: 1 };
   createdAt: number;
   updatedAt: number;
+  /** Incremented when template, slots or template contract change; legacy components are version 1. */
+  version?: number;
+  origin?: { kind: 'manual' | 'extracted' | 'library_copy'; sourceScreenId?: ScreenId; sourceNid?: Nid;
+    sourceProjectId?: string; sourceComponentId?: ComponentId; sourceFingerprint?: string };
 }
 
 export interface ProjectData {
@@ -112,6 +163,8 @@ export interface ProjectData {
   updatedAt: number;
   settings: ProjectSettings;
   designSystem: DesignSystem;
+  designSystemOrigin?: DesignSystemOrigin;
+  designLibraryBinding?: DesignLibraryBinding;
   screens: Screen[];
   assets: Asset[];
   components?: ComponentDefinition[];

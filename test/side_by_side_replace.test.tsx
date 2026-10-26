@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { useProjectStore } from '../src/stores/useProjectStore';
+import { passStagedRenderCheck } from './helpers/stagedQuality';
 import { useHistoryStore } from '../src/stores/useHistoryStore';
 import { CanvasToolExecutor } from '../src/services/tools/canvasToolExecutor';
 import { InfiniteCanvas } from '../src/components/canvas/InfiniteCanvas';
@@ -180,14 +181,15 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
     expect(store.stagedScreen).toBeNull();
   });
 
-  it('CHK-F-04: 采纳新版 (替换原版) 闭环：备份 Checkpoint，更新原画框并清空暂存区', () => {
+  it('CHK-F-04: 采纳新版 (替换原版) 闭环：备份 Checkpoint，更新原画框并清空暂存区', async () => {
     useProjectStore.getState().stageScreenChange(
       'screen-auth',
       '<div data-nid="root-cand"><h1>采纳后的新认证页面</h1></div>',
       '认证信息 (AI 方案候选)'
     );
 
-    useProjectStore.getState().adoptStagedChange();
+    passStagedRenderCheck();
+    await useProjectStore.getState().adoptStagedChange();
 
     const store = useProjectStore.getState();
     // 1. 原画框内容被替换为新版
@@ -199,7 +201,7 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
     expect(checkpoints.some((cp) => cp.label.includes('采纳新版前备份: 认证信息'))).toBe(true);
   });
 
-  it('CHK-F-05: 两版都留闭环：创建新独立画框，原画框保持不变，清空暂存区', () => {
+  it('CHK-F-05: 两版都留闭环：创建新独立画框，原画框保持不变，清空暂存区', async () => {
     const originalHtml = useProjectStore.getState().screens['screen-auth'].htmlContent;
 
     useProjectStore.getState().stageScreenChange(
@@ -208,7 +210,8 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
       '认证信息'
     );
 
-    useProjectStore.getState().keepBothScreens();
+    passStagedRenderCheck();
+    await useProjectStore.getState().keepBothScreens();
 
     const store = useProjectStore.getState();
     // 1. 原画框未被改动
@@ -217,6 +220,7 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
     expect(store.screenOrder.length).toBe(2);
     const newScreenId = store.screenOrder[1];
     expect(store.screens[newScreenId].htmlContent).toContain('新分支页面');
+    expect(store.screens[newScreenId].metadata?.basedOnScreenId).toBe('screen-auth');
     // 3. 暂存区清空
     expect(store.stagedScreen).toBeNull();
   });
@@ -253,6 +257,9 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
     expect(container.textContent).toContain('采纳新版 (替换原版)');
     expect(container.textContent).toContain('两版都留');
     expect(container.textContent).toContain('保留原版');
+    expect(container.textContent).toContain('交付检查');
+    const adopt = Array.from(container.querySelectorAll('button')).find(button => button.textContent?.includes('采纳新版'));
+    expect(adopt?.disabled).toBe(true);
   });
 
   it('CHK-F-03: 结构守卫拦截 (rejected_by_guard) 协同可视化：画布暂存新页面并排展示，支持一键采纳替换', async () => {
@@ -301,11 +308,13 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
       expect(chatText).toContain('新方案已在右侧画框并排就绪');
       expect(chatText).toContain('结构守卫提醒');
 
-      // 4. 点击采纳新版，原画框被覆盖更新，暂存区清空
+      // 4. 结构守卫拦截后只能走明确的强制放行；渲染检查通过后原画框才会更新。
+      act(() => passStagedRenderCheck());
       const adoptBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-        b.textContent?.includes('采纳新版')
+        b.textContent?.includes('强制放行并覆盖更新原画框')
       );
       expect(adoptBtn).toBeDefined();
+      expect(adoptBtn?.disabled).toBe(false);
 
       await act(async () => {
         adoptBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

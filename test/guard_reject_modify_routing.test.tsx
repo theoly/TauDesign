@@ -11,6 +11,7 @@ import { resolveApplyToolCall } from '../src/services/tools/applyTargetResolver'
 import { PipelineContext } from '../src/services/ai/engine/pipeline/types';
 import { PipelineExecutor } from '../src/services/ai/engine/pipeline/executor';
 import { AIService } from '../src/services/ai/aiService';
+import { passStagedRenderCheck } from './helpers/stagedQuality';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 let analysisMock: ReturnType<typeof mockModificationAnalysis>;
@@ -241,6 +242,9 @@ describe('引用画框修改落点路由 (Guard Reject Modify Routing)', () => {
       expect(guardText).toContain('结构守卫已拦截本次覆盖');
       expect(guardText).not.toContain('一键挂载至画板');
       expect(Object.keys(useProjectStore.getState().screens).length).toBe(1);
+
+      // A force override may bypass the structural guard only after current render inspection passes.
+      act(() => passStagedRenderCheck());
 
       // 2. 点击强制放行
       const forceBtn = Array.from(container.querySelectorAll('button')).find((b) =>

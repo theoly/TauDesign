@@ -1,6 +1,12 @@
 dist/
 dist-desktop/
-doc/
+doc/*
+!doc/design-workflow-refactor/
+doc/design-workflow-refactor/*
+!doc/design-workflow-refactor/*.md
+!doc/candidate-action-feedback/
+doc/candidate-action-feedback/*
+!doc/candidate-action-feedback/*.md
 node_modules/
 spike/
 AGENTS.md
@@ -13,3 +19,5 @@ bun.lock
 GEMINI.md
 .mcp.json
 .DS_Store
+__pycache__/
+*.pyc

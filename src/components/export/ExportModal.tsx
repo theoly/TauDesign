@@ -150,7 +150,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
 
       if (outcome.engine === 'foreign-object') {
         setExportNotice(
-          `已使用兼容渲染导出（${outcome.fallbackReason || '原生渲染不可用'}）。桌面端原生渲染可获得更高保真度。`
+          `已使用兼容渲染导出（${outcome.fallbackReason || '原生渲染不可用'}）。桌面端原生渲染可获得更高保真度。${outcome.warnings?.length ? ' '+outcome.warnings.join(' ') : ''}`
         );
       }
       setLastEngine(outcome.engine);

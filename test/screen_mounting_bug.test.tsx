@@ -1,3 +1,5 @@
+import {stubPageCreationRender} from './helpers/pageCreation';
+stubPageCreationRender();
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';

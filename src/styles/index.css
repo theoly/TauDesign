@@ -30,3 +30,22 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+
+/* Paired inspector fields keep an editable value visible in narrow sidebars. */
+.property-field {
+  container-type: inline-size;
+}
+@container (max-width: 220px) {
+  .property-field-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px;
+  }
+  .property-field-label {
+    grid-column: 1 / -1;
+    width: auto;
+  }
+  .property-field-row:has(input[type="color"]) {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+  }
+}

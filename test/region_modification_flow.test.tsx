@@ -74,9 +74,11 @@ describe('区块确认到候选的真实流程',()=>{
  expect(input.request).toContain('重新排列标题区');expect(input.request).toContain('保留标题文案');expect(input.authorizedNids).toEqual(['region']);
  const store=useProjectStore.getState();expect(store.screens[id].htmlContent).toBe(regionHtml);
  const candidate=store.stagedScreen!;expect(candidate.targetScreenId).toBe(id);expect(candidate.newHtml).toContain('text-xl');
+ expect(candidate.executionRecord).toMatchObject({ source: 'local-edit',
+   localEdit: { mode: 'region', targetNids: ['region'], operationCount: 1 }, qualityReport: { passed: true } });
  const parse=(html:string)=>new DOMParser().parseFromString(html,'text/html');
  expect(parse(candidate.newHtml).querySelector('[data-nid="other"]')!.isEqualNode(parse(regionHtml).querySelector('[data-nid="other"]'))).toBe(true);
- act(()=>{useProjectStore.getState().setStagedRenderQuality(useProjectStore.getState().getStagedRenderContextKey(),{status:'complete',findings:[],inspected:1});useProjectStore.getState().adoptStagedChange();});
+ await act(async ()=>{useProjectStore.getState().setStagedRenderQuality(useProjectStore.getState().getStagedRenderContextKey(),{status:'complete',findings:[],inspected:1});await useProjectStore.getState().adoptStagedChange();});
  expect(useProjectStore.getState().screens[id].htmlContent).toContain('text-xl');
  act(()=>useHistoryStore.getState().undo());expect(useProjectStore.getState().screens[id].htmlContent).toBe(regionHtml);
  });

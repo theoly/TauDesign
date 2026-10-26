@@ -1,6 +1,8 @@
 import type { DesignSystem } from './designSystem';
 import type { MobileNavigationPolicy } from '../utils/mobileNavigation';
 
+export interface HtmlImportPreviewReceipt { version:1; fingerprint:string }
+
 export type HtmlImportMode = 'preserve' | 'unify' | 'selective';
 export type HtmlImportCategory = 'colors' | 'typography' | 'spacing' | 'radius' | 'shadows';
 
@@ -44,6 +46,15 @@ export interface HtmlImportMetadata {
   retained: string[];
   /** Import provenance format version. Source NID aliases stay in the document. */
   version: 1;
+  workflow?: {
+    id: 'import-html-preserve' | 'import-html-unify' | 'import-html-selective';
+    contractVersion: 1;
+    strategy: 'preserve-source' | 'normalize-tokens' | 'normalize-selected-tokens';
+    sourceFingerprint: string;
+    designSystemId: string;
+    deviceProfile: 'pc' | 'mobile';
+    frameWidth: number;
+  };
 }
 
 export interface HtmlImportOptions extends MobileNavigationPolicy {
@@ -51,10 +62,14 @@ export interface HtmlImportOptions extends MobileNavigationPolicy {
   categories?: HtmlImportCategory[];
   designSystem: DesignSystem;
   colorMode: 'light' | 'dark';
+  frameWidth?: number;
+  referenceDeviceName?: string;
 }
 
 export interface HtmlImportResult {
   htmlContent: string;
+  workflowContract?: import('../services/ai/designWorkflow').DesignTaskContract;
+  executionRecord?: import('../services/ai/designExecutionRecord').DesignExecutionRecord;
   /** Source styles stay in the complete document to retain their cascade position. */
   scopedCss: string;
   changes: string[];

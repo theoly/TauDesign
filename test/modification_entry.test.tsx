@@ -85,12 +85,13 @@ describe('具体要求跳过分析的实际入口', () => {
     expect(engine.messages.at(-1)?.text).toContain('本次未应用修改');
   });
   test('直接修改锁定原目标，切换激活页不会误改另一页', async () => {
+    let other!: string;
+    act(() => { other = useProjectStore.getState().addScreen({ name: '其他页面', htmlContent: '<main>其他页面</main>' });useProjectStore.getState().setActiveScreen(id); });
     let resolve!: (value: any) => void;
     pipeline.mockImplementationOnce(() => new Promise(r => { resolve = r; }));
     let pending!: Promise<void>;
     await act(async () => { pending = engine.sendMessage('修改页面，将主按钮文案改为“提交”', undefined, { referencedScreenId: id }); });
-    let other!: string;
-    act(() => { other = useProjectStore.getState().addScreen({ name: '其他页面', htmlContent: '<main>其他页面</main>' }); });
+    act(() => { useProjectStore.getState().setActiveScreen(other); });
     const otherHtml = useProjectStore.getState().screens[other].htmlContent;
     await act(async () => { resolve({ status: 'staged_side_by_side', rawResponse: `<artifact>${updated}</artifact>`, extractedHtml: updated }); await pending; });
     expect(objects).not.toHaveBeenCalled();

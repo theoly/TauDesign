@@ -10,6 +10,7 @@ import { TokenLintEngine } from '../src/utils/tokenLint';
 import { PromptBuilder } from '../src/services/ai/promptBuilder';
 import { compileTokensToCss } from '../src/utils/cssCompiler';
 import { setTextByNid } from '../src/utils/textNode';
+import { passStagedRenderCheck } from './helpers/stagedQuality';
 
 describe('PRD 全功能综合验收 (Full PRD Acceptance Suite)', () => {
   beforeEach(() => {
@@ -118,10 +119,18 @@ describe('PRD 全功能综合验收 (Full PRD Acceptance Suite)', () => {
       const state = useProjectStore.getState();
       expect(state.components[compId!]).toBeDefined();
       expect(state.components[compId!].name).toBe('主要按钮');
+      expect(state.components[compId!].version).toBe(1);
+      expect(state.components[compId!].origin).toEqual({ kind: 'extracted', sourceScreenId: 'screen-1', sourceNid: 'btn-00001' });
 
       const updatedHtml = state.screens['screen-1'].htmlContent;
       expect(updatedHtml).toContain(`data-component-id="${compId}"`);
       expect(updatedHtml).toContain('data-component-instance="');
+      expect(updatedHtml).toContain('data-component-version="1"');
+      useHistoryStore.getState().undo();
+      expect(useProjectStore.getState().components[compId!]).toBeUndefined();
+      expect(useProjectStore.getState().screens['screen-1'].htmlContent).not.toContain(`data-component-id="${compId}"`);
+      useHistoryStore.getState().redo();
+      expect(useProjectStore.getState().components[compId!].origin?.sourceNid).toBe('btn-00001');
     });
 
     test('D12: 组件同步时跳过存在冲突样式覆盖的实例，并列出跳过明细', () => {
@@ -137,11 +146,26 @@ describe('PRD 全功能综合验收 (Full PRD Acceptance Suite)', () => {
       useProjectStore.getState().updateComponent(compId, {
         templateHtml: '<div class="card p-6 border"><p>升级版卡片</p></div>'
       });
+      expect(useProjectStore.getState().components[compId].version).toBe(2);
 
       // 4. 同步并验证跳过冲突
       const result = useProjectStore.getState().syncComponentInstances(compId, false);
       expect(result.skippedConflictCount).toBeGreaterThanOrEqual(1);
       expect(result.details.some(d => d.includes('跳过'))).toBe(true);
+    });
+
+    test('组件模板版本随内容递增，实例同步后记录新版本', () => {
+      const store = useProjectStore.getState();
+      const compId = store.createComponent('版本卡片', '<article class="card"><p>内容</p></article>');
+      store.insertComponent('screen-1', compId);
+      expect(useProjectStore.getState().screens['screen-1'].htmlContent).toContain('data-component-version="1"');
+      store.updateComponent(compId, { name: '版本卡片改名' });
+      expect(useProjectStore.getState().components[compId].version).toBe(1);
+      store.updateComponent(compId, { templateHtml: '<article class="card p-4"><p>内容</p></article>' });
+      expect(useProjectStore.getState().components[compId].version).toBe(2);
+      const result = useProjectStore.getState().syncComponentInstances(compId, true);
+      expect(result.syncedCount).toBeGreaterThan(0);
+      expect(useProjectStore.getState().screens['screen-1'].htmlContent).toContain('data-component-version="2"');
     });
 
     test('分离实例 (Detach) 移除组件关联，保留原始 DOM 结构', () => {
@@ -152,6 +176,7 @@ describe('PRD 全功能综合验收 (Full PRD Acceptance Suite)', () => {
       const html = useProjectStore.getState().screens['screen-1'].htmlContent;
       expect(html).not.toContain(`data-component-id="${compId}"`);
       expect(html).not.toContain('data-component-instance=');
+      expect(html).not.toContain('data-component-version=');
       expect(html).toContain('data-nid="tag-1"');
       expect(html).toContain('测试');
     });
@@ -173,11 +198,12 @@ describe('PRD 全功能综合验收 (Full PRD Acceptance Suite)', () => {
       expect(staged?.screenName).toBe('改版方案 A');
     });
 
-    test('D17 采纳分支 1: 「采纳新版」覆盖原画框，原版自动打 Checkpoint 备份', () => {
+    test('D17 采纳分支 1: 「采纳新版」覆盖原画框，原版自动打 Checkpoint 备份', async () => {
       const newHtml = '<div data-nid="root-new" class="p-4"><h1>采纳后的页面</h1><button data-nid="btn-00001" class="btn btn-primary">点击进入</button></div>';
       useProjectStore.getState().stageScreenChange('screen-1', newHtml, '改版方案');
 
-      useProjectStore.getState().adoptStagedChange();
+      passStagedRenderCheck();
+      await useProjectStore.getState().adoptStagedChange();
 
       // 原画框已更新为新版 (已注入 nid)
       expect(useProjectStore.getState().screens['screen-1'].htmlContent).toContain('采纳后的页面');
@@ -188,12 +214,13 @@ describe('PRD 全功能综合验收 (Full PRD Acceptance Suite)', () => {
       expect(checkpoints.some(cp => cp.label.includes('采纳新版前备份'))).toBe(true);
     });
 
-    test('D17 采纳分支 2: 「两版都留」开辟新画框，原画框保持不变', () => {
+    test('D17 采纳分支 2: 「两版都留」开辟新画框，原画框保持不变', async () => {
       const originalHtml = useProjectStore.getState().screens['screen-1'].htmlContent;
       const newHtml = '<div data-nid="root-alt"><h1>独立新分支页面</h1><button data-nid="btn-00001" class="btn btn-primary">点击进入</button></div>';
       useProjectStore.getState().stageScreenChange('screen-1', newHtml, '分支新页');
 
-      useProjectStore.getState().keepBothScreens();
+      passStagedRenderCheck();
+      await useProjectStore.getState().keepBothScreens();
 
       expect(useProjectStore.getState().screens['screen-1'].htmlContent).toBe(originalHtml);
       expect(useProjectStore.getState().screenOrder.length).toBe(2);

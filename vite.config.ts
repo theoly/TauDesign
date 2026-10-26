@@ -25,6 +25,11 @@ function aiDevProxyPlugin(): Plugin {
         }
 
         const chunks: Buffer[] = [];
+        const controller = new AbortController();
+        req.on('aborted', () => controller.abort());
+        res.on('close', () => {
+          if (!res.writableEnded) controller.abort();
+        });
         req.on('data', (c) => chunks.push(c));
         req.on('end', async () => {
           try {
@@ -44,7 +49,8 @@ function aiDevProxyPlugin(): Plugin {
             const targetResp = await fetch(targetUrl, {
               method: req.method || 'POST',
               headers: forwardHeaders,
-              body: bodyBuf.length > 0 ? bodyBuf : undefined
+              body: bodyBuf.length > 0 ? bodyBuf : undefined,
+              signal: controller.signal
             });
 
             res.writeHead(targetResp.status, {
@@ -62,8 +68,13 @@ function aiDevProxyPlugin(): Plugin {
             }
             res.end();
           } catch (e: any) {
-            res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
-            res.end(JSON.stringify({ error: e.message || 'Proxy request failed' }));
+            if (controller.signal.aborted || res.destroyed) return;
+            if (res.headersSent) {
+              res.destroy(e instanceof Error ? e : undefined);
+            } else {
+              res.writeHead(500, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+              res.end(JSON.stringify({ error: e.message || 'Proxy request failed' }));
+            }
           }
         });
       });
@@ -81,6 +92,8 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    strictPort: true
+    strictPort: true,
+    // Exported evidence HTML must not reload the editor while another check is running.
+    watch: { ignored: ['**/doc/**/evidence/**', '**/test/visual-baselines/**'] }
   }
 });

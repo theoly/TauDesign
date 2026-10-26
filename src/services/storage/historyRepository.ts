@@ -116,14 +116,15 @@ export function deleteHistoryLocal(projectId: string): void {
 
 // ── 文件夹工程通道 ──────────────────────────────────────────────────────
 
+const historyWrites=new Map<string,Promise<void>>();
 export class HistoryRepository {
   constructor(private readonly storage: ProjectStorage, private readonly projectId: string) {}
 
   async save(snapshot: HistorySnapshot): Promise<void> {
-    await this.storage.writeTextAtomic(
-      HISTORY_FILE,
-      serializeHistory(this.projectId, snapshot, FOLDER_HISTORY_BUDGET)
-    );
+    const serialized=serializeHistory(this.projectId,snapshot,FOLDER_HISTORY_BUDGET);
+    const operation=(historyWrites.get(this.projectId)??Promise.resolve()).catch(()=>{}).then(()=>this.storage.writeTextAtomic(HISTORY_FILE,serialized));
+    historyWrites.set(this.projectId,operation);
+    try{await operation;}finally{if(historyWrites.get(this.projectId)===operation)historyWrites.delete(this.projectId);}
   }
 
   async load(): Promise<HistorySnapshot | null> {

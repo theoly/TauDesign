@@ -1,23 +1,24 @@
+import { DesignSections, TypographySection } from './DesignSections';
+import { AppearanceSections } from './AppearanceSections';
+import { ImageSection } from './ImageSection';
+import { Section, type PropertyPatch } from './PropertyFields';
+import {PageCreationEvidencePanel} from './PageCreationEvidencePanel';
+import { ScreenDesignRoleEditor } from './ScreenDesignRoleEditor';
+import { ProjectAssetAuditPanel } from './ProjectAssetAuditPanel';
+import { DeliveryHistoryPanel } from './DeliveryHistoryPanel';
+import { clearInspectorPreview, findScreenElement, isEscapedInspectorValue, setInspectorPreview } from '../../utils/inspectorStyle';
 import React, { useEffect, useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useAIConfigStore } from '../../stores/useAIConfigStore';
 import { useHistoryStore } from '../../stores/useHistoryStore';
 import { AIService } from '../../services/ai/aiService';
 import { NidEngine } from '../../utils/nidEngine';
-import { TokenLintEngine, computeScreenAuditReport } from '../../utils/tokenLint';
+import { TokenLintEngine, computeScreenAuditReport, getTokenLintContext } from '../../utils/tokenLint';
 import { setTextByNid, uneditableHint } from '../../utils/textNode';
 import { duplicateElementByNid, wrapElementByNid } from '../../utils/domPatcher';
-import { LayoutInspector } from './LayoutInspector';
-import { BoxModelInspector } from './BoxModelInspector';
-import { PositionSizeInspector } from './PositionSizeInspector';
-import { RadiusInspector } from './RadiusInspector';
 import {
   AlertTriangle,
-  ArrowDown,
-  ArrowUp,
-  Box,
   Boxes,
-  CheckCircle2,
   ChevronRight,
   Copy,
   Layers,
@@ -26,22 +27,8 @@ import {
   Sparkles,
   Trash2,
   Type,
-  Wand2,
-  Wrench
+  Wand2
 } from 'lucide-react';
-
-/** 属性面板分组 (doc/feature/inspector-geometry-tabs/spec.md BR-INS-01) */
-export type InspectorTabKey = 'layout' | 'style' | 'actions';
-
-export const INSPECTOR_TABS: Array<{
-  key: InspectorTabKey;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-}> = [
-  { key: 'layout', label: '布局', icon: Box },
-  { key: 'style', label: '外观', icon: Sparkles },
-  { key: 'actions', label: '操作', icon: Wrench }
-];
 
 const formatBreadcrumbClass = (rawCls: unknown): string => {
   if (typeof rawCls === 'string') {
@@ -63,6 +50,11 @@ export const PropertyInspector: React.FC = () => {
     selectedNid,
     selectedNode,
     screens,
+    assets,
+    id: projectId,
+    folderPath,
+    deliveryArchiveRevision,
+    deliveryArchiveNotice,
     settings,
     overrides,
     designSystem,
@@ -76,14 +68,13 @@ export const PropertyInspector: React.FC = () => {
     detachComponentInstance,
     syncComponentInstances,
     selectNodeByNid,
+    setScreenLinkTarget,
+    setScreenDesignRole,
     postAuditReport
   } = useProjectStore();
 
   const { getActiveProviderForRole } = useAIConfigStore();
   const { addCheckpoint } = useHistoryStore();
-
-  // 当前分组。切换选中元素时刻意不重置——连续调同类属性是主要工作流 (BR-INS-08)
-  const [activeTab, setActiveTab] = useState<InspectorTabKey>('layout');
 
   // Point-and-Edit AI state
   const [pointPrompt, setPointPrompt] = useState('');
@@ -102,19 +93,30 @@ export const PropertyInspector: React.FC = () => {
   }, [selectedNid, selectedNode?.textContent]);
 
 
+  useEffect(() => {
+    const el = activeScreenId && selectedNid ? findScreenElement(activeScreenId, selectedNid) : null;
+    return () => { if (el) clearInspectorPreview(el.ownerDocument); };
+  }, [activeScreenId, selectedNid]);
+
   if (!activeScreenId || !selectedNid || !selectedNode) {
     const curScreen = activeScreenId ? screens[activeScreenId] : null;
-    const lint = curScreen ? TokenLintEngine.scan(curScreen.htmlContent, designSystem) : null;
+    const lint = curScreen ? TokenLintEngine.scan(curScreen.htmlContent, designSystem, settings.deviceProfile, getTokenLintContext(curScreen)) : null;
 
     return (
-      <div className="w-full min-w-0 h-full bg-slate-900 p-5 flex flex-col justify-between text-xs select-none">
-        <div className="flex-1 flex flex-col items-center justify-center text-center text-slate-500">
+      <div className="w-full min-w-0 h-full bg-slate-900 p-5 flex flex-col gap-3 overflow-y-auto text-xs select-none">
+        <div className="min-h-28 flex-1 flex flex-col items-center justify-center text-center text-slate-500">
           <Sliders className="w-8 h-8 text-slate-600 mb-3" />
           <span className="font-medium text-slate-400">未选中任何元素</span>
           <p className="mt-1 text-[11px] leading-relaxed">
             在中间画板内点击任意按钮、卡片或文本即可进行精准微调与局部 AI 重构。
           </p>
         </div>
+
+        {curScreen && curScreen.metadata?.kind !== 'specimen' && <ScreenDesignRoleEditor screen={curScreen} onCommit={patch => setScreenDesignRole(curScreen.id, patch)} />}
+        {curScreen && curScreen.metadata?.kind !== 'specimen' && <PageCreationEvidencePanel screen={curScreen} />}
+        {curScreen && curScreen.metadata?.kind !== 'specimen' && <DeliveryHistoryPanel key={`${projectId}:${folderPath}:${curScreen.id}`} projectId={projectId} folderPath={folderPath}
+          screen={curScreen} revision={deliveryArchiveRevision} notice={deliveryArchiveNotice} />}
+        <ProjectAssetAuditPanel projectId={projectId} folderPath={folderPath} screens={screens} assets={assets} />
 
         {/* Screen Health & Token Lint Widget (PRD §3.5.4) */}
         {lint && curScreen && (
@@ -134,6 +136,7 @@ export const PropertyInspector: React.FC = () => {
               />
             </div>
             <div className="space-y-1.5 pt-1">
+              {curScreen.metadata?.importedHtml && <p className="text-[11px] leading-relaxed text-slate-400">导入页包含自带样式；Token 合规度仅衡量与项目基座的差异，不代表视觉还原度。保留原貌时无需自动统一这些差异。</p>}
               <span className="text-[10px] text-slate-400 block">
                 {lint.issues.length > 0 ? `检测到 ${lint.issues.length} 处风格逃逸` : '未检测到风格逃逸，规范度达标'}
               </span>
@@ -161,9 +164,24 @@ export const PropertyInspector: React.FC = () => {
   const currentOverride = overrides[overrideKey] || { nid: selectedNid, declarations: {} };
   const decs = currentOverride.declarations;
 
-  const handleStyleChange = (prop: string, val: string, isCustom = false) => {
-    setOverride(activeScreenId, selectedNid, { [prop]: val }, isCustom, `微调样式: ${prop} -> ${val}`);
+  const handlePreview = (patch: PropertyPatch | null) => {
+    const el = findScreenElement(activeScreenId, selectedNid);
+    if (!el) return;
+    if (patch) setInspectorPreview(el.ownerDocument, selectedNid, patch);
+    else clearInspectorPreview(el.ownerDocument);
   };
+  const handleBatchChange = (patch: PropertyPatch) => {
+    handlePreview(null);
+    setOverride(activeScreenId, selectedNid, patch,
+      Object.entries(patch).some(([prop, value]) => isEscapedInspectorValue(prop, value)),
+      `调整${selectedNode.tagName}属性: ${Object.keys(patch).filter(p => patch[p]).slice(0, 3).join('、') || '还原'}`);
+  };
+  const snapshot = selectedNode.inspector;
+  const computed: PropertyPatch = snapshot?.styles ?? Object.fromEntries(Object.entries(selectedNode.computedLayout ?? {}).map(([key, value]) => [key.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`), String(value ?? '')]));
+  const sectionProps = { declarations: decs, computed, authored:snapshot?.authored, onChange: handleBatchChange, onPreview: handlePreview, tokens: snapshot?.tokens, pageColors: snapshot?.pageColors };
+  const isTextNode = selectedNode.textEditable !== false && selectedNode.tagName !== 'img' && selectedNode.tagName !== 'svg';
+  const selectedLinkTarget = findScreenElement(activeScreenId, selectedNid)?.getAttribute('data-target-screen-id') || '';
+  const availableTargets = Object.values(screens).filter(screen => screen.metadata?.kind !== 'specimen');
 
   const handleTextChange = (newText: string) => {
     if (selectedNode.textEditable === false) return;
@@ -275,7 +293,7 @@ Requirements:
     if (!selectedNode.componentId) return;
     const res = syncComponentInstances(selectedNode.componentId);
     if (res.skippedConflictCount > 0) {
-      setSyncStatusMsg(`已同步 ${res.syncedCount} 处；跳过 ${res.skippedConflictCount} 处冲突实例 (已受保护)`);
+      setSyncStatusMsg(`已同步 ${res.syncedCount} 处；跳过 ${res.skippedConflictCount} 处实例。${res.details[0]??'无法安全保留用户内容。'}`);
     } else {
       setSyncStatusMsg(`成功同步全部 ${res.syncedCount} 处实例`);
     }
@@ -381,123 +399,32 @@ Requirements:
         })()}
       </div>
 
-      {/* Tab 分组 (BR-INS-01) */}
-      <div className="flex items-center gap-1 px-3 pt-3 border-b border-slate-800">
-        {INSPECTOR_TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            data-testid={`inspector-tab-${tab.key}`}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] rounded-t-lg border-b-2 transition ${
-              activeTab === tab.key
-                ? 'border-blue-500 text-blue-300 bg-slate-800/60 font-semibold'
-                : 'border-transparent text-slate-500 hover:text-slate-300 hover:bg-slate-800/30'
-            }`}
-          >
-            <tab.icon className="w-3.5 h-3.5" />
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
-        {activeTab === 'layout' && (
-          <>
-            {/* 定位与尺寸 (BR-INS-03/04) */}
-            <PositionSizeInspector
-              computedBox={selectedNode.computedBox}
-              computedLayout={selectedNode.computedLayout}
-              declarations={decs}
-              onStyleChange={handleStyleChange}
-            />
-
-        {/* Layout & Alignment (PRD §3.6.1) */}
-        <LayoutInspector
-          computedLayout={selectedNode.computedLayout}
-          declarations={decs}
-          onStyleChange={handleStyleChange}
-        />
-
-        {/* Box Model & Spacing (PRD §3.6.1) */}
-        <BoxModelInspector
-          computedBox={selectedNode.computedBox}
-          declarations={decs}
-          onStyleChange={handleStyleChange}
-        />
-          </>
-        )}
-
-        {activeTab === 'style' && (
-          <>
-            {/* 圆角 (BR-INS-05) */}
-            <RadiusInspector
-              key={selectedNid}
-              computedLayout={selectedNode.computedLayout}
-              declarations={decs}
-              onStyleChange={handleStyleChange}
-            />
-
-        {/* 阴影层级 */}
-        <div className="space-y-2 pt-2 border-t border-slate-800">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">阴影 (SHADOW)</span>
+      <div className="flex-1 overflow-y-auto px-3 pb-4" data-testid="property-sections">
+        <div key={`${activeScreenId}:${selectedNid}`}>
+          <DesignSections {...sectionProps} tagName={selectedNode.tagName}
+            width={selectedNode.computedBox.width} height={selectedNode.computedBox.height}
+            parentDisplay={snapshot?.parentDisplay} parentDirection={snapshot?.parentDirection} geometry={snapshot?.geometry} />
+          {isTextNode && <TypographySection {...sectionProps} />}
+          <ImageSection screenId={activeScreenId} nid={selectedNid} tagName={selectedNode.tagName} {...sectionProps} />
+          <AppearanceSections {...sectionProps} />
+        </div>
+        <Section title="页面跳转">
+          <label className="block text-[10px] text-slate-400" htmlFor="screen-link-target">画布预览中 Shift+点击此元素可跳转</label>
           <select
-            value={decs['box-shadow'] || ''}
-            onChange={(e) => handleStyleChange('box-shadow', e.target.value)}
-            aria-label="阴影层级"
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs"
+            id="screen-link-target"
+            aria-label="跳转目标页面"
+            value={selectedLinkTarget}
+            onChange={event => setScreenLinkTarget(activeScreenId, selectedNid, event.target.value || undefined)}
+            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
           >
-            <option value="">默认</option>
-            <option value="none">无阴影</option>
-            <option value="var(--shadow-sm)">平滑阴影 (SM)</option>
-            <option value="var(--shadow-md)">中等阴影 (MD)</option>
-            <option value="var(--shadow-lg)">浮层阴影 (LG)</option>
+            <option value="">不设置跳转</option>
+            {selectedLinkTarget && !availableTargets.some(screen => screen.id === selectedLinkTarget) && (
+              <option value={selectedLinkTarget}>失效目标：{selectedLinkTarget}</option>
+            )}
+            {availableTargets.map(screen => <option key={screen.id} value={screen.id}>{screen.name}</option>)}
           </select>
-        </div>
-
-        {/* Typography */}
-        <div className="space-y-3 pt-2 border-t border-slate-800">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">排版与字号</span>
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="text-[10px] text-slate-500 block mb-1">字号阶梯</span>
-              <select
-                value={decs['font-size'] || ''}
-                onChange={(e) => handleStyleChange('font-size', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs"
-              >
-                <option value="">默认</option>
-                <option value="var(--font-size-xs)">XS (12px)</option>
-                <option value="var(--font-size-sm)">SM (14px)</option>
-                <option value="var(--font-size-md)">MD (16px)</option>
-                <option value="var(--font-size-lg)">LG (18px)</option>
-                <option value="var(--font-size-xl)">XL (20px)</option>
-                <option value="var(--font-size-2xl)">2XL (24px)</option>
-                <option value="var(--font-size-3xl)">3XL (30px)</option>
-              </select>
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 block mb-1">字重</span>
-              <select
-                value={decs['font-weight'] || ''}
-                onChange={(e) => handleStyleChange('font-weight', e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs"
-              >
-                <option value="">默认</option>
-                <option value="400">Regular 400</option>
-                <option value="500">Medium 500</option>
-                <option value="600">Semibold 600</option>
-                <option value="700">Bold 700</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-          </>
-        )}
-
-        {activeTab === 'actions' && (
-          <>
+        </Section>
+        <Section title="组件与结构操作">
         {/* Component Instance or Extract Banner (PRD §3.7 / D6) */}
         {selectedNode.componentId ? (
           <div className="p-3 bg-indigo-950/40 border border-indigo-800/50 rounded-xl space-y-2">
@@ -509,7 +436,7 @@ Requirements:
               <span className="text-[10px] text-indigo-400/70 font-mono">#{selectedNode.componentInstanceId?.slice(0, 8)}</span>
             </div>
             <p className="text-[10px] text-indigo-300/70 leading-tight">
-              该元素属于工程组件同步组。结构与样式修改将保留插槽内容并同步。
+              {components[selectedNode.componentId]?.templateContract?'固定模板与插槽校验已启用；同步按槽名保留内容，固定区域使用最新模板。':'该组件使用兼容同步，按原有内容顺序匹配。可在资源中心配置模板与插槽约束。'}
             </p>
             {syncStatusMsg && (
               <div className="p-1.5 bg-indigo-900/60 text-indigo-200 rounded text-[10px] leading-tight">
@@ -629,8 +556,7 @@ Requirements:
             </button>
           </div>
         )}
-          </>
-        )}
+        </Section>
       </div>
     </div>
   );

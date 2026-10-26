@@ -166,7 +166,7 @@ describe('ExportRenderer Specification (BR-01 / BR-02 / ISSUE-024)', () => {
       expect(resultSvg).toContain('svg.full-img, img.full-img { width: 100% !important; height: auto !important; display: block !important; }');
     });
 
-    it('generates native high-DPI resolution scaling with matched width/height and original viewBox (ISSUE-025)', () => {
+    it('scales the XHTML paint layer at CSS layout width for high-DPI output (ISSUE-025)', () => {
       const scale2Svg = buildExportSvg(mockScreen, {
         tokensCss: mockTokensCss,
         baseCss: mockBaseCss,
@@ -177,10 +177,16 @@ describe('ExportRenderer Specification (BR-01 / BR-02 / ISSUE-024)', () => {
         bgColor: '#ffffff'
       });
 
-      // 根 SVG 的物理分辨率应为 780 × 1688，视口保持 390 × 844，保证 2x Retina 清晰渲染
+      // 使用物理像素坐标及 HTML 绘制层缩放；CSS 布局宽度仍是390，不能靠放大1x位图兜底。
       expect(scale2Svg).toContain('width="780"');
       expect(scale2Svg).toContain('height="1688"');
-      expect(scale2Svg).toContain('viewBox="0 0 390 844"');
+      expect(scale2Svg).toContain('viewBox="0 0 780 1688"');
+      const doc=new DOMParser().parseFromString(scale2Svg,'image/svg+xml');
+      const container=doc.querySelector('foreignObject > div') as HTMLElement;
+      expect(container.style.width).toBe('390px');
+      expect(container.style.height).toBe('844px');
+      expect(container.style.transform).toBe('scale(2)');
+      expect(container.style.transformOrigin).toBe('0 0');
     });
   });
 

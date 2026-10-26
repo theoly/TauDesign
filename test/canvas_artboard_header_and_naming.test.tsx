@@ -1,3 +1,5 @@
+import {stubPageCreationRender} from './helpers/pageCreation';
+stubPageCreationRender();
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -205,7 +207,7 @@ describe('画框上方浮动标题（Trae 风格）、明暗可视性与 AI 命�
     expect(headerDarkActive?.className).toContain('text-blue-400');
   });
 
-  test('CHK-F-05: AI 新建页面命名放宽：<= 20 汉字完整保留，过滤 (AI 方案) 冗余标记', () => {
+  test('CHK-F-05: AI 新建页面命名放宽：<= 20 汉字完整保留，过滤 (AI 方案) 冗余标记', async () => {
     // 1. 贴切且中等长度的标题（如用户提出的 <= 20 汉字）完整保留
     expect(sanitizeScreenTitle('送花表达心意 - 牵手币充值')).toBe('送花表达心意 - 牵手币充值');
     expect(sanitizeScreenTitle('动态详情')).toBe('动态详情');
@@ -224,7 +226,7 @@ describe('画框上方浮动标题（Trae 风格）、明暗可视性与 AI 命�
     expect(sanitizeScreenTitle('')).toBe('新页面');
 
     // 5. CanvasToolExecutor 在 create_screen 时自动执行 sanitize
-    const res = CanvasToolExecutor.execute({
+    const res = await CanvasToolExecutor.executeAsync({
       tool: 'create_screen',
       params: {
         title: '送花表达心意 - 牵手币充值 (AI 方案)',

@@ -5,6 +5,8 @@ import type {
 import { defaultTheme } from '../../utils/themePresets';
 import { buildPrimaryRamp } from '../../utils/colorHarmony';
 import { normalizeMobileNavigation } from '../../utils/mobileNavigation';
+import { buildHtmlImportContract } from '../ai/designWorkflow';
+import { htmlImportExecutionRecord } from '../ai/designExecutionRecord';
 import {
   colorChroma, colorLightness, cssUrls, imageSrcsetCandidates, opaqueColor, pixelValue, rgbChannels,
   transformDeclarations, transformStyleSheet, unsafeCss, unsafeUrl, type ImportDeclaration, type ImportUrlContext,
@@ -399,6 +401,14 @@ export function convertHtmlImport(analysis: HtmlImportAnalysis, options: HtmlImp
   const distinctChanges = unique(changes), distinctRetained = unique(retained);
   const navigation = normalizeMobileNavigation(serialize(doc), options);
   if (navigation.removedNids.length || navigation.title) distinctChanges.push(options.useCustomNavigation ? '系统状态栏由预览外壳提供，自定义导航保留。' : '顶部状态栏与导航栏由微信预览外壳提供，不写入页面HTML。');
-  return { htmlContent: navigation.html, scopedCss: '', changes: distinctChanges, retained: distinctRetained,
-    metadata: { fileName: analysis.fileName, mode: options.mode, categories: selected, changes: distinctChanges, retained: distinctRetained, version: 1, ...(navigation.title ? { navigationTitle: navigation.title } : {}) } };
+  const frameWidth = options.frameWidth ?? (options.deviceProfile === 'mobile' ? 390 : 1440);
+  const workflow = buildHtmlImportContract({ fileName: analysis.fileName, html: analysis.sanitizedHtml, mode: options.mode,
+    categories: options.categories, deviceProfile: options.deviceProfile ?? 'pc', frameWidth,
+    referenceDeviceName: options.referenceDeviceName, designSystem: options.designSystem });
+  return { htmlContent: navigation.html, scopedCss: '', workflowContract:workflow, executionRecord: htmlImportExecutionRecord(navigation.html), changes: distinctChanges, retained: distinctRetained,
+    metadata: { fileName: analysis.fileName, mode: options.mode, categories: selected, changes: distinctChanges, retained: distinctRetained, version: 1,
+      workflow: { id: workflow.workflowId as 'import-html-preserve' | 'import-html-unify' | 'import-html-selective', contractVersion: workflow.version,
+        strategy: workflow.strategy as 'preserve-source' | 'normalize-tokens' | 'normalize-selected-tokens',
+        sourceFingerprint: workflow.target!.baselineFingerprint, designSystemId: options.designSystem.id, deviceProfile: options.deviceProfile ?? 'pc', frameWidth },
+      ...(navigation.title ? { navigationTitle: navigation.title } : {}) } };
 }

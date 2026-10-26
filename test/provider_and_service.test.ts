@@ -450,7 +450,8 @@ describe('AI Provider & AIService Tests', () => {
         root.render(React.createElement(AIProviderModal, { onClose: () => {} }));
       });
 
-      expect(container.textContent).toContain('AI Provider 配置与模型档位绑定');
+      expect(container.textContent).toContain('AI 模型与 Provider');
+      expect(container.textContent).toContain('项目设置');
       expect(container.textContent).toContain('添加第三方');
 
       // Click "添加第三方" to open menu

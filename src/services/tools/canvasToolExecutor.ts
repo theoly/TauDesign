@@ -1,8 +1,16 @@
+import {prepareNewPageWithRepair,type PageRepairModel} from '../ai/pageCreationRepair';
+import type {PageRepairRecord} from '../ai/pageRepairRecord';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useHistoryStore } from '../../stores/useHistoryStore';
 import { NidEngine } from '../../utils/nidEngine';
 import { patchElementByNid } from '../../utils/domPatcher';
 import { checkGenerationQuality, qualitySummary } from '../ai/generationQuality';
+import type { DesignTaskContract } from '../ai/designWorkflow';
+import {buildDesignTaskContract} from '../ai/designWorkflow';
+import {knowledgeFingerprint} from '../ai/projectKnowledge';
+import {pageCreationContext} from '../ai/pageCreationValidation';
+import {createProjectStorage} from '../storage/projectStorage';
+import type { DesignExecutionRecord } from '../ai/designExecutionRecord';
 
 export type CanvasToolCall =
   | {
@@ -12,6 +20,8 @@ export type CanvasToolCall =
         html: string;
         screenId?: string;
         referencedScreenId?: string;
+        workflowContract?: DesignTaskContract;
+        executionRecord?: DesignExecutionRecord;
       };
     }
     | {
@@ -22,6 +32,8 @@ export type CanvasToolCall =
         html: string;
         forceInPlace?: boolean;
         modificationRequest?: string;
+        workflowContract?: DesignTaskContract;
+        executionRecord?: DesignExecutionRecord;
       };
     }
   | {
@@ -47,6 +59,8 @@ export interface CanvasToolExecutionResult {
   screenId?: string;
   screenName?: string;
   candidateHtml?: string;
+  createdHtml?:string;
+  repair?:PageRepairRecord;
   checkpointId?: string;
   error?: string;
 }
@@ -78,7 +92,40 @@ export function sanitizeScreenTitle(rawTitle?: string): string {
  * 所有对画板的写操作统一经由本执行器派发，
  * 集中管理画框排布坐标、历史栈 Checkpoint 与 D17 并排比选 Staging。
  */
+const pendingCreations=new Set<string>();
 export class CanvasToolExecutor {
+  /** The only AI creation entry. Low-level blank/specimen/duplicate store actions remain synchronous. */
+  static async executeAsync(call:CanvasToolCall,options:{signal?:AbortSignal;isCurrent?:()=>boolean;repair?:PageRepairModel}={}):Promise<CanvasToolExecutionResult> {
+    if(call.tool!=='create_screen')return this.execute(call);
+    const params=structuredClone(call.params),state=useProjectStore.getState();
+    const contract=params.workflowContract??buildDesignTaskContract({intent:'create_screen',request:params.title||'创建新页面',
+      deviceProfile:state.settings.deviceProfile,frameWidth:state.settings.frameWidth,designSystem:state.designSystem,
+      designSystemOrigin:state.designSystemOrigin,designLibraryBinding:state.designLibraryBinding,knowledgeFingerprint:knowledgeFingerprint(state)});
+    if(contract.multiPage)return {success:false,tool:'create_screen',status:'failed',error:'计划内页面必须经完整批次验收后统一交付，不能单独加入画布。'};
+    const key=`${state.id}:${contract.taskId}`,context=pageCreationContext(state);
+    const failed=(error:string):CanvasToolExecutionResult=>({success:false,tool:'create_screen',status:'failed',error});
+    if(pendingCreations.has(key)||Object.values(state.screens).some(screen=>screen.metadata?.creationEvidence?.contract?.taskId===contract.taskId))return failed('同一新建任务正在处理或已经应用。');
+    const current=()=>!options.signal?.aborted&&(options.isCurrent?.()??true)&&pageCreationContext(useProjectStore.getState())===context;
+    pendingCreations.add(key);
+    try {
+      const snapshot=structuredClone({id:state.id,folderPath:state.folderPath,screens:state.screens,settings:state.settings,assets:state.assets,
+        designSystem:state.designSystem,designSystemOrigin:state.designSystemOrigin,designLibraryBinding:state.designLibraryBinding,
+        components:state.components,decisions:state.decisions,projectDocuments:state.projectDocuments,overrides:state.overrides});
+      const id=params.screenId&&!state.screens[params.screenId]?params.screenId:crypto.randomUUID();
+      const name=sanitizeScreenTitle(params.title?.trim()||`画框 ${state.screenOrder.length+1}`);
+      const prepared=await prepareNewPageWithRepair(snapshot,{id,name,htmlContent:params.html,position:{x:0,y:0}},contract,
+        createProjectStorage(state.id,state.folderPath),{isCurrent:current,signal:options.signal,repair:options.repair});
+      if(prepared.status!=='ready')return {...failed(prepared.message),repair:prepared.repair};
+      if(!current())return failed('应用前工程已变化或创建已取消。');
+      const {position:_position,...screen}=prepared.screen;
+      const creationEvidence={...prepared.evidence,...(params.executionRecord?.sectioned?{execution:{...structuredClone(params.executionRecord),completeHtml:prepared.screen.htmlContent}}:{})};
+      const newId=useProjectStore.getState().addScreen({...screen,metadata:{...screen.metadata,creationEvidence}},id,{referencedScreenId:params.referencedScreenId});
+      const checkpointId=useHistoryStore.getState().addCheckpoint(`AI 新建页面: ${name}`,{screenId:newId,htmlContent:prepared.screen.htmlContent});
+      useProjectStore.getState().panToScreen(newId);
+      return {success:true,tool:'create_screen',status:'screen_created',screenId:newId,screenName:name,checkpointId,createdHtml:prepared.screen.htmlContent,repair:prepared.evidence.repair};
+    }catch(error){return failed(error instanceof Error?error.message:'新建页面失败。');}
+    finally{pendingCreations.delete(key);}
+  }
   /**
    * 执行指定的画布工具动作
    */
@@ -89,44 +136,11 @@ export class CanvasToolExecutor {
     try {
       switch (call.tool) {
         case 'create_screen': {
-          const { title, html, screenId, referencedScreenId } = call.params;
-          const currentScreens = store.screens;
-          const allScreens = Object.values(currentScreens);
-
-          const formattedHtml = NidEngine.injectNids(html);
-          const rawTitle = title?.trim() || `画框 ${allScreens.length + 1}`;
-          const finalTitle = sanitizeScreenTitle(rawTitle);
-          const targetCustomId = screenId && !currentScreens[screenId] ? screenId : undefined;
-
-          // 使用 store.addScreen 的智能布局引擎排布坐标与避让
-          const newId = store.addScreen(
-            {
-              name: finalTitle,
-              htmlContent: formattedHtml
-            },
-            targetCustomId,
-            { referencedScreenId }
-          );
-
-          const checkpointId = history.addCheckpoint(`AI 新建页面: ${finalTitle}`, {
-            screenId: newId,
-            htmlContent: formattedHtml
-          });
-
-          store.panToScreen(newId);
-
-          return {
-            success: true,
-            tool: 'create_screen',
-            status: 'screen_created',
-            screenId: newId,
-            screenName: finalTitle,
-            checkpointId
-          };
+          return {success:false,tool:'create_screen',status:'failed',error:'AI 新建页面必须等待异步资源与实际渲染校验，请使用 executeAsync。'};
         }
 
         case 'modify_screen': {
-          const { screenId, title, html, forceInPlace, modificationRequest } = call.params;
+          const { screenId, title, html, forceInPlace, modificationRequest, workflowContract, executionRecord } = call.params;
           const target = store.screens[screenId];
           if (!target) {
             return {
@@ -180,7 +194,7 @@ export class CanvasToolExecutor {
           }
 
           // D17 & BR-SSR-01: 页面修改统一在原画框右侧暂存候选新页面，供用户直观观测与比选替换
-          store.stageScreenChange(target.id, formattedHtml, `${finalTitle} (AI 调整候选)`, modificationRequest);
+          store.stageScreenChange(target.id, formattedHtml, `${finalTitle} (AI 调整候选)`, modificationRequest, workflowContract, executionRecord);
           store.panToScreen(target.id);
 
           return {

@@ -7,6 +7,10 @@ import { RenderedQualityCard } from '../chat/RenderedQualityCard';
 import { QualityReportCard } from '../chat/QualityReportCard';
 import { ScreenFrame } from './ScreenFrame';
 import { CanvasMinimap } from './CanvasMinimap';
+import { CandidateEvidencePanel } from './CandidateEvidencePanel';
+import { contentFingerprint } from '../../services/ai/designWorkflow';
+import { knowledgeFingerprint } from '../../services/ai/projectKnowledge';
+import { canConfirmCandidateStructure } from '../../services/ai/candidateValidation';
 import { Check, Copy, Plus, Sparkles, X } from 'lucide-react';
 
 interface InfiniteCanvasProps {
@@ -19,6 +23,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
   const [isPanning, setIsPanning] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
   const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const [confirmedStructureKey, setConfirmedStructureKey] = useState<string | null>(null);
 
   const {
     id: projectId,
@@ -31,10 +36,13 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
     viewportTransform,
     setViewportTransform,
     stagedScreen,
+    stagedCandidateSaveStatus,
+    stagedAdoptionStatus,
+    stagedAdoptionError,
+    stagedValidationEvidence,
     stagedRenderQuality,
-    adoptStagedChange,
+    recheckStagedAssetFiles,
     discardStagedChange,
-    keepBothScreens,
     activeSnapGuides
   } = useProjectStore();
 
@@ -179,8 +187,15 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
     ? (stagedRenderQuality?.key === renderKey ? stagedRenderQuality.report : undefined)
     : (reportId && renderReports[reportId]?.key === renderKey ? renderReports[reportId].report : undefined);
   const renderPending = Boolean(stagedScreen && (!renderedReport || renderedReport.status === 'pending'));
-  const adoptionBlocked = candidateQuality?.findings.some(f => f.severity === 'error')
-    || renderedReport?.findings.some(f => f.severity === 'error') || renderPending;
+  const renderIncomplete = Boolean(stagedScreen && renderedReport && !['complete', 'pending'].includes(renderedReport.status));
+  const taskCurrent = !stagedScreen || useProjectStore.getState().isStagedTaskCurrent();
+  const stagedAssetIssues = stagedScreen ? useProjectStore.getState().getStagedAssetIssues() : [];
+  const deliveryReport = stagedScreen ? useProjectStore.getState().getStagedDeliveryReport() : null;
+  const blockers = deliveryReport?.checks.filter(c => c.status !== 'passed') ?? [];
+  const canConfirmStructure = canConfirmCandidateStructure(deliveryReport);
+  const structureConfirmed = canConfirmStructure && confirmedStructureKey === renderKey;
+  const adoptionBlocked = deliveryReport?.status !== 'ready' && !structureConfirmed;
+  const blockedDescription = blockers.map(c => c.message).join('；');
   const locateRenderIssue = (nid: string) => {
     if (!reportId) return;
     setQualityFocus({ screenId: reportId, nid });
@@ -318,29 +333,63 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
 
       {/* Side-by-Side Floating Adoption Toolbar (D17 / §3.2.9) */}
       {stagedScreen && (
-        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 w-max max-w-[calc(100%_-_2rem)] bg-slate-900/90 backdrop-blur-md border border-purple-500/50 shadow-2xl rounded-2xl px-4 py-3 flex flex-wrap justify-center items-center gap-3 text-xs">
+        <div data-testid="candidate-actions-toolbar" onMouseDown={e=>e.stopPropagation()} onPointerDown={e=>e.stopPropagation()} onWheel={e=>e.stopPropagation()} onKeyDown={e=>{if(e.code==='Space')e.stopPropagation();}} className="absolute top-6 left-1/2 -translate-x-1/2 z-50 w-max max-w-[calc(100%_-_2rem)] bg-slate-900/90 backdrop-blur-md border border-purple-500/50 shadow-2xl rounded-2xl px-4 py-3 flex flex-wrap justify-center items-center gap-3 text-xs">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping" />
             <span className="font-semibold text-purple-200">AI 新方案已在右侧画框并排就绪</span>
           </div>
+          {stagedCandidateSaveStatus && <span role={stagedCandidateSaveStatus === 'failed' ? 'alert' : 'status'}
+            className={stagedCandidateSaveStatus === 'failed' ? 'text-amber-300' : 'text-slate-400'}>
+            {stagedCandidateSaveStatus === 'pending' ? '正在保存候选…' : stagedCandidateSaveStatus === 'saved' ? '候选已存档' : '候选存档失败；关闭工程后将无法恢复'}
+          </span>}
+          {stagedAdoptionStatus === 'saving' && <span role="status" className="text-slate-300">正在保存交付档案…</span>}
+          {stagedAdoptionError && <span role="alert" className="text-amber-300">{stagedAdoptionError}</span>}
+          <CandidateEvidencePanel current={stagedValidationEvidence}
+            historical={stagedScreen.restoredFromDisk ? stagedScreen.validationEvidence : undefined}
+            currentIsStale={Boolean(stagedValidationEvidence && (stagedValidationEvidence.contextFingerprint !== contentFingerprint(renderKey) ||
+              stagedValidationEvidence.projectFingerprint !== knowledgeFingerprint(useProjectStore.getState())))} />
           {candidateQuality && candidateQuality.findings.length > 0 && <QualityReportCard report={candidateQuality} />}
           {renderPending && <span role="status" className="text-slate-300">正在检查当前方案渲染…</span>}
+          {renderIncomplete && <span role="alert" className="text-amber-300">渲染检查未完成，暂不能采纳；请重新加载候选画框后再试。</span>}
+          {!taskCurrent && <span role="alert" className="text-amber-300">原页面或项目资料已变化，候选已过期，请重新生成。</span>}
+          {stagedAssetIssues.length > 0 && <span role="alert" className="text-amber-300">候选资源引用未通过：{stagedAssetIssues[0].message}{stagedAssetIssues.length > 1 ? `；另有 ${stagedAssetIssues.length - 1} 项` : ''}</span>}
+          {deliveryReport?.checks.find(check=>check.id==='entities')?.status==='blocked'&&<span role="alert" className="max-w-md break-words text-amber-300">设计实体引用未通过：{deliveryReport.checks.find(check=>check.id==='entities')!.message}</span>}
+          {deliveryReport?.checks.find(check => check.id === 'asset_files')?.status !== 'passed' && <span role="alert" className="text-amber-300 flex items-center gap-1">
+            {deliveryReport?.checks.find(check => check.id === 'asset_files')?.message}
+            <button type="button" onClick={recheckStagedAssetFiles} className="underline text-blue-300 hover:text-blue-200">重新核对</button>
+          </span>}
+          {deliveryReport && <span role="status" className={deliveryReport.status === 'ready' ? 'text-emerald-300' : 'text-slate-300'}
+            title={deliveryReport.checks.map(check => `${check.id}: ${check.message}`).join('\n')}>
+            交付检查 {deliveryReport.checks.filter(check => check.status === 'passed').length}/{deliveryReport.checks.length}
+          </span>}
+          {blockers.length > 0 && <div id="candidate-delivery-blockers" data-testid="candidate-delivery-blockers" role={deliveryReport?.status === 'blocked' ? 'alert' : 'status'} className="order-last basis-full max-w-full rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-amber-200 break-words">
+            <span className="font-medium">{structureConfirmed ? '已确认结构变更：' : '暂不能采纳：'}</span>{blockedDescription}
+            {canConfirmStructure && <label className="mt-2 flex items-start gap-2 text-slate-200 cursor-pointer">
+              <input type="checkbox" aria-label="我已检查并接受这次结构变化" checked={structureConfirmed} disabled={stagedAdoptionStatus === 'saving'}
+                onChange={e=>setConfirmedStructureKey(e.target.checked ? renderKey : null)} className="mt-0.5" />
+              <span>我已检查并接受这次结构变化；确认后可替换原版或保留两版，其它交付检查仍须通过。</span>
+            </label>}
+          </div>}
           {renderedReport?.findings.some(f => f.severity === 'error') && <span role="alert" className="text-red-300">存在严重渲染问题，请修复后采纳。</span>}
           {renderedReport && <RenderedQualityCard report={renderedReport} onLocate={locateRenderIssue} />}
           <div className="h-4 w-px bg-slate-700" />
           <div className="flex flex-wrap justify-center items-center gap-2">
             <button
-              disabled={adoptionBlocked}
-              onClick={adoptStagedChange}
-              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white font-medium px-4 py-1.5 rounded-lg shadow transition"
+              disabled={adoptionBlocked || stagedAdoptionStatus === 'saving'}
+              onClick={()=>void useProjectStore.getState().commitStagedDelivery(structureConfirmed ? 'confirm-structure-replace' : 'replace', renderKey)}
+              aria-describedby={blockers.length ? 'candidate-delivery-blockers' : undefined}
+              title={adoptionBlocked ? blockedDescription : structureConfirmed ? '已确认当前结构变化，替换原版前仍会完整复验' : '采纳当前方案'}
+              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 bg-blue-600 enabled:hover:bg-blue-500 text-white font-medium px-4 py-1.5 rounded-lg shadow transition disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none"
             >
               <Check className="w-4 h-4" />
               <span>采纳新版 (替换原版)</span>
             </button>
             <button
-              disabled={adoptionBlocked}
-              onClick={keepBothScreens}
-              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium px-4 py-1.5 rounded-lg border border-slate-700 transition"
+              disabled={adoptionBlocked || stagedAdoptionStatus === 'saving'}
+              onClick={()=>void useProjectStore.getState().commitStagedDelivery(structureConfirmed ? 'confirm-structure-keep-both' : 'keep-both', renderKey)}
+              aria-describedby={blockers.length ? 'candidate-delivery-blockers' : undefined}
+              title={adoptionBlocked ? blockedDescription : '保留原版并新增当前方案'}
+              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 bg-slate-800 enabled:hover:bg-slate-700 text-slate-200 font-medium px-4 py-1.5 rounded-lg border border-slate-700 transition disabled:text-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Copy className="w-4 h-4" />
               <span>两版都留</span>

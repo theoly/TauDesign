@@ -1,6 +1,7 @@
 import { AITransport, StreamEvent } from '../transport/types';
 import { AIEngineCore, StreamTextOptions, StreamTextResult, TokenUsage } from './types';
 import { prepareModelRequest } from './protocolAdapter';
+import { structuredOutputIssue } from '../../structuredOutput';
 
 function hasCompleteArtifact(raw: string): boolean {
   const lower = raw.toLowerCase();
@@ -124,8 +125,8 @@ export class DefaultAIEngineCore implements AIEngineCore {
           outputTokens: ev.output_tokens
         };
       } else if (ev.type === 'Done') {
-        // Rust传输结束还会发一次stop，不能覆盖Provider先前的length/max_tokens。
-        if (ev.finish_reason && (!finishReason || ev.finish_reason !== 'stop')) finishReason = ev.finish_reason;
+        // Transport stop/end_turn must not erase an earlier limit/filter/failure reason.
+        if (ev.finish_reason && (!finishReason || structuredOutputIssue(ev.finish_reason) || !structuredOutputIssue(finishReason))) finishReason = ev.finish_reason;
         finishQueues();
       } else if (ev.type === 'Error') {
         streamError = new Error(`[${ev.kind}] ${ev.message}`);
@@ -241,10 +242,27 @@ export class DefaultAIEngineCore implements AIEngineCore {
     options: Omit<StreamTextOptions, 'jsonSchema'>
   ): Promise<T> {
     const res = this.streamText({ ...options, jsonSchema: schema });
-    const raw = await res.textPromise;
-    // Extract JSON block if surrounded by markdown codeblock
-    const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-    const textToParse = jsonMatch ? jsonMatch[1].trim() : raw.trim();
-    return JSON.parse(textToParse) as T;
+    let rejectAbort!: (error: Error) => void;
+    const cancelled = new Promise<never>((_resolve, reject) => { rejectAbort = reject; });
+    const abort = () => {
+      rejectAbort(new DOMException('结构化生成已取消', 'AbortError'));
+      try { res.abort(); } catch { /* cancellation cannot depend on transport cooperation */ }
+    };
+    options.signal?.addEventListener('abort', abort, { once: true });
+    // Attach to every promise immediately, including metadata that may reject before text settles.
+    const complete = Promise.all([res.textPromise, res.finishReasonPromise, res.recoveryPromise]);
+    try {
+      if (options.signal?.aborted) abort();
+      const [raw, finishReason, recoveredStreamError] = await Promise.race([complete, cancelled]);
+      if (options.signal?.aborted) throw new DOMException('结构化生成已取消', 'AbortError');
+      const issue = structuredOutputIssue(finishReason, recoveredStreamError);
+      if (issue) throw new Error(issue);
+      // Extract JSON block if surrounded by markdown codeblock.
+      const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      const textToParse = jsonMatch ? jsonMatch[1].trim() : raw.trim();
+      return JSON.parse(textToParse) as T;
+    } finally {
+      options.signal?.removeEventListener('abort', abort);
+    }
   }
 }

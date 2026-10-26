@@ -3,7 +3,7 @@ import { useProjectStore } from '../../stores/useProjectStore';
 import { useHistoryStore } from '../../stores/useHistoryStore';
 import { BrandMark } from '../common/BrandMark';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
-import { TokenLintEngine } from '../../utils/tokenLint';
+import { TokenLintEngine, getTokenLintContext } from '../../utils/tokenLint';
 import {
   ArrowLeft,
   Download,
@@ -50,7 +50,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
 
   // Compute active screen lint
   const curScreen = activeScreenId ? screens[activeScreenId] : null;
-  const lint = curScreen ? TokenLintEngine.scan(curScreen.htmlContent, designSystem) : null;
+  const lint = curScreen ? TokenLintEngine.scan(curScreen.htmlContent, designSystem, settings.deviceProfile, getTokenLintContext(curScreen)) : null;
 
   const handleZoom = (factor: number) => {
     const newScale = Math.min(Math.max(viewportTransform.scale * factor, 0.1), 4.0);
@@ -139,7 +139,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
         {lint && (
           <div
             className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[11px]"
-            title={`Token 合规率: ${lint.complianceRate}% (${lint.issues.length} 处逃逸)`}
+            title={`Token 合规率: ${lint.complianceRate}% (${lint.issues.length} 处差异)${curScreen?.metadata?.importedHtml ? '；导入页包含自带样式，此分数不代表视觉还原度' : ''}`}
           >
             <ShieldCheck className={`w-3.5 h-3.5 ${lint.complianceRate >= 95 ? 'text-emerald-400' : 'text-amber-400'}`} />
             <span className="text-slate-400">合规率:</span>
@@ -206,7 +206,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
         <button
           onClick={onOpenSettings}
           className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition"
-          title="AI Provider 设置"
+          title="设置"
+          aria-label="设置"
         >
           <Settings className="w-4 h-4" />
         </button>

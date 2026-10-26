@@ -1,3 +1,5 @@
+import {stubPageCreationRender} from './helpers/pageCreation';
+stubPageCreationRender();
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
@@ -136,11 +138,11 @@ describe('New Screen Auto Focus & Viewport Navigation (新建画框自动聚焦�
     expect(Math.abs(dupDomCenter - expectedCenter)).toBeLessThanOrEqual(2);
   });
 
-  test('CHK-F-04: CanvasToolExecutor.execute({ tool: "create_screen" }) 自动调用 panToScreen 使新页面立即可见', () => {
+  test('CHK-F-04: CanvasToolExecutor.execute({ tool: "create_screen" }) 自动调用 panToScreen 使新页面立即可见', async () => {
     const initialTransform = { x: 80, y: 80, scale: 0.7 };
     useProjectStore.getState().setViewportTransform(initialTransform);
 
-    const result = CanvasToolExecutor.execute({
+    const result = await CanvasToolExecutor.executeAsync({
       tool: 'create_screen',
       params: {
         title: '个人设置与安全中心',

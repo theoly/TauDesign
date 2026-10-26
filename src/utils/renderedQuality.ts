@@ -1,4 +1,5 @@
 import type { QualityFinding } from '../services/ai/generationQuality';
+import { hasAccessibleActionName } from '../services/ai/actionIntegrity';
 import { contrastRatio } from './colorHarmony';
 
 export interface RenderedQualityReport {
@@ -66,6 +67,23 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
       if (['auto', 'scroll'].includes(css(cur).overflowX)) return true;
     }
     return false;
+  };
+  const clippedDecoration = (el: Element, rect: DOMRect) => {
+    // Only empty non-semantic leaves qualify. Never mask clipped labels, media or actions.
+    if (!el.matches('div,span,i,b') || el.children.length || el.textContent?.trim()
+      || ['role', 'aria-label', 'title', 'tabindex'].some(attr => el.hasAttribute(attr)) || css(el).position === 'fixed') return false;
+    let left = rect.left, right = rect.right, clipped = false;
+    let containingBlock = css(el).position !== 'absolute';
+    for (let cur = el.parentElement; cur && cur !== doc.body; cur = cur.parentElement) {
+      if (hasComplexTransform(cur)) return false;
+      const style = css(cur);
+      if (style.position && style.position !== 'static') containingBlock = true;
+      // An absolutely positioned descendant escapes an overflow ancestor below its containing block.
+      if (!containingBlock || !['hidden', 'clip'].includes(style.overflowX)) continue;
+      const box = cur.getBoundingClientRect(), clipLeft = box.left + (cur.clientLeft || 0);
+      left = Math.max(left, clipLeft); right = Math.min(right, clipLeft + cur.clientWidth); clipped = true;
+    }
+    return clipped && (right <= left || (left >= -tolerance && right <= width + tolerance));
   };
   const lineCount = (el: Element) => {
     const lines: Array<{ top: number; bottom: number }> = [];
@@ -151,7 +169,7 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
         if (Array.from(range.getClientRects()).some(r => r.width > 0 && r.height > 0)) { hasLabel = true; break; }
       }
       if (!hasLabel) {
-        const named = Boolean(el.getAttribute('aria-label')?.trim() || el.getAttribute('title')?.trim());
+        const named = hasAccessibleActionName(el);
         hasLabel = Array.from(el.querySelectorAll('svg, img, .icon')).some(icon => {
           if (!paintedLabel(icon, false)) return false;
           return named || Boolean(icon.getAttribute('alt')?.trim() || icon.querySelector('title')?.textContent?.trim());
@@ -195,7 +213,7 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
         }
       }
     }
-    if ((rect.right > width + tolerance || rect.left < -tolerance) && !scrollAncestor(el) && !['auto', 'scroll'].includes(s.overflowX)) {
+    if ((rect.right > width + tolerance || rect.left < -tolerance) && !scrollAncestor(el) && !['auto', 'scroll'].includes(s.overflowX) && !clippedDecoration(el, rect)) {
       add(el, 'render_horizontal_overflow', '组件超出了画框左右边界。', `${Math.round(rect.left)}–${Math.round(rect.right)}px`, '保留完整内容，调整容器宽度或让组件组整体换行');
     }
     const html = el as HTMLElement;

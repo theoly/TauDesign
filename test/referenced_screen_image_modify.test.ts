@@ -4,6 +4,7 @@ import { resolveToolFromAIResponse } from '../src/services/tools/toolResolver';
 import { CanvasToolExecutor } from '../src/services/tools/canvasToolExecutor';
 import { enrichContext } from '../src/services/ai/engine/context/contextEnricher';
 import { useProjectStore } from '../src/stores/useProjectStore';
+import { passStagedRenderCheck } from './helpers/stagedQuality';
 
 describe('引用画框下图文修改精准路由测试 (Referenced Screen Image Modify)', () => {
   const existingScreens = {
@@ -105,7 +106,7 @@ describe('引用画框下图文修改精准路由测试 (Referenced Screen Image
   });
 
   describe('CHK-F-04: CanvasToolExecutor 与精准原地修改完整闭环 (BR-CR-04)', () => {
-    it('执行引用状态下的修改动作，直接原地更新画框内容并记录检查点', () => {
+    it('执行引用状态下的修改动作，直接原地更新画框内容并记录检查点', async () => {
       useProjectStore.setState({ activeScreenId: 'screen-login' });
 
       const fullHtml = '<main data-nid="root1"><div data-nid="card1"><h3>新视觉登录</h3></div></main>';
@@ -131,7 +132,8 @@ describe('引用画框下图文修改精准路由测试 (Referenced Screen Image
       expect(store.stagedScreen?.targetScreenId).toBe('screen-login');
 
       // 采纳新版后正式覆盖
-      store.adoptStagedChange();
+      passStagedRenderCheck();
+      await store.adoptStagedChange();
       const afterAdoptStore = useProjectStore.getState();
       expect(afterAdoptStore.screens['screen-login'].htmlContent).toContain('新视觉登录');
       expect(afterAdoptStore.stagedScreen).toBeNull();
@@ -213,7 +215,7 @@ describe('引用画框下图文修改精准路由测试 (Referenced Screen Image
       }
     });
 
-    it('CHK-F-13: CanvasToolExecutor 原地修改画框时，严格保护原有画框标题，禁止篡改为“画框”', () => {
+    it('CHK-F-13: CanvasToolExecutor 原地修改画框时，严格保护原有画框标题，禁止篡改为“画框”', async () => {
       const res = CanvasToolExecutor.execute({
         tool: 'modify_screen',
         params: {
@@ -227,7 +229,8 @@ describe('引用画框下图文修改精准路由测试 (Referenced Screen Image
       expect(res.status).toBe('screen_staged');
       expect(res.screenName).toBe('手机号验证码登录'); // 不被“画框”篡改
 
-      useProjectStore.getState().adoptStagedChange();
+      passStagedRenderCheck();
+      await useProjectStore.getState().adoptStagedChange();
       const store = useProjectStore.getState();
       expect(store.screens['screen-login'].name).toBe('手机号验证码登录');
       expect(store.screens['screen-login'].htmlContent).toContain('新内容');

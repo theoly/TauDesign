@@ -1,0 +1,557 @@
+{
+  "version": 1,
+  "cases": {
+    "screen-1791970118246-t9qj-mobile-compact": {
+      "identity": {
+        "environment": {
+          "browser": "webkit",
+          "version": "26.0",
+          "platform": "Darwin",
+          "release": "24.6.0",
+          "machine": "arm64",
+          "scale": 1,
+          "locale": "zh-CN",
+          "fontMetrics": [
+            {
+              "font": "Arial",
+              "width": 201.8828125
+            },
+            {
+              "font": "PingFang SC",
+              "width": 207.6320343017578
+            },
+            {
+              "font": "system-ui",
+              "width": 201.2596435546875
+            }
+          ]
+        },
+        "source": "ff7b7d12d473addd85f8fe6d8bc487d9ac87433b0be0e877ea742525efaedfd3",
+        "screenId": "screen-1791970118246-t9qj",
+        "viewport": {
+          "width": 390,
+          "height": 694,
+          "contentHeight": 602,
+          "reference": {
+            "id": "mobile-compact",
+            "name": "移动小屏",
+            "deviceProfile": "mobile",
+            "width": 375,
+            "height": 667
+          }
+        }
+      },
+      "images": {
+        "canvas": "93bb46d8c81d90529efa407730bfbe3ef392a6233f1b2d8c674c8b8c62192843",
+        "png": "0a7ba66ce647fa9a40bc1c76ad73d8e86fba852e6c562a5aa40da6e955193961",
+        "html": "052058372ba881ba3328ff76a2cb6cbc178be005b567387622b81e5a630625f0"
+      }
+    },
+    "screen-1791970118246-t9qj-mobile-standard": {
+      "identity": {
+        "environment": {
+          "browser": "webkit",
+          "version": "26.0",
+          "platform": "Darwin",
+          "release": "24.6.0",
+          "machine": "arm64",
+          "scale": 1,
+          "locale": "zh-CN",
+          "fontMetrics": [
+            {
+              "font": "Arial",
+              "width": 201.8828125
+            },
+            {
+              "font": "PingFang SC",
+              "width": 207.6320343017578
+            },
+            {
+              "font": "system-ui",
+              "width": 201.2596435546875
+            }
+          ]
+        },
+        "source": "ff7b7d12d473addd85f8fe6d8bc487d9ac87433b0be0e877ea742525efaedfd3",
+        "screenId": "screen-1791970118246-t9qj",
+        "viewport": {
+          "width": 390,
+          "height": 844,
+          "contentHeight": 752,
+          "reference": {
+            "id": "mobile-standard",
+            "name": "移动标准",
+            "deviceProfile": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        }
+      },
+      "images": {
+        "canvas": "93bb46d8c81d90529efa407730bfbe3ef392a6233f1b2d8c674c8b8c62192843",
+        "png": "c34e5d26baff54c23b465e32d2eaa0be53bb7774737ad76e3b43db6832026b01",
+        "html": "190487f205461f21baa4a5fdbebecc3267fbe04c46f571161757f013cf40db28"
+      }
+    },
+    "screen-1791970118246-t9qj-mobile-tall": {
+      "identity": {
+        "environment": {
+          "browser": "webkit",
+          "version": "26.0",
+          "platform": "Darwin",
+          "release": "24.6.0",
+          "machine": "arm64",
+          "scale": 1,
+          "locale": "zh-CN",
+          "fontMetrics": [
+            {
+              "font": "Arial",
+              "width": 201.8828125
+            },
+            {
+              "font": "PingFang SC",
+              "width": 207.6320343017578
+            },
+            {
+              "font": "system-ui",
+              "width": 201.2596435546875
+            }
+          ]
+        },
+        "source": "ff7b7d12d473addd85f8fe6d8bc487d9ac87433b0be0e877ea742525efaedfd3",
+        "screenId": "screen-1791970118246-t9qj",
+        "viewport": {
+          "width": 390,
+          "height": 866,
+          "contentHeight": 774,
+          "reference": {
+            "id": "mobile-tall",
+            "name": "移动长屏",
+            "deviceProfile": "mobile",
+            "width": 412,
+            "height": 915
+          }
+        }
+      },
+      "images": {
+        "canvas": "57ded3ab53ac0fa004738a77ea0dbf515bcc8873f0a359e917d7b8310b88a799",
+        "png": "d394c08df3c9b80463743d7dfa848d9c5806af398b23bf36b55d4830f01a1188",
+        "html": "e47408b6d8dbc489edf75933cbc21cb99f6d4a2f16d55e03cb81bfea99551b26"
+      }
+    },
+    "screen-1791980074775-gmsc-mobile-compact": {
+      "identity": {
+        "environment": {
+          "browser": "webkit",
+          "version": "26.0",
+          "platform": "Darwin",
+          "release": "24.6.0",
+          "machine": "arm64",
+          "scale": 1,
+          "locale": "zh-CN",
+          "fontMetrics": [
+            {
+              "font": "Arial",
+              "width": 201.8828125
+            },
+            {
+              "font": "PingFang SC",
+              "width": 207.6320343017578
+            },
+            {
+              "font": "system-ui",
+              "width": 201.2596435546875
+            }
+          ]
+        },
+        "source": "ff7b7d12d473addd85f8fe6d8bc487d9ac87433b0be0e877ea742525efaedfd3",
+        "screenId": "screen-1791980074775-gmsc",
+        "viewport": {
+          "width": 390,
+          "height": 694,
+          "contentHeight": 602,
+          "reference": {
+            "id": "mobile-compact",
+            "name": "移动小屏",
+            "deviceProfile": "mobile",
+            "width": 375,
+            "height": 667
+          }
+        }
+      },
+      "images": {
+        "canvas": "3730756005313acb41aba4ecd66d55415a9af06b6d64a2a4de93f94cd9bcb5ee",
+        "png": "1766d8f4c5f0f9dbacd557d8e4807a63c6d191217ff3557b235713f8c65b8046",
+        "html": "10957260cb9b3b657049f5e870944a6890b09871bedeb29686c4431c5ea2b2cd"
+      }
+    },
+    "screen-1791980074775-gmsc-mobile-standard": {
+      "identity": {
+        "environment": {
+          "browser": "webkit",
+          "version": "26.0",
+          "platform": "Darwin",
+          "release": "24.6.0",
+          "machine": "arm64",
+          "scale": 1,
+          "locale": "zh-CN",
+          "fontMetrics": [
+            {
+              "font": "Arial",
+              "width": 201.8828125
+            },
+            {
+              "font": "PingFang SC",
+              "width": 207.6320343017578
+            },
+            {
+              "font": "system-ui",
+              "width": 201.2596435546875
+            }
+          ]
+        },
+        "source": "ff7b7d12d473addd85f8fe6d8bc487d9ac87433b0be0e877ea742525efaedfd3",
+        "screenId": "screen-1791980074775-gmsc",
+        "viewport": {
+          "width": 390,
+          "height": 844,
+          "contentHeight": 752,
+          "reference": {
+            "id": "mobile-standard",
+            "name": "移动标准",
+            "deviceProfile": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        }
+      },
+      "images": {
+        "canvas": "3730756005313acb41aba4ecd66d55415a9af06b6d64a2a4de93f94cd9bcb5ee",
+        "png": "6e54c79b6e6d4ae25a1bb33bca39341fef1ce7b5491d69c0a7f3233804d3dc71",
+        "html": "10957260cb9b3b657049f5e870944a6890b09871bedeb29686c4431c5ea2b2cd"
+      }
+    },
+    "screen-1791980074775-gmsc-mobile-tall": {
+      "identity": {
+        "environment": {
+          "browser": "webkit",
+          "version": "26.0",
+          "platform": "Darwin",
+          "release": "24.6.0",
+          "machine": "arm64",
+          "scale": 1,
+          "locale": "zh-CN",
+          "fontMetrics": [
+            {
+              "font": "Arial",
+              "width": 201.8828125
+            },
+            {
+              "font": "PingFang SC",
+              "width": 207.6320343017578
+            },
+            {
+              "font": "system-ui",
+              "width": 201.2596435546875
+            }
+          ]
+        },
+        "source": "ff7b7d12d473addd85f8fe6d8bc487d9ac87433b0be0e877ea742525efaedfd3",
+        "screenId": "screen-1791980074775-gmsc",
+        "viewport": {
+          "width": 390,
+          "height": 866,
+          "contentHeight": 774,
+          "reference": {
+            "id": "mobile-tall",
+            "name": "移动长屏",
+            "deviceProfile": "mobile",
+            "width": 412,
+            "height": 915
+          }
+        }
+      },
+      "images": {
+        "canvas": "3730756005313acb41aba4ecd66d55415a9af06b6d64a2a4de93f94cd9bcb5ee",
+        "png": "8a97e92a230694105de9b5ccdc9d70ec9af71bbd25cd5bcc55c0ce934eaabfa3",
+        "html": "10957260cb9b3b657049f5e870944a6890b09871bedeb29686c4431c5ea2b2cd"
+      }
+    },
+    "screen-1792026516007-f8ib-mobile-compact": {
+      "identity": {
+        "environment": {
+          "browser": "webkit",
+          "version": "26.0",
+          "platform": "Darwin",
+          "release": "24.6.0",
+          "machine": "arm64",
+          "scale": 1,
+          "locale": "zh-CN",
+          "fontMetrics": [
+            {
+              "font": "Arial",
+              "width": 201.8828125
+            },
+            {
+              "font": "PingFang SC",
+              "width": 207.6320343017578
+            },
+            {
+              "font": "system-ui",
+              "width": 201.2596435546875
+            }
+          ]
+        },
+        "source": "ff7b7d12d473addd85f8fe6d8bc487d9ac87433b0be0e877ea742525efaedfd3",
+        "screenId": "screen-1792026516007-f8ib",
+        "viewport": {
+          "width": 390,
+          "height": 694,
+          "contentHeight": 602,
+          "reference": {
+            "id": "mobile-compact",
+            "name": "移动小屏",
+            "deviceProfile": "mobile",
+            "width": 375,
+            "height": 667
+          }
+        }
+      },
+      "images": {
+        "canvas": "4e8a6265bb3a86b24fb0682824944b457ab184769a7be06af3393864f04e5800",
+        "png": "a69a752d299867b4d17b2f02ed24be9df8cb4563bb41e77c172677db8e986955",
+        "html": "af6fc496b9eacc08cc2277f181d2c2ba0ebca78c1a4704ffa8de8ba2beabdb16"
+      }
+    },
+    "screen-1792026516007-f8ib-mobile-standard": {
+      "identity": {
+        "environment": {
+          "browser": "webkit",
+          "version": "26.0",
+          "platform": "Darwin",
+          "release": "24.6.0",
+          "machine": "arm64",
+          "scale": 1,
+          "locale": "zh-CN",
+          "fontMetrics": [
+            {
+              "font": "Arial",
+              "width": 201.8828125
+            },
+            {
+              "font": "PingFang SC",
+              "width": 207.6320343017578
+            },
+            {
+              "font": "system-ui",
+              "width": 201.2596435546875
+            }
+          ]
+        },
+        "source": "ff7b7d12d473addd85f8fe6d8bc487d9ac87433b0be0e877ea742525efaedfd3",
+        "screenId": "screen-1792026516007-f8ib",
+        "viewport": {
+          "width": 390,
+          "height": 844,
+          "contentHeight": 752,
+          "reference": {
+            "id": "mobile-standard",
+            "name": "移动标准",
+            "deviceProfile": "mobile",
+            "width": 390,
+            "height": 844
+          }
+        }
+      },
+      "images": {
+        "canvas": "4e8a6265bb3a86b24fb0682824944b457ab184769a7be06af3393864f04e5800",
+        "png": "d9bfadde5d320873b1fba520f7fc0f5bca98c0a658b1da5185bdf7231896d2db",
+        "html": "af6fc496b9eacc08cc2277f181d2c2ba0ebca78c1a4704ffa8de8ba2beabdb16"
+      }
+    },
+    "screen-1792026516007-f8ib-mobile-tall": {
+      "identity": {
+        "environment": {
+          "browser": "webkit",
+          "version": "26.0",
+          "platform": "Darwin",
+          "release": "24.6.0",
+          "machine": "arm64",
+          "scale": 1,
+          "locale": "zh-CN",
+          "fontMetrics": [
+            {
+              "font": "Arial",
+              "width": 201.8828125
+            },
+            {
+              "font": "PingFang SC",
+              "width": 207.6320343017578
+            },
+            {
+              "font": "system-ui",
+              "width": 201.2596435546875
+            }
+          ]
+        },
+        "source": "ff7b7d12d473addd85f8fe6d8bc487d9ac87433b0be0e877ea742525efaedfd3",
+        "screenId": "screen-1792026516007-f8ib",
+        "viewport": {
+          "width": 390,
+          "height": 866,
+          "contentHeight": 774,
+          "reference": {
+            "id": "mobile-tall",
+            "name": "移动长屏",
+            "deviceProfile": "mobile",
+            "width": 412,
+            "height": 915
+          }
+        }
+      },
+      "images": {
+        "canvas": "4e8a6265bb3a86b24fb0682824944b457ab184769a7be06af3393864f04e5800",
+        "png": "1b360e299a84badf7e6303573265b061a8ffe28df1e053f6163b9224ff744cf8",
+        "html": "af6fc496b9eacc08cc2277f181d2c2ba0ebca78c1a4704ffa8de8ba2beabdb16"
+      }
+    },
+    "screen-1792898358411-1ri6-pc-laptop": {
+      "identity": {
+        "environment": {
+          "browser": "webkit",
+          "version": "26.0",
+          "platform": "Darwin",
+          "release": "24.6.0",
+          "machine": "arm64",
+          "scale": 1,
+          "locale": "zh-CN",
+          "fontMetrics": [
+            {
+              "font": "Arial",
+              "width": 201.8828125
+            },
+            {
+              "font": "PingFang SC",
+              "width": 207.6320343017578
+            },
+            {
+              "font": "system-ui",
+              "width": 201.2596435546875
+            }
+          ]
+        },
+        "source": "f0816b178dea886fcafe59aeb03cb1ada1a663854a18408cafe0b3c1083029fa",
+        "screenId": "screen-1792898358411-1ri6",
+        "viewport": {
+          "width": 1440,
+          "height": 810,
+          "contentHeight": 810,
+          "reference": {
+            "id": "pc-laptop",
+            "name": "笔记本",
+            "deviceProfile": "pc",
+            "width": 1366,
+            "height": 768
+          }
+        }
+      },
+      "images": {
+        "canvas": "b752aca938b25a8ec726bb814febfa5eaeb342b6854308dcbad65ea958c23529",
+        "png": "15a2a1479d9e6c2b1028dde25e1bb4ccf90aed995534a2f3aeb8893962615d0f",
+        "html": "b752aca938b25a8ec726bb814febfa5eaeb342b6854308dcbad65ea958c23529"
+      }
+    },
+    "screen-1792898358411-1ri6-pc-standard": {
+      "identity": {
+        "environment": {
+          "browser": "webkit",
+          "version": "26.0",
+          "platform": "Darwin",
+          "release": "24.6.0",
+          "machine": "arm64",
+          "scale": 1,
+          "locale": "zh-CN",
+          "fontMetrics": [
+            {
+              "font": "Arial",
+              "width": 201.8828125
+            },
+            {
+              "font": "PingFang SC",
+              "width": 207.6320343017578
+            },
+            {
+              "font": "system-ui",
+              "width": 201.2596435546875
+            }
+          ]
+        },
+        "source": "f0816b178dea886fcafe59aeb03cb1ada1a663854a18408cafe0b3c1083029fa",
+        "screenId": "screen-1792898358411-1ri6",
+        "viewport": {
+          "width": 1440,
+          "height": 900,
+          "contentHeight": 900,
+          "reference": {
+            "id": "pc-standard",
+            "name": "桌面标准",
+            "deviceProfile": "pc",
+            "width": 1440,
+            "height": 900
+          }
+        }
+      },
+      "images": {
+        "canvas": "6be5be3b2a9639053604b4985d7d6ce2af3336cfaf9d34c53143f75f2d5b5cb5",
+        "png": "ab9dac6b9cf79bbe0c8bd4fd276f057ec11abe6672e12cd9aecdfd461057099e",
+        "html": "6be5be3b2a9639053604b4985d7d6ce2af3336cfaf9d34c53143f75f2d5b5cb5"
+      }
+    },
+    "screen-1792898358411-1ri6-pc-wide": {
+      "identity": {
+        "environment": {
+          "browser": "webkit",
+          "version": "26.0",
+          "platform": "Darwin",
+          "release": "24.6.0",
+          "machine": "arm64",
+          "scale": 1,
+          "locale": "zh-CN",
+          "fontMetrics": [
+            {
+              "font": "Arial",
+              "width": 201.8828125
+            },
+            {
+              "font": "PingFang SC",
+              "width": 207.6320343017578
+            },
+            {
+              "font": "system-ui",
+              "width": 201.2596435546875
+            }
+          ]
+        },
+        "source": "f0816b178dea886fcafe59aeb03cb1ada1a663854a18408cafe0b3c1083029fa",
+        "screenId": "screen-1792898358411-1ri6",
+        "viewport": {
+          "width": 1440,
+          "height": 810,
+          "contentHeight": 810,
+          "reference": {
+            "id": "pc-wide",
+            "name": "桌面宽屏",
+            "deviceProfile": "pc",
+            "width": 1920,
+            "height": 1080
+          }
+        }
+      },
+      "images": {
+        "canvas": "b752aca938b25a8ec726bb814febfa5eaeb342b6854308dcbad65ea958c23529",
+        "png": "15a2a1479d9e6c2b1028dde25e1bb4ccf90aed995534a2f3aeb8893962615d0f",
+        "html": "b752aca938b25a8ec726bb814febfa5eaeb342b6854308dcbad65ea958c23529"
+      }
+    }
+  }
+}

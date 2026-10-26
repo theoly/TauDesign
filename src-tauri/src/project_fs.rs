@@ -39,6 +39,48 @@ fn ensure_parent(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Only existing absolute directories may be passed to the OS file manager.
+fn existing_directory(root: &str) -> Result<PathBuf, String> {
+    let path = Path::new(root);
+    if root.is_empty() || !path.is_absolute() {
+        return Err("工程目录必须是本地绝对路径".into());
+    }
+    let directory = fs::canonicalize(path).map_err(|e| format!("无法访问工程目录: {e}"))?;
+    if !directory.is_dir() {
+        return Err("工程路径不是目录".into());
+    }
+    Ok(directory)
+}
+
+#[tauri::command]
+pub async fn project_open_directory(root: String) -> Result<(), String> {
+    let directory = existing_directory(&root)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        // Arguments are passed directly, never interpolated into a shell command.
+        #[cfg(target_os = "macos")]
+        let mut command = std::process::Command::new("open");
+        #[cfg(target_os = "windows")]
+        let mut command = std::process::Command::new("explorer.exe");
+        #[cfg(target_os = "linux")]
+        let mut command = std::process::Command::new("xdg-open");
+        #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+        return Err("当前系统不支持打开工程目录".to_string());
+
+        #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
+        {
+            command.arg(directory);
+            // Explorer can delegate to an existing process and return a non-zero code.
+            #[cfg(target_os = "windows")]
+            return command.spawn().map(|_| ()).map_err(|e| format!("打开目录失败: {e}"));
+            #[cfg(not(target_os = "windows"))]
+            {
+                let status = command.status().map_err(|e| format!("打开目录失败: {e}"))?;
+                if status.success() { Ok(()) } else { Err(format!("文件管理器未能打开目录（{status}）")) }
+            }
+        }
+    }).await.map_err(|e| format!("打开目录失败: {e}"))?
+}
+
 #[tauri::command]
 pub fn project_ensure_dir(root: String, rel: String) -> Result<(), String> {
     let path = resolve(&root, &rel)?;
@@ -260,6 +302,20 @@ pub fn project_delete(root: String, rel: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn directory_open_accepts_existing_absolute_folders_only() {
+        let root = std::env::temp_dir().join(format!("tdesign-工程目录 test-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("project.json"), "{}").unwrap();
+        assert_eq!(existing_directory(root.to_str().unwrap()).unwrap(), fs::canonicalize(&root).unwrap());
+        assert!(existing_directory("").is_err());
+        assert!(existing_directory("relative-folder").is_err());
+        assert!(existing_directory("https://example.com").is_err());
+        assert!(existing_directory(root.join("missing").to_str().unwrap()).is_err());
+        assert!(existing_directory(root.join("project.json").to_str().unwrap()).is_err());
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn rejects_escaping_paths() {

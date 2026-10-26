@@ -1,5 +1,7 @@
+import {seedImportedScreen} from './helpers/importFixture';
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { useProjectStore } from '../src/stores/useProjectStore';
+import { passStagedRenderCheck } from './helpers/stagedQuality';
 import { useHistoryStore } from '../src/stores/useHistoryStore';
 import { defaultTheme } from '../src/utils/themePresets';
 import { normalizeMobileNavigation } from '../src/utils/mobileNavigation';
@@ -47,7 +49,7 @@ describe('移动导航：持久化与生成管道', () => {
   });
   test('导入自定义设置和页面一次提交，撤销恢复默认；自定义导航被处理', () => {
     const store = useProjectStore.getState();
-    const id = store.importHtmlScreen({ name: '导入订单', htmlContent: source, metadata: { importedHtml: { fileName: 'order.html', mode: 'preserve', categories: [], changes: [], retained: [], version: 1 } } }, { projectId: store.id, useCustomNavigation: true });
+    const id = seedImportedScreen({ name: '导入订单', htmlContent: source, metadata: { importedHtml: { fileName: 'order.html', mode: 'preserve', categories: [], changes: [], retained: [], version: 1 } } }, { projectId: store.id, useCustomNavigation: true });
     expect(useProjectStore.getState().settings.useCustomNavigation).toBe(true);
     expect(useProjectStore.getState().screens[id].htmlContent).toContain('class="appbar"');
     expect(useProjectStore.getState().screens[id].htmlContent).not.toContain('class="status-bar"');
@@ -56,14 +58,15 @@ describe('移动导航：持久化与生成管道', () => {
     expect(useProjectStore.getState().screens[id]).toBeUndefined();
     useHistoryStore.getState().redo(); expect(useProjectStore.getState().settings.useCustomNavigation).toBe(true);
   });
-  test('候选清理保留导航标题，采纳不丢节点身份且可撤销', () => {
+  test('候选清理保留导航标题，采纳不丢节点身份且可撤销', async () => {
     const store = useProjectStore.getState();
     const id = store.addScreen({ name: '原页', htmlContent: '<main><p>正文</p></main>' });
     store.stageScreenChange(id, '<main><nav class="appbar"><span class="appbar-title">详情</span></nav><p>正文</p></main>', '新方案');
     expect(useProjectStore.getState().stagedScreen?.newHtml).not.toContain('class="appbar"');
     expect(useProjectStore.getState().stagedScreen?.navigationTitle).toBe('详情');
     const before = useProjectStore.getState().screens[id];
-    store.adoptStagedChange();
+    passStagedRenderCheck();
+    await store.adoptStagedChange();
     const after = useProjectStore.getState().screens[id];
     expect(after.metadata?.navigationTitle).toBe('详情'); expect(after.htmlContent).toContain('data-nid=');
     useHistoryStore.getState().undo(); expect(useProjectStore.getState().screens[id]).toEqual(before);
@@ -120,4 +123,18 @@ describe('移动导航：持久化与生成管道', () => {
       screens: { page: { id: 'page', name: '订单', htmlContent: source } }, deviceProfile: 'mobile', frameWidth: 390, baseSystemPrompt: 'test' });
     expect(output.status).toBe('staged_side_by_side');
   });
+});
+
+test('legacy unclassified top chrome is runtime-only on read and explicit edits remain undoable',()=>{
+ const store=useProjectStore.getState(),id=store.addScreen({name:'旧页',htmlContent:'<main><p>正文</p></main>'});
+ const original='<main><input type="radio" style="display:none" checked><div data-nid="old-status"><span>9:41</span><div><svg></svg><svg></svg></div></div><header class="appbar" data-nid="old-nav"><button aria-label="返回">‹</button><span>旧页标题</span></header><article><p data-nid="body-text">保留正文</p></article></main>';
+ const data={...useProjectStore.getState(),screens:{[id]:{...useProjectStore.getState().screens[id],htmlContent:original}}};
+ store.loadProject(JSON.stringify(data));store.updateScreen(id,{measuredHeight:980});
+ expect(useProjectStore.getState().screens[id].htmlContent).toBe(original);
+ const before=useHistoryStore.getState().past.length;
+ store.updateScreenHtml(id,original.replace('保留正文','已修改正文'));
+ expect(useProjectStore.getState().screens[id].htmlContent).not.toContain('old-status');expect(useProjectStore.getState().screens[id].htmlContent).not.toContain('old-nav');
+ expect(useProjectStore.getState().screens[id].metadata?.navigationTitle).toBe('旧页标题');expect(useHistoryStore.getState().past.length).toBe(before+1);
+ useHistoryStore.getState().undo();expect(useProjectStore.getState().screens[id].htmlContent).toBe(original);
+ useHistoryStore.getState().redo();expect(useProjectStore.getState().screens[id].htmlContent).toContain('已修改正文');
 });

@@ -245,61 +245,32 @@ describe('属性面板几何属性与多 Tab (Inspector Geometry & Tabs)', () =>
       selectNode('d1');
     });
 
-    test('CHK-F-07: 三个分组各就各位；面包屑、AI 微调与文本内容常驻不随切换消失', () => {
+    test('CHK-F-07: 连续分区保留常驻面包屑、AI 与文本入口', () => {
       render(<PropertyInspector />);
-
-      const pinnedAlwaysVisible = () => {
-        const txt = container.textContent || '';
-        expect(txt).toContain('局部 AI 定向微调');
-        expect(txt).toContain('文本内容');
-        expect(txt).toContain('尺寸:');
-      };
-
-      // 默认「布局」：定位/尺寸/盒模型在，外观与操作不在
-      let txt = container.textContent || '';
-      expect(txt).toContain('尺寸 (SIZE)');
-      expect(txt).toContain('定位 (POSITION)');
-      expect(txt).toContain('盒模型与间距');
-      expect(txt).not.toContain('圆角 (RADIUS)');
-      expect(txt).not.toContain('结构与容器操作');
-      pinnedAlwaysVisible();
-
-      click(container.querySelector('[data-testid="inspector-tab-style"]'));
-      txt = container.textContent || '';
-      expect(txt).toContain('圆角 (RADIUS)');
-      expect(txt).toContain('阴影 (SHADOW)');
-      expect(txt).toContain('排版与字号');
-      expect(txt).not.toContain('定位 (POSITION)');
-      pinnedAlwaysVisible();
-
-      click(container.querySelector('[data-testid="inspector-tab-actions"]'));
-      txt = container.textContent || '';
-      expect(txt).toContain('结构与容器操作');
-      expect(txt).toContain('组件化复用');
-      expect(txt).not.toContain('圆角 (RADIUS)');
-      pinnedAlwaysVisible();
+      const txt = container.textContent || '';
+      for (const label of ['局部 AI 定向微调','文本内容','尺寸:','位置与变换','尺寸与布局','圆角','填充','描边','效果','结构与容器操作']) expect(txt).toContain(label);
+      expect(container.querySelector('[data-testid="inspector-tab-style"]')).toBeNull();
     });
 
-    test('CHK-F-08: 切换选中元素后当前分组保持不变', () => {
+    test('CHK-F-08: 切换选中元素保留分区折叠状态，AI 始终可见', () => {
       render(<PropertyInspector />);
-
-      click(container.querySelector('[data-testid="inspector-tab-style"]'));
-      expect(container.textContent).toContain('圆角 (RADIUS)');
-
-      act(() => {
-        selectNode('d2');
-      });
-      render(<PropertyInspector />);
-
-      expect(container.textContent).toContain('圆角 (RADIUS)');
-      expect(container.textContent).not.toContain('定位 (POSITION)');
+      const section = () => Array.from(container.querySelectorAll('section')).find(el => el.textContent?.includes('混合模式'))!;
+      click(section().querySelector('button[aria-expanded]'));
+      expect(container.querySelector('[aria-label="混合模式"]')).toBeNull();
+      act(() => selectNode('d2'));
+      expect(container.querySelector('[aria-label="混合模式"]')).toBeNull();
+      expect(container.textContent).toContain('局部 AI 定向微调');
+      // Restore shared section UI state for subsequent tests.
+      click(Array.from(container.querySelectorAll('button[aria-expanded]')).find(el => el.textContent?.includes('图层'))!);
     });
 
     test('CHK-F-09: 几何控件经 setOverride 写入，可被「还原为 AI 基线样式」一次清除', () => {
       render(<PropertyInspector />);
 
-      setInput(container.querySelector('[data-testid="size-width"]'), '320');
-      setInput(container.querySelector('[data-testid="size-height"]'), '200');
+      setInput(container.querySelector('[aria-label="宽度 W"]'), '320');
+      act(() => container.querySelector('[aria-label="宽度 W"]')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})));
+      setInput(container.querySelector('[aria-label="高度 H"]'), '200');
+      act(() => container.querySelector('[aria-label="高度 H"]')!.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',bubbles:true})));
 
       const key = `${SCREEN_ID}:d1`;
       expect(useProjectStore.getState().overrides[key].declarations['width']).toBe('320px');
@@ -308,7 +279,6 @@ describe('属性面板几何属性与多 Tab (Inspector Geometry & Tabs)', () =>
       // 撤销栈里有对应条目
       expect(useHistoryStore.getState().past.length).toBeGreaterThan(0);
 
-      click(container.querySelector('[data-testid="inspector-tab-actions"]'));
       const resetBtn = Array.from(container.querySelectorAll('button')).find((b) =>
         b.textContent?.includes('还原为 AI 基线样式')
       );

@@ -3,6 +3,8 @@ mod export_save;
 mod png_export;
 mod project_fs;
 mod ssrf_guard;
+mod utf8_stream;
+mod proxy_cancellation;
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -11,6 +13,7 @@ use tauri::ipc::Channel;
 #[derive(Clone, Serialize)]
 #[serde(tag = "type", content = "data")]
 pub enum StreamPayload {
+    Ready(String),
     Chunk(String),
     Error(String),
     Done,
@@ -18,6 +21,34 @@ pub enum StreamPayload {
 
 #[tauri::command]
 async fn proxy_stream_request(
+    url: String,
+    method: String,
+    headers: HashMap<String, String>,
+    body: String,
+    allow_private_network: Option<bool>,
+    allowed_internal_hosts: Option<Vec<String>>,
+    channel: Channel<StreamPayload>,
+    request_id: Option<String>,
+    requests: tauri::State<'_, proxy_cancellation::ProxyRequests>,
+) -> Result<(), String> {
+    if let Some(id) = request_id {
+        let (_guard, registration) = requests.register(id.clone())?;
+        // The frontend can now cancel even when it aborted before this command began.
+        channel.send(StreamPayload::Ready(id)).map_err(|e| e.to_string())?;
+        return futures_util::future::Abortable::new(
+            forward_stream_request(url, method, headers, body, allow_private_network, allowed_internal_hosts, channel),
+            registration,
+        ).await.unwrap_or(Ok(()));
+    }
+    forward_stream_request(url, method, headers, body, allow_private_network, allowed_internal_hosts, channel).await
+}
+
+#[tauri::command]
+fn cancel_proxy_request(request_id: String, requests: tauri::State<'_, proxy_cancellation::ProxyRequests>) -> Result<(), String> {
+    requests.cancel(&request_id)
+}
+
+async fn forward_stream_request(
     url: String,
     method: String,
     headers: HashMap<String, String>,
@@ -116,12 +147,17 @@ async fn proxy_stream_request(
 
     use futures_util::StreamExt;
     let mut stream = res.bytes_stream();
+    let mut decoder = utf8_stream::Utf8StreamDecoder::default();
 
     while let Some(chunk_res) = stream.next().await {
         match chunk_res {
             Ok(bytes) => {
-                let text = String::from_utf8_lossy(&bytes).to_string();
-                let _ = channel.send(StreamPayload::Chunk(text));
+                // HTTP chunks may split a Chinese/emoji code point. Keep its incomplete
+                // bytes until the next chunk rather than replacing them independently.
+                let text = decoder.push(&bytes);
+                if !text.is_empty() {
+                    channel.send(StreamPayload::Chunk(text)).map_err(|e| e.to_string())?;
+                }
             }
             Err(e) => {
                 let _ = channel.send(StreamPayload::Error(format!("读取流数据异常: {}", e)));
@@ -130,6 +166,10 @@ async fn proxy_stream_request(
         }
     }
 
+    let tail = decoder.finish();
+    if !tail.is_empty() {
+        let _ = channel.send(StreamPayload::Chunk(tail));
+    }
     let _ = channel.send(StreamPayload::Done);
     Ok(())
 }
@@ -137,6 +177,7 @@ async fn proxy_stream_request(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(proxy_cancellation::ProxyRequests::default())
         // 高保真导出：离屏窗口通过该协议加载自包含 HTML (doc/feature/high-fidelity-png-export)
         .register_uri_scheme_protocol(png_export::EXPORT_SCHEME, |_ctx, request| {
             let token = request.uri().path().trim_start_matches('/').to_string();
@@ -173,9 +214,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             proxy_stream_request,
+            cancel_proxy_request,
             app_menu::set_html_import_menu_enabled,
             project_fs::project_ensure_dir,
             project_fs::project_exists,
+            project_fs::project_open_directory,
             project_fs::project_read_text,
             project_fs::read_text_context_file,
             project_fs::project_write_text_atomic,

@@ -1,5 +1,9 @@
 import { checkGenerationQuality, qualitySummary, type QualityOptions, type QualityReport } from './generationQuality';
 import { compareStructure, type StructureDiff } from '../../utils/structureGuard';
+import type { DesignTaskContract } from './designWorkflow';
+import type { DesignExecutionRecord } from './designExecutionRecord';
+import type { RestyleValidationReport } from './restyleValidation';
+import type { RestyleDeliveryReceipt } from '../storage/restyleDeliveryRepository';
 
 /**
  * 批量风格重塑的编排 (A3 / T-AE-27, T-AE-28)。
@@ -36,6 +40,11 @@ export interface RestyleOutcome {
   diff?: StructureDiff;
   qualityReport?: QualityReport;
   message?: string;
+  workflowContract?: DesignTaskContract;
+  executionRecord?: DesignExecutionRecord;
+  validation?: RestyleValidationReport;
+  batchId?: string;
+  delivery?: RestyleDeliveryReceipt;
 }
 
 export interface RestylePlan {
@@ -76,21 +85,22 @@ export function planRestyle(
  * 结构变化即拒绝——这不是保守，是因为模型删掉一个容器时用户丢的是内容，
  * 而 Restyle 的承诺只是「换个样子」。
  */
-export function acceptRestyleResult(target: RestyleTarget, rewritten: string | null, options: QualityOptions = {}): RestyleOutcome {
+export function acceptRestyleResult(target: RestyleTarget, rewritten: string | null, options: QualityOptions = {}, workflowContract?: DesignTaskContract): RestyleOutcome {
   if (!rewritten || !rewritten.trim()) {
-    return { target, status: 'failed', message: '模型未返回有效 HTML' };
+    return { target, status: 'failed', message: '模型未返回有效 HTML', workflowContract };
   }
 
   const diff = compareStructure(target.html, rewritten);
   const qualityReport = checkGenerationQuality(rewritten, { ...options, baselineHtml: target.html, preserveNids: true, protectedNids: target.protectedNids });
-  if (!diff.ok) return { target, status: 'skipped_structure', qualityReport, diff, message: diff.reason };
-  if (!qualityReport.passed) return { target, status: 'failed', qualityReport, message: qualitySummary(qualityReport) };
+  if (!diff.ok) return { target, status: 'skipped_structure', qualityReport, diff, message: diff.reason, workflowContract };
+  if (!qualityReport.passed) return { target, status: 'failed', qualityReport, message: qualitySummary(qualityReport), workflowContract };
 
   // 文案漂移不阻断，但要如实报告——用户有权知道哪些页面的文字被动过
   return {
     target,
     status: 'applied',
     qualityReport,
+    workflowContract,
     html: rewritten,
     diff,
     message: [diff.textChanged > 0 ? `已应用，但检测到 ${diff.textChanged} 处文案变化，建议核对` : '', qualitySummary(qualityReport)].filter(Boolean).join('；') || undefined
@@ -102,12 +112,14 @@ export function summarizeOutcomes(outcomes: RestyleOutcome[]) {
   const applied = outcomes.filter((o) => o.status === 'applied');
   const structureRejected = outcomes.filter((o) => o.status === 'skipped_structure');
   const failed = outcomes.filter((o) => o.status === 'failed');
+  const conflicts = outcomes.filter((o) => o.status === 'skipped_conflict');
   const textDrift = applied.filter((o) => (o.diff?.textChanged ?? 0) > 0);
   return {
     total: outcomes.length,
     applied: applied.length,
     structureRejected: structureRejected.length,
     failed: failed.length,
+    conflicts: conflicts.length,
     textDrift: textDrift.length,
     details: outcomes
       .filter((o) => o.status !== 'applied' || Boolean(o.message))

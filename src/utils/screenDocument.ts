@@ -1,4 +1,5 @@
 import type { Screen } from '../types/project';
+import { reconcileInlinePriority } from './inspectorStyle';
 import { injectMobileChrome, normalizeMobileNavigation, type MobileNavigationPolicy } from './mobileNavigation';
 import { resolveImportedViewport } from './importViewport';
 
@@ -67,6 +68,7 @@ export function buildScreenDocument(screen: Screen, options: ScreenDocumentOptio
   doc.head.append(style('scoped-css', screen.scopedCss ?? ''));
   doc.head.append(style('tokens', projectCssForScreen(screen, options.tokensCss)));
   doc.head.append(style('overrides', projectCssForScreen(screen, options.screenOverrides)));
+  reconcileInlinePriority(doc, options.screenOverrides);
   doc.head.append(style('frame-fill', imported ? '' : 'html { background-color: var(--color-bg, #f8fafc); }'));
   if (options.width !== undefined) {
     const reset = imported

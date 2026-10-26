@@ -21,6 +21,12 @@ export const ModificationReviewCard: React.FC<{
   return <section data-testid="modification-review" className="p-3 border border-blue-500/30 bg-slate-950/70 rounded-xl space-y-3 text-xs text-slate-200">
     <h3 className="font-semibold">{review.status === 'analyzing' ? '正在分析原页面…' : '选择本次修改内容'}</h3>
     <p className="text-slate-400">{review.summary}</p>
+    {review.evidence && <details className="space-y-1 text-[11px] text-slate-400">
+      <summary className="cursor-pointer">查看分析检查记录</summary>
+      <p className="break-all">任务 {review.evidence.taskId} · {review.evidence.analysisFingerprint}</p>
+      <p>已检查输出格式，共请求 {review.evidence.attempts} 次{review.evidence.attempts > 1 ? '（含一次格式纠正）' : ''}。此记录不代表视觉验收通过。</p>
+      {review.evidence.downgrades.map(item => <p key={item.id} className="text-amber-300">{review.items.find(s=>s.id===item.id)?.title ?? item.id}：{item.reason} 需由用户选择其它执行方式。</p>)}
+    </details>}
     {ready && <>
       <p className="text-[11px] text-slate-400">基于页面结构与样式分析；勾选需要修改的项，也可只填写补充要求。</p>
       <div className="max-h-80 overflow-y-auto space-y-2">{review.items.map(item => <label key={item.id} className="flex items-start gap-2 p-2 rounded-lg border border-slate-700 cursor-pointer">

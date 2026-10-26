@@ -1,3 +1,5 @@
+import {ComponentContractEditor} from './ComponentContractEditor';
+import {libraryMemberLocked} from '../../services/ai/designLibraryReference';
 import React, { useState, useRef } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useAIConfigStore } from '../../stores/useAIConfigStore';
@@ -73,6 +75,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
     screens,
     activeScreenId,
     components,
+    designLibraryBinding,
     assets,
     selectedNode,
     createComponent,
@@ -411,6 +414,7 @@ No explanations.`;
                           </div>
                         </div>
 
+                        <ComponentContractEditor component={comp}/>
                         <div className="flex items-center justify-between pt-1 border-t border-slate-900 gap-1.5">
                           <div className="flex items-center gap-1.5">
                             <button
@@ -430,7 +434,7 @@ No explanations.`;
                               onClick={() => {
                                 const res = syncComponentInstances(comp.id);
                                 if (res.skippedConflictCount > 0) {
-                                  showFeedback(`已同步 ${res.syncedCount} 处；跳过 ${res.skippedConflictCount} 处冲突实例 (已受保护)`);
+                                  showFeedback(`已同步 ${res.syncedCount} 处；跳过 ${res.skippedConflictCount} 处实例。${res.details[0]??'无法安全保留用户内容。'}`);
                                 } else {
                                   showFeedback(`已成功批量同步 ${res.syncedCount} 处实例`);
                                 }
@@ -447,7 +451,8 @@ No explanations.`;
                               }
                             }}
                             className="p-1 text-slate-500 hover:text-red-400 transition"
-                            title="删除组件"
+                            disabled={libraryMemberLocked({designLibraryBinding},'components',comp.id)}
+                            title={libraryMemberLocked({designLibraryBinding},'components',comp.id)?'设计库参考只读，请先转为项目副本':'删除组件'}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -638,6 +643,7 @@ No explanations.`;
                             全局替换
                           </button>
                           <button
+                            disabled={libraryMemberLocked({designLibraryBinding},'assets',ast.id)} title={libraryMemberLocked({designLibraryBinding},'assets',ast.id)?'设计库参考只读，请先转为项目副本':'删除素材'}
                             onClick={() => removeAsset(ast.id)}
                             className="text-slate-500 hover:text-red-400 p-0.5"
                           >

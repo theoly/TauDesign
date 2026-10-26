@@ -3,7 +3,7 @@ import { act } from 'react';
 import { DefaultAIEngineCore } from '../src/services/ai/engine/core';
 
 export const mockModificationAnalysis = () => spyOn(DefaultAIEngineCore.prototype, 'generateObject').mockResolvedValue({
-  summary: '基于原页面整理修改项', items: [{ title: '调整页面层级', reason: '原页面信息层级需要改善', change: '按用户要求调整页面层级' }]
+  summary: '基于原页面整理修改项', items: [{ title: '调整页面层级', reason: '原页面信息层级需要改善', change: '按用户要求调整页面层级', scope: 'page', operations: [] }]
 });
 
 export async function confirmLatestModification(container: HTMLElement) {

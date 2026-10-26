@@ -3,6 +3,7 @@ import { ProjectStorage } from './projectStorage';
 import { getBaseCss } from '../../styles/baseCss';
 import { getBuiltinDesignProse } from '../../styles/presets/designProse';
 import { ArtifactManifest } from '../../types/project';
+import { cssUrls, imageSrcsetCandidates } from '../import/htmlImportCss';
 
 /**
  * 将画框对象或元信息规范化为标准 ArtifactManifest (REQ-OD-05 / BR-05.1)
@@ -84,6 +85,8 @@ export interface ProjectDocument {
   savedAt?: number;
   settings: Record<string, unknown>;
   designSystem: Record<string, unknown>;
+  designSystemOrigin?: Record<string, unknown>;
+  designLibraryBinding?: Record<string, unknown>;
   screens: Record<string, Record<string, unknown>>;
   screenOrder?: string[];
   assets?: unknown;
@@ -313,7 +316,8 @@ export interface MigrationResult {
  */
 export async function migrateProjectToFolder(
   sourceJson: string,
-  storage: ProjectStorage
+  storage: ProjectStorage,
+  sourceStorage?: ProjectStorage
 ): Promise<MigrationResult> {
   const backup = sourceJson;
   let doc: ProjectDocument;
@@ -325,13 +329,32 @@ export async function migrateProjectToFolder(
 
   const repo = new ProjectRepository(storage);
   try {
+    const assets = Object.values(doc.assets ?? {}) as { relPath?: unknown }[];
+    const paths = new Set<string>();
+    for (const asset of assets) {
+      const path = asset?.relPath;
+      if (typeof path !== 'string' || !safeMigrationAssetPath(path)) throw new Error('资源路径无效');
+      paths.add(path);
+    }
+    for (const path of migrationResourcePaths(doc)) {
+      if (!safeMigrationAssetPath(path)) throw new Error(`资源路径无效：${path}`);
+      paths.add(path);
+    }
+    for (const path of paths) {
+      const bytes = await (sourceStorage ?? storage).readBinary(path);
+      if (!bytes) throw new Error(`资源文件缺失或为空：${path}`);
+      if (sourceStorage) await storage.writeBinary(path, bytes);
+      if (await storage.readBinary(path) !== bytes) throw new Error(`资源读回不一致：${path}`);
+    }
     await repo.save(doc);
   } catch (e) {
     return { ok: false, screenCount: 0, backup, error: `写入失败: ${String(e)}` };
   }
 
   // 读回验证：画框数量与每个画框的 HTML 必须逐字节一致
-  const reloaded = await repo.load();
+  let reloaded: ProjectDocument | null;
+  try { reloaded = await repo.load(); }
+  catch (error) { return { ok: false, screenCount: 0, backup, error: `读回验证失败：${String(error)}` }; }
   if (!reloaded) {
     return { ok: false, screenCount: 0, backup, error: '读回验证失败：无法解析 project.json' };
   }
@@ -350,7 +373,75 @@ export async function migrateProjectToFolder(
     if (!got || got.htmlContent !== doc.screens[sid].htmlContent) {
       return { ok: false, screenCount: gotIds.length, backup, error: `读回验证失败：画框 ${sid} 内容不一致` };
     }
+    if ((got.scopedCss ?? '') !== (doc.screens[sid].scopedCss ?? '')) {
+      return { ok: false, screenCount: gotIds.length, backup, error: `读回验证失败：画框 ${sid} 样式不一致` };
+    }
+    // The repository may add missing manifest defaults. Authored fields must survive.
+    const source = doc.screens[sid];
+    const normalized = { ...source, ...normalizeToArtifactManifest({ ...source, id: sid },
+      doc.settings.deviceProfile === 'mobile' ? 'mobile' : 'pc') };
+    for (const key of Object.keys(source).filter(key => !['htmlContent', 'scopedCss'].includes(key))) {
+      if (!sameMigrationValue(normalized[key as keyof typeof normalized], got[key])) {
+        return { ok: false, screenCount: gotIds.length, backup, error: `读回验证失败：画框 ${sid} 字段 ${key} 不一致` };
+      }
+    }
+  }
+
+  for (const key of Object.keys(doc).filter(key => !['screens', 'savedAt', 'projectDocuments'].includes(key))) {
+    if (!sameMigrationValue(doc[key as keyof ProjectDocument], reloaded[key as keyof ProjectDocument])) {
+      return { ok: false, screenCount: gotIds.length, backup, error: `读回验证失败：工程字段 ${key} 不一致` };
+    }
+  }
+  if (!sameMigrationValue(doc.projectDocuments ?? {}, reloaded.projectDocuments ?? {})) {
+    return { ok: false, screenCount: gotIds.length, backup, error: '读回验证失败：项目文档不一致' };
   }
 
   return { ok: true, screenCount: gotIds.length, backup };
+}
+
+/** JSON object ordering is not meaningful; array ordering and every saved value are. */
+function sameMigrationValue(left: unknown, right: unknown): boolean {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value)
+      .filter(([, item]) => item !== undefined).sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => [key, canonical(item)]));
+    return value;
+  };
+  return JSON.stringify(canonical(left)) === JSON.stringify(canonical(right));
+}
+
+function safeMigrationAssetPath(path: string): boolean {
+  return /^assets\/(?:images|icons|imports)\/[a-zA-Z0-9_./-]+$/.test(path) &&
+    !path.split('/').some(part => part === '.' || part === '..' || !part);
+}
+
+/** Imported fonts and CSS images may have no entry in the image-only asset index. */
+function migrationResourcePaths(doc: ProjectDocument): Set<string> {
+  const values: string[] = [];
+  const htmlSources = [...Object.values(doc.screens ?? {}).map(screen => ({ html: screen.htmlContent, css: screen.scopedCss })),
+    ...Object.values(doc.components ?? {}).map(component => ({ html: (component as {templateHtml?: string}).templateHtml, css: undefined }))];
+  for (const source of htmlSources) {
+    if (typeof source.css === 'string') values.push(...cssUrls(source.css));
+    const document = new DOMParser().parseFromString(typeof source.html === 'string' ? source.html : '', 'text/html');
+    const visit = (root: ParentNode) => {
+      for (const element of Array.from(root.querySelectorAll('*'))) {
+        for (const attr of ['src', 'poster', 'href', 'xlink:href', 'background']) {
+          const value = element.getAttribute(attr);if (value) values.push(value);
+        }
+        values.push(...imageSrcsetCandidates(element.getAttribute('srcset') ?? '').map(candidate => candidate.url));
+        values.push(...cssUrls(element.getAttribute('style') ?? ''));
+        if (element.localName === 'style') values.push(...cssUrls(element.textContent ?? ''));
+        if (element.localName === 'template') visit((element as HTMLTemplateElement).content);
+      }
+    };
+    visit(document);
+  }
+  for (const override of Object.values(doc.overrides ?? {})) {
+    for (const value of Object.values((override as {declarations?: Record<string, unknown>}).declarations ?? {})) {
+      if (typeof value === 'string') values.push(...cssUrls(value));
+    }
+  }
+  return new Set(values.map(value => value.trim().replace(/^\.\//, '').split(/[?#]/)[0])
+    .filter(value => value.startsWith('assets/')));
 }

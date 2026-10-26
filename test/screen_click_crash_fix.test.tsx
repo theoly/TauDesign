@@ -254,4 +254,20 @@ describe('ISSUE-018: 画框元素多次点选与 SVG 面包屑防崩溃测试', 
     expect(selected?.nid).toBe('path2');
     expect(selected?.parentChain?.some((p) => p.nid === 'svg2')).toBe(true);
   });
+
+  test('Shift+点击已有页面跳转元素时切换到目标画框', async () => {
+    const store = useProjectStore.getState();
+    const sourceId = store.addScreen({ name: '来源页', htmlContent: '<button data-nid="go" data-target-screen-id="target-page">打开详情</button>' }, 'source-page');
+    const targetId = store.addScreen({ name: '目标页', htmlContent: '<main data-nid="target">详情</main>' }, 'target-page');
+    store.setActiveScreen(sourceId);
+    render(<ScreenFrame screen={useProjectStore.getState().screens[sourceId]} lodLevel={2} />);
+    await act(async () => { await new Promise(resolve => setTimeout(resolve, 60)); });
+    const iframe = container.querySelector('iframe') as HTMLIFrameElement;
+    const button = iframe.contentDocument!.querySelector('[data-nid="go"]')!;
+    await act(async () => {
+      button.dispatchEvent(new (iframe.contentDocument!.defaultView as any).MouseEvent('click', { bubbles: true, shiftKey: true }));
+    });
+    expect(useProjectStore.getState().activeScreenId).toBe(targetId);
+    expect(useProjectStore.getState().selectedNode).toBeNull();
+  });
 });

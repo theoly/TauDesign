@@ -11,6 +11,7 @@ import { defaultProviders } from '../src/stores/useAIConfigStore';
 import { CanvasToolExecutor } from '../src/services/tools/canvasToolExecutor';
 import { useProjectStore } from '../src/stores/useProjectStore';
 import { useHistoryStore } from '../src/stores/useHistoryStore';
+import { finalizeModelHtml } from '../src/services/ai/modelHtmlResult';
 
 const before = '<main data-nid="root"><section data-nid="sheet"><p data-nid="detail">合同核销规则</p></section><footer data-nid="footer"><button data-nid="save" class="btn">暂存</button><button data-nid="submit" class="btn btn-primary"><svg class="icon"><path d="M1 1"/></svg><span data-nid="label">提交并核销 1 次合同约见权益</span></button></footer></main>';
 const blank = '<main data-nid="root"><section data-nid="sheet"><p data-nid="detail">合同核销规则</p></section><footer data-nid="footer"><button data-nid="save" class="btn">暂存</button><button data-nid="submit" class="btn btn-primary"><svg class="icon"><path d="M1 1"/></svg><span data-nid="label"></span></button></footer></main>';
@@ -83,11 +84,14 @@ describe('修改后的操作完整性', () => {
       { type: 'Delta', text: '<artifact type="screen" identifier="s1"><main><p>规则说明</p><button>暂存</button><button data-n' },
       { type: 'Done', finish_reason: 'length' }
     ] });
+    transport.enqueueScenario({events:[{type:'Delta',text:'无恢复标记的重写内容'},{type:'Done',finish_reason:'stop'}]});
     const result = await PipelineExecutor.execute({ input: { rawPrompt: '重构抽屉，缩短提交按钮', activeScreenId: 's1', decision: { intent: 'modify_screen', targetScreenId: 's1', reason: 'user' } },
       provider: defaultProviders[0], model: 'test', engineCore: new DefaultAIEngineCore(transport), screens: { s1: { id: 's1', name: '回访', htmlContent: before } }, deviceProfile: 'mobile', frameWidth: 390, baseSystemPrompt: '修改原页面' });
-    expect(result.status).toBe('rejected_by_quality');
-    expect(result.errorMessage).toContain('未完整'); expect(result.extractedHtml).toBeUndefined();
-    expect(result.qualityReport?.findings.some(f => f.code === 'incomplete_artifact')).toBe(true);
+    expect(result.status).toBe('error');
+    expect(result.errorMessage).toContain('恢复标记');expect(result.extractedHtml).toBeUndefined();expect(result.changeSet).toBeUndefined();
+    expect(result.continuationCheckpoint?.prefix).toBe(result.rawResponse);
+    const terminal=finalizeModelHtml({rawResponse:result.rawResponse,finishReason:'length',warnings:[],continuationCount:1});
+    expect(terminal.status).toBe('rejected_by_quality');expect(terminal.qualityReport?.findings.some(f => f.code === 'incomplete_artifact')).toBe(true);
   });
   test('结束原因透传并保留真实length，不被传输结束的stop覆盖', async () => {
     const transport = { id: 'end-sequence', stream(_request: unknown, onEvent: (event: any) => void) {

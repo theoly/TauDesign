@@ -1,4 +1,4 @@
-import { invoke, Channel, isTauri } from '@tauri-apps/api/core';
+import { streamNativeProxy } from '../../nativeProxy';
 import { AITransport, TransportRequest, StreamEvent } from './types';
 import { SSEChunkParser } from './chunkParser';
 
@@ -9,14 +9,22 @@ export class TauriRustTransport implements AITransport {
     request: TransportRequest,
     onEvent: (event: StreamEvent) => void
   ): { abort: () => void; promise: Promise<void> } {
-    let isAborted = false;
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    if (request.signal?.aborted) controller.abort();
+    else request.signal?.addEventListener('abort', abort, { once: true });
     const parser = new SSEChunkParser(onEvent);
 
-    const promise = new Promise<void>(async (resolve, reject) => {
+    const promise = (async () => {
       try {
-        const channel = new Channel<{ type: string; data?: string }>();
-        channel.onmessage = (payload) => {
-          if (isAborted) return;
+        await streamNativeProxy({
+          url: request.url,
+          method: request.method || 'POST',
+          headers: request.headers || {},
+          body: typeof request.body === 'string' ? request.body : JSON.stringify(request.body || {}),
+          allow_private_network: request.allowPrivateNetwork ?? request.provider?.allowPrivateNetwork ?? false,
+          allowed_internal_hosts: request.allowedInternalHosts ?? request.provider?.allowedInternalHosts ?? [],
+        }, (payload) => {
           if (payload.type === 'Chunk' && payload.data) {
             parser.feed(payload.data);
           } else if (payload.type === 'Error') {
@@ -25,38 +33,23 @@ export class TauriRustTransport implements AITransport {
               kind: 'network_error',
               message: payload.data || '网络请求异常'
             });
-            resolve();
           } else if (payload.type === 'Done') {
             parser.finish();
             onEvent({ type: 'Done', finish_reason: 'stop' });
-            resolve();
           }
-        };
-
-        await invoke('proxy_stream_request', {
-          url: request.url,
-          method: request.method || 'POST',
-          headers: request.headers || {},
-          body: typeof request.body === 'string' ? request.body : JSON.stringify(request.body || {}),
-          allow_private_network: request.allowPrivateNetwork ?? request.provider?.allowPrivateNetwork ?? false,
-          allowed_internal_hosts: request.allowedInternalHosts ?? request.provider?.allowedInternalHosts ?? [],
-          channel
-        });
+        }, controller.signal);
       } catch (err: any) {
-        if (!isAborted) {
+        if (!controller.signal.aborted) {
           onEvent({
             type: 'Error',
             kind: 'network_error',
             message: err?.message || 'Tauri proxy request failed'
           });
         }
-        resolve();
+      } finally {
+        request.signal?.removeEventListener('abort', abort);
       }
-    });
-
-    const abort = () => {
-      isAborted = true;
-    };
+    })();
 
     return { abort, promise };
   }

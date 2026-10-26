@@ -32,7 +32,10 @@ export function renderProjectComponents(components: ComponentDefinition[], budge
   const entries: string[] = [];
   let omitted = 0;
   for (const component of components) {
-    const entry = `组件名称: ${component.name} (${component.id})\n\`\`\`html\n${component.templateHtml}\n\`\`\``;
+    const version = component.version ?? 1;
+    const origin = component.origin ? `；来源 ${component.origin.kind}${component.origin.sourceScreenId ? ` / ${component.origin.sourceScreenId}#${component.origin.sourceNid ?? ''}` : ''}` : '';
+    const contract = component.templateContract ? `\n模板合同 v${component.templateContract.version}：固定结构/属性/文案必须保持；仅声明的插槽内容可变。实例须声明data-component-id和data-component-version。\nslotDefs=${JSON.stringify(component.slotDefs??[])}` : '\n旧组件未启用固定模板/插槽校验。';
+    const entry = `组件名称: ${component.name} (${component.id}) v${version}${origin}${contract}\n\`\`\`html\n${component.templateHtml}\n\`\`\``;
     if (used + entry.length > budget) { omitted++; continue; }
     used += entry.length;
     entries.push(entry);

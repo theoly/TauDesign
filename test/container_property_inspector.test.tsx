@@ -148,12 +148,10 @@ describe('容器属性编辑与显示测试 (Container Property Inspector)', () 
 
     render(<PropertyInspector />);
 
-    // Click justify-content '两端' (space-between)
-    const betweenBtn = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.trim() === '两端');
-    expect(betweenBtn).toBeDefined();
-    act(() => {
-      betweenBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    });
+    // 连续分区的分布选择仍通过同一历史管道提交。
+    const distribution = container.querySelector('select[aria-label="分布"]') as HTMLSelectElement;
+    expect(distribution).not.toBeNull();
+    act(() => fireChange(distribution, 'space-between'));
 
     const key = `${screenId}:box1`;
     const ov = useProjectStore.getState().overrides[key];

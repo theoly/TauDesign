@@ -1,5 +1,6 @@
 import { Screen, ProjectSettings, ArtifactManifest } from '../types/project';
 import { NidEngine } from './nidEngine';
+import { prepareForeignObjectShadows } from './foreignObjectShadows';
 import { buildScreenDocument } from './screenDocument';
 import type { MobileNavigationPolicy } from './mobileNavigation';
 
@@ -21,6 +22,7 @@ export interface ExportSvgOptions extends MobileNavigationPolicy {
 }
 
 export interface ExportPngOptions extends MobileNavigationPolicy {
+  onWarning?: (text: string) => void;
   viewportHeight?: number;
   tokensCss: string;
   baseCss: string;
@@ -91,7 +93,8 @@ export function buildArtifactManifest(screen: Screen, settings: ProjectSettings)
  * 将 HTML 结构转换为具备 100% XML/XHTML 严格语法的 SVG 字符串 (BR-02 / ISSUE-024 / ISSUE-025)
  *
  * 核心保障：
- * 1. 原生 Retina 高倍率输出：width/height 按 scale 放大，viewBox 保持原始坐标空间，消除位图拉伸模糊；
+ * 1. 高倍率输出：SVG 使用物理像素坐标，HTML 保持 CSS 布局宽度并在绘制前缩放；
+ *    避免 WebKit 在嵌套 XHTML 文档中忽略 SVG viewBox 的缩放，只绘制左上角 1x 内容。
  * 2. 内联 SVG 转换：将 data:image/svg+xml 形式的 <img> 自动转换为内联 <svg> 元素，
  *    解决 WebKit 在 SVG foreignObject 中阻断子图片加载导致的排版坍塌 (ISSUE-025)；
  * 3. 规整 void 标签自闭合与实体转义，保障 0 parsererror。
@@ -107,9 +110,9 @@ export function buildExportSvg(screen: Screen, options: ExportSvgOptions): strin
 
   if (typeof document === 'undefined') {
     // SSR / Node 环境降级
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="${scaledWidth}" height="${scaledHeight}" viewBox="0 0 ${width} ${height}">
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${scaledWidth}" height="${scaledHeight}" viewBox="0 0 ${scaledWidth} ${scaledHeight}">
       <foreignObject width="100%" height="100%">
-        <div xmlns="http://www.w3.org/1999/xhtml" style="width: ${width}px; height: ${height}px; overflow: hidden; background-color: ${bgColor};">
+        <div xmlns="http://www.w3.org/1999/xhtml" style="width: ${width}px; height: ${height}px; overflow: hidden; background-color: ${bgColor}; transform: scale(${scale}); transform-origin: 0 0;">
           <style>${tokensCss}\n${baseCss}\n${screenOverrides}</style>
           ${cleanBodyHtml}
         </div>
@@ -121,7 +124,7 @@ export function buildExportSvg(screen: Screen, options: ExportSvgOptions): strin
   svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
   svg.setAttribute('width', `${scaledWidth}`);
   svg.setAttribute('height', `${scaledHeight}`);
-  svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+  svg.setAttribute('viewBox', `0 0 ${scaledWidth} ${scaledHeight}`);
 
   const foreignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject');
   foreignObject.setAttribute('width', '100%');
@@ -130,6 +133,8 @@ export function buildExportSvg(screen: Screen, options: ExportSvgOptions): strin
   const container = document.createElement('div');
   container.setAttribute('xmlns', 'http://www.w3.org/1999/xhtml');
   container.style.cssText = `width: ${width}px; height: ${height}px; overflow: hidden; background-color: ${bgColor}; box-sizing: border-box; margin: 0; padding: 0;`;
+  container.style.transform = `scale(${scale})`;
+  container.style.transformOrigin = '0 0';
 
   const styleEl = document.createElement('style');
   styleEl.textContent = `
@@ -264,7 +269,7 @@ export function downloadDataUrl(dataUrl: string, filename: string): void {
  */
 export async function renderScreenToPngDataUrl(screen: Screen, options: ExportPngOptions): Promise<string> {
   const { width, height, scale, bgColor } = options;
-  const svgString = buildExportSvg(screen, {
+  let svgString = buildExportSvg(screen, {
     tokensCss: options.tokensCss,
     baseCss: options.baseCss,
     screenOverrides: options.screenOverrides,
@@ -275,6 +280,8 @@ export async function renderScreenToPngDataUrl(screen: Screen, options: ExportPn
     viewportHeight: options.viewportHeight,
     deviceProfile: options.deviceProfile, useCustomNavigation: options.useCustomNavigation
   });
+
+  svgString = await prepareForeignObjectShadows(svgString, width, options.viewportHeight ?? height, options.onWarning, scale);
 
   const canvas = document.createElement('canvas');
   canvas.width = width * scale;

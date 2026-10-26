@@ -8,7 +8,7 @@ function hidden(el: Element): boolean {
   }
   return false;
 }
-function label(el: Element): string {
+export function actionLabel(el: Element): string {
   if (el.tagName.toLowerCase() === 'input') return (el.getAttribute('value') ?? (el.getAttribute('type')?.toLowerCase() === 'submit' ? 'Submit' : '')).trim();
   const parts: string[] = [];
   const visit = (node: Node) => {
@@ -22,13 +22,19 @@ function label(el: Element): string {
   el.childNodes.forEach(visit);
   return parts.join('').replace(/\s+/g, ' ').trim();
 }
+const label = actionLabel;
 function primary(el: Element): boolean {
   return el.matches('.btn-primary,[type="submit"],[data-action="primary"]')
     || [...el.classList].some(c => /(?:^|[-_])(primary|cta|submit)(?:$|[-_])/.test(c))
     || /^(提交|确认支付|立即支付|付款)/.test(label(el));
 }
-function accessible(el: Element): boolean {
-  return Boolean(el.getAttribute('aria-label')?.trim() || el.getAttribute('title')?.trim()
+export function hasAccessibleActionName(el: Element): boolean {
+  const ids = el.getAttribute('aria-labelledby')?.trim().split(/\s+/).filter(Boolean) ?? [];
+  const named = ids.length > 0 && ids.every(id => {
+    const targets = Array.from(el.ownerDocument.querySelectorAll('[id]')).filter(node => node.id === id);
+    return targets.length === 1 && Boolean(label(targets[0]));
+  });
+  return Boolean(named || el.getAttribute('aria-label')?.trim() || el.getAttribute('title')?.trim()
     || Array.from(el.querySelectorAll('img[alt],svg title')).some(node => (node.getAttribute('alt') || node.textContent)?.trim()));
 }
 function authorizedRemoval(el: Element, request: string): boolean {
@@ -74,7 +80,8 @@ export function inspectActionIntegrity(doc: Document, original?: Document, reque
     }
   }
   for (const action of actions) {
-    if (hidden(action) || !primary(action) || label(action) || accessible(action)) continue;
+    const icon = Array.from(action.querySelectorAll('svg,img,.icon')).some(node => !hidden(node));
+    if (hidden(action) || !primary(action) || label(action) || (icon && hasAccessibleActionName(action))) continue;
     if (!findings.some(f => f.code === 'action_label_lost' && f.nid === (action.getAttribute('data-nid') || undefined))) {
       add(action, 'action_label_missing', '主操作按钮没有可识别的操作文案。', '空按钮');
     }

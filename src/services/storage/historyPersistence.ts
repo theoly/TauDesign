@@ -5,7 +5,7 @@ import {
   HistorySnapshot,
   deleteHistoryLocal,
   readHistoryLocal,
-  writeHistoryLocal
+  writeHistoryLocal,historyKey,serializeHistory,LOCAL_HISTORY_BUDGET
 } from './historyRepository';
 
 /**
@@ -32,18 +32,19 @@ function snapshot(): HistorySnapshot {
   return { past, future, checkpoints };
 }
 
-function writeNow(target: PersistTarget): void {
+async function writeNow(target: PersistTarget,checked=false): Promise<void> {
   const snap = snapshot();
   if (target.folderPath) {
-    void new HistoryRepository(
+    const operation=new HistoryRepository(
       createProjectStorage(target.projectId, target.folderPath),
       target.projectId
     )
-      .save(snap)
-      .catch((e) => console.warn('[history] 归档写入失败', e));
+      .save(snap);
+    if(checked)await operation;else await operation.catch((e)=>console.warn('[history] 归档写入失败',e));
     return;
   }
-  writeHistoryLocal(target.projectId, snap);
+  if(checked)localStorage.setItem(historyKey(target.projectId),serializeHistory(target.projectId,snap,LOCAL_HISTORY_BUDGET));
+  else writeHistoryLocal(target.projectId, snap);
 }
 
 function cancelPending(): void {
@@ -63,7 +64,7 @@ export function scheduleHistorySave(projectId: string, folderPath?: string): voi
     timer = null;
     const target = pending;
     pending = null;
-    if (target && !suspended) writeNow(target);
+    if (target && !suspended) void writeNow(target);
   }, SAVE_DEBOUNCE_MS);
 }
 
@@ -72,7 +73,13 @@ export function flushHistorySave(projectId?: string, folderPath?: string): void 
   const target = projectId ? { projectId, folderPath } : pending;
   cancelPending();
   if (suspended || !target) return;
-  writeNow(target);
+  void writeNow(target);
+}
+
+/** Awaited switch barrier; failures retain the current workspace and its in-memory History. */
+export async function flushHistorySaveChecked(projectId:string,folderPath?:string):Promise<void>{
+ if(suspended)throw Error('历史正在加载，请稍后再切换源库。');
+ cancelPending();await writeNow({projectId,folderPath},true);
 }
 
 /** 进入工程加载流程：丢弃在途写入并挂起落盘 */
@@ -93,7 +100,7 @@ export function isHistoryPersistenceSuspended(): boolean {
  * 读取并恢复指定工程的历史归档 (BR-HIS-02)。
  * 恢复完成后自动解除挂起；读不到归档则以空栈启动。
  */
-export async function loadHistoryForProject(projectId: string, folderPath?: string): Promise<boolean> {
+export async function loadHistoryForProject(projectId: string, folderPath?: string,isCurrent:()=>boolean=()=>true): Promise<boolean> {
   let snap: HistorySnapshot | null = null;
   try {
     snap = folderPath
@@ -104,6 +111,7 @@ export async function loadHistoryForProject(projectId: string, folderPath?: stri
     snap = null;
   }
 
+  if(!isCurrent())return false;
   useHistoryStore.getState().restore(snap);
   resumeHistoryPersistence();
   return Boolean(snap);

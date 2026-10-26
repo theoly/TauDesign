@@ -18,20 +18,22 @@ import {
   Plus,
   RefreshCw,
   Server,
+  FolderOpen,
   ShieldAlert,
   Sparkles,
   Trash2,
   XCircle
 } from 'lucide-react';
 import { QuickPromptsConfigPanel } from './QuickPromptsConfigPanel';
+import { ProjectSettingsPanel } from './ProjectSettingsPanel';
 
 interface AIProviderModalProps {
   onClose: () => void;
-  initialTab?: 'provider' | 'quick_prompts';
+  initialTab?: 'provider' | 'quick_prompts' | 'project';
 }
 
 export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initialTab = 'provider' }) => {
-  const [activeTab, setActiveTab] = useState<'provider' | 'quick_prompts'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'provider' | 'quick_prompts' | 'project'>(initialTab);
   const { providers, bindings, addProvider, updateProvider, deleteProvider, setRoleBinding } =
     useAIConfigStore();
   const { totalCalls, totalInputTokens, totalOutputTokens, totalEstimatedCostUsd, clearUsage } =
@@ -260,11 +262,17 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
       <div className="w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 min-w-0">
             <span className="font-semibold text-slate-100 text-sm hidden sm:inline">
-              AI Provider 配置与模型档位绑定
+              设置
             </span>
-            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <button type="button" onClick={() => setActiveTab('project')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${activeTab === 'project'
+                  ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}`}>
+                <FolderOpen className="w-3.5 h-3.5" />
+                <span>项目设置</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('provider')}
@@ -296,7 +304,9 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
           </button>
         </div>
 
-        {activeTab === 'quick_prompts' ? (
+        {activeTab === 'project' ? (
+          <ProjectSettingsPanel />
+        ) : activeTab === 'quick_prompts' ? (
           <QuickPromptsConfigPanel />
         ) : (
           /* Content Layout */

@@ -55,14 +55,14 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
   return (
     <div className={`flex flex-col h-full bg-slate-950 text-slate-200 overflow-hidden ${className}`}>
       {/* Top Header Bar */}
-      <div className="px-5 py-3.5 border-b border-slate-800/80 bg-slate-900/60 flex items-center justify-between shrink-0">
-        <div>
+      <div className={`px-5 py-3.5 border-b border-slate-800/80 bg-slate-900/60 flex gap-3 shrink-0 ${compact ? 'flex-col items-stretch' : 'flex-wrap items-center justify-between'}`}>
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span
               className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
               style={{ backgroundColor: primaryHex }}
             />
-            <h3 className="font-semibold text-slate-100 text-sm">{theme.name}</h3>
+            <h3 className="min-w-0 break-words font-semibold text-slate-100 text-sm">{theme.name}</h3>
           </div>
           <p className="text-[11px] text-slate-400 mt-0.5">
             {theme.id === 'theme-neutral-modern'
@@ -72,29 +72,29 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
         </div>
 
         {/* Controls: Mode & View Toggle */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {/* View Tab Toggle */}
           <div className="bg-slate-900 border border-slate-800 rounded-lg p-0.5 flex items-center text-xs">
             <button
               onClick={() => setViewTab('visual')}
-              className={`px-2.5 py-1 rounded-md transition flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-md transition flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                 viewTab === 'visual'
                   ? 'bg-blue-600 text-white font-medium shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Eye className="w-3.5 h-3.5" />
+              <Eye className="w-3.5 h-3.5 shrink-0" />
               <span>可视化</span>
             </button>
             <button
               onClick={() => setViewTab('token')}
-              className={`px-2.5 py-1 rounded-md transition flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 rounded-md transition flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
                 viewTab === 'token'
                   ? 'bg-blue-600 text-white font-medium shadow-sm'
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <Terminal className="w-3.5 h-3.5" />
+              <Terminal className="w-3.5 h-3.5 shrink-0" />
               <span>Token</span>
             </button>
           </div>
@@ -126,7 +126,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
             {/* Section 1: Palette */}
             <div className="mb-6">
               <h4 className="text-[11px] font-bold uppercase tracking-wider mb-3 opacity-60">调色板 (Palette)</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5">
+              <div className={`grid gap-2.5 ${compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4 md:grid-cols-6'}`}>
                 {[
                   { label: 'Primary', role: 'accent', hex: primaryHex, bg: primaryHex, text: roles.onPrimary },
                   { label: 'Surface', role: 'surface', hex: surfaceHex, bg: surfaceHex, text: textPrimaryHex, border: true },

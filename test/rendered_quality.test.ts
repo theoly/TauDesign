@@ -217,3 +217,34 @@ describe('渲染检查监听生命周期',()=>{
     await new Promise(resolve=>setTimeout(resolve,50));expect(reports).toHaveLength(count);expect(reports.some(x=>x.status==='complete')).toBe(false);
   });
 });
+
+describe('裁切装饰与真实水平越界',()=>{
+  function decoration(style='position:absolute',host='position:relative;overflow-x:hidden;overflow-y:hidden',tag='div',extra=''){
+    const f=fixture(`<section data-nid="clip-host" style="${host}"><${tag} data-nid="decoration" style="${style}" ${extra}></${tag}></section>`);
+    f.sizes(f.doc.querySelector('section')!,16,20,358,100);f.sizes(f.doc.querySelector('[data-nid="decoration"]')!,300,0,98,98);return f;
+  }
+  test('empty rotated decoration clipped by its containing block is not visible page overflow',()=>{
+    const f=decoration('position:absolute;transform:rotate(15deg)');
+    expect(f.report().findings.some(x=>x.code==='render_horizontal_overflow'&&x.nid==='decoration')).toBe(false);
+    f.doc.querySelector('section')!.style.overflowX='visible';
+    expect(f.report().findings.some(x=>x.code==='render_horizontal_overflow'&&x.nid==='decoration')).toBe(true);
+  });
+  for(const [name,style,host,tag,extra] of [
+    ['fixed','position:fixed','overflow-x:hidden','div',''],
+    ['absolute escapes clipping ancestor','position:absolute','overflow-x:hidden','div',''],
+    ['complex clip transform','position:absolute','position:relative;overflow-x:hidden;transform:scale(2)','div',''],
+    ['semantic media','position:absolute','position:relative;overflow-x:hidden','img','alt="图片"'],
+    ['named leaf','position:absolute','position:relative;overflow-x:hidden','div','role="img" aria-label="业务图表"'],
+  ] as const)test(`${name} retains overflow warning`,()=>{
+    const f=decoration(style,host,tag,extra);
+    expect(f.report().findings.some(x=>x.code==='render_horizontal_overflow'&&x.nid==='decoration')).toBe(true);
+  });
+  test('clipping container outside viewport still warns and text is not exempted',()=>{
+    const f=decoration();f.sizes(f.doc.querySelector('section')!,16,20,440,100);
+    expect(f.report().findings.some(x=>x.code==='render_horizontal_overflow'&&x.nid==='decoration')).toBe(true);
+    const text=fixture('<section style="position:relative;overflow-x:hidden"><p data-nid="text">必须完整显示</p></section>');
+    text.sizes(text.doc.querySelector('section')!,16,20,358,100);text.sizes(text.doc.querySelector('p')!,380,20,80,24);
+    text.textLines.set('text',[{top:20,bottom:36,left:380,right:460,width:80,height:16}] as any);
+    expect(text.codes()).toContain('render_horizontal_overflow');expect(text.codes()).toContain('render_clipped_text');
+  });
+});

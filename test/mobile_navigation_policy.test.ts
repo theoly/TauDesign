@@ -60,3 +60,35 @@ describe('移动端导航策略', () => {
     expect(new DOMParser().parseFromString(custom, 'text/html').querySelector('.td-mini-navigation')).toBeNull();
   });
 });
+
+const legacyClock='<div data-nid="legacy-status" class="row items-center justify-between"><span>9:41</span><div><svg aria-label="信号"></svg><svg aria-label="电量"></svg></div></div>';
+const legacyNav='<header data-nid="legacy-nav" class="appbar"><button aria-label="返回">‹</button><span>现场观察记录</span><button aria-label="关闭">×</button></header>';
+test('leading unclassified system clock row and plain span title normalize without touching business',()=>{
+ const source=`<main>${legacyClock}${legacyNav}<section data-nid="content"><h1>业务标题</h1><button>保存现场观察标签</button></section></main>`;
+ const r=normalizeMobileNavigation(source,policy),d=new DOMParser().parseFromString(r.html,'text/html');
+ expect(d.querySelector('[data-nid="legacy-status"]')).toBeNull();expect(d.querySelector('[data-nid="legacy-nav"]')).toBeNull();
+ expect(r.title).toBe('现场观察记录');expect(r.removedNids).toContain('legacy-status');expect(r.removedNids).toContain('legacy-nav');
+ expect(d.querySelector('[data-nid="content"]')?.textContent).toContain('业务标题保存现场观察标签');
+ expect(normalizeMobileNavigation(r.html,policy).html).toBe(r.html);
+ const custom=normalizeMobileNavigation(source,{...policy,useCustomNavigation:true});
+ expect(custom.html).not.toContain('legacy-status');expect(custom.html).toContain('legacy-nav');
+ expect(normalizeMobileNavigation(source,{deviceProfile:'pc'}).html).toBe(source);
+});
+test('explicit hidden state inputs do not block top detection and remain intact',()=>{
+ const hidden='<style>#panel{display:block}</style><input type="radio" name="state" id="a" style="display:none" checked><input type="radio" name="state" id="b" hidden><input type="hidden" value="secret"><template><p>模板</p></template>';
+ const source=`<main>${hidden}<div data-nid="status-hidden-prefix" class="status-bar">08:46</div><nav class="appbar"><span class="appbar-title">活动核销</span></nav><section id="panel"><label for="a">核销</label><button>切换活动</button></section></main>`;
+ const r=normalizeMobileNavigation(source,policy),d=new DOMParser().parseFromString(r.html,'text/html');
+ expect(r.title).toBe('活动核销');expect(d.querySelector('.status-bar')).toBeNull();expect(d.querySelector('.appbar')).toBeNull();
+ expect(d.querySelectorAll('input')).toHaveLength(3);expect(d.querySelector('#a')?.hasAttribute('checked')).toBe(true);
+ expect(d.querySelector('label')?.getAttribute('for')).toBe('a');expect(d.querySelector('template')).not.toBeNull();expect(d.querySelector('button')?.textContent).toBe('切换活动');
+});
+for(const [name,source] of [
+ ['visible input',`<main><input type="radio">${legacyClock}${legacyNav}<article>业务</article></main>`],
+ ['business prefix',`<main><h1>业务标题</h1>${legacyClock}${legacyNav}</main>`],
+ ['card content',`<article class="card">${legacyClock}${legacyNav}</article>`],
+ ['clock without navbar',`<main>${legacyClock}<section>预约时间</section></main>`],
+ ['clock with action',`<main>${legacyClock.replace('</span>','</span><button>编辑时间</button>')}${legacyNav}</main>`],
+ ['one icon',`<main>${legacyClock.replace('<svg aria-label="电量"></svg>','')}${legacyNav}</main>`],
+] as const)test(`legacy status detection preserves ${name}`,()=>{
+ const r=normalizeMobileNavigation(source,policy);expect(r.html).toContain('legacy-status');
+});

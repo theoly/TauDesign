@@ -409,11 +409,13 @@ function importAssetPath(url: string): boolean {
 }
 
 /** Materialize only parsed URL locations. Stored HTML/CSS and user text stay relative. */
-export async function resolveImportedResources(html: string, scopedCss: string | undefined, storage: ProjectStorage): Promise<{ htmlContent: string; scopedCss?: string }> {
+export async function resolveImportedResources(html: string, scopedCss: string | undefined, storage: ProjectStorage, registeredPaths: ReadonlySet<string> = new Set()): Promise<{ htmlContent: string; scopedCss?: string }> {
   const cache = new Map<string, Promise<string | null>>();
   async function resolve(url: string): Promise<string> {
-    const { path, suffix } = splitSuffix(url);
-    if (!importAssetPath(path)) return url;
+    const { path: rawPath, suffix } = splitSuffix(url);
+    const path = rawPath.replace(/^\.\//, '');
+    const registered = registeredPaths.has(path) && /^assets\/(?:images|icons)\/[a-zA-Z0-9_.-]+$/.test(path) && !!MIME_BY_EXT[extension(path)];
+    if (!importAssetPath(path) && !registered) return url;
     let pending = cache.get(path);
     if (!pending) {
       pending = storage.readBinary(path).catch((error) => {

@@ -138,9 +138,9 @@ You are TauDesign's expert UI/UX engine. Generate polished, semantic HTML5 for w
 4. COLOR MODE (CRITICAL):
    - Render in ${(options.colorMode ?? 'light').toUpperCase()} mode; tokens below resolve this mode.
    - NEVER hardcode a color literal. Every color must use var(--color-*) or a whitelisted class so pages follow toggle light/dark automatically.${
-     options.hasAttachment
+     options.hasAttachment && options.intent!=='question'
        ? `\n5. REFERENCE IMAGE FIDELITY:
-   - Faithfully reproduce visual warmth and palette (.bg-ambient-warm, .bg-ambient-cool, .bg-gradient-soft).
+   - Use the screenshot as layout/content reference; express its visual warmth through current project Tokens (.bg-ambient-warm, .bg-ambient-cool, .bg-gradient-soft). Project device/navigation, component rules and explicit edit scope take priority over reference appearance.
    - For full-bleed headers, avoid artificial floating cards with bottom rounded corners.
    - NARROW EXCEPTION (deviation-note): the "no text outside <artifact>" rule above has exactly one scoped exception, fully specified in the DEVIATION DISCLOSURE section of the user message below. Follow that section's conditions precisely; do not invent a different format.`
        : ''

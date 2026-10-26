@@ -1,3 +1,5 @@
+import {stubPageCreationRender} from './helpers/pageCreation';
+stubPageCreationRender();
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -13,6 +15,12 @@ const byButton = (label: string) => [...container.querySelectorAll('button')].fi
 const click = (el: HTMLElement) => act(() => el.click());
 const waitFor = async (assertion: () => void) => {
   for (let i = 0; ; i++) {
+    // Publish the exact document/load if the DOM simulator has not loaded the current srcdoc.
+    const frame=container.querySelector('iframe[title="导入结果预览"]') as HTMLIFrameElement|null;
+    const marker=frame?.srcdoc.match(/name="taudesign-import-preview" content="([^"]+)"/);
+    if(frame?.contentDocument&&marker&&frame.contentDocument.querySelector('meta[name="taudesign-import-preview"]')?.getAttribute('content')!==marker[1]){
+      await act(async()=>{frame.contentDocument!.open();frame.contentDocument!.write(frame.srcdoc);frame.contentDocument!.close();frame.dispatchEvent(new Event('load'));});
+    }
     try { assertion(); return; } catch (error) { if (i >= 35) throw error; }
     await act(async () => { await new Promise(resolve => setTimeout(resolve, 10)); });
   }
@@ -105,6 +113,7 @@ describe('HTML 导入对话框', () => {
     expect(imported.name).toBe('预约管理');
     expect(imported.htmlContent).toContain('提交预约');
     expect(imported.metadata?.importedHtml?.mode).toBe('preserve');
+    expect(imported.metadata?.importedHtml?.workflow).toMatchObject({ id: 'import-html-preserve', deviceProfile: 'mobile', frameWidth: 390 });
     expect(useHistoryStore.getState().past.length).toBe(1);
     expect(closed).toBe(true);
   });
@@ -119,6 +128,7 @@ describe('HTML 导入对话框', () => {
     await waitFor(() => expect(useProjectStore.getState().screenOrder.length).toBe(1));
     expect(useProjectStore.getState().designSystem.tokens.colors.primary['500']).toBe('#477568');
     expect(Object.values(useProjectStore.getState().screens)[0].metadata?.importedHtml?.mode).toBe('selective');
+    expect(Object.values(useProjectStore.getState().screens)[0].metadata?.importedHtml?.workflow?.id).toBe('import-html-selective');
     act(() => { useHistoryStore.getState().undo(); });
     expect(useProjectStore.getState().screenOrder.length).toBe(0);
     expect(useProjectStore.getState().designSystem).toEqual(defaultTheme);
@@ -132,4 +142,27 @@ describe('HTML 导入对话框', () => {
     expect(byButton('确认导入').disabled).toBe(true);
     expect(useProjectStore.getState().screenOrder.length).toBe(1);
   });
+});
+
+test('an arbitrary iframe load does not unlock confirmation without the exact converted preview marker',async()=>{
+ const block=(event:Event)=>event.stopImmediatePropagation();container.addEventListener('load',block,true);
+ try{
+  act(()=>root.render(<HtmlImportDialog onClose={()=>{}}/>));
+  await act(async()=>{Object.defineProperty(byLabel('选择 HTML 文件'),'files',{configurable:true,value:[new File([html],'meeting.html',{type:'text/html'})]});byLabel('选择 HTML 文件').dispatchEvent(new Event('change',{bubbles:true}));await new Promise(resolve=>setTimeout(resolve,40));});
+  expect(byButton('确认导入').disabled).toBe(true);
+  const frame=container.querySelector('iframe[title="导入结果预览"]') as HTMLIFrameElement;
+  expect(frame).not.toBeNull();
+  const marker=frame.contentDocument!.querySelector('meta[name="taudesign-import-preview"]')!;
+  const key=marker.getAttribute('content')!;marker.setAttribute('content','old-preview');container.removeEventListener('load',block,true);
+  act(()=>frame.dispatchEvent(new Event('load')));expect(byButton('确认导入').disabled).toBe(true);
+  marker.setAttribute('content',key);act(()=>frame.dispatchEvent(new Event('load')));expect(byButton('确认导入').disabled).toBe(false);
+ }finally{container.removeEventListener('load',block,true);}
+});
+test('changing the import selection while validation is pending rejects instead of committing stale settings',async()=>{
+ const {PageRenderCheck}=await import('../src/services/ai/pageRenderCheck');let publish!:()=>void;
+ PageRenderCheck.inspect=async()=>{await new Promise<void>(resolve=>publish=resolve);return {status:'complete',findings:[],inspected:5};};
+ let closed=false;act(()=>root.render(<HtmlImportDialog onClose={()=>{closed=true;}}/>));await selectHtml();
+ click(byButton('确认导入'));await act(async()=>{await new Promise(resolve=>setTimeout(resolve,0));});
+ click(byLabel('项目统一'));await act(async()=>{publish();await new Promise(resolve=>setTimeout(resolve,15));});
+ expect(useProjectStore.getState().screenOrder.length).toBe(0);expect(useHistoryStore.getState().past.length).toBe(0);expect(closed).toBe(false);expect(container.textContent).toContain('已变化');
 });

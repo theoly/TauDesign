@@ -1,5 +1,8 @@
+import {stubPageCreationRender} from './helpers/pageCreation';
+stubPageCreationRender();
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { useProjectStore } from '../src/stores/useProjectStore';
+import { passStagedRenderCheck } from './helpers/stagedQuality';
 import { patchElementByNid } from '../src/utils/domPatcher';
 import { CanvasToolExecutor } from '../src/services/tools/canvasToolExecutor';
 import { resolveToolFromAIResponse } from '../src/services/tools/toolResolver';
@@ -58,8 +61,8 @@ describe('CHK-CT-02 ~ CHK-CT-04: CanvasToolExecutor 统一执行器', () => {
     freshStore();
   });
 
-  it('CHK-CT-02: create_screen 成功添加画框并自动排布坐标', () => {
-    const res = CanvasToolExecutor.execute({
+  it('CHK-CT-02: create_screen 成功添加画框并自动排布坐标', async () => {
+    const res = await CanvasToolExecutor.executeAsync({
       tool: 'create_screen',
       params: {
         title: '新设计页',
@@ -77,8 +80,8 @@ describe('CHK-CT-02 ~ CHK-CT-04: CanvasToolExecutor 统一执行器', () => {
     expect(state.activeScreenId).toBe(res.screenId);
   });
 
-  it('CHK-CT-03: modify_screen 暂存候选新画框进入并排比选 (BR-SSR-01)，采纳后覆盖更新', () => {
-    const createRes = CanvasToolExecutor.execute({
+  it('CHK-CT-03: modify_screen 暂存候选新画框进入并排比选 (BR-SSR-01)，采纳后覆盖更新', async () => {
+    const createRes = await CanvasToolExecutor.executeAsync({
       tool: 'create_screen',
       params: { title: '原页面', html: '<main data-nid="root">原版</main>' }
     });
@@ -90,7 +93,9 @@ describe('CHK-CT-02 ~ CHK-CT-04: CanvasToolExecutor 统一执行器', () => {
       params: {
         screenId: targetId,
         title: '修改版',
-        html: '<main data-nid="root">新版</main>'
+        html: '<main data-nid="root">新版</main>',
+        executionRecord: { source: 'model', rawResponse: '<artifact>新版</artifact>', completeHtml: '<main data-nid="root">新版</main>',
+          finishReason: 'stop', continuationCount: 0, warnings: [] }
       }
     });
 
@@ -105,16 +110,18 @@ describe('CHK-CT-02 ~ CHK-CT-04: CanvasToolExecutor 统一执行器', () => {
     expect(state.stagedScreen).not.toBeNull();
     expect(state.stagedScreen?.targetScreenId).toBe(targetId);
     expect(state.stagedScreen?.newHtml).toContain('新版');
+    expect(state.stagedScreen?.executionRecord).toMatchObject({ source: 'model', finishReason: 'stop', completeHtml: '<main data-nid="root">新版</main>' });
 
     // 用户采纳后覆盖更新
-    useProjectStore.getState().adoptStagedChange();
+    passStagedRenderCheck();
+    await useProjectStore.getState().adoptStagedChange();
     const afterAdopt = useProjectStore.getState();
     expect(afterAdopt.screens[targetId].htmlContent).toContain('新版');
     expect(afterAdopt.stagedScreen).toBeNull();
   });
 
-  it('CHK-CT-04: patch_element 局部外科手术式更新元素并记录检查点 (BR-CR-04)', () => {
-    const createRes = CanvasToolExecutor.execute({
+  it('CHK-CT-04: patch_element 局部外科手术式更新元素并记录检查点 (BR-CR-04)', async () => {
+    const createRes = await CanvasToolExecutor.executeAsync({
       tool: 'create_screen',
       params: {
         title: '充值页',

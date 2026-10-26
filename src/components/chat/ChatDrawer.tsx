@@ -1,3 +1,7 @@
+import {MultiPagePlanCard} from './MultiPagePlanCard';
+import { FailedDraftCard } from './FailedDraftCard';
+import { ReferenceRegionDialog } from './ReferenceRegionDialog';
+import type { ImageAttachment } from '../../types/referenceImage';
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { DesignBriefCard } from './DesignBriefCard';
 import { QualityReportCard } from './QualityReportCard';
@@ -95,12 +99,55 @@ function getThinkingSteps(stage?: number, isGenerating?: boolean, isStopped?: bo
 
 export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   const [input, setInput] = useState('');
+  const [sectionedDesign,setSectionedDesign]=useState(false);
   const [showMentionMenu, setShowMentionMenu] = useState(false);
-  const [attachedImage, setAttachedImage] = useState<{ name: string; dataUrl: string } | null>(null);
+  const [attachedImage, setAttachedImage] = useState<ImageAttachment | null>(null);
+  const originalReference = useRef<ImageAttachment | null>(null), cropTicket=useRef(0);
+  const [regionDialog,setRegionDialog]=useState<{source:ImageAttachment;ticket:number}|null>(null);
+  const attachReference=(image:ImageAttachment|null)=>{cropTicket.current++;originalReference.current=image;setAttachedImage(image);setRegionDialog(null);};
   const [attachedTextFiles, setAttachedTextFiles] = useState<TextReference[]>([]);
   const [textFileError, setTextFileError] = useState<string | null>(null);
   const [isReadingFiles, setIsReadingFiles] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const resize = () => {
+      const style = getComputedStyle(textarea);
+      const lineHeight = parseFloat(style.lineHeight) || 16;
+      const padding = (parseFloat(style.paddingTop) || 0) + (parseFloat(style.paddingBottom) || 0);
+      const border = (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0);
+      const minHeight = lineHeight * 4 + padding + border;
+      const maxHeight = Math.max(minHeight, Math.min(lineHeight * 12 + padding + border, window.innerHeight * 0.4));
+      // Reset first so deletion, clearing and a wider column can shrink the field.
+      textarea.style.minHeight = `${minHeight}px`;
+      textarea.style.maxHeight = `${maxHeight}px`;
+      textarea.style.height = '0px';
+      textarea.style.overflowY = 'hidden';
+      const contentHeight = textarea.value ? textarea.scrollHeight + border : minHeight;
+      textarea.style.height = `${Math.max(minHeight, Math.min(contentHeight, maxHeight))}px`;
+      textarea.style.overflowY = contentHeight > maxHeight ? 'auto' : 'hidden';
+    };
+    resize();
+    let width = textarea.getBoundingClientRect().width;
+    let frame: number | undefined;
+    const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(() => {
+      const nextWidth = textarea.getBoundingClientRect().width;
+      // Height changes must not schedule another measurement loop.
+      if (Math.abs(nextWidth - width) < 0.5) return;
+      width = nextWidth;
+      // Leave the observer delivery cycle before changing an observed dimension.
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => { frame = undefined; resize(); });
+    });
+    observer?.observe(textarea);
+    window.addEventListener('resize', resize);
+    return () => {
+      observer?.disconnect();
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', resize);
+    };
+  }, [input]);
   const { globalPrompts } = useQuickPromptsStore();
   const projectPrompts = useProjectStore((state) => state.quickPrompts) || [];
   const allQuickPrompts = [...projectPrompts, ...globalPrompts];
@@ -159,6 +206,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
     screens,
     settings,
     stagedScreen,
+    stagedAdoptionStatus,
+    stagedAdoptionError,
     activeScreenId,
     selectedNode,
     setActiveScreen,
@@ -169,6 +218,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
     pendingAuditReport,
     clearPendingAuditReport
   } = useProjectStore();
+  const candidateDelivery = stagedScreen ? useProjectStore.getState().getStagedDeliveryReport() : null;
+  const candidateReady = candidateDelivery?.status === 'ready' && stagedAdoptionStatus !== 'saving';
+  const candidateForceReady = Boolean(stagedAdoptionStatus !== 'saving' && candidateDelivery && candidateDelivery.checks.every(check => check.id === 'quality' || check.status === 'passed'));
   const { providers, bindings } = useAIConfigStore();
   const engine = useAIEngineChat();
 
@@ -333,7 +385,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           const ext = imageFile.type.split('/')[1] || 'png';
           const timeStr = new Date().toTimeString().slice(0, 8).replace(/:/g, '');
           const fileName = imageFile.name && imageFile.name !== 'image.png' ? imageFile.name : `剪切板截图_${timeStr}.${ext}`;
-          setAttachedImage({ name: fileName, dataUrl: ev.target.result as string });
+          attachReference({ name: fileName, dataUrl: ev.target.result as string });
         }
       };
       reader.readAsDataURL(imageFile);
@@ -411,9 +463,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
     setInput('');
     const currentAttachment = attachedImage
-      ? { name: attachedImage.name, dataUrl: attachedImage.dataUrl }
+      ? { ...attachedImage }
       : undefined;
-    setAttachedImage(null);
+    attachReference(null);
     setAttachedTextFiles([]);
 
     // 清除元素引用（单次修改后不保留）
@@ -442,6 +494,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       : undefined;
 
     await engine.sendMessage(textToSend, currentAttachment, {
+      sectioned:sectionedDesign,
       referencedScreenId,
       // 活跃画框单独传递：仅当用户明确说「修改」时才作为落点 (BR-GT-03)
       activeScreenId,
@@ -649,11 +702,15 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             <p className="text-[11px] text-purple-300/90 leading-relaxed">
               新方案已在右侧画框并排就绪，针对「{screens[stagedScreen.targetScreenId]?.name || '目标画框'}」请观测对比并选择：
             </p>
+            {candidateDelivery && <p role="status" className="text-[10px] text-purple-300/80">交付检查 {candidateDelivery.checks.filter(check => check.status === 'passed').length}/{candidateDelivery.checks.length}{candidateDelivery.status !== 'ready' ? ` · ${candidateDelivery.checks.find(check => check.status === 'blocked' || check.status === 'pending')?.message ?? '检查未完成'}` : ''}</p>}
+            {stagedAdoptionStatus === 'saving' && <p role="status" className="text-[11px] text-slate-300">正在保存交付档案…</p>}
+            {stagedAdoptionError && <p role="alert" className="text-[11px] text-amber-300">{stagedAdoptionError}</p>}
             <div className="space-y-1.5 pt-0.5">
               <button
                 type="button"
+                disabled={!candidateReady}
                 onClick={engine.adoptCandidate}
-                className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-900/30 transition cursor-pointer whitespace-nowrap"
+                className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-900/30 transition cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
                 <span>采纳新版 (替换原版)</span>
@@ -661,8 +718,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
+                  disabled={!candidateReady}
                   onClick={engine.keepBothCandidates}
-                  className="w-full px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-slate-700/70 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer whitespace-nowrap"
+                  className="w-full px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-slate-700/70 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Copy className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                   <span>两版都留</span>
@@ -1070,12 +1128,18 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 </div>
               )}
 
+              {m.pagePlan&&<MultiPagePlanCard review={m.pagePlan} disabled={engine.isGenerating} onConfirm={pages=>engine.confirmPagePlan(m.id,pages)} onCancel={()=>engine.cancelPagePlan(m.id)}/>}
+
               {m.modificationReview && <ModificationReviewCard review={m.modificationReview} disabled={engine.isGenerating}
                 onConfirm={(selected, extra, mode) => engine.confirmModification(m.id, selected, extra, mode)}
                 onCancel={() => engine.cancelModification(m.id)} onRetry={() => engine.retryModificationAnalysis(m.id)} />}
 
               {m.designBrief && <DesignBriefCard brief={m.designBrief} />}
+              {m.isGenerating&&m.generationProgress&&<p role="status" className="text-[11px] leading-relaxed text-sky-300/80">{m.generationProgress}</p>}
               {m.qualityReport && <QualityReportCard report={m.qualityReport} />}
+              {m.qualityDraft && <FailedDraftCard value={m.qualityDraft} saved={m.qualityDraftSaved} busy={engine.isGenerating||m.qualityDraftBusy} notice={m.qualityDraftNotice}
+                onSuggest={()=>engine.suggestQualityTurn(m.id)} onRepair={labels=>engine.repairQualityTurn(m.id,labels)} onRegenerate={()=>engine.retryTurn(m.id)}/>}
+              {m.creationRepairNotice&&<p role="status" className="rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-2 text-[11px] leading-relaxed text-emerald-300">{m.creationRepairNotice}</p>}
 
               {/* Text / Result Bubble */}
               {(m.text || m.htmlOutput || m.isStopped || isCurrentGenerating) && (
@@ -1153,7 +1217,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
                       <span>正在分析设计规范并流式编写页面代码...</span>
                     </div>
-                  ) : m.htmlOutput ? (
+                  ) : m.qualityDraft ? null : m.htmlOutput ? (
                     (() => {
                       const mountedScreenId =
                         (m.screenId && screens[m.screenId] ? m.screenId : undefined) ||
@@ -1196,11 +1260,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                               <p className="text-[11px] text-purple-300/90 leading-relaxed">
                                 新方案已在右侧画框并排就绪，针对「{displayTitle}」请观测对比并选择：
                               </p>
+                              {candidateDelivery && <p role="status" className="text-[10px] leading-relaxed text-slate-300">
+                                交付检查 {candidateDelivery.checks.filter(check => check.status === 'passed').length}/{candidateDelivery.checks.length}
+                                {candidateDelivery.checks.find(check => check.status !== 'passed') && ` · ${candidateDelivery.checks.find(check => check.status !== 'passed')?.message}`}
+                              </p>}
                               <div className="space-y-1.5 pt-0.5">
                                 <button
                                   type="button"
-                                  onClick={engine.adoptCandidate}
-                                  className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-900/30 transition cursor-pointer whitespace-nowrap active:scale-[0.98]"
+                                  disabled={m.isGuardRejected ? !candidateForceReady : !candidateReady}
+                                  onClick={m.isGuardRejected ? () => engine.forceApply(m.htmlOutput, m.id) : engine.adoptCandidate}
+                                  className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-900/30 transition cursor-pointer whitespace-nowrap active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
                                   <span>
@@ -1212,8 +1281,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                 <div className="grid grid-cols-2 gap-2">
                                   <button
                                     type="button"
+                                    disabled={!candidateReady}
                                     onClick={engine.keepBothCandidates}
-                                    className="w-full px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-slate-700/70 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer whitespace-nowrap active:scale-[0.98]"
+                                    className="w-full px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-slate-700/70 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer whitespace-nowrap active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                                     title="保留原画框，同时将新方案作为新画框添加到画板"
                                   >
                                     <Copy className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -1280,15 +1350,17 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             <div className="space-y-2">
                               <div className="flex items-center gap-1.5 text-amber-400 font-medium text-[11px]">
                                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                                <span>页面设计代码已就绪，尚未挂载至画板</span>
+                                <span>{m.isError?'页面未通过应用检查':'页面设计代码已就绪，尚未挂载至画板'}</span>
                               </div>
+                              {m.isError&&<p role="alert" className="text-[11px] leading-relaxed text-red-300">{m.text}</p>}
                               <button
                                 type="button"
+                                disabled={engine.isGenerating}
                                 onClick={() => engine.mountMessageHtml(m.id)}
                                 className="w-full px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow transition cursor-pointer"
                               >
                                 <Sparkles className="w-3.5 h-3.5" />
-                                <span>一键挂载至画板</span>
+                                <span>{m.isError?'重新检查并挂载':'一键挂载至画板'}</span>
                               </button>
                             </div>
                           )}
@@ -1408,13 +1480,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       )}
                       {!isCurrentGenerating && (
                         <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-red-900/40">
+                          {m.continuationAvailable&&<button type="button" onClick={()=>engine.continueTurn(m.id)} className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px]" title="使用本次会话保留的片段继续，不重新生成已完成部分">{m.sectionedAvailable?'继续区块设计':'继续未完成设计'}</button>}
+                          {m.outputLimitReached&&!m.sectionedMode&&m.originalDecision?.action==='create_screen'&&<button type="button" onClick={()=>engine.sectionLargeTurn(m.id)} className="px-2.5 py-1 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 text-[11px]">按区块重建同一页</button>}
+                          {m.outputLimitReached&&m.originalDecision?.action==='create_screen'&&<button type="button" onClick={()=>engine.splitLargeTurn(m.id)} className="px-2.5 py-1 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 text-[11px]">拆分为多页设计</button>}
                           <button
                             type="button"
                             onClick={() => engine.retryTurn(m.id)}
                             className="flex items-center gap-1 px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[11px] font-medium transition cursor-pointer shadow-sm"
                           >
                             <RefreshCw className="w-3 h-3" />
-                            <span>直接重试</span>
+                            <span>{m.outputLimitReached||m.sectionedMode?'从头重新生成':'直接重试'}</span>
                           </button>
                           {m.preActionSnapshot && (
                             <button
@@ -1687,7 +1762,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               const image = images[0];
               const reader = new FileReader();
               reader.onload = (ev) => {
-                if (ev.target?.result) setAttachedImage({ name: image.name, dataUrl: ev.target.result as string });
+                if (ev.target?.result) attachReference({ name: image.name, dataUrl: ev.target.result as string });
               };
               reader.readAsDataURL(image);
             }
@@ -1737,13 +1812,17 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 </span>
               </div>
               <button
-                onClick={() => setAttachedImage(null)}
+                onClick={() => attachReference(null)}
                 disabled={engine.isGenerating}
                 className="text-slate-400 hover:text-slate-200 p-0.5 disabled:opacity-40 flex-shrink-0"
                 title="移除参考图"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
+            </div>
+            <div className="flex items-center gap-2 text-[10px] text-slate-400">
+              <button type="button" disabled={engine.isGenerating} onClick={()=>{const source=originalReference.current??attachedImage;const ticket=++cropTicket.current;setRegionDialog({source,ticket});}} className="text-blue-300 hover:underline disabled:opacity-40">{attachedImage.region?'重新选择参考区域':'选择参考区域'}</button>
+              {attachedImage.region&&<span>仅使用选区 {attachedImage.region.width}×{attachedImage.region.height}</span>}
             </div>
             {!codeSupportsVision && !visionReady && (
               <div className="p-2 bg-amber-950/40 border border-amber-800/40 rounded-xl text-[10px] text-amber-300/90 leading-relaxed flex items-start gap-1.5">
@@ -1830,6 +1909,10 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           </div>
         </div>
 
+        <label className="mb-2 flex items-center gap-1.5 text-[10px] text-slate-400" title="适合新建长页面：先建立公共骨架，按2～6块生成，通常3～7次AI调用，必要续写另计；全部检查通过后仍交付一页。">
+          <input type="checkbox" aria-label="分区生成同一页" checked={sectionedDesign} disabled={engine.isGenerating} onChange={e=>setSectionedDesign(e.target.checked)} className="accent-blue-500"/>
+          分区生成同一页 <span className="text-slate-500">（适合长页面）</span>
+        </label>
         <div className="relative flex items-center gap-1.5">
           <button
             type="button"
@@ -1861,7 +1944,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 ? 'AI 正在生成中，点击右侧按钮可立即停止...'
                 : '输入设计诉求，可上传/粘贴图片或文本文件，也可引用本地文本路径...'
             }
-            rows={2}
+            rows={4}
             className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 pr-20 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
           />
 
@@ -1894,6 +1977,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         </div>
       </div>
 
+      {regionDialog&&<ReferenceRegionDialog source={regionDialog.source} onClose={()=>{cropTicket.current++;setRegionDialog(null);}}
+        onApply={image=>{if(cropTicket.current!==regionDialog.ticket)return;setAttachedImage(image);cropTicket.current++;setRegionDialog(null);}}/>}
       {/* 附件大图全屏预览弹窗 (Lightbox Modal) */}
       {previewImageUrl && (
         <div

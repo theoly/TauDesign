@@ -1,3 +1,5 @@
+import { resolveScreenReferences } from './screenReferenceResolver';
+import { requiresPageVariantPlan } from './multiPageContract';
 import { classifyIntent } from './intentClassifier';
 
 /**
@@ -91,6 +93,9 @@ export function classifyCommand(rawPrompt: string): { kind: CommandKind; hit?: s
   const create = EXPLICIT_CREATE_KEYWORDS.find((kw) => t.includes(kw));
   if (create) return { kind: 'explicit_create', hit: create };
 
+  const createPage=t.match(/(?:创建|新建|生成|新增|设计|做)(?:一个|一张|个|张)?(?:新的?)?[^，。！？；\n]{0,24}?(?:页面|画框|页)(?!面?的?(?:标题|字号|颜色|按钮))/);
+  if(createPage&&!/重新生成|生成当前|生成原页/.test(t))return {kind:'explicit_create',hit:createPage[0]};
+
   const modify = EXPLICIT_MODIFY_KEYWORDS.find((kw) => t.includes(kw));
   if (modify) return { kind: 'explicit_modify', hit: modify };
 
@@ -112,20 +117,10 @@ export function resolveExplicitReference(
     return { screenId: referenceToggleScreenId, source: 'toggle' };
   }
 
-  // 长名优先，避免「登录」抢走「登录注册页」
-  const sorted = Object.entries(screens).sort(([, a], [, b]) => b.name.length - a.name.length);
-
-  for (const [sid, s] of sorted) {
-    if (rawPrompt.includes(`@${s.name}`) || rawPrompt.includes(`@${sid}`)) {
-      return { screenId: sid, source: 'mention' };
-    }
-  }
-
-  for (const [sid, s] of sorted) {
-    if (s.name && s.name.trim().length >= 2 && rawPrompt.includes(s.name)) {
-      return { screenId: sid, source: 'screen_name' };
-    }
-  }
+  const resolved=resolveScreenReferences(rawPrompt,screens);
+  if(resolved.ambiguousNames.length||resolved.unmatchedNames.length)return null;
+  const id=resolved.mentionIds[0]??resolved.ids[0];
+  if(id)return {screenId:id,source:resolved.mentionIds.includes(id)?'mention':'screen_name'};
 
   return null;
 }
@@ -186,15 +181,27 @@ export function resolveGenerationTarget(input: GenerationTargetInput): Generatio
     }
   }
 
+  const resolution=resolveScreenReferences(rawPrompt,screens);
+  if(referenceToggleScreenId&&!screens[referenceToggleScreenId])return {...base,action:'needs_reference',reason:'引用页面已不存在，请重新选择或使用完整页面名。'};
+  if(!(referenceToggleScreenId&&screens[referenceToggleScreenId]) && (resolution.ambiguousNames.length||resolution.unmatchedNames.length))return {
+    ...base,action:'needs_reference',reason:resolution.ambiguousNames.length
+      ? `存在同名页面：${resolution.ambiguousNames.join('、')}。请使用 @页面ID 或明确启用目标页引用。`
+      : `未找到引用页面：${resolution.unmatchedNames.join('、')}。请使用现有完整页名或 @页面ID。`
+  };
   const reference = resolveExplicitReference(rawPrompt, screens, referenceToggleScreenId);
   const command = classifyCommand(rawPrompt);
 
   // 2. 提问与纯主题诉求不触碰画布，沿用既有分类器
   const classified = classifyIntent(rawPrompt, Boolean(reference));
-  if (classified.intent === 'question') {
-    return { ...base, action: 'question', reason: classified.reason };
+  if (classified.intent === 'question' && command.kind !== 'explicit_create') {
+    return { ...base, action: 'question', styleReferenceScreenId:reference?.screenId??null, referenceSource:reference?.source??null, reason: classified.reason };
   }
-  const hasPageCreateVerb = PAGE_CREATE_VERBS.some((v) => rawPrompt.includes(v));
+  const hasPageCreateVerb = command.kind==='explicit_create' || PAGE_CREATE_VERBS.some((v) => rawPrompt.includes(v));
+  if(reference && !hasPageCreateVerb && command.kind==='neutral' && classified.intent!=='modify_screen' && /分析|解释|说明|梳理|查看|读取/.test(rawPrompt))return {...base,action:'question',styleReferenceScreenId:reference.screenId,referenceSource:reference.source,reason:'读取并分析引用页面，不修改原页面'};
+  if(requiresPageVariantPlan(rawPrompt)){
+    const currentPage=/当前页|当前页面|本页|this\s+(?:page|screen)/i.test(rawPrompt)&&activeScreenId&&screens[activeScreenId]?activeScreenId:null;
+    return {...base,action:'create_screen',styleReferenceScreenId:reference?.screenId??currentPage,referenceSource:reference?.source??(currentPage?'active_screen':null),reason:'明确要求同页多个方案，确认计划后新建比较副本，参考原页只读'};
+  }
   if (classified.intent === 'change_theme' && !hasPageCreateVerb) {
     return { ...base, action: 'change_theme', reason: classified.reason };
   }

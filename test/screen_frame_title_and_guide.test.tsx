@@ -126,7 +126,7 @@ describe('ScreenFrame 标题栏防溢出与首屏辅助线视觉弱化', () => {
     expect(guideBadge).not.toBeNull();
     expect(guideBadge?.textContent).toContain('首屏 · 400px');
     expect(guideBadge?.getAttribute('title')).toContain('测试设备');
-    expect(guideBadge?.className).toContain('bg-slate-950/35');
+    expect(guideBadge?.className).toContain('bg-slate-950/20');
     expect(guideBadge?.className).toContain('text-slate-500/55');
     expect(guideBadge?.className).not.toContain('border');
     expect(guideBadge?.className).not.toContain('shadow');

@@ -1,7 +1,7 @@
 import { normalizeMobileNavigation } from '../../utils/mobileNavigation';
 import type { DesignSystem } from '../../types/designSystem';
 import type { DeviceProfile } from '../../styles/baseCss';
-import { TokenLintEngine } from '../../utils/tokenLint';
+import { TokenLintEngine, type TokenLintContext } from '../../utils/tokenLint';
 import { parseHtmlCopy } from '../../utils/htmlDocument';
 import { techBlueTheme } from '../../utils/themePresets';
 import { inspectActionIntegrity } from './actionIntegrity';
@@ -24,6 +24,7 @@ export interface QualityOptions {
   protectedNids?: string[];
   preserveNids?: boolean;
   modificationRequest?: string;
+  tokenLintContext?: TokenLintContext;
 }
 
 /** 所有生产入口共用；离线DOM检查不冒充像素或光学验收，不自动改写结果。 */
@@ -67,7 +68,7 @@ export function checkGenerationQuality(html: string, options: QualityOptions = {
       add(el, 'unbounded_icon', 'warning', '组件内SVG缺少明确尺寸；若为功能图标请使用icon。', 'svg无尺寸', 'icon或明确内容SVG几何');
     }
   }
-  for (const issue of TokenLintEngine.scan(html, options.designSystem ?? techBlueTheme, options.deviceProfile).issues) {
+  for (const issue of TokenLintEngine.scan(html, options.designSystem ?? techBlueTheme, options.deviceProfile, options.tokenLintContext).issues) {
     findings.push({ code: issue.issueType, severity: 'warning', nid: issue.nid === 'unknown' ? undefined : issue.nid,
       message: issue.description, actual: issue.rawSnippet, expected: issue.suggestedFix });
   }
@@ -89,9 +90,10 @@ export function checkGenerationQuality(html: string, options: QualityOptions = {
 }
 
 export function qualitySummary(report: QualityReport): string {
-  const ordered = [...report.findings.filter(f => f.severity === 'error'), ...report.findings.filter(f => f.severity === 'warning')];
+  const errors = report.findings.filter(f => f.severity === 'error');
+  const ordered = errors.length ? errors : report.findings;
   return ordered.slice(0, 4).map(f => `${f.nid ? `[${f.nid}] ` : ''}${f.message}`).join('；')
-    + (report.findings.length > 4 ? `；另有${report.findings.length - 4}项` : '');
+    + (ordered.length > 4 ? `；另有${ordered.length - 4}项${errors.length?'阻断问题':'提示'}` : '');
 }
 
 /** Validate raw source before DOM normalization; business/action checks run on the retained content. */

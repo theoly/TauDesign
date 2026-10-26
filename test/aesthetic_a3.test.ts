@@ -4,7 +4,8 @@
  * 重点在两个强制机制：结构守卫与组件优先编排。Polish / Restyle 的承诺是
  * 「只改样子不改内容」，这条承诺必须可强制执行，不能只靠 Prompt 请求。
  */
-import { describe, test, expect } from 'bun:test';
+import { describe, test, expect, spyOn } from 'bun:test';
+import { PageRenderCheck } from '../src/services/ai/pageRenderCheck';
 import { compareStructure, hasTextDrift } from '../src/utils/structureGuard';
 import { planRestyle, acceptRestyleResult, summarizeOutcomes, type RestyleTarget } from '../src/services/ai/restyleService';
 import { buildPolishPrompt, describeTargetStyle } from '../src/services/ai/polishPrompt';
@@ -220,11 +221,11 @@ describe('T-AE-27/28 · store 层编排', () => {
       name: '目标页', position: { x: 0, y: 0 }, htmlContent: '<div data-nid="z1"><span data-nid="z2">a</span></div>'
     });
     const before = store.getState().screens[sid].htmlContent;
-    const applied = store.getState().applyRestyleOutcome({
+    const applied = await store.getState().applyRestyleOutcome({
       target: { kind: 'screen', id: sid, name: '目标页', html: before },
       status: 'skipped_structure'
     });
-    expect(applied).toBe(false);
+    expect(applied.applied).toBe(false);
     expect(store.getState().screens[sid].htmlContent).toBe(before);
   });
 
@@ -234,14 +235,17 @@ describe('T-AE-27/28 · store 层编排', () => {
       name: '目标页2', position: { x: 0, y: 0 }, htmlContent: '<div data-nid="y1" class="card">a</div>'
     });
     const html = '<div data-nid="y1" class="card shadow-soft p-6">a</div>';
+    const render = spyOn(PageRenderCheck,'inspect').mockResolvedValue({status:'complete',findings:[],inspected:1});
+    try {
     expect(
-      store.getState().applyRestyleOutcome({
+      (await store.getState().applyRestyleOutcome({
         target: { kind: 'screen', id: sid, name: '目标页2', html: '<div data-nid="y1" class="card">a</div>' },
         status: 'applied',
         html
-      })
+      })).applied
     ).toBe(true);
     expect(store.getState().screens[sid].htmlContent).toBe(html);
+    } finally { render.mockRestore(); }
   });
 });
 

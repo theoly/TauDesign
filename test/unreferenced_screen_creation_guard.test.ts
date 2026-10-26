@@ -1,3 +1,5 @@
+import {stubPageCreationRender} from './helpers/pageCreation';
+stubPageCreationRender();
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { resolveToolFromAIResponse } from '../src/services/tools/toolResolver';
 import { CanvasToolExecutor } from '../src/services/tools/canvasToolExecutor';
@@ -139,7 +141,7 @@ describe('未引用画框防误判与比选拦截测试 (Unreferenced Screen Cre
     }
   });
 
-  it('CHK-F-05: 执行未引用时生成的 create_screen，stagedScreen 必须保持为 null，不弹出比选替换栏', () => {
+  it('CHK-F-05: 执行未引用时生成的 create_screen，stagedScreen 必须保持为 null，不弹出比选替换栏', async () => {
     const rawResponse = '<artifact identifier="screen-1" type="screen" title="推荐匹配 · 暂无数据"><div data-nid="r3"><h1>暂无数据</h1></div></artifact>';
     const extractedHtml = '<div data-nid="r3"><h1>暂无数据</h1></div>';
 
@@ -156,7 +158,7 @@ describe('未引用画框防误判与比选拦截测试 (Unreferenced Screen Cre
     expect(call?.tool).toBe('create_screen');
 
     // 调用 CanvasToolExecutor 执行工具
-    const execResult = CanvasToolExecutor.execute(call!);
+    const execResult = await CanvasToolExecutor.executeAsync(call!);
     expect(execResult.success).toBe(true);
 
     const store = useProjectStore.getState();
