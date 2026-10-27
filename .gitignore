@@ -1,5 +1,6 @@
 dist/
 dist-desktop/
+release-assets/
 doc/*
 !doc/design-workflow-refactor/
 doc/design-workflow-refactor/*
@@ -16,10 +17,12 @@ doc/restyle-progress/*
 !doc/restyle-bounded/
 doc/restyle-bounded/*
 !doc/restyle-bounded/*.md
+!doc/desktop-release/
+doc/desktop-release/*
+!doc/desktop-release/*.md
 node_modules/
 spike/
 AGENTS.md
-bun.lock
 .env
 .env.*
 .claude/
