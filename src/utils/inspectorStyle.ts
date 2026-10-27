@@ -147,6 +147,7 @@ export function clearInspectorPreview(doc:Document) {
 const inlineBaseline = new WeakMap<Document, Map<HTMLElement,string>>();
 /** Render/export copies may lower inline !important so L4 wins; source HTML stays intact. */
 export function reconcileInlinePriority(doc:Document, css:string) {
+  css=(doc.querySelector('style[data-taudesign-runtime="theme-backgrounds"]')?.textContent??'')+'\n'+(doc.querySelector('style[data-taudesign-runtime="overrides"]')?.textContent??'')+'\n'+css;
   const previous=inlineBaseline.get(doc);
   previous?.forEach((value,el)=>{el.style.cssText=value;});
   const changed=new Map<HTMLElement,string>();
@@ -162,6 +163,11 @@ export function reconcileInlinePriority(doc:Document, css:string) {
         el.style.setProperty(prop,el.style.getPropertyValue(prop),'');
       }
     }
+  }
+  for(const match of css.matchAll(/(?:^|[{}])\s*(body|html)\s*\{([^}]+)\}/g)){
+    const el=doc.querySelector<HTMLElement>(match[1]);if(!el)continue;
+    const probe=doc.createElement('span').style;probe.cssText=match[2];
+    for(let i=0;i<probe.length;i++){const property=probe.item(i);for(const prop of [property,...SHORTHANDS[property]??[]])if(el.style.getPropertyPriority(prop)==='important'){if(!changed.has(el))changed.set(el,el.style.cssText);el.style.setProperty(prop,el.style.getPropertyValue(prop),'');}}
   }
   inlineBaseline.set(doc,changed);
 }

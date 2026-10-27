@@ -146,7 +146,9 @@ export async function streamWithContinuation(core: AIEngineCore, options: Stream
       return result;
     }
     const artifact = extractArtifact(result.rawResponse);
-    const incomplete = artifact && (!artifact.isComplete || !htmlIsComplete(artifact.html));
+    const fence=/```html[ \t]*\r?\n([\s\S]*)$/i.exec(result.rawResponse);
+    const unfinishedFence=!!fence&&!fence[1].includes('```')&&fence[1].trimStart().startsWith('<');
+    const incomplete = artifact ? !artifact.isComplete || !htmlIsComplete(artifact.html) : unfinishedFence;
     if (callbacks.allowContinuation === false || !isOutputLimit(result.finishReason) || !incomplete || transportRecovery) return result;
     if (continuations >= autoCap || requestedTokens >= totalBudget || result.rawResponse.length > 120000) {
       result.warnings.push(`续写达到${autoCap}次或累计${totalBudget}请求输出Token上限；请拆分修改。`);

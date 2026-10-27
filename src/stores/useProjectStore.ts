@@ -83,6 +83,7 @@ import type { DesignExecutionRecord } from '../services/ai/designExecutionRecord
 import { assertDesignLibraryCopyCompatible, type DesignLibraryCopy } from '../services/ai/designLibraryCopy';
 import { saveStagedCandidate, removeStagedCandidate, type StagedCandidateData } from '../services/storage/candidateRepository';
 import { canConfirmCandidateStructure, type CandidateDeliveryReport, type CandidateValidationEvidence } from '../services/ai/candidateValidation';
+import {backgroundScreenUpdates,styleApplicationKey} from '../services/import/styleApplication';
 import { DeliveryRepository, type DeliveryMode, type DeliveryRecord } from '../services/storage/deliveryRepository';
 import { DeliveryPreviewCapture } from '../services/storage/deliveryPreview';
 import { PagePreviewCapture, type PagePreview } from '../services/storage/pagePreview';
@@ -164,6 +165,8 @@ export interface HtmlScreenImportSetup {
   colorMode?: 'light' | 'dark';
   assets?: Asset[];
   useCustomNavigation?: boolean;
+  /** Explicit selective theme update in an existing project, bound to the reviewed context. */
+  themeUpdate?: {expectedKey:string;syncScreenIds:string[]};
 }
 
 export interface ComputedBoxModel {
@@ -328,6 +331,7 @@ interface ProjectState {
   setShowViewportGuide: (show: boolean) => void;
   setPanelOpen: (key: string, open: boolean) => void;
   setDesignSystem: (ds: DesignSystem) => void;
+  applyExtractedStyle: (ds:DesignSystem,syncScreenIds:string[],expectedKey:string) => void;
   applyDesignLibraryCopy: (copy: DesignLibraryCopy) => void;
   detachDesignLibraryReference: () => void;
   /** 换肤前扫描会被 L4 覆盖挡住的节点 (T-AE-22) */
@@ -853,6 +857,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return target.length;
   },
 
+  applyExtractedStyle: (ds,syncScreenIds,expectedKey) => {
+    const state=get();assertLibraryEditable(state);
+    if(styleApplicationKey(state)!==expectedKey)throw new Error('页面或主题已变化，请重新分析并预览。');
+    const updates=backgroundScreenUpdates(state,ds,syncScreenIds);
+    const origin=designSystemOriginFor(ds,{kind:'project_override',sourceId:ds.id,sourceName:ds.name,updatedAt:Date.now()},state.designSystemOrigin);
+    const forward:Patch[]=[{op:'replace',path:['designSystem'],value:ds},{op:'replace',path:['designSystemOrigin'],value:origin}];
+    const inverse:Patch[]=[{op:'replace',path:['designSystem'],value:state.designSystem},{op:'replace',path:['designSystemOrigin'],value:state.designSystemOrigin}];
+    for(const [id,screen] of Object.entries(updates)){forward.push({op:'replace',path:['screens',id],value:screen});inverse.push({op:'replace',path:['screens',id],value:state.screens[id]});}
+    useHistoryStore.getState().commit('从页面提取并应用选定风格',forward,inverse);
+    set({designSystem:ds,designSystemOrigin:origin,screens:{...state.screens,...updates}});get().saveProject();
+  },
+
   setDesignSystem: (ds) => {
     assertLibraryEditable(get());
     const prevDs = get().designSystem;
@@ -961,6 +977,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         id: sc.id,
         name: sc.name,
         html: sc.htmlContent,
+        imported:!!sc.metadata?.importedHtml,
         protectedNids: get().getProtectedNids(sc.id)
       }));
 
@@ -1085,7 +1102,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if(!input.screen.metadata?.importedHtml||!input.screen.htmlContent.trim())throw new Error('缺少有效 HTML 导入结果');
       const missing=input.resources?.resources.find(resource=>resource.status==='missing');
       if(missing)throw new Error(`导入资源缺失：${missing.url}，请补充资源后重新预览。`);
-      if((input.setup.designSystem||input.setup.colorMode)&&Object.values(state.screens).some(sc=>sc.metadata?.kind!=='specimen'))throw new Error('已有页面的工程不能通过导入替换项目风格');
+      if((input.setup.designSystem||input.setup.colorMode)&&Object.values(state.screens).some(sc=>sc.metadata?.kind!=='specimen')){
+        if(!input.setup.themeUpdate||input.setup.themeUpdate.expectedKey!==styleApplicationKey(state))throw new Error('已有页面的工程需明确确认主题更新并重新核对预览。');
+        if(input.setup.colorMode&&input.setup.colorMode!==state.settings.colorMode)throw new Error('提取风格不切换已有工程明暗模式。');
+      }
       const snapshot=structuredClone({id:state.id,folderPath:state.folderPath,screens:state.screens,settings:{...state.settings,
         ...(input.setup.colorMode?{colorMode:input.setup.colorMode}:{}),...(input.setup.useCustomNavigation!==undefined?{useCustomNavigation:input.setup.useCustomNavigation}:{})},
         assets:state.assets,designSystem:input.setup.designSystem??state.designSystem,designSystemOrigin:state.designSystemOrigin,
@@ -1142,7 +1162,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if(setup.designSystem)assertLibraryEditable(get());
       if (setup.projectId !== get().id) throw new Error('工程已切换，请重新导入');
       if ((setup.designSystem || setup.colorMode) && Object.values(get().screens).some(sc => sc.metadata?.kind !== 'specimen')) {
-        throw new Error('已有页面的工程不能通过导入替换项目风格');
+        if(!setup.themeUpdate||setup.themeUpdate.expectedKey!==styleApplicationKey(get()))throw new Error('已有页面的工程需明确确认主题更新并重新核对预览。');
+        if(setup.colorMode&&setup.colorMode!==get().settings.colorMode)throw new Error('提取风格不切换已有工程明暗模式。');
       }
     }
     const id = customId || `screen-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -1172,6 +1193,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }, { ...get().settings, useCustomNavigation: setup?.useCustomNavigation ?? get().settings.useCustomNavigation });
     const prevScreens = get().screens;
     const prevOrder = [...get().screenOrder];
+    const backgroundUpdates=setup?.designSystem&&setup.themeUpdate?backgroundScreenUpdates(get(),setup.designSystem,setup.themeUpdate.syncScreenIds):{};
 
     // 历史变更记录：新画框添加 + 序位 + 避让画框的位移 (BR-HIS-09)
     const forwardOps: Array<{ op: 'add' | 'replace'; path: string[]; value: any }> = [
@@ -1193,6 +1215,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
 
     if (setup?.designSystem) {
+      for(const [screenId,updated] of Object.entries(backgroundUpdates)){
+        forwardOps.push({op:'replace',path:['screens',screenId],value:updated});
+        backwardOps.push({op:'replace',path:['screens',screenId],value:prevScreens[screenId]});
+      }
       forwardOps.push({ op: 'replace', path: ['designSystem'], value: setup.designSystem });
       backwardOps.push({ op: 'replace', path: ['designSystem'], value: get().designSystem });
       const origin = designSystemOriginFor(setup.designSystem, setup.designSystemOrigin ?? {
@@ -1239,6 +1265,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
     set((state) => {
       const nextScreens = { ...state.screens, [id]: screen };
+      for(const [screenId,updated] of Object.entries(backgroundUpdates))if(nextScreens[screenId])nextScreens[screenId]={...nextScreens[screenId],metadata:updated.metadata};
       for (const shift of shiftedScreens) {
         if (nextScreens[shift.id]) {
           nextScreens[shift.id] = {

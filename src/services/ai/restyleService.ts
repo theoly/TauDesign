@@ -31,11 +31,12 @@ export interface RestyleTarget {
   reuseCount?: number;
   /** 含 L4 覆盖的节点，其 class 不应被改写 */
   protectedNids?: string[];
+  imported?: boolean;
 }
 
 export interface RestyleOutcome {
   target: RestyleTarget;
-  status: 'applied' | 'skipped_structure' | 'skipped_conflict' | 'failed';
+  status: 'applied' | 'skipped_structure' | 'skipped_conflict' | 'skipped_unchanged' | 'failed';
   html?: string;
   diff?: StructureDiff;
   qualityReport?: QualityReport;
@@ -119,6 +120,7 @@ export function summarizeOutcomes(outcomes: RestyleOutcome[]) {
     applied: applied.length,
     structureRejected: structureRejected.length,
     failed: failed.length,
+    unchanged:outcomes.filter(o=>o.status==='skipped_unchanged').length,
     conflicts: conflicts.length,
     textDrift: textDrift.length,
     details: outcomes

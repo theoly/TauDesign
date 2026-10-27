@@ -2,6 +2,7 @@ import { supportsNativeContinuation } from '../../boundedContinuation';
 import { AIProviderConfig } from '../../../../types/provider';
 import { EngineMessage, StreamTextOptions } from './types';
 import { TransportRequest } from '../transport/types';
+import {supportsThinkingToggle} from '../../thinkingPolicy';
 
 export interface PreparedRequest {
   transportRequest: TransportRequest;
@@ -46,6 +47,7 @@ export function prepareModelRequest(options: StreamTextOptions): PreparedRequest
       model,
       messages: openAiMessages,
       ...(openAiMessages.some(m => 'partial' in m) ? { enable_thinking: false } : {}),
+      ...(options.enableThinking!==undefined&&supportsThinkingToggle(provider,model)?{enable_thinking:options.enableThinking}:{}),
       stream: true,
       temperature,
       max_tokens: maxTokens
@@ -194,7 +196,7 @@ export function prepareModelRequest(options: StreamTextOptions): PreparedRequest
       provider: options.provider,
       model: options.model,
       messages: options.messages,
-      generationOptions: { maxTokens, temperature }
+      generationOptions: { maxTokens, temperature,...(options.enableThinking!==undefined?{enableThinking:options.enableThinking}:{}) }
     },
     estimatedInputChars
   };

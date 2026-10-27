@@ -72,6 +72,8 @@ export interface Screen {
   thumbnail?: string;
   /** 'specimen' 为风格样张页（doc/aesthetic/spec.md §6.6），非业务画框 */
   metadata?: { description?: string; promptOrigin?: string; kind?: 'specimen'; importedHtml?: HtmlImportMetadata; navigationTitle?: string; scopedStyleAsset?: ScopedStyleAssetIdentity;
+    /** Explicit page choices when a project background changes; no business DOM rewrite. */
+    themeBackgrounds?: { snapshot?: import('./themeBackground').ThemeBackgrounds; bindings?: Partial<Record<import('./themeBackground').BackgroundRole,string[]>> };
     /** Static design taxonomy only; no runtime role or state transitions are implied. */
     pageGroup?: string; stateLabel?: string; audienceRole?: string; basedOnScreenId?: ScreenId;
     multiPageDelivery?:import('../services/ai/multiPageContract').MultiPageDelivery;

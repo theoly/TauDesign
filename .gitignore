@@ -7,6 +7,15 @@ doc/design-workflow-refactor/*
 !doc/candidate-action-feedback/
 doc/candidate-action-feedback/*
 !doc/candidate-action-feedback/*.md
+!doc/import-gradient-theme/
+doc/import-gradient-theme/*
+!doc/import-gradient-theme/*.md
+!doc/restyle-progress/
+doc/restyle-progress/*
+!doc/restyle-progress/*.md
+!doc/restyle-bounded/
+doc/restyle-bounded/*
+!doc/restyle-bounded/*.md
 node_modules/
 spike/
 AGENTS.md

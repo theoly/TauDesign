@@ -97,7 +97,7 @@ function sanitize(doc: Document, warnings: string[]): void {
   if (repaired) warnings.push(`已修复 ${repaired} 个重复或非法节点标识，源选择器通过独立属性保留。`);
 }
 
-function declaredStyles(doc: Document): ImportDeclaration[] {
+export function declaredStyles(doc: Document): ImportDeclaration[] {
   const declarations: ImportDeclaration[] = [];
   for (const element of elements(doc)) if (element.localName === 'style') transformStyleSheet(element.textContent || '', declaration => { declarations.push(declaration); });
   return declarations;
@@ -110,7 +110,7 @@ function specificity(selector: string): number {
 }
 
 /** Conservative declared cascade for inference; never reported as computed CSS. */
-function declaredValue(element: Element, properties: string[], declarations: ImportDeclaration[]): string | undefined {
+export function declaredValue(element: Element, properties: string[], declarations: ImportDeclaration[]): string | undefined {
   let value: string | undefined, priority = -1;
   for (const declaration of declarations) {
     if (declaration.conditional || !properties.includes(declaration.property) || declaration.selector.startsWith('@')) continue;

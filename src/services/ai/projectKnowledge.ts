@@ -120,6 +120,7 @@ function packageContext(state: KnowledgeState, request: string, targetId?: strin
     library: state.designLibraryBinding ? { mode: state.designLibraryBinding.mode,
       source: state.designLibraryBinding.sourceName.slice(0, 150), fingerprint: state.designLibraryBinding.sourceFingerprint } : undefined,
     density: state.designSystem.tokens.personality.density, primary: state.designSystem.tokens.colors.primary['500'],
+    backgrounds:state.designSystem.tokens.backgrounds?Object.fromEntries(Object.entries(state.designSystem.tokens.backgrounds).map(([role,modes])=>[role,modes?.[state.settings.colorMode]])):undefined,
     rules: Object.values(state.decisions).filter(d => d.active && d.scope === 'global').slice(0, 16).map(d => d.text.slice(0, 200)),
     components: Object.values(state.components).slice(0, 20).map(c => c.name.slice(0, 100)) };
   let result = '';

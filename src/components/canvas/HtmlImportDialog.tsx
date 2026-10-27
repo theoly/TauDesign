@@ -15,6 +15,9 @@ import { buildScreenDocument } from '../../utils/screenDocument';
 import { measureImportedFrame, observeImportedFrame } from '../../utils/importViewport';
 import { DesignSystemVisualPreview } from '../theme/DesignSystemVisualPreview';
 import { MobileNavigationOption } from '../theme/MobileNavigationOption';
+import {ExtractedStyleChoices} from '../theme/ExtractedStyleChoices';
+import {extractPageStyle,mergeExtractedStyle,type StyleSelection} from '../../services/import/pageStyleExtraction';
+import {styleApplicationKey} from '../../services/import/styleApplication';
 
 const CATEGORIES: { id: HtmlImportCategory; name: string }[] = [
   { id: 'colors', name: '颜色' }, { id: 'typography', name: '字体与字号' },
@@ -80,6 +83,7 @@ export const HtmlImportDialog: React.FC<{ onClose: () => void }> = ({ onClose })
   const confirmBusy=useRef(false);
   const importController=useRef<AbortController>();
   const [extract, setExtract] = useState(false);
+  const [styleSelection,setStyleSelection]=useState<StyleSelection>({backgroundIds:[],fields:[]});
   const [primary, setPrimary] = useState('#2563eb');
   const [baseSize, setBaseSize] = useState(16);
   const [radius, setRadius] = useState(8);
@@ -97,7 +101,7 @@ export const HtmlImportDialog: React.FC<{ onClose: () => void }> = ({ onClose })
   useEffect(() => {
     if (!file) return;
     let current = true;
-    setLoading(true); setError(''); setData(undefined); setPreview(undefined);
+    setLoading(true); setError(''); setData(undefined); setPreview(undefined);setStyleSelection({backgroundIds:[],fields:[]});
     (async () => {
       if (file.size > 2 * 1024 * 1024) throw new Error('HTML 文件不能超过 2 MiB');
       const runtime = await prepareHtmlImportRuntime(await file.text(), file.name);
@@ -128,7 +132,12 @@ export const HtmlImportDialog: React.FC<{ onClose: () => void }> = ({ onClose })
     theme.tokens.personality.density = density;
     return theme;
   }, [data, primary, baseSize, radius, density, invalidPrimary]);
-  const effectiveTheme = useExtracted && extractedTheme ? extractedTheme : designSystem;
+  const detectedStyle=useMemo(()=>data?extractPageStyle({id:'import-source',name:data.analysis.title,htmlContent:data.analysis.sanitizedHtml,position:{x:0,y:0},metadata:{importedHtml:{fileName:data.analysis.fileName,mode:'preserve',version:1,categories:[],changes:[],retained:[]}}},designSystem,settings.colorMode,settings.deviceProfile,'html-import'):undefined,[data,designSystem,settings.colorMode,settings.deviceProfile]);
+  const updateSelectedStyle=!libraryReadOnly&&styleSelection.backgroundIds.length+styleSelection.fields.length>0;
+  const effectiveTheme = useMemo(()=>{
+    const base=useExtracted&&extractedTheme?extractedTheme:designSystem;
+    return updateSelectedStyle&&detectedStyle?mergeExtractedStyle(base,detectedStyle,styleSelection,settings.colorMode):base;
+  },[useExtracted,extractedTheme,designSystem,updateSelectedStyle,detectedStyle,styleSelection,settings.colorMode]);
   const effectiveMode = useExtracted ? themeMode : settings.colorMode;
   const conversion = useMemo(() => {
     if (!data || invalidPrimary) return undefined;
@@ -188,7 +197,8 @@ export const HtmlImportDialog: React.FC<{ onClose: () => void }> = ({ onClose })
       await currentProject.importHtmlScreen({name:name.trim()||data.analysis.title,htmlContent:result.htmlContent,scopedCss:result.scopedCss,
         metadata:{importedHtml:result.metadata}}, {
         projectId:openingProject.current,assets,...(settings.deviceProfile==='mobile'?{useCustomNavigation}:{}),
-        ...(useExtracted&&extractedTheme?{designSystem:extractedTheme,colorMode:effectiveMode}:{})
+        ...(useExtracted||updateSelectedStyle?{designSystem:effectiveTheme,colorMode:effectiveMode}:{}),
+        ...(!empty&&updateSelectedStyle?{themeUpdate:{expectedKey:styleApplicationKey(currentProject),syncScreenIds:[]}}:{})
       },{contract:result.workflowContract!,preview:{version:1,fingerprint:preview.key},resources:data.prepared,signal:controller.signal,
         isCurrent:()=>alive.current&&latestPreviewKey.current===preview.key});
       if(alive.current)onClose();
@@ -214,6 +224,7 @@ export const HtmlImportDialog: React.FC<{ onClose: () => void }> = ({ onClose })
           {(error || wrongProject || invalidPrimary || conversion?.error || previewError) && <p role="alert" className="rounded-lg border border-red-800 bg-red-950/40 p-3 text-xs text-red-200">{wrongProject ? '工程已切换，请关闭后重新导入。' : invalidPrimary ? '请输入有效的六位主色，例如 #477568。' : error || conversion?.error || previewError}</p>}
           {data && <>
             <label className="block space-y-1.5 text-xs text-slate-400">页面名称<input aria-label="导入页面名称" value={name} onChange={event => setName(event.target.value)} className={inputClass} /></label>
+            {detectedStyle&&<details className="rounded-lg border border-slate-700 p-3"><summary className="cursor-pointer text-xs font-medium">检测页面风格 · 可选择更新项目主题</summary><p className="my-3 text-[11px] leading-relaxed text-slate-400">默认仅保留在导入页。勾选后更新项目中所选的风格项，未选择的旧页面保留原背景。{libraryReadOnly?'当前设计库为只读。':''}</p><ExtractedStyleChoices analysis={detectedStyle} selection={styleSelection} onChange={setStyleSelection} theme={designSystem} mode={settings.colorMode} disabled={libraryReadOnly||saving}/></details>}
             <fieldset className="space-y-2"><legend className="mb-2 text-xs font-semibold">导入方式</legend>{MODES.map(option => <label key={option.id} className={`block cursor-pointer rounded-lg border p-2.5 text-xs ${mode === option.id ? 'border-blue-500 bg-blue-950/30' : 'border-slate-700'}`}><span className="flex items-center gap-2"><input type="radio" name="html-import-mode" aria-label={option.name} checked={mode === option.id} onChange={() => setMode(option.id)} />{option.name}</span><span className="mt-1.5 block pl-5 text-[11px] leading-relaxed text-slate-400">{option.desc}</span></label>)}</fieldset>
             {mode === 'selective' && <div className="flex flex-wrap gap-3">{CATEGORIES.map(item => <label key={item.id} className="flex items-center gap-1.5 text-xs"><input aria-label={`统一${item.name}`} type="checkbox" checked={categories.includes(item.id)} onChange={event => setCategories(prev => event.target.checked ? [...prev, item.id] : prev.filter(id => id !== item.id))} />{item.name}</label>)}</div>}
             <MobileNavigationOption disabled={saving} value={useCustomNavigation} onChange={setUseCustomNavigation} />

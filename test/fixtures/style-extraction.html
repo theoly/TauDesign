@@ -1,0 +1,25 @@
+<!doctype html><html><meta charset="utf-8"><title>渐变提取验证</title><body style="margin:0"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {DesignSystemPanel} from '/src/components/layout/panels/DesignSystemPanel.tsx';
+import {ThemeEditor} from '/src/components/theme/ThemeEditor.tsx';
+import {InfiniteCanvas} from '/src/components/canvas/InfiniteCanvas.tsx';
+import {HtmlImportDialog} from '/src/components/canvas/HtmlImportDialog.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {compileTokensToCss} from '/src/utils/cssCompiler.ts';
+import {getBaseCss} from '/src/styles/baseCss.ts';
+import {buildStandaloneHtml} from '/src/utils/exportRenderer.ts';
+import {buildExportRenderDocument,exportScreenPng} from '/src/utils/pngExporter.ts';
+import {extractPageStyle} from '/src/services/import/pageStyleExtraction.ts';
+const device=new URL(location.href).searchParams.get('device')||'mobile';
+const s=useProjectStore.getState();s.initNewProject({name:'背景提取独立验收',deviceProfile:device,createSpecimen:false});
+const original='<html><head><style>:root{--warm:#fff3ea;--end:#fffaf5}body{margin:0;min-height:600px;background:linear-gradient(180deg,var(--warm),var(--end));font-family:system-ui}.primary{background:linear-gradient(90deg,#ff8a55,#ef5d28);padding:12px 24px;color:white;border:0;border-radius:16px}</style></head><body data-nid="refer001"><h1>暖色参考</h1><button class="primary" data-nid="refer002">立即开始</button></body></html>';
+s.addScreen({name:'暖色参考',htmlContent:original,position:{x:0,y:0},metadata:{importedHtml:{fileName:'reference.html',mode:'preserve',categories:[],changes:[],retained:[],version:1}}},'source');
+for(const [index,id] of ['target','untouched'].entries())s.addScreen({name:id==='target'?'同步页面':'保持原样',position:{x:(index+1)*(device==='mobile'?450:1500),y:0},htmlContent:`<main data-nid="${id==='target'?'target01':'oldpage1'}" class="p-4 col gap-4 bg-surface"><h1 class="text-xl">${id}</h1><button class="btn btn-primary" data-nid="${id==='target'?'target02':'oldpage2'}">保存</button></main>`},id);
+s.setActiveScreen('source');useHistoryStore.getState().restore(null);
+window.fixture={state:()=>useProjectStore.getState(),undo:()=>useHistoryStore.getState().undo(),redo:()=>useHistoryStore.getState().redo(),analyze:(screen,theme)=>extractPageStyle(screen,theme??useProjectStore.getState().designSystem,'light',device),exportHtml:id=>{const t=useProjectStore.getState();return buildStandaloneHtml(t.screens[id],{tokensCss:compileTokensToCss(t.designSystem.tokens,t.settings.colorMode,device),baseCss:getBaseCss(device),screenOverrides:'',deviceProfile:device});},exportPng:async id=>{const t=useProjectStore.getState();return exportScreenPng(t.screens[id],{tokensCss:compileTokensToCss(t.designSystem.tokens,t.settings.colorMode,device),baseCss:getBaseCss(device),screenOverrides:'',deviceProfile:device,width:t.settings.frameWidth,clipToHeight:true,clipHeight:844,scale:1,bgColor:'#fff',viewportHeight:844});},exportPngDocument:id=>{const t=useProjectStore.getState();return buildExportRenderDocument(t.screens[id],{tokensCss:compileTokensToCss(t.designSystem.tokens,t.settings.colorMode,device),baseCss:getBaseCss(device),screenOverrides:'',deviceProfile:device,width:t.settings.frameWidth,scale:1,bgColor:'#fff',viewportHeight:844});}};
+function Harness(){const [editor,setEditor]=React.useState(false),[importing,setImporting]=React.useState(false);return React.createElement('div',{className:'flex h-screen bg-slate-950 text-slate-200'},React.createElement('aside',{className:'w-80 shrink-0 overflow-y-auto'},React.createElement('button',{onClick:()=>setImporting(true)},'导入HTML'),React.createElement(DesignSystemPanel,{onOpenThemeEditor:()=>setEditor(true),onOpenRestyle:()=>{}})),React.createElement('div',{className:'relative min-w-0 flex-1'},React.createElement(InfiniteCanvas)),editor&&React.createElement(ThemeEditor,{onClose:()=>setEditor(false)}),importing&&React.createElement(HtmlImportDialog,{onClose:()=>setImporting(false)}));}
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Harness));
+</script></body></html>

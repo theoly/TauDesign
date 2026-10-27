@@ -35,11 +35,11 @@
   text-decoration: underline;
 }
 
-.btn-primary:hover:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-hover); }
+.btn-primary:hover:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-hover); filter: var(--background-primary-hover-filter, none); }
 .btn-danger:hover:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-danger-hover); }
 .btn-secondary:hover:not(:disabled):not([aria-disabled="true"]), .btn-outline:hover:not(:disabled):not([aria-disabled="true"]), .btn-text:hover:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-light); }
 /* Keep pressed feedback above hover when both states match. */
-.btn-primary:active:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-active); }
+.btn-primary:active:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-active); filter: var(--background-primary-active-filter, none); }
 .btn-danger:active:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-danger-active); }
 
 .btn-ghost:hover:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-surface-alt); }

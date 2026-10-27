@@ -270,6 +270,7 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
       </div>`;
 
   const misc = `
+    <div class="bg-decorative-surface p-4 r-md">主题装饰背景</div>
       <div class="col gap-3">
         <div class="bg-surface-alt r-md p-3 sticky-top text-xs text-muted">sticky-top · 滚动时吸顶</div>
         <div class="r-md overflow-hidden border" style="height: 88px;">

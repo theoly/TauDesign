@@ -1,0 +1,28 @@
+<!doctype html><html><meta charset="utf-8"><title>大页面重塑受控验证</title><body style="margin:0;background:#020617"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {RestylePanel} from '/src/components/theme/RestylePanel.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useAIConfigStore} from '/src/stores/useAIConfigStore.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {createRestylePatchPlan} from '/src/services/ai/restylePatches.ts';
+const input=window.fixtureSource,s=useProjectStore.getState();
+s.initNewProject({name:'大页只读样本验证',deviceProfile:'mobile',designSystem:input.designSystem,createSpecimen:false});
+s.addScreen({name:'TA 的主页',htmlContent:input.html,metadata:input.metadata,position:{x:0,y:0}},'large');
+const before=useProjectStore.getState().screens.large.htmlContent;
+useAIConfigStore.setState({getActiveProviderForRole:()=>({provider:{id:'controlled',name:'受控阿里请求',protocol:'openai_compatible',baseUrl:'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',apiKey:'LOCAL_ONLY',isEnabled:true},modelId:'qwen3.8-flash'})});
+const plan=createRestylePatchPlan({id:'large',kind:'screen',name:'TA 的主页',html:before,imported:true},'mobile');
+const fixture={calls:0,requests:[],groups:plan.groups.length,originalUnchanged:()=>before===useProjectStore.getState().screens.large.htmlContent};
+const original=DefaultAIEngineCore.prototype.streamText;
+const transport={id:'controlled-bounded',stream(request,onEvent){
+ fixture.calls++;const body=request.body,p=JSON.parse(body.messages[1].content);
+ fixture.requests.push({chars:JSON.stringify(body.messages).length,maxTokens:body.max_tokens,thinking:body.enable_thinking,items:p.items.length});
+ let timer,done=false,resolve;const promise=new Promise(r=>resolve=r);
+ timer=setTimeout(()=>{if(done)return;done=true;const text=JSON.stringify({bindings:[{id:p.items[0].id,role:'primary'}]});onEvent({type:'Delta',text});onEvent({type:'Done',finish_reason:'stop'});resolve();},350);
+ return {promise,abort(){done=true;clearTimeout(timer);resolve();}};
+}};
+DefaultAIEngineCore.prototype.streamText=function(options){this.setTransport(transport);return original.call(this,options);};
+window.fixture=fixture;
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(RestylePanel,{scope:'all',onClose:()=>{}}));
+</script></body></html>

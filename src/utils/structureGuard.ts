@@ -43,7 +43,7 @@ function collect(html: string): NodeSig[] | null {
       const tag = child.tagName.toLowerCase();
       const childPath = `${path}>${i}:${tag}`;
       // 只取直接子文本，避免父节点重复计入后代文本
-      const ownText = Array.from(child.childNodes)
+      const ownText = ['style','script'].includes(tag)?'':Array.from(child.childNodes)
         .filter((n) => n.nodeType === 3)
         .map((n) => n.textContent ?? '')
         .join('')

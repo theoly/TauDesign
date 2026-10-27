@@ -15,7 +15,8 @@
 
 body {
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
-  background-color: var(--color-bg, #f8fafc);
+  background: var(--background-page, var(--color-bg));
+  min-height: calc(var(--background-page-full-height) * 100vh);
   color: var(--color-text-primary, #0f172a);
   font-size: var(--font-size-md, 16px);
   line-height: 1.5;
@@ -160,6 +161,7 @@ a { color: var(--color-primary-text); }
 .text-danger { color: var(--color-danger, #dc2626); }
 
 /* 5. Surfaces, Backgrounds & Borders */
+.bg-decorative-surface { background: var(--background-decorative-surface, var(--color-surface)); }
 .bg-surface { background-color: var(--color-surface, #ffffff); }
 .bg-surface-alt { background-color: var(--color-surface-alt, #f1f5f9); }
 .bg-primary { background-color: var(--color-primary); color: var(--color-on-primary); }
@@ -276,7 +278,7 @@ a { color: var(--color-primary-text); }
 }
 
 .btn-primary {
-  background-color: var(--color-primary, #2563eb);
+  background: var(--background-primary-action, var(--color-primary));
   color: var(--color-on-primary);
 }
 
@@ -555,7 +557,7 @@ a { color: var(--color-primary-text); }
 .btn-outline { background-color: transparent; color: var(--color-primary-text); border-color: var(--color-primary-text); }
 .btn-text { background-color: transparent; color: var(--color-primary-text); }
 .btn-danger { background-color: var(--color-danger-fill); color: var(--color-on-danger); }
-.btn-primary:active:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-active); }
+.btn-primary:active:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-active); filter: var(--background-primary-active-filter, none); }
 .btn-danger:active:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-danger-active); }
 .btn-secondary:active:not(:disabled):not([aria-disabled="true"]), .btn-outline:active:not(:disabled):not([aria-disabled="true"]), .btn-text:active:not(:disabled):not([aria-disabled="true"]) { background-color: var(--color-primary-light); }
 .btn:focus-visible, .input:focus-visible, .select:focus-visible {

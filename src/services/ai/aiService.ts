@@ -5,6 +5,7 @@ import { streamNativeProxy } from './nativeProxy';
 import { supportsNativeContinuation } from './boundedContinuation';
 import { ModelDiscoveryService } from './modelDiscoveryService';
 import { DiscoveredModel } from './engine/core/multimodalGuard';
+import {supportsThinkingToggle} from './thinkingPolicy';
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -16,6 +17,7 @@ export interface ChatMessage {
 export interface GenerationOptions {
   maxTokens?: number;
   temperature?: number;
+  enableThinking?: boolean;
 }
 
 class StreamChunkProcessor {
@@ -304,6 +306,7 @@ export class AIService {
             model: modelId,
             messages: formattedMessages,
             ...(formattedMessages.some(m => 'partial' in m) ? { enable_thinking: false } : {}),
+            ...(generationOptions.enableThinking!==undefined&&supportsThinkingToggle(provider,modelId)?{enable_thinking:generationOptions.enableThinking}:{}),
             stream: true,
             temperature: generationOptions.temperature ?? 0.7,
             max_tokens: generationOptions.maxTokens ?? 8192

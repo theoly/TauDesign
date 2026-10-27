@@ -1,3 +1,4 @@
+import { compileBackgroundVariables } from './themeBackground';
 import { DENSITY_SCALE, DesignSystemTokens } from '../types/designSystem';
 import { resolveThemeColors } from './semanticColors';
 import { COLOR_ROLES, colorRoleKeys } from '../types/colorRoles';
@@ -17,6 +18,9 @@ export function compileTokensToCss(tokens: DesignSystemTokens, mode: 'light' | '
   color-scheme: ${mode};
   /* Colors */
   ${colorRoleKeys.map(role => `--color-${COLOR_ROLES[role][1]}: ${roles[role]};`).join('\n  ')}
+
+  /* Background roles */
+  ${compileBackgroundVariables(tokens.backgrounds, mode)}
 
   /* Typography */
   --font-sans: ${t.fontFamilySans};

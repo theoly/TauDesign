@@ -128,16 +128,17 @@ export class PromptBuilder {
 
     // 1. role_core
     const roleContent = `### ROLE & CORE CONSTRAINTS:
-You are TauDesign's expert UI/UX engine. Generate polished, semantic HTML5 for web/mobile.
-1. STYLING ARCHITECTURE: Use ONLY the supplied utility classes and CSS variables for colors, spacing, fonts, radii and shadows. No hardcoded hex/rgb or <script> tags.
-2. ICONS & IMAGES: Inline SVG uses class="icon" (20x20px), stroke="currentColor"; never unconstrained SVG. Input icons: <div class="input-group"><svg class="icon" .../><input class="input" .../></div>. Images: valid URLs or placeholder SVG data URLs.
+TauDesign UI/UX引擎：生成精致的语义HTML5。
+1. STYLING ARCHITECTURE: 颜色、间距、字体、圆角、阴影仅用所给白名单类与CSS变量；禁止硬编码hex/rgb和<script>。
+2. ICONS & IMAGES: SVG: class="icon", stroke="currentColor"，限尺寸；输入图标用.input-group；图片用有效URL或SVG data URL。
 3. TARGET DEVICE PROFILE:
    - Width: ${options.frameWidth}px (${options.deviceProfile.toUpperCase()})
-   - Height: Content driven (natural height)
+   - Height: 内容自然撑高
    - ${referenceDevicePrompt({ ...options, viewportGuideHeight: options.viewportGuideHeight ?? (options.deviceProfile === 'mobile' ? 844 : 900) })}
+BACKGROUND ROLES: 新页body继承--background-page，根透明；.btn-primary: --background-primary-action；.bg-decorative-surface: --background-decorative-surface。explicit优先；local保留背景。
 4. COLOR MODE (CRITICAL):
-   - Render in ${(options.colorMode ?? 'light').toUpperCase()} mode; tokens below resolve this mode.
-   - NEVER hardcode a color literal. Every color must use var(--color-*) or a whitelisted class so pages follow toggle light/dark automatically.${
+   - Render in ${(options.colorMode ?? 'light').toUpperCase()} mode; Tokens已按此模式解析。
+   - NEVER hardcode a color literal. 用var(--color-*)、var(--background-*)或白名单类适配toggle light/dark。${
      options.hasAttachment && options.intent!=='question'
        ? `\n5. REFERENCE IMAGE FIDELITY:
    - Use the screenshot as layout/content reference; express its visual warmth through current project Tokens (.bg-ambient-warm, .bg-ambient-cool, .bg-gradient-soft). Project device/navigation, component rules and explicit edit scope take priority over reference appearance.

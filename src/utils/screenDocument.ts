@@ -2,6 +2,7 @@ import type { Screen } from '../types/project';
 import { reconcileInlinePriority } from './inspectorStyle';
 import { injectMobileChrome, normalizeMobileNavigation, type MobileNavigationPolicy } from './mobileNavigation';
 import { resolveImportedViewport } from './importViewport';
+import {screenBackgroundCss,manualBackgroundResetCss} from './screenBackgrounds';
 
 export interface ScreenDocumentOptions extends MobileNavigationPolicy {
   tokensCss: string;
@@ -23,7 +24,7 @@ export interface ScreenDocumentOptions extends MobileNavigationPolicy {
 /** Imported CSS keeps its own variable namespace, even when only one category is unified. */
 export function projectCssForScreen(screen: Pick<Screen, 'metadata'>, css: string): string {
   return screen.metadata?.importedHtml
-    ? css.replace(/--(color|font|space|radius|shadow|blur|mini)-/g, '--td-import-$1-')
+    ? css.replace(/--(color|font|space|radius|shadow|blur|mini|background)-/g, '--td-import-$1-')
     : css;
 }
 
@@ -67,8 +68,12 @@ export function buildScreenDocument(screen: Screen, options: ScreenDocumentOptio
   if (options.editorCss !== undefined) doc.head.append(style('editor-chrome', options.editorCss));
   doc.head.append(style('scoped-css', screen.scopedCss ?? ''));
   doc.head.append(style('tokens', projectCssForScreen(screen, options.tokensCss)));
-  doc.head.append(style('overrides', projectCssForScreen(screen, options.screenOverrides)));
-  reconcileInlinePriority(doc, options.screenOverrides);
+  const backgroundCss=projectCssForScreen(screen,screenBackgroundCss(screen,/color-scheme:\s*dark/.test(options.tokensCss)?'dark':'light',options.screenOverrides));
+  if(backgroundCss)doc.head.prepend(style('theme-background-layer','@layer taudesign-theme-sync;'));
+  if(backgroundCss)doc.head.append(style('theme-backgrounds',backgroundCss));
+  const manualReset=manualBackgroundResetCss(options.screenOverrides);
+  doc.head.append(style('overrides', projectCssForScreen(screen, options.screenOverrides+(manualReset?'\n'+manualReset:''))));
+  reconcileInlinePriority(doc,backgroundCss+'\n'+options.screenOverrides);
   doc.head.append(style('frame-fill', imported ? '' : 'html { background-color: var(--color-bg, #f8fafc); }'));
   if (options.width !== undefined) {
     const reset = imported
@@ -83,6 +88,7 @@ export function buildScreenDocument(screen: Screen, options: ScreenDocumentOptio
     resolveImportedViewport(doc, Math.max(1, viewport - chromeHeight), options.viewportWidth ?? options.width);
     const marker = style('viewport', ''); marker.setAttribute('data-viewport-height', String(viewport)); doc.head.append(marker);
   }
+  if(!imported)doc.head.append(style('page-background-fill',`body{min-height:calc(var(--background-page-full-height,0) * ${viewport!==undefined?`${viewport}px`:'100vh'})}`));
   if (imported && options.staticImage) doc.head.append(style('image-resting', '*,::before,::after{animation:none!important;transition:none!important}'));
   if (options.includeMobileChrome) {
     injectMobileChrome(doc, options, screen.metadata?.navigationTitle ?? screen.metadata?.importedHtml?.navigationTitle ?? normalized.title ?? screen.name, viewport !== undefined);

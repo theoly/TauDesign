@@ -5,6 +5,7 @@ import { useProjectStore } from '../../../stores/useProjectStore';
 import { Accordion } from '../Accordion';
 import { Palette, Plus, Sparkles, Trash2 } from 'lucide-react';
 import { MobileNavigationOption } from '../../theme/MobileNavigationOption';
+import {PageStyleExtractionDialog} from '../../theme/PageStyleExtractionDialog';
 
 interface DesignSystemPanelProps {
   /** 打开完整主题编辑器：色阶推导、预设切换等留在弹窗 */
@@ -18,6 +19,7 @@ export const DesignSystemPanel: React.FC<DesignSystemPanelProps> = ({ onOpenThem
   const { designSystem, settings, decisions, addDecision, removeDecision, toggleDecision } =
     useProjectStore();
   const [newDecision, setNewDecision] = useState('');
+  const [extracting,setExtracting]=useState(false);
 
   const t = designSystem.tokens;
   const mode = settings.colorMode;
@@ -37,7 +39,9 @@ export const DesignSystemPanel: React.FC<DesignSystemPanelProps> = ({ onOpenThem
 
   return (
     <>
+      {extracting&&<PageStyleExtractionDialog onClose={()=>setExtracting(false)}/>}
       <div className="px-2 py-1.5 border-b border-slate-850/80">
+        <button onClick={()=>setExtracting(true)} className="mb-1.5 w-full rounded-md bg-slate-800 py-2 text-[11px] text-slate-200 hover:bg-slate-700">从已有页面提取风格</button>
         <button
           onClick={onOpenThemeEditor}
           className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-md text-[11px] transition"

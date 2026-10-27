@@ -16,6 +16,8 @@ export interface StreamTextOptions {
   maxTokens?: number;
   jsonSchema?: Record<string, unknown>;
   signal?: AbortSignal;
+  /** Task-scoped and serialized only for an explicitly supported model/endpoint. */
+  enableThinking?: boolean;
 }
 
 export interface TokenUsage {

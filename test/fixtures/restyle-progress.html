@@ -1,0 +1,21 @@
+<!doctype html><html><meta charset="utf-8"><title>重塑进度受控验证</title><body style="margin:0;background:#020617"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {RestylePanel} from '/src/components/theme/RestylePanel.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useAIConfigStore} from '/src/stores/useAIConfigStore.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+const s=useProjectStore.getState();s.initNewProject({name:'重塑受控验收',deviceProfile:'pc',createSpecimen:false});
+for(const [i,id] of ['token','custom'].entries())s.addScreen({name:id==='token'?'已跟随主题页':'来源独立样式页',htmlContent:`<main data-nid="${id==='token'?'token001':'custom01'}" class="card p-4"><h1>页面</h1><button class="btn btn-primary">保存</button></main>`,scopedCss:id==='custom'?'.card{border-radius:12px}':undefined,position:{x:i*1500,y:0}},id);
+useAIConfigStore.setState({getActiveProviderForRole:()=>({provider:{id:'controlled',name:'本地受控流',protocol:'openai_compatible',baseUrl:'https://invalid.test',apiKey:'TEST_KEY_NOT_FOR_DISPLAY',isEnabled:true},modelId:'stream-fixture'})});
+const original=DefaultAIEngineCore.prototype.streamText;
+const fixture={calls:0,aborts:0,state:()=>useProjectStore.getState()};
+const transport={id:'controlled-stall',stream(request,onEvent){fixture.calls++;let stopped=false,resolve;const promise=new Promise(r=>resolve=r);
+ const timer=setTimeout(()=>{if(!stopped){onEvent({type:'Delta',text:'<think>private reasoning</think>'});onEvent({type:'Delta',text:'abc'});}},50);
+ return {promise,abort(){if(!stopped){stopped=true;clearTimeout(timer);fixture.aborts++;resolve();}}};
+}};
+DefaultAIEngineCore.prototype.streamText=function(options){this.setTransport(transport);return original.call(this,options);};
+window.fixture=fixture;
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(RestylePanel,{scope:'all',onClose:()=>{document.body.dataset.closed='true';}}));
+</script></body></html>

@@ -165,11 +165,13 @@ describe('restyle batch orchestration and application guards',()=>{
     try{
       host=document.createElement('div');document.body.append(host);root=createRoot(host);
       await act(async()=>{root!.render(<RestylePanel scope="all" onClose={()=>{}}/>);});
+      // Token-bound pages default to no model work; explicitly select the trial target.
+      await act(async()=>{(host!.querySelector('input[type="checkbox"]') as HTMLInputElement).click();});
       const find=(text:string)=>Array.from(host!.querySelectorAll('button')).find(b=>b.textContent?.includes(text))!;
       await act(async()=>{const button=find('试跑单个目标');button.click();button.click();});expect(calls).toBe(1);
       await act(async()=>{release(`<artifact>${html('a').replace('p-4','p-6')}</artifact>`);await pause();});
       act(()=>useProjectStore.getState().updateScreenHtml('a','<main>人工修改</main>','人工修改'));
-      await act(async()=>{find('确认效果').click();await pause();});
+      await act(async()=>{find('确认效果')?.click();await pause();});
       expect(calls).toBe(1);expect(host.textContent).toContain('重新试跑');expect(useProjectStore.getState().screens.a.htmlContent).toContain('人工修改');
     }finally{streamSpy.mockRestore();binding.mockRestore();}
   });

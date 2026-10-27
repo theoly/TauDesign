@@ -10,6 +10,7 @@ import { compileTokensToCss } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
 import { NidEngine } from '../../utils/nidEngine';
 import { buildScreenDocument, projectCssForScreen, runtimeStyle } from '../../utils/screenDocument';
+import {screenBackgroundCss,syncScreenBackgroundStyle,manualBackgroundResetCss} from '../../utils/screenBackgrounds';
 import { useScreenResources } from '../../hooks/useScreenResources';
 import { inspectText, setDirectText, setTextByNid } from '../../utils/textNode';
 import { useProjectStore } from '../../stores/useProjectStore';
@@ -100,10 +101,11 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     })
     .join('\n')));
 
+  const backgroundCss=projectCssForScreen(screen,screenBackgroundCss(screen,settings.colorMode,screenOverrides));
   // load可能晚于样式热更新；回调始终读取当前值，避免把新版样式回滚。
   const scopedCss = viewportCss(renderScreen?.scopedCss || '');
-  const runtimeStylesRef = useRef({ scopedCss, tokensCss, screenOverrides });
-  runtimeStylesRef.current = { scopedCss, tokensCss, screenOverrides };
+  const runtimeStylesRef = useRef({ scopedCss, tokensCss, screenOverrides,backgroundCss });
+  runtimeStylesRef.current = { scopedCss, tokensCss, screenOverrides,backgroundCss };
 
   /**
    * 编辑器 chrome 样式：选中/悬浮描边。
@@ -207,6 +209,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
   }, [scopedCss, lodLevel]);
 
   // Hot update Tokens when theme changes (under 100ms, no DOM rebuild)
+  useEffect(()=>{const doc=iframeRef.current?.contentDocument;if(doc){syncScreenBackgroundStyle(doc,backgroundCss);reconcileInlinePriority(doc,backgroundCss+'\n'+screenOverrides);}},[backgroundCss,screenOverrides,lodLevel]);
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe || !iframe.contentDocument) return;
@@ -222,9 +225,9 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     if (!iframe || !iframe.contentDocument) return;
     const overridesEl = runtimeStyle(iframe.contentDocument, 'overrides');
     if (overridesEl) {
-      overridesEl.textContent = screenOverrides;
+      overridesEl.textContent = screenOverrides+"\n"+manualBackgroundResetCss(screenOverrides);
     }
-    reconcileInlinePriority(iframe.contentDocument, screenOverrides);
+    reconcileInlinePriority(iframe.contentDocument, backgroundCss+'\n'+screenOverrides);
 
     // 样式覆盖更新后，立即确保选中元素的 .aidesign-selected 高亮不丢失 (ISSUE-019)
     if (isActive && selectedNid) {
@@ -288,8 +291,9 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       const tokensEl = runtimeStyle(doc, 'tokens');
       if (tokensEl) tokensEl.textContent = runtimeStylesRef.current.tokensCss;
       const overridesEl = runtimeStyle(doc, 'overrides');
-      if (overridesEl) overridesEl.textContent = runtimeStylesRef.current.screenOverrides;
-      reconcileInlinePriority(doc, runtimeStylesRef.current.screenOverrides);
+      if (overridesEl) overridesEl.textContent = runtimeStylesRef.current.screenOverrides+"\n"+manualBackgroundResetCss(runtimeStylesRef.current.screenOverrides);
+      syncScreenBackgroundStyle(doc,runtimeStylesRef.current.backgroundCss);
+      reconcileInlinePriority(doc,runtimeStylesRef.current.backgroundCss+'\n'+runtimeStylesRef.current.screenOverrides);
 
       doc.querySelectorAll('.aidesign-selected').forEach(el => el.classList.remove('aidesign-selected'));
       doc.querySelectorAll('.aidesign-hovered').forEach(el => el.classList.remove('aidesign-hovered'));

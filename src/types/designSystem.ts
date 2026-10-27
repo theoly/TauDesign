@@ -1,8 +1,10 @@
+import type { ThemeBackgrounds } from './themeBackground';
 import type { ColorRole } from './colorRoles';
 export type ModePair = { light: string; dark: string };
 export type Ramp = { [step: string]: string };
 
 export interface DesignSystemTokens {
+  backgrounds?: ThemeBackgrounds;
   colors: {
     primary: Ramp;
     neutral: Ramp;

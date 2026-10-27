@@ -59,14 +59,17 @@ export function buildStandaloneHtml(screen: Screen, options: StandaloneHtmlOptio
   const doc = new DOMParser().parseFromString(stripEditorChromeClasses(screen.htmlContent || ''), 'text/html');
   // L4 selectors (and authored selectors in imported pages) require stable NIDs.
   const keepNids = !!screen.metadata?.importedHtml;
+  const hasBackgroundBindings=Object.values(screen.metadata?.themeBackgrounds?.bindings??{}).some(selectors=>selectors?.length);
   for (const el of Array.from(doc.querySelectorAll('*'))) {
     for (const attr of Array.from(el.attributes)) {
-      if (attr.name === 'data-nid' && !keepNids && options.screenOverrides.trim()) el.setAttribute('data-export-id', attr.value);
+      if (attr.name === 'data-nid' && !keepNids && (options.screenOverrides.trim()||hasBackgroundBindings)) el.setAttribute('data-export-id', attr.value);
       if ((attr.name === 'data-nid' && !keepNids) || attr.name === 'data-asset-id' || attr.name.startsWith('data-component-')) el.removeAttribute(attr.name);
     }
   }
   const screenOverrides = keepNids ? options.screenOverrides : options.screenOverrides.replace(/\[data-nid(?=[\s=\]])/g, '[data-export-id');
-  return buildScreenDocument({ ...screen, htmlContent: doc.documentElement.outerHTML }, { ...options, screenOverrides, title: screen?.name || 'Exported Design', viewportHeight: undefined, viewportWidth: undefined, includeMobileChrome: false, staticImage: false });
+  const metadata=structuredClone(screen.metadata);
+  if(!keepNids&&metadata?.themeBackgrounds?.bindings)for(const role of Object.keys(metadata.themeBackgrounds.bindings) as Array<keyof typeof metadata.themeBackgrounds.bindings>){metadata.themeBackgrounds.bindings[role]=metadata.themeBackgrounds.bindings[role]?.map(selector=>selector.replace('[data-nid=', '[data-export-id='));}
+  return buildScreenDocument({ ...screen,metadata, htmlContent: doc.documentElement.outerHTML }, { ...options, screenOverrides, title: screen?.name || 'Exported Design', viewportHeight: undefined, viewportWidth: undefined, includeMobileChrome: false, staticImage: false });
 }
 
 /**

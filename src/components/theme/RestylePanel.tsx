@@ -10,13 +10,16 @@ import { acceptRestyleResult, summarizeOutcomes, type RestyleOutcome, type Resty
 import { executeRestyleBatch, restyleContextKey } from '../../services/ai/restyleBatch';
 import type { RestylePlan } from '../../services/ai/restyleService';
 import { createAIEngineCore } from '../../services/ai/engine/core';
-import { executeRestyleTarget } from '../../services/ai/restyleExecutor';
+import { assessRestyleTarget, restyleTargetKey, selectRestylePlan } from '../../services/ai/restyleAssessment';
+import { executeRestyleTarget, type RestyleProgress } from '../../services/ai/restyleExecutor';
 import { executeStructuredEdit } from '../../services/ai/structuredEditExecutor';
 import { analyzeScreenModification, buildReviewedModificationRequest, buildModificationReviewReceipt, captureModificationSnapshot, isModificationSnapshotCurrent, getLocalModificationPlan,
   type ModificationMode, type ModificationReviewState, type ModificationSnapshot } from '../../services/ai/modificationReview';
 import { ModificationReviewCard } from '../chat/ModificationReviewCard';
 import { buildDesignTaskContract, buildRestyleContract, renderDesignTaskContract } from '../../services/ai/designWorkflow';
 import { RestyleDeliveryHistoryPanel } from '../inspector/RestyleDeliveryHistoryPanel';
+import {restyleThinkingOptions} from '../../services/ai/thinkingPolicy';
+import {createRestylePatchPlan,RESTYLE_PATCH_THRESHOLD} from '../../services/ai/restylePatches';
 
 /**
  * 批量风格重塑面板 (A3 / T-AE-27)。
@@ -42,20 +45,28 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
 
   const isSingle = scope !== 'all';
   // Polish 就是队列只含一项的 Restyle——同一套结构守卫与 Checkpoint 保护
-  const plan = useMemo(
+  const basePlan = useMemo(
     () => {
       if (!isSingle) {
         const plan = buildRestylePlan();
-        const queue = plan.queue.map(target => target.kind === 'screen' ? { ...target, html: normalizeMobileNavigation(target.html, settings).html } : target);
+        const queue = plan.queue.map(target => target.kind === 'screen' ? { ...target, imported:!!screens[target.id]?.metadata?.importedHtml,html: normalizeMobileNavigation(target.html, settings).html } : target);
         return { ...plan, queue, dryRun: queue[0] ?? null };
       }
       const screen = screens[scope];
-      const target: RestyleTarget | null = screen ? { kind: 'screen', id: scope, name: screen.name, html: normalizeMobileNavigation(screen.htmlContent, settings).html,
+      const target: RestyleTarget | null = screen ? { kind: 'screen', id: scope, name: screen.name, imported:!!screen.metadata?.importedHtml, html: normalizeMobileNavigation(screen.htmlContent, settings).html,
         protectedNids: useProjectStore.getState().getProtectedNids(scope) } : null;
       return { queue: target ? [target] : [], dryRun: target, estimatedCalls: target ? 1 : 0, naiveCalls: target ? 1 : 0 };
     },
     [buildRestylePlan, isSingle, scope, screens, overrides, settings.deviceProfile, settings.useCustomNavigation]
   );
+  const assessments = useMemo(() => basePlan.queue.map(target => ({target, assessment:assessRestyleTarget(target,{
+    scopedCss:target.kind==='screen'?screens[target.id]?.scopedCss:undefined,
+    imported:target.kind==='screen'&&Boolean(screens[target.id]?.metadata?.importedHtml),deviceProfile:settings.deviceProfile})})),[basePlan,screens,settings.deviceProfile]);
+  const [selection,setSelection]=useState<string[]|null>(null);
+  const selected=selection??assessments.filter(a=>a.assessment.recommended&&a.assessment.selectable).map(a=>restyleTargetKey(a.target));
+  const plan=isSingle?basePlan:selectRestylePlan(basePlan,selected);
+  const requestEstimate=useMemo(()=>plan.queue.reduce((count,target)=>{if(target.html.length<=RESTYLE_PATCH_THRESHOLD)return count+1;try{return count+createRestylePatchPlan(target,settings.deviceProfile).groups.length;}catch{return count;}},0),[basePlan,selected.join('|'),settings.deviceProfile]);
+  const [progress,setProgress]=useState<RestyleProgress|null>(null);
   const [phase, setPhase] = useState<'plan' | 'analysis' | 'dryrun' | 'review' | 'batch' | 'done'>('plan');
   const [busy, setBusy] = useState(false);
   const [dryOutcome, setDryOutcome] = useState<RestyleOutcome | null>(null);
@@ -69,8 +80,13 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
   const mountedRef = useRef(true);
   const batchSnapshotRef = useRef<{ plan: RestylePlan; key: string; outcome?: RestyleOutcome } | null>(null);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; controllerRef.current?.abort(); }; }, []);
+  const stop = () => { controllerRef.current?.abort(); setBusy(false); setError('重塑已停止；未应用的页面保持原样，已应用项可撤销。'); };
   const close = () => { controllerRef.current?.abort(); onClose(); };
 
+  useEffect(()=>{ if(!busyRef.current){if(batchSnapshotRef.current)setError('页面或工程已变化，请重新试跑。');batchSnapshotRef.current=null;setDryOutcome(null);setSelection(null);setPhase('plan'); } },[basePlan,projectId]);
+  const changeSelection=(key:string,checked:boolean)=>{
+    setSelection(checked?[...selected,key]:selected.filter(id=>id!==key));batchSnapshotRef.current=null;setDryOutcome(null);setPhase('plan');setProgress(null);
+  };
   const styleDirective = useMemo(() => describeTargetStyle(designSystem), [designSystem]);
 
   const taskContract = (target: RestyleTarget, confirmedScope?: string) => {
@@ -113,7 +129,10 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
       : `${renderDesignTaskContract(workflowContract)}\n\n${projectKnowledge}\n\n重塑以下${target.kind === 'component' ? '组件' : '页面'}：\n\n${target.html}`;
     return executeRestyleTarget(coreRef.current, { target, contract: workflowContract,
       quality: { designSystem, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation },
-      request: { provider: binding.provider, model: binding.modelId, signal: controllerRef.current?.signal, maxTokens: 16384,
+      patchContext:[styleDirective,confirmedScope??'',projectKnowledge].join('\n'),
+      colorMode:settings.colorMode,
+      onProgress: value => { if(mountedRef.current)setProgress(value); },
+      request: { provider: binding.provider, model: binding.modelId, signal: controllerRef.current?.signal, maxTokens: 16384,...restyleThinkingOptions(binding.provider,binding.modelId),
         messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userRequest }] }
     });
   };
@@ -148,7 +167,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
       if (!controller.signal.aborted) setAnalysis({ ...result, status: 'ready' });
     } catch (e) {
       if (!controller.signal.aborted) setAnalysis({ status: 'error', summary: e instanceof Error ? e.message : String(e), items: [] });
-    } finally { busyRef.current = false; if (!controller.signal.aborted) setBusy(false); }
+    } finally { busyRef.current = false; if (mountedRef.current) setBusy(false); }
   };
 
   const confirmSingle = async (selected: string[], extra: string, mode: ModificationMode = 'page') => {
@@ -279,7 +298,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
             <div className="flex items-center justify-between text-slate-300">
               <span className="font-semibold">执行计划</span>
               <span className="text-slate-400">
-                预计 <span className="text-blue-400 font-semibold">{plan.estimatedCalls + (isSingle ? 1 : 0)}</span> 次 AI 调用
+                预计 <span className="text-blue-400 font-semibold">{requestEstimate + (isSingle ? 1 : 0)}</span> 次 AI 调用
                 {isSingle && '（分析 + 生成）'}
               </span>
             </div>
@@ -299,6 +318,21 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
             </div>
           </div>
 
+          {!isSingle && <div className="space-y-2 text-slate-400">
+            <p>本地预检：推荐 {assessments.filter(a=>a.assessment.recommended).length} 项，未选 {basePlan.queue.length-plan.queue.length} 项。仅检查主题绑定，不代表视觉美感已验证。</p>
+            {assessments.map(({target,assessment})=><label key={restyleTargetKey(target)} className="flex gap-2 items-start">
+              <input type="checkbox" disabled={busy||!assessment.selectable} checked={selected.includes(restyleTargetKey(target))}
+                onChange={event=>changeSelection(restyleTargetKey(target),event.target.checked)}/>
+              <span>{target.name}：{assessment.reason}</span>
+            </label>)}
+          </div>}
+          {progress && <div role="status" className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 space-y-1">
+            <p>{progress.targetName} · {{checking:'检查目标',waiting:'等待模型',reasoning:'接收推理',receiving:'接收正文',continuing:'续写',validating:'校验',complete:'完成',failed:'失败',cancelled:'已取消'}[progress.phase]}</p>
+            <p>{progress.provider} / {progress.model}</p>
+            <p>耗时 {Math.floor(progress.elapsedMs/1000)} 秒 · 距最近活动 {Math.floor(progress.idleMs/1000)} 秒</p>
+            <p>正文 {progress.textChars} 字符 · 推理 {progress.reasoningChars} 字符 · 续写 {progress.continuationCount} 次</p>
+            {progress.patchGroups&&<p className="text-blue-300">样式补丁 {progress.patchGroup??0}/{progress.patchGroups} 组 · 已请求 {progress.requestCount??0} 次 · 保留原HTML，仅合并样式</p>}
+          </div>}
           {phase === 'plan' && (
             <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-xl text-amber-200 flex items-start gap-2">
               <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-400" />
@@ -335,7 +369,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
                     {dryOutcome.html?.slice(0, 800)}
                   </pre>
                 </>
-              ) : (
+              ) : dryOutcome.status==='skipped_unchanged' ? <p className="text-slate-300">{dryOutcome.message}</p> : (
                 <div className="text-rose-400 leading-relaxed">
                   {dryOutcome.message ?? '试跑未通过'}
                   <div className="text-slate-500 mt-1">结果已被拒绝，未做任何改动。</div>
@@ -351,7 +385,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
               </div>
               {summary && (
                 <div className="text-slate-400 leading-relaxed">
-                  已应用 {summary.applied}，结构被拒 {summary.structureRejected}，冲突跳过 {summary.conflicts}，失败 {summary.failed}
+                  已应用 {summary.applied}，无需修改 {summary.unchanged}，结构被拒 {summary.structureRejected}，冲突跳过 {summary.conflicts}，失败 {summary.failed}
                   {summary.textDrift > 0 && `，${summary.textDrift} 处文案变化待核对`}
                 </div>
               )}
@@ -377,6 +411,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
         </div>
 
         <div className="p-4 border-t border-slate-800 flex items-center justify-end gap-2">
+          {busy && <button onClick={stop} className="px-3 py-1.5 text-amber-300 text-xs">停止重塑</button>}
           <button onClick={close} className="px-3 py-1.5 text-slate-300 hover:text-slate-100 text-xs">
             {phase === 'done' ? '完成' : busy ? '停止并关闭' : '取消'}
           </button>

@@ -10,6 +10,8 @@ import rawBaseCss from '../../styles/base.css?raw';
 import { resolveDesignProse } from '../../services/ai/engine/context/designProseProvider';
 import { applyBrandColor, COLOR_SCHEMES } from '../../utils/colorHarmony';
 import { DesignLibraryImportPanel } from './DesignLibraryImportPanel';
+import {PageStyleExtractionDialog} from './PageStyleExtractionDialog';
+import {ThemeBackgroundEditor} from './ThemeBackgroundEditor';
 
 interface ThemeEditorProps {
   onClose: () => void;
@@ -36,6 +38,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
   const [evolveResult, setEvolveResult] = useState<string | null>(null);
   const [showProseCard, setShowProseCard] = useState(false);
   const [harmonizeSurfaces, setHarmonizeSurfaces] = useState(true);
+  const [extracting,setExtracting]=useState(false);
 
   const activeProse = resolveDesignProse({ presetId: designSystem.id });
 
@@ -192,6 +195,8 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               </div>
 
               {/* Theme Presets */}
+              <button onClick={()=>setExtracting(true)} className="w-full rounded-lg border border-slate-700 bg-slate-800 p-3 text-xs text-slate-200">从已有页面提取风格</button>
+              {extracting&&<PageStyleExtractionDialog onClose={()=>setExtracting(false)}/>}
               <fieldset disabled={libraryReadOnly} className="space-y-5 disabled:opacity-50" aria-label="设计 Token 编辑">
               <details className="space-y-3">
                 <summary className="cursor-pointer text-slate-300 font-semibold">选择主题风格预设</summary>
@@ -273,6 +278,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                 <p className="text-[11px] leading-relaxed text-slate-400">背景保持低饱和，卡片用表面色；品牌色集中用于主操作和选中态，成功、警告、危险色只表达状态。</p>
               </div>
 
+              <ThemeBackgroundEditor/>
               <ColorRoleEditor tokens={designSystem.tokens} mode={settings.colorMode}
                 onChange={tokens => setDesignSystem({ ...designSystem, tokens })} />
 
