@@ -8,6 +8,8 @@ import { QualityReportCard } from '../chat/QualityReportCard';
 import { ScreenFrame } from './ScreenFrame';
 import { CanvasMinimap } from './CanvasMinimap';
 import { CandidateEvidencePanel } from './CandidateEvidencePanel';
+import { TextLayoutRepairDialog } from './TextLayoutRepairDialog';
+import { repairCompressedBodyCards } from '../../utils/textLayoutRepair';
 import { contentFingerprint } from '../../services/ai/designWorkflow';
 import { knowledgeFingerprint } from '../../services/ai/projectKnowledge';
 import { canConfirmCandidateStructure } from '../../services/ai/candidateValidation';
@@ -24,6 +26,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [confirmedStructureKey, setConfirmedStructureKey] = useState<string | null>(null);
+  const [layoutRepair,setLayoutRepair]=useState<{screenId:string;textNids:string[]}|null>(null);
 
   const {
     id: projectId,
@@ -187,6 +190,13 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
     ? (stagedRenderQuality?.key === renderKey ? stagedRenderQuality.report : undefined)
     : (reportId && renderReports[reportId]?.key === renderKey ? renderReports[reportId].report : undefined);
   const renderPending = Boolean(stagedScreen && (!renderedReport || renderedReport.status === 'pending'));
+  const repairableTextNids=useMemo(()=>{
+    const screen=screens[activeScreenId||''];
+    if(stagedScreen||!screen||screen.metadata?.importedHtml||renderedReport?.status!=='complete')return [];
+    return [...new Set(renderedReport.findings.filter(f=>f.code==='render_compressed_body'&&f.nid).map(f=>f.nid!))].filter(nid=>{
+      try{repairCompressedBodyCards(screen.htmlContent,[nid],useProjectStore.getState().getProtectedNids(screen.id));return true;}catch{return false;}
+    });
+  },[renderedReport,stagedScreen,activeScreenId,screens,overrides]);
   const renderIncomplete = Boolean(stagedScreen && renderedReport && !['complete', 'pending'].includes(renderedReport.status));
   const taskCurrent = !stagedScreen || useProjectStore.getState().isStagedTaskCurrent();
   const stagedAssetIssues = stagedScreen ? useProjectStore.getState().getStagedAssetIssues() : [];
@@ -406,8 +416,9 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
       )}
 
       {!stagedScreen && activeScreenId && renderedReport && <div className="absolute right-4 top-4 z-40 max-w-sm">
-        <RenderedQualityCard report={renderedReport} onLocate={locateRenderIssue} />
+        <RenderedQualityCard report={renderedReport} onLocate={locateRenderIssue} onRepairLayout={repairableTextNids.length?()=>setLayoutRepair({screenId:activeScreenId,textNids:repairableTextNids}):undefined} />
       </div>}
+      {layoutRepair&&<TextLayoutRepairDialog key={layoutRepair.screenId} {...layoutRepair} onClose={()=>setLayoutRepair(null)}/>}
       <CanvasMinimap canvasRef={containerRef} />
 
       {/* 纯净工作区空画布引导 (OpenDesign / PRD 体验升级) */}

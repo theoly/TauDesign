@@ -1188,7 +1188,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const initialStyleAsset = screenData.scopedCss
       ? nextScopedStyleAsset(id, screenData.scopedCss, setup ? 'imported' : 'generated')
       : undefined;
-    const screen: Screen = normalizeScreenNavigation({ ...screenData, id, position, htmlContent,
+    const screen: Screen = normalizeScreenNavigation({ ...screenData, id, entry: `screens/${id}.html`, position, htmlContent,
       ...(initialStyleAsset ? { metadata: { ...screenData.metadata, scopedStyleAsset: initialStyleAsset } } : {})
     }, { ...get().settings, useCustomNavigation: setup?.useCustomNavigation ?? get().settings.useCustomNavigation });
     const prevScreens = get().screens;

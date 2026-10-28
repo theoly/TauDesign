@@ -1,0 +1,79 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>副本清单原生回归</title>
+<body style="margin:0;background:#020617;color:white"><div id="status">正在验证隔离临时工程…</div><div id="root" style="height:85vh"></div>
+<script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {invoke,isTauri} from '/node_modules/@tauri-apps/api/core.js';
+import {InfiniteCanvas} from '/src/components/canvas/InfiniteCanvas.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {neutralModernTheme} from '/src/utils/themePresets.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {ProjectRepository} from '/src/services/storage/projectRepository.ts';
+import {flushHistorySaveChecked,loadHistoryForProject} from '/src/services/storage/historyPersistence.ts';
+import {setTextByNid} from '/src/utils/textNode.ts';
+import {buildStandaloneHtml} from '/src/utils/exportRenderer.ts';
+import {exportScreenPng} from '/src/utils/pngExporter.ts';
+import {compileTokensToCss} from '/src/utils/cssCompiler.ts';
+import {getBaseCss} from '/src/styles/baseCss.ts';
+const params=new URLSearchParams(location.search),folder=params.get('root');
+const assert=(ok,reason)=>{if(!ok)throw Error(reason);};
+try {
+ assert(isTauri(),'This fixture requires a real Tauri runtime');
+ assert(/^\/private\/tmp\/taudesign-manifest-[a-zA-Z0-9-]+$/.test(folder),'Only an isolated task temporary directory is allowed');
+ const store=useProjectStore;
+ let copyId,projectId;
+ if(params.get('phase')!=='reopen') {
+  projectId=store.getState().initNewProject({name:'清单原生回归',deviceProfile:'mobile',designSystem:neutralModernTheme,createSpecimen:false,folderPath:folder});
+  store.getState().addScreen({name:'原页',htmlContent:'<main class="p-4"><h1 class="text-xl">原页保持</h1><p>可安全修改的副本文字</p></main>'},'original');
+  copyId=store.getState().duplicateScreen('original');
+  assert(store.getState().screens[copyId].entry===`screens/${copyId}.html`,'Copy entry incorrect');
+  useHistoryStore.getState().undo();assert(!store.getState().screens[copyId],'Undo copy failed');
+  useHistoryStore.getState().redo();assert(Boolean(store.getState().screens[copyId]),'Redo copy failed');
+  const copy=store.getState().screens[copyId],p=new DOMParser().parseFromString(copy.htmlContent,'text/html').querySelector('p');
+  store.getState().updateScreenHtml(copyId,setTextByNid(copy.htmlContent,p.getAttribute('data-nid'),'副本独立正文'),'修改副本文字');
+  await store.getState().saveProjectChecked();await flushHistorySaveChecked(projectId,folder);
+  const storage=createProjectStorage(projectId,folder),index=JSON.parse(await storage.readText('project.json'));
+  index.screens[copyId].entry='screens/original.html';
+  await storage.writeTextAtomic('project.json',JSON.stringify(index));
+  await storage.writeTextAtomic('acceptance-input.json',JSON.stringify({projectId,copyId,history:useHistoryStore.getState().past.length}));
+  params.set('phase','reopen');location.replace(location.pathname+'?'+params); // fresh WebView document and JS module graph
+ } else {
+  const read=await invoke('project_read_text',{root:folder,rel:'acceptance-input.json'});
+  const seed=JSON.parse(read);({projectId,copyId}=seed);
+  const storage=createProjectStorage(projectId,folder),repo=new ProjectRepository(storage);
+  const before=await storage.readText('project.json'),loaded=await repo.load();
+  assert(loaded.screens[copyId].entry===`screens/${copyId}.html`,'Legacy entry not corrected');
+  assert(loaded.screens[copyId].htmlContent.includes('副本独立正文'),'Canonical copy body missing');
+  assert(await storage.readText('project.json')===before,'Load wrote project');
+  store.getState().loadProject(JSON.stringify(loaded));store.setState({folderPath:folder});
+  await loadHistoryForProject(projectId,folder);
+  assert(useHistoryStore.getState().past.length===seed.history,'Native History not restored');
+  useHistoryStore.getState().undo();assert(!store.getState().screens[copyId].htmlContent.includes('副本独立正文'),'Undo text failed');
+  useHistoryStore.getState().redo();
+  assert(store.getState().screens[copyId].htmlContent.includes('副本独立正文'),'Redo text failed');
+  assert(store.getState().screens.original.htmlContent.includes('原页保持')&&!store.getState().screens.original.htmlContent.includes('副本独立正文'),'Original changed');
+  await store.getState().saveProjectChecked();await flushHistorySaveChecked(projectId,folder);
+  const manifest=JSON.parse(await storage.readText(`screens/${copyId}.manifest.json`));
+  const index=JSON.parse(await storage.readText('project.json'));
+  assert(manifest.entry===`screens/${copyId}.html`&&index.screens[copyId].entry===manifest.entry,'Native saved manifests inconsistent');
+  assert((await storage.readText(manifest.entry)).includes('副本独立正文'),'Manifest read wrong page');
+  ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(InfiniteCanvas));
+  const options={tokensCss:compileTokensToCss(store.getState().designSystem.tokens,'light'),baseCss:getBaseCss('mobile'),screenOverrides:'',deviceProfile:'mobile',useCustomNavigation:false};
+  const html=buildStandaloneHtml(store.getState().screens[copyId],options);
+  assert(html.includes('副本独立正文')&&!html.includes('data-nid='),'HTML export wrong');
+  await storage.writeTextAtomic('exports/copy.html',html);
+  const png=await exportScreenPng(store.getState().screens[copyId],{...options,width:390,viewportHeight:844,clipHeight:844,clipToHeight:true,scale:1,bgColor:'#ffffff'});
+  assert(png.engine.startsWith('native-'),'Native export unexpectedly fell back');
+  await storage.writeBinary('exports/copy.png',png.dataUrl.split(',')[1]);
+  const report={status:'passed',platform:navigator.userAgent,scope:'Real macOS Tauri IPC IO; isolated project, fresh-document reopen, History and HTML/native PNG',projectId,copyId,copyEntry:manifest.entry,historyRestored:true,originalPreserved:true,legacyCorrected:true,pngEngine:png.engine,pngHeight:png.cssHeight};
+  await storage.writeTextAtomic('acceptance-result.json',JSON.stringify(report,null,2));
+  document.getElementById('status').textContent='通过：复制、原生保存重开、清单读取、History及HTML/PNG导出';
+ }
+} catch(error) {
+ document.getElementById('status').textContent='失败：'+error.message;
+ if(/^\/private\/tmp\/taudesign-manifest-[a-zA-Z0-9-]+$/.test(folder)&&isTauri())await invoke('project_write_text_atomic',{root:folder,rel:'acceptance-result.json',contents:JSON.stringify({status:'failed',error:String(error),stack:error.stack})});
+ console.error(error);
+}
+</script></body></html>

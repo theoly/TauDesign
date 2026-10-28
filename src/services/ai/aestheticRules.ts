@@ -30,7 +30,7 @@ export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY — these rules are
 - ICONS: 按钮、输入框、指标卡与列表行须有 Lucide/Heroicons 风格内联SVG图标，class="icon"、stroke="currentColor"；无图标页面不合格。
 - REALISTIC CONTENT: 使用真实感中文姓名、电话、日期、金额和状态徽标；禁用“占位文字”/“Lorem ipsum”/“标题1”。
 - 按钮文字默认不换行：.btn 已设 white-space: nowrap；不插入<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal 覆盖并调高按钮。
-- COMPONENT LAYOUT CONTRACT: .nowrap 仅控制 flex-wrap，文字用 .text-nowrap。标签组用 .row.wrap.gap-2，标签不设 .flex-1，空间不足整体换行。姓名单行，职业位于姓名下方，人物组不足换行；润色不新增或移动节点。头像用 .avatar，装饰图标用 .icon-box，内部 .icon 的 viewBox 留白对称。长文本列用 .flex-1.min-w-0，地址/URL 按需 .break-words。按钮组可整体换行；禁止缩字、裁字或位移补偿居中。
+- COMPONENT LAYOUT CONTRACT: .nowrap管flex换行，文字用.text-nowrap。标签.row.wrap.gap-2，不设.flex-1，空间不足整项换行。姓名单行、职业位于姓名下方，人物组可换行；润色不新增或移动节点。头像.avatar、装饰.icon-box，.icon的viewBox留白对称。长文本.flex-1.min-w-0，地址/URL按需.break-words。禁缩裁文案或位移补偿居中。长正文卡.col.gap-2，正文独占宽度自然撑高，操作不足换行。
 - STATUS & FEEDBACK: 状态用.badge-soft + 语义色；通知角标遵循组件契约，右上附着不遮图标或内容。`;
 
 /** Only new pages should proactively diversify repeated controls' business states. */
@@ -48,6 +48,7 @@ const PC_RULES = `DEVICE RULES — PC (1440px):
 
 const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
 - SINGLE COLUMN ONLY for main content. No wide tables or desktop grids. Compact cards/actions/metrics may use .grid-2, .grid-3 or .row.gap-2 with .flex-1 if content fits; short labels follow COMPONENT LAYOUT CONTRACT. Long horizontal card lists use .scroll-x.
+- .list-item仅用于横向紧凑列表，长正文卡片不用它；顶部.row.wrap.gap-2，操作组.flex-auto.min-w-0.wrap.justify-end，空间不足整组换行、组内按钮逐项换行。旧页仅改对应class，保留DOM/文案。
 - NO HOVER STATES. Touch screens never fire hover, and no hover utility exists in this profile's whitelist. Never write a :hover rule or reference a hover class. Express affordance through spacing, dividers, borders and .badge-soft instead.
 - Page section spacing: .mt-4 / .mt-6 (NOT .mt-8); page padding .p-4 / .px-4 (NOT .p-8).
 - Card padding: .p-3 / .p-4. Body text: .text-md (16px) — 14px is too small on a phone.

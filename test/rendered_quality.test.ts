@@ -22,6 +22,7 @@ function fixture(html: string, extraCss = '') {
     return new Proxy(style, { get(target, property) {
       if (property === 'getPropertyValue') return (name: string) => name === '-webkit-text-fill-color'
         ? /-webkit-text-fill-color\s*:\s*([^;]+)/.exec(el.getAttribute('style') || '')?.[1].trim() || target.getPropertyValue(name)
+        : name === '-webkit-line-clamp' ? /-webkit-line-clamp\s*:\s*([^;]+)/.exec(el.getAttribute('style') || '')?.[1].trim() || target.getPropertyValue(name)
         : target.getPropertyValue(name);
       return Reflect.get(target, property, target);
     } });
@@ -247,4 +248,36 @@ describe('裁切装饰与真实水平越界',()=>{
     text.textLines.set('text',[{top:20,bottom:36,left:380,right:460,width:80,height:16}] as any);
     expect(text.codes()).toContain('render_horizontal_overflow');expect(text.codes()).toContain('render_clipped_text');
   });
+});
+
+describe('长正文被横排操作组挤窄',()=>{
+ const copy='这周六西湖边有个版画展，我多了一张票，一起去看看吗？';
+ function cramped(style='',parentStyle='display:flex;flex-direction:row',markup?:string){
+  const f=fixture(markup??`<div data-nid="card" style="${parentStyle}"><div data-nid="tools"><button>复制</button><button>采用</button></div><p data-nid="copy" style="${style}">${copy}</p></div>`);
+  f.sizes(f.doc.querySelector('[data-nid="card"]')!,16,20,300,180);f.sizes(f.doc.querySelector('[data-nid="tools"]')!,16,80,190,44);f.sizes(f.doc.querySelector('[data-nid="copy"]')!,216,20,60,180);
+  f.textLines.set('copy',Array.from({length:7},(_,i)=>({top:20+i*22,bottom:36+i*22,width:60,height:16})));
+  return f;
+ }
+ test('不溢出也检出严重正文挤压并定位；中等宽度仅警告',()=>{
+  const f=cramped();expect(f.report().findings.find(x=>x.code==='render_compressed_body')).toMatchObject({nid:'copy',severity:'error'});
+  f.sizes(f.doc.querySelector('[data-nid="copy"]')!,216,20,100,180);
+  expect(f.report().findings.find(x=>x.code==='render_compressed_body')?.severity).toBe('warning');
+ });
+ test('纵向卡片、宽正文、少行正文或已经整体换行的操作组不误报',()=>{
+  const f=cramped();const copyEl=f.doc.querySelector('[data-nid="copy"]')!,root=f.doc.querySelector('[data-nid="card"]')!,tools=f.doc.querySelector('[data-nid="tools"]')!;
+  root.setAttribute('style','display:flex;flex-direction:column');expect(f.codes()).not.toContain('render_compressed_body');
+  root.setAttribute('style','display:flex;flex-direction:row');f.sizes(copyEl,16,140,60,180);expect(f.codes()).not.toContain('render_compressed_body');
+  f.sizes(copyEl,216,20,180,180);expect(f.codes()).not.toContain('render_compressed_body');
+  f.sizes(copyEl,216,20,60,180);f.textLines.set('copy',[{top:20,bottom:36,width:60,height:16}]);expect(f.codes()).not.toContain('render_compressed_body');
+  f.textLines.set('copy',Array.from({length:7},(_,i)=>({top:20+i*22,bottom:36+i*22,width:60,height:16})));tools.remove();expect(f.codes()).not.toContain('render_compressed_body');
+ });
+ for(const style of ['writing-mode:vertical-rl','text-overflow:ellipsis','-webkit-line-clamp:2','transform:scale(2)'])test(`显式特殊排版不推断为窄列：${style}`,()=>{expect(cramped(style).codes()).not.toContain('render_compressed_body');});
+ test('竖排祖先和表格不误报，无nid正文仍检查',()=>{
+  const f=cramped();f.doc.querySelector('[data-nid="card"]')!.setAttribute('style','display:flex;writing-mode:vertical-rl');expect(f.codes()).not.toContain('render_compressed_body');
+  f.doc.querySelector('[data-nid="card"]')!.setAttribute('style','display:flex;flex-direction:row');
+  f.doc.querySelector('[data-nid="card"]')!.setAttribute('role','table');expect(f.codes()).not.toContain('render_compressed_body');
+  f.doc.querySelector('[data-nid="card"]')!.removeAttribute('role');
+  f.doc.querySelector('p')!.removeAttribute('data-nid');f.textLines.set('card',Array.from({length:7},(_,i)=>({top:20+i*22,bottom:36+i*22,width:60,height:16})));
+  expect(f.codes()).toContain('render_compressed_body');
+ });
 });

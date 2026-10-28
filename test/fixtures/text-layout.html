@@ -1,0 +1,37 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>正文布局修复验证</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {InfiniteCanvas} from '/src/components/canvas/InfiniteCanvas.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {buildScreenDocument} from '/src/utils/screenDocument.ts';
+import {compileTokensToCss} from '/src/utils/cssCompiler.ts';
+import {getBaseCss} from '/src/styles/baseCss.ts';
+import {inspectRenderedQuality} from '/src/utils/renderedQuality.ts';
+import {repairCompressedBodyCards} from '/src/utils/textLayoutRepair.ts';
+import {setDirectText,inspectText} from '/src/utils/textNode.ts';
+import {buildDesignTaskContract} from '/src/services/ai/designWorkflow.ts';
+const input=window.fixtureSource,s=useProjectStore.getState();
+s.initNewProject({name:'正文布局独立验收',deviceProfile:'mobile',designSystem:input.designSystem,createSpecimen:false});
+s.addScreen({name:'AI红娘对话牵线',htmlContent:input.html,position:{x:100,y:100}},'s');s.setActiveScreen('s');s.setViewportTransform({x:100,y:80,scale:0.65});
+useHistoryStore.getState().restore(null);
+const source=useProjectStore.getState().screens.s.htmlContent;
+const doc=new DOMParser().parseFromString(source,'text/html');
+const textNids=[...doc.querySelectorAll('section[aria-label="聊天建议"] .list-item > p')].map(el=>el.getAttribute('data-nid'));
+const repaired=repairCompressedBodyCards(source,textNids);
+const fixture={textNids,source,repaired,state:()=>useProjectStore.getState(),undo:()=>useHistoryStore.getState().undo(),redo:()=>useHistoryStore.getState().redo(),history:()=>useHistoryStore.getState().past.length,
+ stageBad(){const s=useProjectStore.getState(),contract=buildDesignTaskContract({intent:'modify_screen',request:'调整建议卡片布局',target:s.screens.s,deviceProfile:'mobile',frameWidth:390,designSystem:s.designSystem,allowedChanges:['screen:s']});s.stageScreenChange('s',source,'错误布局候选','调整建议卡片布局',contract);},
+ stress(){const d=new DOMParser().parseFromString(repaired.html,'text/html');for(const nid of textNids){const p=d.querySelector(`[data-nid="${nid}"]`);setDirectText(p,inspectText(p).text.repeat(4));const buttons=p.parentElement.querySelectorAll('button');setDirectText(buttons[0],'复制这条建议');setDirectText(buttons[1],'采用并填入聊天');}return d.body.innerHTML;},
+ async inspect(width,html=source){
+  const frame=document.createElement('iframe');frame.style.cssText=`position:fixed;left:0;top:0;width:${width}px;height:844px;border:0;background:white;z-index:100;`;
+  const screen={...useProjectStore.getState().screens.s,htmlContent:html},loaded=new Promise(r=>frame.onload=r);
+  frame.srcdoc=buildScreenDocument(screen,{tokensCss:compileTokensToCss(input.designSystem.tokens,'light','mobile'),baseCss:getBaseCss('mobile'),screenOverrides:'',deviceProfile:'mobile',includeMobileChrome:false,viewportWidth:width,viewportHeight:844});
+  document.body.append(frame);await loaded;await frame.contentDocument.fonts.ready;
+  const report=inspectRenderedQuality(frame.contentDocument);
+  const cards=textNids.map(nid=>{const p=frame.contentDocument.querySelector(`[data-nid="${nid}"]`),r=p.getBoundingClientRect(),parent=p.parentElement.getBoundingClientRect();return {nid,width:r.width,parentWidth:parent.width,height:r.height,top:r.top,actionsFit:[...p.parentElement.querySelectorAll('button')].every(b=>{const box=b.getBoundingClientRect();return box.left>=parent.left&&box.right<=parent.right;})};});
+  frame.remove();return {report,cards};
+ }};
+window.fixture=fixture;
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(InfiniteCanvas));
+</script></body></html>

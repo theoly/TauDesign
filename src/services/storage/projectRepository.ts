@@ -17,7 +17,9 @@ export function normalizeToArtifactManifest(
     id,
     kind: (raw.kind as ArtifactManifest['kind']) || 'screen',
     renderer: 'html-iframe',
-    entry: String(raw.entry || `screens/${id}.html`),
+    // Bodies are always saved/read by id. A copied legacy entry must never
+    // redirect manifest readers to another page's HTML.
+    entry: `screens/${id}.html`,
     title: String(raw.title || raw.name || id),
     device: (raw.device as 'pc' | 'mobile') || deviceProfile,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date().toISOString(),

@@ -1,6 +1,7 @@
 import type { QualityFinding } from '../services/ai/generationQuality';
 import { hasAccessibleActionName } from '../services/ai/actionIntegrity';
 import { contrastRatio } from './colorHarmony';
+import { inspectText } from './textNode';
 
 export interface RenderedQualityReport {
   status: 'pending' | 'complete' | 'incomplete' | 'unavailable';
@@ -178,7 +179,33 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
     }
     if (!hasLabel) add(el, 'render_action_invisible_label', '操作控件缺少可见文案或有名称的可见图标。', '文字为空、隐藏、透明、字号为零或无可见尺寸', '恢复可见操作文案，或提供有可访问名称的可见图标', 'error');
   };
-  const nodes = Array.from(doc.body.querySelectorAll(`[data-nid], .btn, .badge, .badge-soft, .badge-count, .badge-dot, .tag, .icon-box, .avatar, .text-nowrap, ${actionSelector}`));
+  const inspectCompressedBody = (el: Element) => {
+    if (inspectText(el).text.replace(/\s/g, '').length < 20 || el.closest('button,a,input,textarea,select,svg,table,pre,code,[role="table"],[role="grid"]') || hasComplexTransform(el)) return;
+    const s = css(el), parent = el.parentElement;
+    if (!parent || !['flex', 'inline-flex'].includes(css(parent).display) || !['row', 'row-reverse', ''].includes(css(parent).flexDirection)) return;
+    for (let cur: Element | null = el; cur; cur = cur.parentElement) {
+      const style = css(cur);
+      if (style.writingMode && style.writingMode !== 'horizontal-tb' || style.textOverflow === 'ellipsis' || Number(style.getPropertyValue('-webkit-line-clamp')) > 0) return;
+    }
+    const r = el.getBoundingClientRect(), p = parent.getBoundingClientRect(), font = parseFloat(s.fontSize);
+    const contentWidth = r.width - (parseFloat(s.paddingLeft) || 0) - (parseFloat(s.paddingRight) || 0);
+    const parentWidth = p.width - (parseFloat(css(parent).paddingLeft) || 0) - (parseFloat(css(parent).paddingRight) || 0);
+    if (!(font > 0 && contentWidth > 0 && parentWidth > 0) || contentWidth / parentWidth > 0.45 || contentWidth / font > 10) return;
+    const crowded = Array.from(parent.children).some(peer => {
+      if (peer === el || !visible(peer) || ['absolute','fixed'].includes(css(peer).position) || !(peer.matches(actionSelector) || peer.querySelector(actionSelector))) return false;
+      const box = peer.getBoundingClientRect();
+      return box.width >= parentWidth * 0.45 && Math.min(r.bottom, box.bottom) - Math.max(r.top, box.top) > tolerance
+        && Math.min(r.right, box.right) - Math.max(r.left, box.left) <= tolerance;
+    });
+    if (!crowded) return;
+    const lines = lineCount(el);
+    if (lines < 4) return;
+    const severe = contentWidth / font <= 6 && contentWidth / parentWidth <= 0.4 && lines >= 5;
+    add(el, 'render_compressed_body', '操作区把长正文挤成了窄列。',
+      `正文宽${Math.round(contentWidth)}px（${(contentWidth/font).toFixed(1)}em），${lines}行，占容器${Math.round(contentWidth/parentWidth*100)}%`,
+      '将长正文与标签/操作组纵向排列，操作组空间不足整体换行；保留字号、文案和自然高度', severe ? 'error' : 'warning');
+  };
+  const nodes = Array.from(doc.body.querySelectorAll(`[data-nid], p, .btn, .badge, .badge-soft, .badge-count, .badge-dot, .tag, .icon-box, .avatar, .text-nowrap, ${actionSelector}`));
   const maxNodes = options.maxNodes ?? 1500;
   let inspected = 0;
   if (doc.body.scrollWidth > width + tolerance && !['auto', 'scroll'].includes(css(doc.body).overflowX)) {
@@ -188,6 +215,7 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
     if (el.matches(actionSelector)) inspectAction(el);
     if (!visible(el)) continue;
     inspected++;
+    inspectCompressedBody(el);
     const s = css(el), rect = el.getBoundingClientRect();
     if (el.matches('.badge, .badge-soft, .badge-count, .badge-dot, .tag')
       && (el.matches('.badge-count, .badge-dot') || ['absolute', 'fixed'].includes(s.position)) && !hasComplexTransform(el)) {

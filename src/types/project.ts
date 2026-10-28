@@ -64,6 +64,8 @@ export interface DesignLibraryBinding {
 
 export interface Screen {
   id: ScreenId;
+  /** Repository-managed canonical body path; optional for legacy in-memory pages. */
+  entry?: string;
   name: string;
   position: { x: number; y: number };
   measuredHeight?: number;

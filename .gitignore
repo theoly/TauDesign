@@ -20,6 +20,12 @@ doc/restyle-bounded/*
 !doc/desktop-release/
 doc/desktop-release/*
 !doc/desktop-release/*.md
+!doc/text-layout/
+doc/text-layout/*
+!doc/text-layout/*.md
+!doc/refactor-finalization/
+doc/refactor-finalization/*
+!doc/refactor-finalization/*.md
 node_modules/
 spike/
 AGENTS.md

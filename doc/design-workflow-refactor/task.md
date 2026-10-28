@@ -1,5 +1,7 @@
 # 任务清单
 
+- [x] 2026-10-28 收口：修复复制页entry、补旧工程清单兼容和复制/保存/重开/History回归；最终2,212项单测、类型/构建、24Rust、当前源码42入口、新增双引擎及隔离macOS原生专项通过。[报告](../refactor-finalization/test.md)。Windows/Linux实机用户确认保留缺口。
+
 - [x] 2026-10-26 真实复杂PC外部样本增量已执行：6页只读迁移、3页三设备双引擎54项回放、macOS副本文件/History/原生PNG；原源码未变，WebKit兼容PNG交叉差异3项未通过并保留。[报告](../real-pc-acceptance/test.md)。
 
 ## 2026-10-26 最终收口
