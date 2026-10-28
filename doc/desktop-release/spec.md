@@ -10,3 +10,9 @@
 - This task writes the workflow and supporting collector; it does not push tags or create a live release. Hosted OS builds require the first GitHub run; local validation cannot claim Windows/Linux binaries were built.
 
 References: https://v2.tauri.app/distribute/pipelines/github/ ; https://docs.github.com/en/actions/reference/runners/github-hosted-runners ; https://cli.github.com/manual/gh_release_create
+
+## Installation policy update · 2026-10-28
+
+The user requested plain `bun install` after an Actions installation was canceled. Both the frontend check job and native build matrix shall use `bun install`, retaining Bun 1.3.5, the tracked lockfile and Cargo `--locked`. Bun may resolve or update the lockfile within the ephemeral runner; those changes are not committed. Release source archives still use the original tagged SHA.
+
+The Bun frozen-install requirement above is deprecated on 2026-10-28 and superseded by this section at the user's request; the original requirement is retained as history. A canceled operation alone does not establish a lockfile mismatch. This policy change cannot establish that a hosted cancellation is fixed without another Actions run.

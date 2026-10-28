@@ -21,3 +21,15 @@ The workflow pins official checkout/upload/download/setup-bun action SHAs and bu
 No remote tag was pushed; no GitHub workflow run or real release was created. Hosted native compilation/bundling, real GITHUB_TOKEN policies and signing/notarization were not exercised locally. Native binary success must be confirmed by the first Actions run. Builds have no configured distribution-signing credentials. See [usage](./README.md) for publishing v0.0.1. Final implementation hashes are in `evidence/source.json`.
 
 **ACCEPTANCE: PASS for implementation and local verification; hosted execution pending.**
+
+## Install command adjustment · 2026-10-28
+
+Changed both frontend dependency installation steps to `bun install` at the user's request. Bun version, tracked lockfile, Cargo locking, matrix and publication gates are unchanged.
+
+- actionlint 1.7.12: exit 0 for `.github/workflows/release.yml`.
+- `/Users/theoly/.local/pydev/bin/python3 scripts/tests/test_release_workflow.py`: 2 tests pass, including source archives/checksums and draft/publication failure handling.
+- `bun test`: 2212 pass, 0 fail, 14034 assertions across 198 files, 37.47 seconds. Log: `/private/tmp/taudesign-ci-install-tests.log`. Existing React act warnings remain.
+- `bun run type-check`: exit 0. Log: `/private/tmp/taudesign-ci-install-types.log`.
+- `bun run build`: exit 0; Vite completed in 2.58 seconds. Log: `/private/tmp/taudesign-ci-install-build.log`.
+
+Read-only GitHub inspection of [run 40621539382](https://github.com/theoly/TauDesign/actions/runs/40621539382) shows the install step ran from 02:32:54 to 02:53:06 UTC and ended with `The operation was canceled.` This is consistent with the check job's 20-minute timeout, but the available logs do not identify why installation stalled. No lockfile mismatch was reported. Removing the flag does not by itself prove that the cancellation is fixed. No remote rerun or release publication was performed for this adjustment.

@@ -14,3 +14,12 @@ Final evidence (2026-10-27):
 - Full regression 2197/0, type-check and build passed. `test.md` and `evidence/{full,type-check,build}.log`.
 
 Matrix/native build acceptance above concerns the validated workflow configuration, not actual hosted binaries. No remote tag or release was created during local validation.
+
+## Install command adjustment · 2026-10-28
+
+The earlier frozen Bun requirement is historical; the current installation policy is in `spec.md` under Installation policy update.
+
+- [x] Both dependency installation steps use `bun install`; no frontend frozen-install command remains. Workflow diff verifies both steps.
+- [x] Fixed Bun version, native matrix, Cargo lock and publication dependencies are preserved. Workflow diff changes only the two installation commands.
+- [x] Workflow/static and integration checks, full tests, type-check and build pass. See `test.md`, 2026-10-28 addendum.
+- [x] Hosted cancellation is not reported as resolved without a confirming run. Run 40621539382 shows installation canceled after approximately 20 minutes, consistent with the check job timeout; no lockfile error was logged.
