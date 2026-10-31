@@ -206,6 +206,19 @@ The [Desktop release workflow](./.github/workflows/release.yml) supports version
 - Stable DOM identifiers, manual override layers and History protect local edits.
 - The current refactor has unit, browser and macOS native evidence. Windows/Linux native acceptance remains a recorded gap; configured build targets do not replace platform testing.
 
+### Latest recorded verification
+
+The following checks were recorded on **2026-10-31** for application code in [acd3ea5](https://github.com/theoly/TauDesign/commit/acd3ea53c46e8fa1053a401ce3a25014434d4d44):
+
+| Check | Result |
+| --- | --- |
+| Frontend tests | 2,580 passed, 0 failed. |
+| Rust library tests | 26 passed, 0 failed. |
+| Type checking and production build | Passed. |
+| Controlled browser regression | Chromium and WebKit; Mobile and PC profiles. |
+
+Browser checks use controlled model responses. These results verify the tested workflows; they do not establish real-model quality, complete platform acceptance or a published release. See the [dated test report](./doc/ui-design-workflow/test.md) for scope and remaining gaps.
+
 See [current workflow status](./doc/design-workflow-refactor/current.md) for earlier implementation and acceptance records. The ongoing [UI design workflow plan](./doc/ui-design-workflow/README.md), [task list](./doc/ui-design-workflow/task.md) and [test reports](./doc/ui-design-workflow/test.md) track the current refactor. It is not fully accepted yet: schema/invalidation coverage, remaining delivery checks, real-model comparisons, independent human review and native-platform acceptance remain subject to their documented gates. Automatic design guidance stays off by default.
 
 The [UI design guide (Chinese)](./doc/ui-design-guidance/guide.md) explains the generation rules for hierarchy, spacing, typography, theme backgrounds and component layout, including limits for edits to existing pages.

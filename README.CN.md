@@ -206,6 +206,19 @@ PACKAGE_DMG=1 PACKAGE_ZIP=1 bun run package:desktop
 - 稳定 DOM 标识、手动样式覆盖层和 History 保护局部编辑。
 - 当前重构具备单测、浏览器和 macOS 原生验收记录；Windows/Linux 原生实机验收仍是已记录的缺口，构建目标配置不能替代实机验证。
 
+### 最近一次验证记录
+
+以下检查于 **2026-10-31** 对应用代码提交 [acd3ea5](https://github.com/theoly/TauDesign/commit/acd3ea53c46e8fa1053a401ce3a25014434d4d44) 执行：
+
+| 检查 | 结果 |
+| --- | --- |
+| 前端测试 | 2,580 项通过，0 失败。 |
+| Rust 库测试 | 26 项通过，0 失败。 |
+| 类型检查与生产构建 | 通过。 |
+| 受控浏览器回归 | Chromium、WebKit；移动端与 PC 档位。 |
+
+浏览器检查使用受控模型响应。这些结果验证了已测试流程，不代表真实模型质量、全部平台验收或新版本已发布。具体范围和剩余缺口见[按日期归档的测试报告](./doc/ui-design-workflow/test.md)。
+
 较早的实现与验收记录见[当前工作流状态](./doc/design-workflow-refactor/current.md)。正在实施的重构以 [UI 设计流程方案](./doc/ui-design-workflow/README.md)、[任务清单](./doc/ui-design-workflow/task.md)及[测试报告](./doc/ui-design-workflow/test.md)为准。整体尚未完成验收：schema/失效矩阵、剩余交付检查、真实模型对照、独立人工评审及原生平台验收仍按各自门槛执行；自动参考设计规则继续默认关闭。
 
 [UI 设计指导](./doc/ui-design-guidance/guide.md)说明生成流程采用的层级、间距、排版、主题背景和组件布局规则，以及修改旧页面时的范围约束。
