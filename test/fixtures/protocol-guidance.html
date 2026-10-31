@@ -1,0 +1,54 @@
+<!doctype html><html><meta charset="utf-8"><title>区块规则协议受控验收</title><body style="margin:0;background:#020617"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {ScreenFrame} from '/src/components/canvas/ScreenFrame.tsx';
+import {DesignGuidanceCard} from '/src/components/chat/DesignGuidanceCard.tsx';
+import {TaskBudgetCard} from '/src/components/chat/TaskBudgetCard.tsx';
+import {executeStructuredEdit} from '/src/services/ai/structuredEditExecutor.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {MockTransport} from '/src/services/ai/engine/transport/mockTransport.ts';
+import {buildDesignTaskContract} from '/src/services/ai/designWorkflow.ts';
+import {guidancePacketIssue} from '/src/services/ai/designKnowledge/receipt.ts';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {techBlueTheme} from '/src/utils/themePresets.ts';
+const device=new URLSearchParams(location.search).get('device')==='pc'?'pc':'mobile';
+const width=device==='pc'?1440:390,scale=device==='pc'?0.5:1;
+const store=useProjectStore.getState();store.initNewProject({name:'区块规则验证',deviceProfile:device,designSystem:techBlueTheme,createSpecimen:false});
+const region='<section data-nid="region01"><h2 data-nid="title001">资料说明</h2><p data-nid="copy0001">长正文需要独立空间，保持完整内容。</p><button data-nid="save0001" class="btn btn-primary">查看详情</button></section>';
+const original='<main data-nid="page0001" class="'+(device==='pc'?'container-max':'p-4')+'">'+region+'<aside data-nid="aside001">'+Array.from({length:24},(_,i)=>`<p data-nid="keep${i}">保留内容 ${i}</p>`).join('')+'</aside></main>';
+store.addScreen({name:'资料页',htmlContent:original},'page');
+const state={device,width,original,requests:[],state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length};window.protocolGuidanceFixture=state;
+const transport=new MockTransport();
+const core=new DefaultAIEngineCore({id:'local-fixture',stream:(request,event)=>{
+ const body=request.body;state.requests.push({schema:body.response_format,maxTokens:body.max_tokens,rulePresent:body.messages[0].content.includes('[LY-04@1]'),wholeHtml:body.messages[0].content.includes('返回完整 HTML')});
+ transport.queueResponse(JSON.stringify({nid:'region01',html:region.replace('data-nid="region01"','data-nid="region01" class="col gap-4"')}),20);
+ return transport.stream(request,event);
+}});
+const onRenderQuality=(_id,key,report)=>useProjectStore.getState().setStagedRenderQuality(key,report);
+function App(){
+ const [result,setResult]=React.useState(),[status,setStatus]=React.useState('待执行');
+ const staged=useProjectStore(s=>s.stagedScreen);
+ const preview=React.useMemo(()=>staged?{...useProjectStore.getState().screens.page,htmlContent:staged.newHtml,position:{x:0,y:32}}:undefined,[staged?.newHtml]);
+ const run=async()=>{
+  setStatus('执行中');
+  const request='长正文保持完整，调整文字层级';
+  const r=await executeStructuredEdit(core,{mode:'region',screen:{id:'page',name:'资料页',htmlContent:original},request,
+   contract:buildDesignTaskContract({intent:'modify_screen',request,target:{id:'page',name:'资料页',htmlContent:original},allowedChanges:['element:region01'],deviceProfile:device,frameWidth:width}),
+   settings:useProjectStore.getState().settings,designSystem:techBlueTheme,colorMode:'light',regionNids:['region01'],binding:{provider:{id:'fixture',name:'本地夹具',protocol:'openai_compatible',baseUrl:'http://mock',apiKey:'FIXTURE_SECRET'},model:'fixture'},isCurrent:()=>true,contextualGuidance:{features:['long-copy']}});
+  state.result=r;setResult(r);setStatus(r.status);
+  if(r.status==='ready')useProjectStore.getState().stageScreenChange('page',r.html,'资料页',request,r.contract,r.executionRecord);
+ };
+ return React.createElement('main',{style:{padding:16,color:'#cbd5e1'}},
+  React.createElement('h1',null,'可选区块规则 · '+device),
+  React.createElement('button',{onClick:run,disabled:status!=='待执行'},'执行区块试点'),
+  React.createElement('p',{'data-testid':'status'},status),
+  result&&React.createElement('div',{style:{maxWidth:600}},React.createElement(DesignGuidanceCard,{contract:result.contract}),React.createElement(TaskBudgetCard,{value:result.taskBudget})),
+  React.createElement('button',{onClick:async()=>setStatus(await useProjectStore.getState().adoptStagedChange()?'已采纳':'采纳被拒绝')},'采纳经过门禁的候选'),
+  preview&&React.createElement('div',{style:{position:'relative',width:width*scale,height:1000,transformOrigin:'top left'}},
+   React.createElement('div',{style:{position:'relative',transform:`scale(${scale})`,transformOrigin:'top left'}},React.createElement(ScreenFrame,{screen:preview,lodLevel:2,isStaged:true,overrideSourceScreenId:'page',renderQualityKey:useProjectStore.getState().getStagedRenderContextKey(),onRenderQuality}))));
+}
+state.packetIssue=()=>guidancePacketIssue(state.result.contract);
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script></body></html>

@@ -12,8 +12,10 @@ export interface DesignExecutionRecord {
   errorMessage?: string;
   warnings: string[];
   qualityReport?: QualityReport;
-  localEdit?: { mode: 'element' | 'local' | 'region'; targetNids: string[]; operationCount: number };
-  draftRepair?: { sourceFingerprint: string; sourceTaskId?: string; confirmedLabels: Array<{nid:string;text:string}> };
+  localEdit?: { mode: 'element' | 'local' | 'region'; targetNids: string[]; operationCount: number;structural?:true };
+  draftRepair?: { sourceFingerprint: string; sourceTaskId?: string; confirmedLabels: Array<{nid:string;text:string}>;
+    historicalPageTaskSource?:import('./designWorkflow').DesignTaskContract;
+    historicalGuidanceSource?:import('./designWorkflow').DesignTaskContract };
 }
 
 export function modelExecutionRecord(result: ContinuationResult, options: {
@@ -37,9 +39,9 @@ export function htmlImportExecutionRecord(html: string): DesignExecutionRecord {
 
 /** Records the verified DOM result. Structured model replies are not available as raw stream text. */
 export function localEditExecutionRecord(input: {
-  html: string; qualityReport: QualityReport; mode: 'element' | 'local' | 'region'; targetNids: string[]; operationCount: number;
+  html: string; qualityReport: QualityReport; mode: 'element' | 'local' | 'region'; targetNids: string[]; operationCount: number;structural?:true;
 }): DesignExecutionRecord {
   return { source: 'local-edit', rawResponse: '', completeHtml: input.html, continuationCount: 0, warnings: [],
     qualityReport: input.qualityReport,
-    localEdit: { mode: input.mode, targetNids: [...input.targetNids], operationCount: input.operationCount } };
+    localEdit: { mode: input.mode, targetNids: [...input.targetNids], operationCount: input.operationCount,...(input.structural?{structural:true as const}:{}) } };
 }

@@ -1,3 +1,8 @@
+import {createAIEngineCore} from '../../services/ai/engine/core';
+import {executeStructuredEdit} from '../../services/ai/structuredEditExecutor';
+import {buildDesignTaskContract} from '../../services/ai/designWorkflow';
+import {continuationBindingKey} from '../../services/ai/generationContinuation';
+import {captureModificationSnapshot,isModificationSnapshotCurrent} from '../../services/ai/modificationReview';
 import { DesignSections, TypographySection } from './DesignSections';
 import { AppearanceSections } from './AppearanceSections';
 import { ImageSection } from './ImageSection';
@@ -7,12 +12,9 @@ import { ScreenDesignRoleEditor } from './ScreenDesignRoleEditor';
 import { ProjectAssetAuditPanel } from './ProjectAssetAuditPanel';
 import { DeliveryHistoryPanel } from './DeliveryHistoryPanel';
 import { clearInspectorPreview, findScreenElement, isEscapedInspectorValue, setInspectorPreview } from '../../utils/inspectorStyle';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useAIConfigStore } from '../../stores/useAIConfigStore';
-import { useHistoryStore } from '../../stores/useHistoryStore';
-import { AIService } from '../../services/ai/aiService';
-import { NidEngine } from '../../utils/nidEngine';
 import { TokenLintEngine, computeScreenAuditReport, getTokenLintContext } from '../../utils/tokenLint';
 import { setTextByNid, uneditableHint } from '../../utils/textNode';
 import { duplicateElementByNid, wrapElementByNid } from '../../utils/domPatcher';
@@ -74,11 +76,13 @@ export const PropertyInspector: React.FC = () => {
   } = useProjectStore();
 
   const { getActiveProviderForRole } = useAIConfigStore();
-  const { addCheckpoint } = useHistoryStore();
 
   // Point-and-Edit AI state
   const [pointPrompt, setPointPrompt] = useState('');
   const [isPointGenerating, setIsPointGenerating] = useState(false);
+  const [pointNotice,setPointNotice]=useState('');
+  const pointJob=useRef<AbortController|null>(null);
+  useEffect(()=>()=>pointJob.current?.abort(),[projectId,activeScreenId,selectedNid]);
 
   // Component states
   const [compNameInput, setCompNameInput] = useState('');
@@ -197,62 +201,29 @@ export const PropertyInspector: React.FC = () => {
 
   // --- Point-and-Edit: 局部 AI 微调 (T-P2-01 / PRD §3.6.2) ---
   const handlePointAndEdit = async () => {
-    if (!pointPrompt.trim() || isPointGenerating) return;
-    const activeRole = getActiveProviderForRole('code');
-    if (!activeRole || !activeRole.provider || !activeRole.provider.apiKey) {
-      alert('请先在右上角【设置】中配置 AI Provider API Key');
-      return;
-    }
-
-    setIsPointGenerating(true);
-
-    // Extract target subtree
-    const targetRegex = new RegExp(`(<([a-zA-Z0-9-]+)[^>]*data-nid=["']${selectedNid}["'][^>]*>[\\s\\S]*?<\\/\\2>)`, 'i');
-    const match = currentScreen.htmlContent.match(targetRegex);
-    const targetSubtree = match ? match[1] : '';
-
-    const prompt = `You are performing a scoped Point-and-Edit refactoring on an existing HTML element.
-Target element:
-\`\`\`html
-${targetSubtree}
-\`\`\`
-
-User Instruction: "${pointPrompt}"
-Requirements:
-1. Return ONLY the modified element HTML.
-2. Keep the data-nid="${selectedNid}" on the root element.
-3. Use white-listed CSS utility classes (row, col, card, btn, etc.) and CSS variables.
-4. Do NOT output markdown explanations outside the code block.`;
-
-    let acc = '';
-    const { promise } = AIService.stream(
-      activeRole.provider,
-      activeRole.modelId,
-      [{ role: 'user', content: prompt }],
-      (ev) => {
-        if (ev.type === 'Delta') acc += ev.text;
-      }
-    );
-
+    if (!pointPrompt.trim() || pointJob.current) return;
+    const binding=getActiveProviderForRole('code');
+    if(!binding?.provider||(!binding.provider.apiKey&&binding.provider.protocol!=='ollama_native')) {setPointNotice('请先配置可用的代码模型。');return;}
+    const state=useProjectStore.getState(),screen=state.screens[activeScreenId];
+    if(!screen)return;
+    const snapshot=captureModificationSnapshot(state,activeScreenId),job=new AbortController(),request=pointPrompt.trim();
+    pointJob.current=job;setIsPointGenerating(true);setPointNotice('');
+    const current=()=>{const latest=getActiveProviderForRole('code');return !job.signal.aborted&&useProjectStore.getState().activeScreenId===activeScreenId&&useProjectStore.getState().selectedNid===selectedNid&&isModificationSnapshotCurrent(useProjectStore.getState(),snapshot)&&Boolean(latest&&continuationBindingKey({provider:latest.provider,model:latest.modelId})===continuationBindingKey({provider:binding.provider,model:binding.modelId}));};
     try {
-      await promise;
-    } finally {
-      setIsPointGenerating(false);
-      setPointPrompt('');
-
-      let cleanSubtree = acc.replace(/```(?:html)?/gi, '').replace(/```/g, '').trim();
-      if (cleanSubtree && targetSubtree) {
-        addCheckpoint(`局部微调前备份: #${selectedNid}`, {
-          screenId: activeScreenId,
-          htmlContent: currentScreen.htmlContent
-        });
-
-        // Ensure data-nids are maintained
-        const updatedHtml = currentScreen.htmlContent.replace(targetSubtree, cleanSubtree);
-        const finalHtml = NidEngine.injectNids(updatedHtml);
-        updateScreenHtml(activeScreenId, finalHtml, `局部 AI 微调: #${selectedNid}`);
-      }
-    }
+      const contract=buildDesignTaskContract({intent:'modify_screen',request,target:screen,elementNid:selectedNid,
+        deviceProfile:state.settings.deviceProfile,frameWidth:state.settings.frameWidth,referenceDeviceName:state.settings.referenceDevice?.name,
+        designSystem:state.designSystem,designSystemOrigin:state.designSystemOrigin,protectedNids:state.getProtectedNids(activeScreenId)});
+      const candidate=await executeStructuredEdit(createAIEngineCore(),{mode:'element',binding:{provider:binding.provider,model:binding.modelId},
+        contextualGuidance:useAIConfigStore.getState().autoReferenceDesignRules?{}:undefined,
+        signal:job.signal,screen,elementNid:selectedNid,request,settings:state.settings,contract,designSystem:state.designSystem,colorMode:state.settings.colorMode,
+        protectedNids:state.getProtectedNids(activeScreenId),isCurrent:current,
+        onPhase:phase=>{if(current())setPointNotice(phase==='planning'?'正在梳理所选元素内的功能与交互…':'正在生成所选元素的副本修改…');}});
+      if(!current())return;
+      if(candidate.status!=='ready')throw Error(candidate.message);
+      useProjectStore.getState().stageScreenChange(activeScreenId,candidate.html,`${screen.name}（局部微调候选）`,request,candidate.contract,candidate.executionRecord);
+      setPointPrompt('');setPointNotice('已创建局部修改候选，请比较后采纳。');
+    }catch(error){if(current())setPointNotice(error instanceof Error?error.message:'局部修改失败，原页未改变。');}
+    finally{if(pointJob.current===job){pointJob.current=null;setIsPointGenerating(false);}}
   };
 
   // --- Structural Operations (T-P2-07 / PRD §3.6.3 / ISSUE-021) ---
@@ -350,17 +321,19 @@ Requirements:
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handlePointAndEdit();
               }}
-              placeholder="对当前选中元素提需求，如：加微光动画..."
+              placeholder="对选中元素提要求，如：增加内边距"
               className="w-full bg-slate-950 border border-purple-800/60 rounded-lg px-2.5 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-purple-500 pr-8"
             />
             <button
               onClick={handlePointAndEdit}
+              aria-label="生成局部微调候选"
               disabled={isPointGenerating || !pointPrompt.trim()}
               className="absolute right-1.5 top-1.5 p-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded transition"
             >
               <Wand2 className="w-3 h-3" />
             </button>
           </div>
+          {pointNotice&&<p role="status" className="text-[11px] leading-relaxed text-purple-200">{pointNotice}</p>}
         </div>
       </div>
 

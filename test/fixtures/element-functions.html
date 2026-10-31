@@ -1,0 +1,42 @@
+<!doctype html><html><meta charset="utf-8"><title>明确元素功能规划验证</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {ChatDrawer} from '/src/components/chat/ChatDrawer.tsx';
+import {ScreenFrame} from '/src/components/canvas/ScreenFrame.tsx';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {MockTransport} from '/src/services/ai/engine/transport/mockTransport.ts';
+import {PipelineExecutor} from '/src/services/ai/engine/pipeline/executor.ts';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {useAIConfigStore,defaultProviders,defaultBindings} from '/src/stores/useAIConfigStore.ts';
+import {techBlueTheme} from '/src/utils/themePresets.ts';
+import {chatPageTaskPlan} from '/test/fixtures/pageTaskPlan.ts';
+import {contentFingerprint} from '/src/services/ai/designWorkflow.ts';
+const mode=new URLSearchParams(location.search).get('mode');const reference=mode==='reference';const decorative=mode==='decorative';const form=mode==='form';
+const store=useProjectStore.getState();store.initNewProject({name:'区块功能验证',deviceProfile:'mobile',designSystem:techBlueTheme,createSpecimen:false});
+const field=form?'<label>邮箱<input data-nid="email001" class="input"/></label>':'';
+const original='<main data-nid="page0001"><section data-nid="region01"><h2 data-nid="title001">资料</h2>'+field+'<a data-nid="link0001" href="/privacy" aria-label="隐私规则">隐私</a><button data-nid="save0001" type="button" class="btn btn-primary">保存</button></section><aside data-nid="aside001">'+Array.from({length:18},(_,i)=>`<p data-nid="keep${i}">OUTSIDE_REGION_${i}</p>`).join('')+'</aside></main>';
+store.addScreen({name:'资料页',htmlContent:original},'page');
+useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'FIXTURE_SECRET'})),bindings:reference?{...defaultBindings,vision:{role:'vision',providerId:'prov-openai',modelId:'gpt-4o'}}:defaultBindings});
+const state={requests:[],pipelineCalls:0,state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length,original};window.elementFunctionFixture=state;
+const execute=PipelineExecutor.execute;PipelineExecutor.execute=options=>{state.pipelineCalls++;return execute(options);};
+const transport=new MockTransport();
+const core=new DefaultAIEngineCore({id:'local',stream:(request,event)=>{
+ const schema=request.body.response_format?.json_schema?.schema,stage=schema?.properties.features?'plan':schema?.properties.nid?'region':'analysis';
+ const last=request.body.messages.at(-1),images=Array.isArray(last.content)?last.content.filter(c=>c.type==='image_url').map(c=>c.image_url.url):[];
+ const text=Array.isArray(last.content)?last.content.find(c=>c.type==='text').text:last.content;
+ let planningInput;if(stage==='plan'){const input=JSON.parse(text);planningInput={nids:input.regions.map(r=>r.nid),outsideInBaseline:JSON.stringify(input.regions).includes('OUTSIDE_REGION_'),fullBaselinePresent:Object.hasOwn(input,'baselineHtml')};}
+ state.requests.push({stage,hasPlan:request.body.messages[0].content.includes('PAGE TASK PLAN'),images:images.map(contentFingerprint),planningInput,...(stage==='region'&&form?{formChanges:JSON.parse(text).authorizedFormChanges}:{})});
+ if(stage==='analysis')transport.queueResponse(JSON.stringify({summary:'调整资料区层级',items:[{title:'调整资料区',reason:'资料区可优化',change:'重新排列资料区',scope:'region',targetNids:['region01'],operations:[]}]}),10);
+ else if(stage==='plan'){
+  const plan={...chatPageTaskPlan,goal:'填写邮箱并查看反馈',features:[{...chatPageTaskPlan.features[0],title:'邮箱',change:form?'update':'add',basis:images.length?'image':'user',sourceIds:images.length?[`image:${contentFingerprint(images[0])}`]:['user:request'],information:[{label:'邮箱',kind:'input'}],interactions:[{label:'保存',precondition:'邮箱已填写',outcome:'显示校验反馈',targetScreenId:''}]}]};
+  transport.queueResponse(JSON.stringify(plan),20);
+ }else transport.queueResponse(JSON.stringify({nid:'region01',html:'<section data-nid="region01" class="col gap-4">'+(decorative?'<span aria-hidden="true">★</span>':'')+'<h2 data-nid="title001">资料</h2>'+(form?field.replace('<input ','<input required '):decorative?'':'<label>邮箱<input class="input"/></label>')+'<a data-nid="link0001" href="/privacy" aria-label="隐私规则">隐私</a><button data-nid="save0001" type="button" class="btn btn-primary">保存</button></section>'}),20);
+ return transport.stream(request,event);
+}});
+const stream=DefaultAIEngineCore.prototype.streamText;DefaultAIEngineCore.prototype.streamText=function(options){return stream.call(core,options);};
+let root=ReactDOM.createRoot(document.getElementById('root'));root.render(React.createElement(ChatDrawer));
+state.reopen=()=>{root.unmount();root=ReactDOM.createRoot(document.getElementById('root'));root.render(React.createElement(ChatDrawer));};
+state.preview=()=>{const s=state.state(),c=s.stagedScreen,host=document.createElement('div');document.body.append(host);const preview=ReactDOM.createRoot(host);state.hidePreview=()=>{preview.unmount();host.remove();};preview.render(React.createElement(ScreenFrame,{screen:{...s.screens.page,htmlContent:c.newHtml,position:{x:360,y:32}},lodLevel:2,isStaged:true,overrideSourceScreenId:'page',renderQualityKey:s.getStagedRenderContextKey(),onRenderQuality:(_id,key,report)=>useProjectStore.getState().setStagedRenderQuality(key,report)}));};
+</script></body></html>

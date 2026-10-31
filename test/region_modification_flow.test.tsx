@@ -50,6 +50,8 @@ import { useHistoryStore } from '../src/stores/useHistoryStore';
 import { useAIConfigStore, defaultBindings } from '../src/stores/useAIConfigStore';
 import { PipelineExecutor } from '../src/services/ai/engine/pipeline/executor';
 import { ModificationReviewCard } from '../src/components/chat/ModificationReviewCard';
+import {chatPageTaskPlan} from './fixtures/pageTaskPlan';
+import {referenceImageIdentity} from '../src/services/ai/workflowSources';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 const replacement = '<section data-nid="region" class="col"><h1 data-nid="title" class="text-xl">标题</h1></section>';
 describe('区块确认到候选的真实流程',()=>{
@@ -57,6 +59,8 @@ describe('区块确认到候选的真实流程',()=>{
  let objects:ReturnType<typeof spyOn>,pipeline:ReturnType<typeof spyOn>;
  const Harness=()=>{engine=useAIEngineChat();return null;};
  const start=async(textReferences?: any[])=>{await act(async()=>{root.render(<Harness/>);});await act(async()=>{await engine.sendMessage('修改当前页面，优化标题区',undefined,{referencedScreenId:id,textReferences});});return engine.messages.find(m=>m.modificationReview?.status==='ready')!;};
+ const task={...chatPageTaskPlan,goal:'填写邮箱资料',features:[{...chatPageTaskPlan.features[0],information:[{label:'邮箱',kind:'input'}],interactions:[{label:'保存',precondition:'已填写邮箱',outcome:'展示校验结果',targetScreenId:''}]}]};
+ const functionalRegion='<section data-nid="region" class="col gap-4"><h1 data-nid="title">标题</h1><label>邮箱<input class="input"/></label><button class="btn btn-primary">保存</button></section>';
  beforeEach(()=>{
  localStorage.clear();useProjectStore.getState().initNewProject({name:'区块测试',deviceProfile:'mobile',designSystem:defaultTheme,createSpecimen:false});
  id=useProjectStore.getState().addScreen({name:'原页面',htmlContent:regionHtml});
@@ -151,6 +155,49 @@ describe('区块确认到候选的真实流程',()=>{
  act(()=>host.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());expect(radios[1].checked).toBe(true);expect(radios[0].disabled).toBe(true);
  await act(async()=>{host.querySelector<HTMLButtonElement>('button')!.click();});expect(confirmed).toBe('region');
  act(()=>radios[2].click());await act(async()=>{host.querySelector<HTMLButtonElement>('button')!.click();});expect(confirmed).toBe('page');
+ });
+ test('confirmed functionality plans before scoped replacement and preserves its actual contract in candidate/history',async()=>{
+  const review=await start();objects.mockResolvedValueOnce(task).mockResolvedValueOnce({nid:'region',html:functionalRegion});
+  await act(async()=>{await engine.confirmModification(review.id,['suggestion-1'],'增加邮箱输入框','region');});
+  expect(pipeline).not.toHaveBeenCalled();expect(objects).toHaveBeenCalledTimes(3);
+  const staged=useProjectStore.getState().stagedScreen!;expect(staged.workflowContract?.pageTaskPlan?.plan.goal).toBe('填写邮箱资料');expect(staged.workflowContract?.allowedChanges).toEqual(['element:region']);
+  const message=engine.messages.find(m=>m.structuredRetry)!;expect(message.workflowContract?.pageTaskPlan).toEqual(staged.workflowContract?.pageTaskPlan);expect(message.taskBudget).toMatchObject({requests:2,closed:true});
+  const turns=await useProjectStore.getState().getConversationStore().loadRecent();expect(turns).toHaveLength(1);expect(turns[0].user.reviewRequest).toContain('优化标题区');expect(turns[0].user.text).toBe(staged.workflowContract!.request);expect(turns[0].assistant.pageTaskHistory?.contract.pageTaskPlan?.plan.goal).toBe('填写邮箱资料');
+  await act(async()=>root.unmount());root=createRoot(host);await act(async()=>{root.render(<Harness/>);await new Promise(r=>setTimeout(r,15));});
+  const restored=engine.messages.find(m=>m.historicalPageTask)!;expect(restored.workflowContract).toBeUndefined();expect(restored.structuredRetry).toBeUndefined();expect(restored.historicalPageTask?.contract.pageTaskPlan?.plan.goal).toBe('填写邮箱资料');expect(objects).toHaveBeenCalledTimes(3);
+ });
+ test('retry reuses original reviewed roots without a page pipeline; stale source blocks it and message IDs stay unique',async()=>{
+  const review=await start();objects.mockResolvedValueOnce(task).mockResolvedValueOnce({nid:'region',html:functionalRegion});
+  await act(async()=>{await engine.confirmModification(review.id,['suggestion-1'],'增加邮箱输入框','region');});
+  const first=engine.messages.find(m=>m.structuredRetry)!;objects.mockResolvedValueOnce(task).mockResolvedValueOnce({nid:'region',html:functionalRegion});
+  await act(async()=>{engine.retryTurn(first.id);await new Promise(r=>setTimeout(r,15));});
+  expect(objects).toHaveBeenCalledTimes(5);expect(pipeline).not.toHaveBeenCalled();expect(useProjectStore.getState().stagedScreen?.workflowContract?.allowedChanges).toEqual(['element:region']);
+  expect(new Set(engine.messages.map(m=>m.id)).size).toBe(engine.messages.length);
+  act(()=>useProjectStore.getState().updateScreenHtml(id,regionHtml+'<p>人工新增</p>'));
+  await act(async()=>{engine.retryTurn(first.id);await new Promise(r=>setTimeout(r,5));});expect(objects).toHaveBeenCalledTimes(5);expect(pipeline).not.toHaveBeenCalled();
+ });
+ test('planning questions remain visible and do not stage any replacement',async()=>{
+  const review=await start();objects.mockResolvedValue({...task,questions:['请确认邮箱是否必填']});
+  await act(async()=>{await engine.confirmModification(review.id,['suggestion-1'],'增加邮箱输入框','region');});
+  expect(objects).toHaveBeenCalledTimes(2);expect(useProjectStore.getState().stagedScreen).toBeNull();
+  const updated=engine.messages.find(m=>m.id===review.id)!;expect(updated.modificationReview?.summary).toContain('请确认邮箱是否必填');expect(updated.workflowContract?.pageTaskPlan?.plan.questions).toHaveLength(1);expect(updated.taskBudget?.requests).toBe(1);
+ });
+ test('switching the active model while planning blocks the following region request',async()=>{
+  const review=await start();objects.mockImplementationOnce(async()=>{useAIConfigStore.getState().setRoleBinding('code',{role:'code',providerId:'prov-openai',modelId:'gpt-4o'});return task;});
+  await act(async()=>{await engine.confirmModification(review.id,['suggestion-1'],'增加邮箱输入框','region');});
+  expect(objects).toHaveBeenCalledTimes(2);expect(useProjectStore.getState().stagedScreen).toBeNull();expect(engine.messages.find(m=>m.id===review.id)?.modificationReview?.summary).toContain('变化');
+ });
+ test('reference-assisted functional region sends the same image in both stages and saves only metadata/path',async()=>{
+  act(()=>useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'test'})),bindings:defaultBindings}));
+  const attachment={name:'资料参考.png',dataUrl:'data:image/png;base64,YQ=='};
+  await act(async()=>root.render(<Harness/>));await act(async()=>{await engine.sendMessage('修改当前页面，优化标题区',attachment,{referencedScreenId:id});});
+  const review=engine.messages.find(m=>m.modificationReview?.status==='ready')!;
+  const imageTask={...task,features:task.features.map(f=>({...f,basis:'image',sourceIds:[`image:${referenceImageIdentity(attachment).fingerprint}`]}))};
+  objects.mockResolvedValueOnce(imageTask).mockResolvedValueOnce({nid:'region',html:functionalRegion});
+  await act(async()=>{await engine.confirmModification(review.id,['suggestion-1'],'增加邮箱输入框','region');});
+  expect(objects).toHaveBeenCalledTimes(3);for(const call of objects.mock.calls.slice(1))expect(call[1].messages.at(-1)?.imageUrl).toBe(attachment.dataUrl);
+  const staged=useProjectStore.getState().stagedScreen!;expect(staged.workflowContract?.pageTaskPlan?.request.imageFingerprint).toBe(referenceImageIdentity(attachment).fingerprint);
+  const turns=await useProjectStore.getState().getConversationStore().loadRecent();expect(JSON.stringify(turns)).not.toContain(attachment.dataUrl);expect(turns[0].user.attachments?.[0]).toMatch(/^assets\/images\//);
  });
 });
 

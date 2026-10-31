@@ -34,7 +34,7 @@ interface AIProviderModalProps {
 
 export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initialTab = 'provider' }) => {
   const [activeTab, setActiveTab] = useState<'provider' | 'quick_prompts' | 'project'>(initialTab);
-  const { providers, bindings, addProvider, updateProvider, deleteProvider, setRoleBinding } =
+  const { providers, bindings, addProvider, updateProvider, deleteProvider, setRoleBinding,autoReferenceDesignRules,setAutoReferenceDesignRules } =
     useAIConfigStore();
   const { totalCalls, totalInputTokens, totalOutputTokens, totalEstimatedCostUsd, clearUsage } =
     useUsageStore();
@@ -304,6 +304,11 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
           </button>
         </div>
 
+        {activeTab==='provider'&&<label className="mx-4 my-3 flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs text-slate-200">
+          <input type="checkbox" aria-label="自动参考设计规则" className="mt-0.5 shrink-0 accent-blue-500" checked={autoReferenceDesignRules} onChange={event=>setAutoReferenceDesignRules(event.target.checked)} />
+          <span className="min-w-0"><span className="font-medium">自动参考设计规则（试用）</span>
+            <span className="mt-1 block leading-relaxed text-slate-400">根据页面与请求选择适用的布局和可读性建议。默认关闭，仅影响后续新任务；现有设计及进行中的任务保持原规则。</span></span>
+        </label>}
         {activeTab === 'project' ? (
           <ProjectSettingsPanel />
         ) : activeTab === 'quick_prompts' ? (

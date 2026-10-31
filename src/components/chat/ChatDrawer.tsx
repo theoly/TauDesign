@@ -1,9 +1,14 @@
+import {HistoricalDraftSource} from './HistoricalDraftSource';
+import {PageTaskCoverageCard} from './PageTaskCoverageCard';
 import {MultiPagePlanCard} from './MultiPagePlanCard';
 import { FailedDraftCard } from './FailedDraftCard';
 import { ReferenceRegionDialog } from './ReferenceRegionDialog';
 import type { ImageAttachment } from '../../types/referenceImage';
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { DesignBriefCard } from './DesignBriefCard';
+import {TaskBudgetCard} from './TaskBudgetCard';
+import {DesignGuidanceCard} from './DesignGuidanceCard';
+import {PageTaskPlanCard} from './PageTaskPlanCard';
 import { QualityReportCard } from './QualityReportCard';
 import { ModificationReviewCard } from './ModificationReviewCard';
 import { useProjectStore } from '../../stores/useProjectStore';
@@ -1135,6 +1140,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 onCancel={() => engine.cancelModification(m.id)} onRetry={() => engine.retryModificationAnalysis(m.id)} />}
 
               {m.designBrief && <DesignBriefCard brief={m.designBrief} />}
+              {m.historicalGuidanceNotice&&<p role="status" className="my-2 text-[11px] leading-relaxed text-slate-500">{m.historicalGuidanceNotice}</p>}
+              <DesignGuidanceCard contract={m.workflowContract??m.historicalGuidance?.contract} historical={!m.workflowContract&&Boolean(m.historicalGuidance)}/>
+              <HistoricalDraftSource execution={m.executionRecord}/>
+              {m.historicalPageTaskNotice&&<p role="status" className="my-2 text-[11px] leading-relaxed text-slate-500">{m.historicalPageTaskNotice}</p>}
+              <PageTaskPlanCard contract={m.workflowContract??m.historicalPageTask?.contract}/>
+              <PageTaskCoverageCard contract={m.workflowContract} html={m.htmlOutput}/>
+              <TaskBudgetCard value={m.taskBudget}/>
               {m.isGenerating&&m.generationProgress&&<p role="status" className="text-[11px] leading-relaxed text-sky-300/80">{m.generationProgress}</p>}
               {m.qualityReport && <QualityReportCard report={m.qualityReport} />}
               {m.qualityDraft && <FailedDraftCard value={m.qualityDraft} saved={m.qualityDraftSaved} busy={engine.isGenerating||m.qualityDraftBusy} notice={m.qualityDraftNotice}
@@ -1582,6 +1594,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   连接中断；已使用完整接收的页面结果，请检查生成内容。
                 </div>
               )}
+              {m.usageNote&&<p className="text-[10px] leading-relaxed text-slate-500">{m.usageNote}</p>}
               {m.usage && m.sender === 'assistant' && (
                 <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono pl-1 pt-0.5">
                   <Zap className="w-2.5 h-2.5 text-amber-400/80" />

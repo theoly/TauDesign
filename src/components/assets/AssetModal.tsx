@@ -1,9 +1,10 @@
 import {ComponentContractEditor} from './ComponentContractEditor';
 import {libraryMemberLocked} from '../../services/ai/designLibraryReference';
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useAIConfigStore } from '../../stores/useAIConfigStore';
-import { AIService } from '../../services/ai/aiService';
+import {createAIEngineCore} from '../../services/ai/engine/core';
+import {generateIconSvg} from '../../services/ai/iconSvgGeneration';
 import { Asset, ComponentDefinition } from '../../types/project';
 import { ComponentDetector, ComponentCandidate } from '../../utils/componentDetector';
 import { ImageGenerator, ImageGenOptions } from '../../utils/imageGenerator';
@@ -72,6 +73,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
 
   // Store Hooks
   const {
+    id:projectId,
     screens,
     activeScreenId,
     components,
@@ -102,6 +104,8 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
   const [aiIconPrompt, setAiIconPrompt] = useState('');
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [generatedSvg, setGeneratedSvg] = useState<string | null>(null);
+  const svgJob=useRef<AbortController|null>(null);
+  useEffect(()=>()=>svgJob.current?.abort(),[projectId]);
 
   // Notification / Feedback msg
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -130,43 +134,15 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
 
   // Generate AI SVG Icon
   const handleGenerateAiSvg = async () => {
-    if (!aiIconPrompt.trim() || isAiGenerating) return;
-    const activeRole = getActiveProviderForRole('code');
-    if (!activeRole || !activeRole.provider || !activeRole.provider.apiKey) {
-      alert('请先在设置中配置 AI Provider API Key');
-      return;
-    }
-
-    setIsAiGenerating(true);
-    setGeneratedSvg('');
-
-    const prompt = `You are a specialized SVG Vector Icon Designer.
-User Prompt: "${aiIconPrompt}"
-Generate ONLY the inner path / shape tags for a clean 24x24 monochrome vector icon.
-DO NOT wrap with <svg> tags.
-ONLY return valid XML path/circle/rect/polyline/polygon tags with standard attributes.
-No explanations.`;
-
-    let acc = '';
-    const { promise } = AIService.stream(
-      activeRole.provider,
-      activeRole.modelId,
-      [{ role: 'user', content: prompt }],
-      (ev) => {
-        if (ev.type === 'Delta') {
-          acc += ev.text;
-          setGeneratedSvg(acc);
-        }
-      }
-    );
-
+    if(!aiIconPrompt.trim()||svgJob.current)return;
+    const binding=getActiveProviderForRole('code');
+    if(!binding?.provider||(!binding.provider.apiKey&&binding.provider.protocol!=='ollama_native')){showFeedback('请先配置可用的代码模型。');return;}
+    const job=new AbortController();svgJob.current=job;setIsAiGenerating(true);setGeneratedSvg('');
     try {
-      await promise;
-    } finally {
-      setIsAiGenerating(false);
-      const cleaned = acc.replace(/```(?:xml|svg)?/gi, '').replace(/```/g, '').trim();
-      setGeneratedSvg(cleaned);
-    }
+      const svg=await generateIconSvg(createAIEngineCore(),{provider:binding.provider,model:binding.modelId},aiIconPrompt,job.signal);
+      if(!job.signal.aborted&&useProjectStore.getState().id===projectId)setGeneratedSvg(svg);
+    }catch(error){if(!job.signal.aborted)showFeedback(error instanceof Error?error.message:'图标生成失败。');}
+    finally{if(svgJob.current===job){svgJob.current=null;setIsAiGenerating(false);}}
   };
 
   // Generate AI Image (PRD §3.4.1)
@@ -732,7 +708,7 @@ No explanations.`;
 
               {generatedSvg && (
                 <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
-                  <span className="font-semibold text-slate-300 block">实时矢量预览与生成代码</span>
+                  <span className="font-semibold text-slate-300 block">矢量预览与生成代码</span>
                   <div className="flex items-center gap-6">
                     <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center text-purple-400 p-3 shadow-inner">
                       <svg

@@ -1,0 +1,15 @@
+import {GlobalRegistrator} from '@happy-dom/global-registrator';
+import {readFile,mkdir,writeFile} from 'node:fs/promises';
+import {dirname,resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {createHash} from 'node:crypto';
+import {runDesignProtocolDryRun} from './lib/designProtocolDryRun';
+if(typeof DOMParser==='undefined')GlobalRegistrator.register();
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),args=process.argv.slice(2);
+if(args.length&&(args.length!==2||args[0]!=='--output'))throw Error('Usage: bun scripts/verify-design-protocols.ts [--output report.json]');
+const report=await runDesignProtocolDryRun();
+const files=['scripts/verify-design-protocols.ts','scripts/lib/designProtocolDryRun.ts','src/services/ai/workflowCatalog.ts','src/services/ai/designKnowledge/receipt.ts','src/services/ai/designKnowledge/tokenWindow.ts','src/services/ai/designKnowledge/promptAdapter.ts','src/services/ai/structuredEditExecutor.ts','src/services/ai/regionCopyModification.ts','src/services/ai/localCopyModification.ts','src/services/ai/restyleExecutor.ts','src/services/ai/restylePatches.ts','src/services/ai/engine/pipeline/executor.ts'];
+const sourceSha256=Object.fromEntries(await Promise.all(files.map(async path=>[path,createHash('sha256').update(await readFile(resolve(root,path))).digest('hex')])));
+const output=resolve(root,args[1]??'doc/ui-design-workflow/evidence/2026-10-30-protocols/report.json');await mkdir(dirname(output),{recursive:true});
+await writeFile(output,JSON.stringify({...report,generatedAt:new Date().toISOString(),runtime:{bun:process.versions.bun,platform:process.platform,arch:process.arch},sourceSha256},null,2)+'\n');
+console.log(JSON.stringify({output,passed:report.passed,rows:report.rows.length,failures:report.rows.filter(r=>r.status==='failed')}));if(!report.passed)process.exitCode=1;

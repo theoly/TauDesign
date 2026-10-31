@@ -1,3 +1,6 @@
+import {makeGuidancePacket,withGuidanceReceipts} from '../src/services/ai/designKnowledge/receipt';
+import {selectDesignRules} from '../src/services/ai/designKnowledge/selector';
+import {isCandidateValidationEvidence} from '../src/services/ai/candidateValidation';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import React from 'react';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
@@ -121,4 +124,21 @@ test('整页授权与无关L4样式可修，实际复验携带精确覆盖',asyn
  useProjectStore.setState({overrides:{'page:other':{nid:'other',declarations:{'border-radius':'8px'}} as any}});
  const s=useProjectStore.getState(),task=buildDesignTaskContract({intent:'modify_screen',request:'调整页面按钮字号',target:s.screens.page,deviceProfile:'mobile',frameWidth:390,designSystem:s.designSystem});
  s.stageScreenChange('page',broken,'会员资料',task.request,task);publish();expect(await run()).toBe(true);expect(requests[0].overrides).toEqual(s.overrides);expect(calls).toHaveLength(1);
+});
+
+test('guided candidate repair persists parent provenance, rechecks it on adoption and archives the actual repair request',async()=>{
+ stage();let s=useProjectStore.getState();const original=s.stagedScreen!,contract=structuredClone(original.workflowContract!);
+ contract.designGuidance=makeGuidancePacket(contract,selectDesignRules({request:'主按钮',operation:'modify',device:'mobile',scope:'element',features:['button'],maxChars:1500}),'finite-json');
+ await withGuidanceReceipts(core,contract,contract.designGuidance).streamText({provider,model:'fixture',maxTokens:4,messages:[{role:'system',content:contract.designGuidance.selection.body}]}).textPromise;calls=[];
+ s.stageScreenChange('page',broken,'会员资料',contract.request,contract);publish();expect(await run()).toBe(true);s=useProjectStore.getState();
+ const repaired=s.stagedScreen!;expect(repaired.repair!.guidance!.requests).toHaveLength(1);expect(calls).toHaveLength(1);expect(repaired.workflowContract).toEqual(contract);
+ await saveStagedCandidate(s.id,undefined,repaired);const restored=(await loadStagedCandidate(s.id))!;expect(restored.repair).toEqual(repaired.repair);expect(isPageRepairRecord(restored.repair)).toBe(true);
+ useProjectStore.setState({stagedScreen:restored});publish(good as any);expect(useProjectStore.getState().getStagedDeliveryReport().status).toBe('ready');
+ const badRecord=structuredClone(restored);badRecord.repair!.guidance!.parentBindingFingerprint='12345678';useProjectStore.setState({stagedScreen:badRecord});publish(good as any);
+ expect(useProjectStore.getState().getStagedDeliveryReport().status).toBe('blocked');expect(await useProjectStore.getState().adoptStagedChange()).toBe(false);
+ useProjectStore.setState({stagedScreen:restored});publish(good as any);expect(await useProjectStore.getState().adoptStagedChange()).toBe(true);
+ const record=(await new DeliveryRepository(createProjectStorage(s.id),s.id).listForScreen('page',10)).records[0];
+ expect(record.candidate.repair).toEqual(repaired.repair);expect(isCandidateValidationEvidence(record.candidate.validationEvidence)).toBe(true);
+ expect(isCandidateValidationEvidence({...record.candidate.validationEvidence,repair:{...repaired.repair,guidance:{requests:[]}}})).toBe(false);
+ useHistoryStore.getState().undo();expect(useProjectStore.getState().screens.page.htmlContent).toBe(html);useHistoryStore.getState().redo();expect(useProjectStore.getState().screens.page.htmlContent).not.toContain('font-size:0');
 });

@@ -8,6 +8,8 @@ import { compileTokensToCss, extractClassWhitelist } from '../../utils/cssCompil
 import { getBaseCss } from '../../styles/baseCss';
 import { GOLDEN_HIERARCHY, NEW_SCREEN_STATE_RULES, getDeviceAestheticRules } from './aestheticRules';
 import { renderCraftSection } from './craft';
+import { buildContextualCraft,renderFrozenCraft } from './designKnowledge/promptAdapter';
+import type { RuleQuery } from './designKnowledge/types';
 import { resolveDesignProse } from './engine/context/designProseProvider';
 
 export type GenerationIntent = 'create_screen' | 'modify_screen' | 'change_theme' | 'question';
@@ -89,6 +91,10 @@ export function extractSectionOrder(systemPrompt: string): PromptSectionId[] {
 }
 
 export interface PromptBuildOptions {
+  /** A continuing task uses its validated frozen selection instead of today's catalog. */
+  frozenGuidance?: import('./designKnowledge/types').RuleSelection;
+  /** Experimental only; absent preserves the baseline. Device always comes from the project. */
+  contextualGuidance?: Omit<RuleQuery,'device'>;
   designSystem: DesignSystem;
   decisions?: Decision[] | Array<{ id: string; rule: string; rationale: string }> | string[];
   designRules?: string[];
@@ -180,7 +186,9 @@ ${renderProjectComponents(options.components)}` : ''}` });
     // 6. craft_references (REQ-OD-06 / BR-06.1~6.2)
     const wantsCraft = intent === 'create_screen' || intent === 'modify_screen';
     if (wantsCraft) {
-      const craftBase = renderCraftSection(intent);
+      const craftBase = options.frozenGuidance ? renderFrozenCraft(intent,options.frozenGuidance) : options.contextualGuidance
+        ? buildContextualCraft(intent,{...options.contextualGuidance,device:options.deviceProfile}).body
+        : renderCraftSection(intent);
       const deviceRules = getDeviceAestheticRules(options.deviceProfile, options.useCustomNavigation);
       const craftContent = `${craftBase}\n\n#### 设备档位专属工艺约束 (${options.deviceProfile.toUpperCase()} Profile)\n${deviceRules}\n\n#### 视觉层次金律 (VISUAL HIERARCHY)\n${GOLDEN_HIERARCHY}${intent === 'create_screen' ? `\n\n${NEW_SCREEN_STATE_RULES}` : ''}`;
       sections.push({ id: 'craft_references', content: craftContent });

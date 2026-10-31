@@ -11,6 +11,8 @@ import {knowledgeFingerprint} from '../ai/projectKnowledge';
 import {pageCreationContext} from '../ai/pageCreationValidation';
 import {createProjectStorage} from '../storage/projectStorage';
 import type { DesignExecutionRecord } from '../ai/designExecutionRecord';
+import {draftExecutionIssue} from '../ai/draftExecutionSource';
+import {resolveWorkflowValidation} from '../ai/workflowValidation';
 
 export type CanvasToolCall =
   | {
@@ -98,9 +100,12 @@ export class CanvasToolExecutor {
   static async executeAsync(call:CanvasToolCall,options:{signal?:AbortSignal;isCurrent?:()=>boolean;repair?:PageRepairModel}={}):Promise<CanvasToolExecutionResult> {
     if(call.tool!=='create_screen')return this.execute(call);
     const params=structuredClone(call.params),state=useProjectStore.getState();
-    const contract=params.workflowContract??buildDesignTaskContract({intent:'create_screen',request:params.title||'创建新页面',
+    const contract=params.workflowContract===undefined?buildDesignTaskContract({intent:'create_screen',request:params.title||'创建新页面',
       deviceProfile:state.settings.deviceProfile,frameWidth:state.settings.frameWidth,designSystem:state.designSystem,
-      designSystemOrigin:state.designSystemOrigin,designLibraryBinding:state.designLibraryBinding,knowledgeFingerprint:knowledgeFingerprint(state)});
+      designSystemOrigin:state.designSystemOrigin,designLibraryBinding:state.designLibraryBinding,knowledgeFingerprint:knowledgeFingerprint(state)}):params.workflowContract;
+    const task=resolveWorkflowValidation(contract,'create');
+    const localSourceIssue=draftExecutionIssue(params.executionRecord,params.html);
+    if(!task.ok||localSourceIssue)return {success:false,tool:'create_screen',status:'failed',error:!task.ok?task.message:localSourceIssue};
     if(contract.multiPage)return {success:false,tool:'create_screen',status:'failed',error:'计划内页面必须经完整批次验收后统一交付，不能单独加入画布。'};
     const key=`${state.id}:${contract.taskId}`,context=pageCreationContext(state);
     const failed=(error:string):CanvasToolExecutionResult=>({success:false,tool:'create_screen',status:'failed',error});
@@ -118,7 +123,7 @@ export class CanvasToolExecutor {
       if(prepared.status!=='ready')return {...failed(prepared.message),repair:prepared.repair};
       if(!current())return failed('应用前工程已变化或创建已取消。');
       const {position:_position,...screen}=prepared.screen;
-      const creationEvidence={...prepared.evidence,...(params.executionRecord?.sectioned?{execution:{...structuredClone(params.executionRecord),completeHtml:prepared.screen.htmlContent}}:{})};
+      const creationEvidence={...prepared.evidence,...(params.executionRecord?.sectioned||params.executionRecord?.draftRepair?{execution:{...structuredClone(params.executionRecord),completeHtml:prepared.screen.htmlContent}}:{})};
       const newId=useProjectStore.getState().addScreen({...screen,metadata:{...screen.metadata,creationEvidence}},id,{referencedScreenId:params.referencedScreenId});
       const checkpointId=useHistoryStore.getState().addCheckpoint(`AI 新建页面: ${name}`,{screenId:newId,htmlContent:prepared.screen.htmlContent});
       useProjectStore.getState().panToScreen(newId);

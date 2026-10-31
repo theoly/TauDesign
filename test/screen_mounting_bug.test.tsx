@@ -1,3 +1,4 @@
+import {chatPageTaskPlan} from './fixtures/pageTaskPlan';
 import {stubPageCreationRender} from './helpers/pageCreation';
 stubPageCreationRender();
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
@@ -92,7 +93,7 @@ describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sy
         abort: () => {},
         promise: new Promise((resolve) => {
           setTimeout(() => {
-            onEvent({ type: 'Delta', text: generatedHtml });
+            onEvent({ type: 'Delta', text: _msgs.some(m=>typeof m.content==='string'&&m.content.includes('业务与交互规划师'))?JSON.stringify(chatPageTaskPlan):generatedHtml });
             onEvent({ type: 'Done', finish_reason: 'stop' });
             resolve();
           }, 50);
@@ -164,7 +165,7 @@ describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sy
         abort: () => {},
         promise: new Promise((resolve) => {
           setTimeout(() => {
-            onEvent({ type: 'Delta', text: `\`\`\`html\n${rawHtml}\n\`\`\`` });
+            onEvent({ type: 'Delta', text: _msgs.some(m=>typeof m.content==='string'&&m.content.includes('业务与交互规划师'))?JSON.stringify(chatPageTaskPlan):`\`\`\`html\n${rawHtml}\n\`\`\`` });
             onEvent({ type: 'Done', finish_reason: 'stop' });
             resolve();
           }, 30);

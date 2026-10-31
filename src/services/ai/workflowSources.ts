@@ -27,7 +27,8 @@ export function referenceImageIdentity(attachment:ImageAttachment):Pick<Referenc
 }
 /** Use only the outgoing current-turn user message; older conversation images never count. */
 export function recordReferenceInput(contract:DesignTaskContract,messages:EngineMessage[],providerId:string,model:string):string|undefined{
-  if(!creationSourceStages(contract.workflowId).includes('reference-input'))return;
+  const plannedPageModification=contract.operation==='modify'&&!contract.elementNid&&Boolean(contract.pageTaskPlan&&contract.referenceImage);
+  if(!creationSourceStages(contract.workflowId).includes('reference-input')&&!plannedPageModification)return;
   const image=contract.referenceImage,last=messages[messages.length-1];
   if(!validReferenceImageIdentity(image)||!last||last.role!=='user'||!last.imageUrl||typeof last.content!=='string'||!last.content.includes(contract.request))return '本轮参考图片未进入实际模型消息，未执行生成。';
   try{if(referenceImageIdentity({name:image.name,dataUrl:last.imageUrl}).fingerprint!==image.fingerprint)return '本轮实际图片与任务参考图身份不匹配，未执行生成。';}

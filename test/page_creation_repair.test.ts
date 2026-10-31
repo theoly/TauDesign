@@ -1,3 +1,12 @@
+import {makeGuidancePacket,withGuidanceReceipts} from '../src/services/ai/designKnowledge/receipt';
+import {selectDesignRules} from '../src/services/ai/designKnowledge/selector';
+import {TaskBudget,withTaskBudget} from '../src/services/ai/taskBudget';
+import {frozenRepairGuidance,repairGuidanceIssue} from '../src/services/ai/designKnowledge/repairTrace';
+import {useAIConfigStore} from '../src/stores/useAIConfigStore';
+import {RepairReceipt} from '../src/components/canvas/CandidateRepairControl';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {createElement} from 'react';
+import {withMultiPageTasks} from './fixtures/multiPageTask';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import {prepareNewPageWithRepair} from '../src/services/ai/pageCreationRepair';
 import {PageRenderCheck} from '../src/services/ai/pageRenderCheck';
@@ -102,7 +111,7 @@ test('缺失用量时记录明确估算，冻结调用信息不保存凭证',asy
 });
 for(const failSecond of [false,true])test(`多页首屏一次修复后${failSecond?'第二页失败整批不写':'全部通过才一起加入'}`,async()=>{
  let pages=0;
- const multi:AIEngineCore={async generateObject(){return {summary:'两页静态资料',pages:[{name:'资料页',requirements:['会员资料'],links:[]},{name:'设置页',requirements:['设置'],links:[]}]} as any;},streamText(options){
+ const multi:AIEngineCore={async generateObject(){return withMultiPageTasks({summary:'两页静态资料',pages:[{name:'资料页',requirements:['会员资料'],links:[]},{name:'设置页',requirements:['设置'],links:[]}]}) as any;},streamText(options){
   if(options.jsonSchema)return core.streamText(options);
   const scope=JSON.parse(options.messages.find(m=>m.role==='system')!.content.match(/confirmedMultiPageScope=(.*); output exactly this page/)![1]);pages++;
   const content=pages===1?html:html.replace('font-size:0px','font-size:14px');const text=failSecond&&pages===2?'无有效页面':`<artifact identifier="screen_new" type="screen" title="${scope.name}">${content}</artifact>`;
@@ -118,4 +127,63 @@ for(const failSecond of [false,true])test(`多页首屏一次修复后${failSeco
 for(const reason of ['MAX_TOKENS','content_filter','SAFETY','tool_calls','unknown_status'])test(`closed repair JSON with ${reason} cannot bypass the shared end gate or retry`,async()=>{
  finish=reason;const contract=task(),result=await run({},html,contract);expect(result.status).toBe('blocked');expect(calls).toHaveLength(1);expect(renders).toBe(1);
  expect(useProjectStore.getState().screenOrder).toEqual([]);expect((await run({},html,contract)).status).toBe('blocked');expect(calls).toHaveLength(1);
+});
+
+async function guidedTask(budget?:TaskBudget){
+ const contract=task();contract.designGuidance=makeGuidancePacket(contract,selectDesignRules({request:'长正文',operation:'create',device:'mobile',scope:'page',maxChars:1500}),'html');
+ const tracked=withGuidanceReceipts(core,contract,contract.designGuidance);
+ await (budget?withTaskBudget(tracked,budget):tracked).streamText({provider,model:'fixture',maxTokens:4,messages:[{role:'system',content:contract.designGuidance.selection.body}]}).textPromise;
+ calls=[];return contract;
+}
+test('guided creation repair keeps the frozen parent, bounded JSON protocol and actual independent receipt',async()=>{
+ const plain=await run();expect(plain.status).toBe('ready');const originalMessages=JSON.stringify(calls[0].messages);calls=[];
+ const budget=new TaskBudget({maxRequests:2,maxRequestedOutputTokens:1804,maxDurationMs:10000,maxRequestDurationMs:10000});
+ const contract=await guidedTask(budget),before=JSON.stringify(contract),config=useAIConfigStore.getState();
+ useAIConfigStore.setState({autoReferenceDesignRules:false});
+ try{
+  const result=await run({repair:{core,provider,model:'fixture',taskBudget:budget}},html,contract);expect(result.status).toBe('ready');if(result.status!=='ready')return;
+  expect(calls).toHaveLength(1);expect(calls[0].maxTokens).toBe(1800);expect(calls[0].messages[0].content).toContain('只返回JSON');expect(calls[0].messages[0].content).not.toContain('OUTPUT CONTRACT');
+  expect(JSON.stringify(calls[0].messages).length).toBeLessThanOrEqual(originalMessages.length);expect(JSON.stringify(contract)).toBe(before);
+  const repair=result.evidence.repair!,trace=repair.guidance!;expect(trace.injectedRuleIds.length).toBeGreaterThan(0);
+  expect(trace.requests).toHaveLength(1);expect(trace.requests[0].requestId).not.toBe(contract.designGuidance!.requests[0].requestId);expect(trace.requests[0].status).toBe('completed');
+  for(const id of trace.injectedRuleIds)expect(calls[0].messages[0].content).toContain(`[${id}@`);
+  expect(repairGuidanceIssue(trace,contract,true)).toBeUndefined();expect(isPageCreationEvidence(JSON.parse(JSON.stringify(result.evidence)))).toBe(true);
+  expect(budget.snapshot()).toMatchObject({requests:2,requestedOutputTokens:1804,reservedOutputTokens:0});
+  const ui=renderToStaticMarkup(createElement(RepairReceipt,{value:repair}));expect(ui).toContain('沿用原任务');expect(ui).toContain('返回完成');expect(ui).not.toContain(provider.apiKey);
+  const corrupt=structuredClone(result.evidence);corrupt.repair!.guidance!.parentTaskId='another';expect(isPageCreationEvidence(corrupt)).toBe(false);
+  const legacy=structuredClone(result.evidence);delete legacy.repair!.guidance;expect(isPageCreationEvidence(legacy)).toBe(true);
+ }finally{budget.close();useAIConfigStore.setState(config,true);}
+});
+test('guided repair budget exhaustion does not create a failed dispatch or refill the parent allowance',async()=>{
+ const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1804,maxDurationMs:10000,maxRequestDurationMs:10000}),contract=await guidedTask(budget);
+ const result=await run({repair:{core,provider,model:'fixture',taskBudget:budget}},html,contract);
+ expect(result.status).toBe('blocked');if(result.status!=='blocked')return;
+ expect(calls).toHaveLength(0);expect(result.repair?.guidance?.requests).toEqual([]);expect(contract.designGuidance!.requests[0].status).toBe('completed');expect(budget.snapshot().requests).toBe(1);
+ expect(isPageRepairRecord(result.repair)).toBe(true);expect(result.message).toContain('预算');budget.close();
+});
+test('frozen repair rules use existing CSS whitespace only and explicitly omit an oversized rule',async()=>{
+ const contract=await guidedTask(),before=JSON.stringify(contract),payload={tokens:':root{--space:1px}',targets:['original']};
+ const adapted=frozenRepairGuidance(contract,payload)!;
+ expect(adapted.payload).toEqual(payload);expect(adapted.suffix).toBe('');expect(adapted.trace.injectedRuleIds).toEqual([]);
+ expect(adapted.trace.omittedRuleIds).toEqual(contract.designGuidance!.selection.selected.map(s=>s.rule.id));expect(JSON.stringify(contract)).toBe(before);
+ expect(repairGuidanceIssue(adapted.trace,contract)).toBeUndefined();
+});
+for(const kind of ['scope','incomplete','rule'] as const)test(`invalid ${kind} parent guidance is refused before repair dispatch`,async()=>{
+ const contract=await guidedTask();if(kind==='scope')contract.allowedChanges=['screen:outside'];if(kind==='incomplete')contract.designGuidance!.requests[0].status='cancelled';if(kind==='rule')contract.designGuidance!.selection.selected[0].rule.guidance='changed';
+ const result=await run({},html,contract);expect(result.status).toBe('blocked');expect(calls).toHaveLength(0);
+});
+test('failed guided repair retains its actual failure receipt and cannot publish a repaired record',async()=>{
+ const contract=await guidedTask();answer='not JSON';const result=await run({},html,contract);expect(result.status).toBe('blocked');if(result.status!=='blocked')return;
+ expect(calls).toHaveLength(1);expect(result.repair?.guidance?.requests).toHaveLength(1);expect(result.repair?.status).toBe('blocked');expect(isPageRepairRecord(result.repair)).toBe(true);
+ const forged={...result.repair,status:'repaired',operations:[{nid:'save',type:'remove_styles',value:'font-size'}],afterHtmlFingerprint:'12345678',guidance:{...result.repair!.guidance,requests:[]}};expect(isPageRepairRecord(forged)).toBe(false);
+});
+
+test('cancelled guided repair keeps a cancelled receipt after an uncooperative late response',async()=>{
+ const contract=await guidedTask(),controller=new AbortController();let release!:()=>void;
+ const slow:AIEngineCore={...core,streamText(options){const result=core.streamText(options),wait=new Promise<void>(resolve=>release=resolve);return {...result,textStream:(async function*(){await wait;yield answer;})(),textPromise:wait.then(()=>answer),abort(){}};}};
+ const pending=run({signal:controller.signal,repair:{core:slow,provider,model:'fixture'}},html,contract);
+ for(let i=0;i<30&&!release;i++)await new Promise(r=>setTimeout(r,0));expect(release).toBeDefined();controller.abort();release();
+ const result=await pending;expect(result.status).toBe('blocked');if(result.status!=='blocked')return;
+ expect(result.repair?.status).toBe('cancelled');expect(result.repair?.guidance?.requests[0].status).toBe('cancelled');expect(isPageRepairRecord(result.repair)).toBe(true);
+ expect(renders).toBe(1);expect(contract.designGuidance!.requests[0].status).toBe('completed');
 });

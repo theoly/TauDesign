@@ -10,6 +10,7 @@ import {resolveWorkflowValidation,inspectWorkflowStructure} from './workflowVali
 import {proposeStyleRepair,type PageRepairModel} from './controlledStyleRepair';
 import type {PageRepairRecord} from './pageRepairRecord';
 import {checkGenerationSourceSafety,checkGenerationQuality,qualitySummary} from './generationQuality';
+import {formRuleScope} from './formBehaviorChanges';
 import {inspectDesignEntities,designEntitySummary} from './designEntityValidation';
 import {libraryReferenceIssue,verifyLibraryReferenceFiles} from './designLibraryReference';
 import {inspectProjectAssetReferences,referencedProjectAssets,verifyProjectAssetFiles,screenForAssetAudit} from './projectAssetIntegrity';
@@ -68,7 +69,7 @@ export async function repairCandidate(input:CandidateRepairInput,storage:Project
  const validate=async(html:string)=>{
   guard();const libraryIssue=libraryReferenceIssue(state);if(libraryIssue)throw Error(libraryIssue);
   const source=checkGenerationSourceSafety(html,policy);if(!source.passed)throw Error(qualitySummary(source));
-  const quality=checkGenerationQuality(html,{...policy,baselineHtml:baseline.htmlContent,protectedNids:eligibility.protectedNids,modificationRequest:candidate.modificationRequest});if(!quality.passed)throw Error(qualitySummary(quality));
+  const quality=checkGenerationQuality(html,{...policy,baselineHtml:baseline.htmlContent,protectedNids:eligibility.protectedNids,modificationRequest:candidate.modificationRequest,formRuleRoots:formRuleScope(task)});if(!quality.passed)throw Error(qualitySummary(quality));
   const structure=inspectWorkflowStructure(task,baseline.htmlContent,html,policy);if(!structure.passed)throw Error(structure.message);
   const entities=inspectDesignEntities(html,{components:state.components,pageIds:Object.keys(state.screens),baselineHtml:baseline.htmlContent});if(!entities.passed)throw Error(designEntitySummary(entities));
   const screen=screenForAssetAudit(makeScreen(html),state.overrides??{}),assets=Object.values(state.assets);

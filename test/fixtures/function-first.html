@@ -1,0 +1,24 @@
+<!doctype html><html><meta charset="utf-8"><title>功能优先受控验证</title><body style="margin:0;background:#020617"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {PipelineExecutor} from '/src/services/ai/engine/pipeline/executor.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {MockTransport} from '/src/services/ai/engine/transport/mockTransport.ts';
+import {techBlueTheme} from '/src/utils/themePresets.ts';
+import {PageTaskPlanCard} from '/src/components/chat/PageTaskPlanCard.tsx';
+const state={requests:[],output:null,original:'<main>原页面不变</main>'};window.functionFixture=state;
+const plan={goal:'选择时间并完成预约',actor:'预约用户',completion:['展示预约确认结果'],questions:[],features:[{id:'f1',title:'预约',change:'add',basis:'user',sourceIds:['user:request'],
+ information:[{label:'预约时间',kind:'input'}],interactions:[{label:'确认预约',precondition:'已选择时间',outcome:'展示预约结果',targetScreenId:''}],states:[{name:'待选择',condition:'未选择时间',feedback:'提示选择预约时间'}]}]};
+function App(){const [phase,setPhase]=React.useState('待运行'),[output,setOutput]=React.useState(null);
+ async function run(){setPhase('正在梳理功能、信息与交互');const transport=new MockTransport();transport.queueResponse(JSON.stringify(plan),20);
+ transport.queueResponse('<artifact type="screen" title="预约"><main class="p-4"><label>预约时间<input/></label><button class="btn btn-primary">确认预约</button></main></artifact>',20);
+ const core=new DefaultAIEngineCore({id:'local',stream:(request,event)=>{state.requests.push({json:!!request.body.response_format,containsPlan:JSON.stringify(request.body.messages).includes('PAGE TASK PLAN')});return transport.stream(request,event);}});
+ const result=await PipelineExecutor.execute({input:{rawPrompt:'创建预约页面，选择预约时间并确认预约',activeScreenId:null},provider:{id:'fixture',protocol:'openai_compatible',baseUrl:'http://mock',apiKey:'FIXTURE_SECRET'},model:'fixture',engineCore:core,
+ screens:{old:{id:'old',name:'保留页',htmlContent:state.original}},deviceProfile:'mobile',frameWidth:390,baseSystemPrompt:'baseline',designSystem:techBlueTheme,pageTaskPlanning:{},
+ onTaskPlan:()=>setPhase('业务规划完成，正在生成页面')});state.output=result;setOutput(result);setPhase(result.status==='error'?result.errorMessage:'受控验证完成');}
+ return React.createElement('main',{style:{maxWidth:640,padding:24,color:'#e2e8f0',margin:'0 auto'}},React.createElement('h1',null,'功能优先设计'),
+ React.createElement('p',{role:'status'},phase),React.createElement('button',{onClick:run,disabled:phase!=='待运行',style:{padding:12,background:'#1d4ed8',borderRadius:8}},'运行功能优先设计'),
+ output&&React.createElement(PageTaskPlanCard,{contract:output.workflowContract}));}
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script></body></html>

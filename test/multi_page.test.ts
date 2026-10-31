@@ -1,3 +1,4 @@
+import {withMultiPageTasks,multiPageTask} from './fixtures/multiPageTask';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import {prepareMultiPagePlan,executeMultiPagePlan,consumeMultiPageBatch,type PreparedMultiPagePlan} from '../src/services/ai/multiPageService';
 import {requiresMultiPagePlan,validateMultiPageItems,isMultiPageDelivery,type MultiPageProgress} from '../src/services/ai/multiPageContract';
@@ -10,7 +11,10 @@ import {PipelineExecutor} from '../src/services/ai/engine/pipeline/executor';
 import {buildDesignTaskContract} from '../src/services/ai/designWorkflow';
 import {readProject} from '../src/utils/projectRegistry';
 import type {AIEngineCore,StreamTextOptions} from '../src/services/ai/engine/core/types';
-const rawPlan=()=>({summary:'登录与注册两个独立页面',pages:[{name:'登录页',requirements:['手机号登录','清晰主按钮'],links:['注册页']},{name:'注册页',requirements:['手机号注册'],links:['登录页']}]});
+import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
+import {MockTransport} from '../src/services/ai/engine/transport/mockTransport';
+import {referenceImageIdentity} from '../src/services/ai/workflowSources';
+const rawPlan=()=>withMultiPageTasks({summary:'登录与注册两个独立页面',pages:[{name:'登录页',requirements:['手机号登录','清晰主按钮'],links:['注册页']},{name:'注册页',requirements:['手机号注册'],links:['登录页']}]});
 const provider={id:'mock',name:'Mock',protocol:'openai_compatible',baseUrl:'https://invalid.local',apiKey:'test',isEnabled:true,models:[]} as any;
 let prior:ReturnType<typeof useProjectStore.getState>,history:ReturnType<typeof useHistoryStore.getState>,inspect:typeof PageRenderCheck.inspect;
 let objectCalls:number,streamCalls:StreamTextOptions[],rawQueue:unknown[],answerMode:'normal'|'unsafe'|'wrong-name'|'missing-links'|'unknown-link'|'no-html';
@@ -20,7 +24,7 @@ beforeEach(()=>{prior=useProjectStore.getState();history=useHistoryStore.getStat
  PageRenderCheck.inspect=async()=>({status:'complete',findings:[],inspected:5});objectCalls=0;streamCalls=[];rawQueue=[rawPlan()];answerMode='normal';
 });
 afterEach(()=>{PageRenderCheck.inspect=inspect;useProjectStore.setState(prior,true);useHistoryStore.setState(history,true);});
-const core:AIEngineCore={async generateObject(){objectCalls++;const value=rawQueue.shift();if(value instanceof Error)throw value;return value as any;},streamText(options){streamCalls.push(options);
+const core:AIEngineCore={async generateObject(schema){objectCalls++;if((schema.properties as any)?.features)return multiPageTask('调整后的页面',['用户确认的新要求']) as any;const value=rawQueue.shift();if(value instanceof Error)throw value;return value as any;},streamText(options){streamCalls.push(options);
  const system=options.messages.find(m=>m.role==='system')!.content,scope=JSON.parse(system.match(/confirmedMultiPageScope=(.*); output exactly this page/)![1]);
  const links=answerMode==='missing-links'?'':scope.requiredTargetIds.map((id:string)=>`<button class="btn" data-target-screen-id="${id}">关联页面</button>`).join('');
  const title=answerMode==='wrong-name'?'别的页面':scope.name;
@@ -114,11 +118,72 @@ test('输入规划合同/实际格式证据随页面交付快照保存',async()=
  const planning=useProjectStore.getState().screens[result.screenIds[0]].metadata!.multiPageDelivery!.planning;
  expect(planning.contract?.workflowId).toBe('plan-multiple-pages');expect(planning.evidence?.checks.find(c=>c.id==='page-plan-schema')?.status).toBe('passed');
 });
+for(const image of [false,true])test(`one real JSON protocol response supplies per-page plans (${image?'image':'text'}); targets map without another planner`,async()=>{
+ const attachment=image?{name:'参考.png',dataUrl:'data:image/png;base64,YQ=='}:undefined;
+ const transport=new MockTransport(),requests:any[]=[];
+ const realCore=new DefaultAIEngineCore({id:'capture',stream:(request,event)=>{
+  requests.push(request);if(request.body.response_format){const raw=rawPlan();if(attachment)for(const p of raw.pages){p.task.features[0].basis='image';p.task.features[0].sourceIds=[`image:${referenceImageIdentity(attachment).fingerprint}`];}transport.queueResponse(JSON.stringify(raw));}
+  else{const scope=JSON.parse(request.body.messages[0].content.match(/confirmedMultiPageScope=(.*); output exactly this page/)![1]);
+   transport.queueResponse(`<artifact type="screen" title="${scope.name}"><main class="p-4"><h1>${scope.name}</h1><button class="btn btn-primary">提交</button>${scope.requiredTargetIds.map((id:string)=>`<button class="btn" data-target-screen-id="${id}">关联</button>`).join('')}</main></artifact>`);
+  }return transport.stream(request,event);
+ }});
+ const prepared=await prepare({core:realCore,attachment,model:image?'fixture-vision':'model'});expect(prepared.plan.pages.every(p=>p.task?.features.length)).toBe(true);
+ expect(requests).toHaveLength(1);expect(requests[0].body.response_format.type).toBe('json_schema');
+ expect(requests[0].body.response_format.json_schema.schema.properties.pages.items.required).toContain('task');
+ const result=await run(prepared);expect(result.status).toBe('complete');expect(requests).toHaveLength(3);
+ expect(requests.filter(r=>r.body.response_format)).toHaveLength(1);
+ const pages=result.screenIds.map(id=>useProjectStore.getState().screens[id]);
+ for(const [i,page] of pages.entries()){
+  const c=page.metadata!.creationEvidence!.contract,task=c.pageTaskPlan!;
+  expect(task.request.planSource).toEqual({kind:'confirmed-multi-page',planId:prepared.plan.id,itemId:prepared.plan.pages[i].id,planFingerprint:c.multiPage!.planFingerprint});
+  expect(task.request.inputFingerprint).toBe(prepared.plan.planning.inputFingerprint);
+  expect(task.plan.features[0].interactions.at(-1)!.targetScreenId).toBe(pages[1-i].id);
+  expect(requests[i+1].body.messages[0].content).toContain('PAGE TASK PLAN');
+  if(attachment){expect(task.request.imageFingerprint).toBe(referenceImageIdentity(attachment).fingerprint);expect(task.plan.features[0].basis).toBe('image');expect(JSON.stringify(c)).not.toContain(attachment.dataUrl);}
+ }
+});
+test('length-limited multi-page JSON cannot become an approved plan or trigger HTML generation',async()=>{
+ const transport=new MockTransport();transport.enqueueScenario({events:[{type:'Delta',text:JSON.stringify(rawPlan())},{type:'Done',finish_reason:'length'}]});
+ let calls=0;const realCore=new DefaultAIEngineCore({id:'capture',stream:(request,event)=>{calls++;return transport.stream(request,event);}});
+ const before=useHistoryStore.getState().past.length;await expect(prepare({core:realCore})).rejects.toThrow();
+ expect(calls).toBe(1);expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past.length).toBe(before);
+});
+for(const changed of ['requirements','links'] as const)test(`editing ${changed} replans only the affected page in the existing batch`,async()=>{
+ const prepared=await prepare(),edited=structuredClone(prepared.plan.pages),before=useHistoryStore.getState().past.length;
+ if(changed==='requirements')edited[0].requirements='新增邮箱输入与确认按钮';else edited[0].links=[];
+ const result=await executeMultiPagePlan(prepared,edited,{getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch)});
+ expect(result.status).toBe('complete');expect(objectCalls).toBe(2);expect(streamCalls).toHaveLength(2);
+ const pages=result.screenIds.map(id=>useProjectStore.getState().screens[id]);
+ expect(pages[0].metadata!.creationEvidence!.contract.pageTaskPlan!.request.planSource).toBeUndefined();
+ expect(pages[0].metadata!.creationEvidence!.contract.pageTaskPlan!.plan.goal).toContain('调整后的页面');
+ expect(pages[1].metadata!.creationEvidence!.contract.pageTaskPlan!.request.planSource?.itemId).toBe(edited[1].id);
+ expect(pages[0].metadata!.multiPageDelivery!.pages[0].task).toBeUndefined();
+ expect(useHistoryStore.getState().past.length).toBe(before+1);expect(useProjectStore.getState().screens.old.htmlContent).toContain('原始页面');
+});
+test('critical plan questions stop before HTML; clearing a question by mutating the task is refused',async()=>{
+ const raw=rawPlan();raw.pages[1].task.questions=['请确认登录权限'];rawQueue=[raw];const prepared=await prepare(),before=useHistoryStore.getState().past.length;
+ expect((await run(prepared)).message).toContain('登录权限');expect(streamCalls).toHaveLength(0);expect(useHistoryStore.getState().past.length).toBe(before);
+ rawQueue=[raw];const another=await prepare(),edited=structuredClone(another.plan.pages);edited[1].task!.questions=[];
+ expect((await executeMultiPagePlan(another,edited,{getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch)})).status).toBe('blocked');
+ expect(streamCalls).toHaveLength(0);expect(useProjectStore.getState().screenOrder).toEqual(['old']);
+});
+for(const kind of ['missing-task','unknown-source','unselected-target'] as const)test(`invalid functional planning ${kind} cannot reach HTML`,async()=>{
+ const raw=rawPlan() as any;
+ if(kind==='missing-task')delete raw.pages[0].task;
+ if(kind==='unknown-source')raw.pages[0].task.features[0].sourceIds=['unknown-document'];
+ if(kind==='unselected-target'){raw.pages[0].links=[];raw.pages[0].task.features[0].interactions[1].targetScreenId='注册页';}
+ rawQueue=[raw,raw];await expect(prepare()).rejects.toThrow('纠正后');expect(objectCalls).toBe(2);expect(streamCalls).toHaveLength(0);
+});
+test('saved delivery validates new task bodies and keeps old deliveries without tasks readable',async()=>{
+ const prepared=await prepare(),result=await run(prepared),delivery=structuredClone(useProjectStore.getState().screens[result.screenIds[0]].metadata!.multiPageDelivery!);
+ expect(isMultiPageDelivery(delivery)).toBe(true);const legacy=structuredClone(delivery);legacy.pages.forEach(p=>delete p.task);delete legacy.planning.inputFingerprint;
+ expect(isMultiPageDelivery(legacy)).toBe(true);delivery.pages[0].task!.features[0].sourceIds=['missing'];expect(isMultiPageDelivery(delivery)).toBe(false);
+});
 
 // 同页方案共用批次门禁，但不能误当业务多页或单页交付。
 import {requiresPageVariantPlan,requestedVariantCount,validMultiPageScope} from '../src/services/ai/multiPageContract';
 import {resolveGenerationTarget} from '../src/services/ai/generationTargetResolver';
-const variantsRaw=(count=2)=>({summary:'同一登录页的不同布局',pages:Array.from({length:count},(_,i)=>({name:`登录方案${i+1}`,requirements:['同一登录页包含手机号输入和提交',i===0?'突出主操作':'按步骤组织信息'],links:[]}))});
+const variantsRaw=(count=2)=>withMultiPageTasks({summary:'同一登录页的不同布局',pages:Array.from({length:count},(_,i)=>({name:`登录方案${i+1}`,requirements:['同一登录页包含手机号输入和提交',i===0?'突出主操作':'按步骤组织信息'],links:[]}))});
 const prepareVariants=(extra:Partial<Parameters<typeof prepareMultiPagePlan>[0]>={})=>{rawQueue=[variantsRaw()];return prepare({request:'为登录页生成两个方案用于比较',referencePageId:'old',...extra});};
 for(const request of ['为登录页生成两个方案用于比较','给当前页面做3种不同方案','设计一个登录页，生成多个方案','generate 3 page variants for a login page','生成当前页的两个版本'])test(`同页方案路由 ${request}`,()=>{
  expect(requiresPageVariantPlan(request)).toBe(true);

@@ -2,8 +2,9 @@ import type {WorkflowValidationReport} from './workflowValidation';
 import type {DesignTaskContract} from './designWorkflow';
 import {contentFingerprint} from './designWorkflow';
 import type {Screen} from '../../types/project';
-export interface MultiPageItem {id:string;name:string;requirements:string;links:string[]}
-export interface MultiPagePlan {version:1;kind?:'variants';id:string;request:string;summary:string;contextFingerprint:string;originalPageCount:number;pages:MultiPageItem[];planning:{attempts:number;checkedAt:number;contract?:DesignTaskContract;evidence?:WorkflowValidationReport}}
+import {validatePageTaskPlan,type PageTaskPlan} from './pageTaskPlan';
+export interface MultiPageItem {id:string;name:string;requirements:string;links:string[];task?:PageTaskPlan}
+export interface MultiPagePlan {version:1;kind?:'variants';id:string;request:string;summary:string;contextFingerprint:string;originalPageCount:number;pages:MultiPageItem[];planning:{attempts:number;checkedAt:number;inputFingerprint?:string;contract?:DesignTaskContract;evidence?:WorkflowValidationReport}}
 export interface MultiPageScope {version:1;kind?:'variants';planId:string;planFingerprint:string;itemId:string;screenId:string;name:string;index:number;total:number;originalPageCount:number;pageIds:string[];requiredTargetIds:string[]}
 export interface MultiPageDelivery {version:1;kind?:'variants';planId:string;planFingerprint:string;confirmedAt:number;request:string;summary:string;originalPageCount:number;pages:Array<MultiPageItem&{screenId:string}>;planning:MultiPagePlan['planning']}
 export interface MultiPageProgress {itemId:string;name:string;status:'pending'|'generating'|'checked'|'applied'|'failed';message?:string}
@@ -75,6 +76,17 @@ export function isMultiPageDelivery(value:unknown):value is MultiPageDelivery{
  try{
   if(!d||d.version!==1||(d.kind!==undefined&&d.kind!=='variants')||typeof d.planId!=='string'||!d.planId||typeof d.planFingerprint!=='string'||!/^[a-f0-9]{8}$/.test(d.planFingerprint)||typeof d.request!=='string'||!d.request.trim()||d.request.length>16000||typeof d.summary!=='string'||!d.summary.trim()||d.summary.length>500||!Number.isFinite(d.confirmedAt)||!d.planning||!Number.isFinite(d.planning.checkedAt)||![1,2].includes(d.planning.attempts)||!Number.isInteger(d.originalPageCount)||d.originalPageCount<2||d.originalPageCount>8)return false;
   if(d.kind==='variants'){validateVariantItems(d.pages);if(d.originalPageCount>4||d.planning.contract?.workflowId!=='plan-page-variants')return false;}else validateMultiPageItems(d.pages);
+  if(d.pages.some(p=>p.task!==undefined)){
+   if(!d.planning.contract||!d.planning.inputFingerprint||!/^[a-f0-9]{8}$/.test(d.planning.inputFingerprint))return false;
+   validateMultiPageTasks(d.pages,d.planning.contract);
+  }
   return d.pages.length<=d.originalPageCount&&d.pages.every(p=>typeof p.screenId==='string'&&Boolean(p.screenId))&&new Set(d.pages.map(p=>p.screenId)).size===d.pages.length;
  }catch{return false;}
+}
+/** Plan-time target IDs are item IDs; the executor maps them to allocated screen IDs. */
+export function validateMultiPageTasks(pages:MultiPageItem[],source:DesignTaskContract):void {
+ for(const [index,page] of pages.entries())if(page.task!==undefined){
+  const task=validatePageTaskPlan(page.task,{...source,operation:'create',strategy:'new-page',multiPage:{version:1,planId:'planning',planFingerprint:'00000000',itemId:page.id,screenId:page.id,name:page.name,index,total:pages.length,originalPageCount:Math.max(2,pages.length),pageIds:pages.map(p=>p.id),requiredTargetIds:page.links}});
+  if(task.features.some(f=>f.interactions.some(a=>a.targetScreenId&&!page.links.includes(a.targetScreenId))))throw Error('功能规划包含未选择的页面关联。');
+ }
 }

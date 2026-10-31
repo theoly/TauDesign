@@ -5,6 +5,10 @@ import { isCandidateValidationEvidence } from '../ai/candidateValidation';
 import type { StagedCandidateData } from './candidateRepository';
 import type { ProjectStorage } from './projectStorage';
 import { isDeliveryPreview, type DeliveryPreview } from './deliveryPreview';
+import {sameRecordedHtml,taskProvenanceIssue} from '../ai/taskProvenance';
+import {isPageRepairRecord} from '../ai/pageRepairRecord';
+import {repairGuidanceIssue} from '../ai/designKnowledge/repairTrace';
+import {draftExecutionIssue} from '../ai/draftExecutionSource';
 
 export type DeliveryMode = 'replace' | 'force-replace' | 'keep-both' | 'confirm-structure-keep-both' | 'confirm-structure-replace';
 type PageSnapshot = Pick<Screen, 'id' | 'name' | 'htmlContent' | 'scopedCss' | 'metadata'>;
@@ -48,7 +52,15 @@ function validRecord(value: unknown, projectId: string, screenId: string): value
     r.candidate && typeof r.candidate.newHtml === 'string' && typeof r.candidate.screenName === 'string' &&
     (r.candidate.modificationRequest === undefined || typeof r.candidate.modificationRequest === 'string') &&
     isCandidateValidationEvidence(r.candidate.validationEvidence) &&
-    r.candidate.validationEvidence.candidateFingerprint === contentFingerprint(r.candidate.newHtml));
+    r.candidate.validationEvidence.candidateFingerprint === contentFingerprint(r.candidate.newHtml)&&sameRecordedHtml(r.candidate.newHtml,r.after.htmlContent)&&
+    !taskProvenanceIssue(r.candidate.workflowContract)&&!draftExecutionIssue(r.candidate.executionRecord,r.candidate.newHtml)&&
+    (r.candidate.workflowContract?.validationPlan===undefined||JSON.stringify(r.candidate.validationEvidence.delivery.workflow?.plan)===JSON.stringify(r.candidate.workflowContract.validationPlan))&&
+    (r.candidate.workflowContract===undefined||(r.candidate.workflowContract.operation==='modify'||r.candidate.workflowContract.operation==='restyle')&&
+      r.candidate.targetScreenId===r.before.id&&r.candidate.workflowContract.target?.id===r.before.id&&
+      r.candidate.workflowContract.target.baselineFingerprint===contentFingerprint(r.before.htmlContent))&&
+    (r.candidate.repair===undefined||(isPageRepairRecord(r.candidate.repair)&&
+      JSON.stringify(r.candidate.repair)===JSON.stringify(r.candidate.validationEvidence.repair)&&
+      (!r.candidate.repair.guidance||(r.candidate.workflowContract!==undefined&&!repairGuidanceIssue(r.candidate.repair.guidance,r.candidate.workflowContract,r.candidate.repair.status==='repaired'))))));
 }
 
 /** Historical events remain available after undo; the project document remains the current-page authority. */
@@ -73,6 +85,7 @@ export class DeliveryRepository {
   }
 
   async finish(record: DeliveryRecord, status: 'applied' | 'aborted', reason?: string): Promise<void> {
+    if(!validRecord(record,this.projectId,record.after.id))throw new Error('交付来源或页面快照不一致，未更新交付状态。');
     await this.storage.writeTextAtomic(recordPath(record.after.id, record.id), JSON.stringify({ ...record, status, completedAt: Date.now(), ...(reason ? { reason } : {}) }));
   }
 

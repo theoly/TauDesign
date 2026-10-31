@@ -1,9 +1,13 @@
+import {PageTaskCoverageCard} from '../chat/PageTaskCoverageCard';
 import {CandidateRepairControl,RepairReceipt} from './CandidateRepairControl';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { ModificationReviewSource } from '../chat/ModificationReviewSource';
 import React, { useState } from 'react';
 import type { CandidateValidationEvidence } from '../../services/ai/candidateValidation';
 import { CandidatePreviewPanel } from './CandidatePreviewPanel';
+import {DesignGuidanceCard} from '../chat/DesignGuidanceCard';
+import {PageTaskPlanCard} from '../chat/PageTaskPlanCard';
+import {HistoricalDraftSource} from '../chat/HistoricalDraftSource';
 
 const labels = { entities:'设计实体引用', task: '任务快照', source: '源码安全', quality: '静态质量', structure:'结构授权', assets: '资源登记', asset_files: '资源文件', render: '实际渲染' };
 const statuses = { passed: '通过', blocked: '未通过', pending: '待检查' };
@@ -53,6 +57,9 @@ export function CandidateEvidencePanel({ current, historical, currentIsStale = f
 }) {
   const [open, setOpen] = useState(false);
   const receipt = useProjectStore(state => state.stagedScreen?.workflowContract?.modificationReview);
+  const contract=useProjectStore(state=>state.stagedScreen?.workflowContract);
+  const candidateHtml=useProjectStore(state=>state.stagedScreen?.newHtml);
+  const execution=useProjectStore(state=>state.stagedScreen?.executionRecord);
   return <details className="relative text-[11px]" onToggle={event => setOpen(event.currentTarget.open)}>
     <summary className="cursor-pointer rounded-lg border border-slate-700 px-2.5 py-1.5 text-slate-300 hover:bg-slate-800">查看验收记录</summary>
     <div className="absolute right-0 top-full z-50 mt-2 max-h-[65vh] w-80 max-w-[80vw] space-y-3 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-4 shadow-xl" aria-label="候选验收记录">
@@ -67,6 +74,10 @@ export function CandidateEvidencePanel({ current, historical, currentIsStale = f
       </details>}
       <CandidateRepairControl />
       <ModificationReviewSource receipt={receipt} />
+      <DesignGuidanceCard contract={contract}/>
+      <HistoricalDraftSource execution={execution}/>
+      <PageTaskPlanCard contract={contract}/>
+      <PageTaskCoverageCard contract={contract} html={candidateHtml}/>
       <CandidatePreviewPanel active={open} />
       <p className="border-t border-slate-800 pt-2 text-slate-500">检查记录与预览图分别保存；预览不等同于跨浏览器像素比较。</p>
     </div>

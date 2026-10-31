@@ -38,6 +38,10 @@ TauDesign turns product requirements, reference images and existing HTML into ed
 | Proposal review | Compare original and candidate pages; replace, keep both or discard after delivery checks. |
 | Delivery | HTML and PNG export, resource checks, render diagnostics, candidate previews and saved delivery records. |
 
+### Start with functionality and information
+
+New pages and supported functionality changes first capture the user goal, required information, available actions and relevant interface states. Project documents, explicitly referenced pages and supplied images provide context; unresolved essential questions stop generation. This is a static design brief, not implemented backend behavior. Precise visual edits retain their scoped editing route.
+
 ### A controlled editing workflow
 
 1. Reference the intended page or element explicitly in chat.
@@ -48,9 +52,21 @@ TauDesign turns product requirements, reference images and existing HTML into ed
 
 Render diagnostics include compressed body text, clipping, overlap and some contrast issues. For supported cases where horizontal action groups squeeze long text, the render report offers a layout repair preview and a local candidate. These checks cover specific rules; business accuracy and visual quality still need review.
 
+AI model and Provider settings include **Automatic design guidance (trial)**, off by default. This application preference selects relevant guidance for new tasks; ongoing tasks keep their frozen rules. Turning it off restores general guidance and keeps existing pages and provenance.
+
+### Design evidence and recovery
+
+Tasks retain their selected rules, target baseline and request receipts. Candidate and delivery panels explain the checks; reopened conversations show **historical design guidance** without sending another AI request or restoring execution permissions. A rule entering a request does not prove that the model followed it or that the page passed inspection.
+
+Supported invisible-label or zero-size control failures can receive one restricted style repair and a full recheck. Automatic repair shares the generation task's remaining quota; a user-triggered candidate repair is a separate single request. Confirmed draft-label repair changes only authorized text and records that it made no model call. Failed, cancelled or inconsistent evidence does not unlock adoption.
+
+Conversation history uses append-only monthly JSONL files. Readers isolate malformed rows, recover missing or damaged indexes from valid month files and coordinate concurrent writes to the same project. Desktop readers also isolate invalid UTF-8 rows; these safeguards do not replace project backups.
+
 ### Large pages and generation limits
 
 Use section generation for a new long page: plan **2–6 sections** and assemble one page after checks. Explicit multi-page requests can use a reviewed page plan. Bounded continuation handles supported truncated responses; incomplete HTML is not applied. Section and continuation checkpoints currently last only for the active session.
+
+Manual continuation shares the original task's cumulative quota and deadline. When that allowance is insufficient, split the design or explicitly start a new generation; continuing does not reset the quota.
 
 ### HTML import and mobile navigation
 
@@ -190,7 +206,11 @@ The [Desktop release workflow](./.github/workflows/release.yml) supports version
 - Stable DOM identifiers, manual override layers and History protect local edits.
 - The current refactor has unit, browser and macOS native evidence. Windows/Linux native acceptance remains a recorded gap; configured build targets do not replace platform testing.
 
-See [current workflow status](./doc/design-workflow-refactor/current.md) for dated implementation and acceptance records.
+See [current workflow status](./doc/design-workflow-refactor/current.md) for earlier implementation and acceptance records. The ongoing [UI design workflow plan](./doc/ui-design-workflow/README.md), [task list](./doc/ui-design-workflow/task.md) and [test reports](./doc/ui-design-workflow/test.md) track the current refactor. It is not fully accepted yet: schema/invalidation coverage, remaining delivery checks, real-model comparisons, independent human review and native-platform acceptance remain subject to their documented gates. Automatic design guidance stays off by default.
+
+The [UI design guide (Chinese)](./doc/ui-design-guidance/guide.md) explains the generation rules for hierarchy, spacing, typography, theme backgrounds and component layout, including limits for edits to existing pages.
+
+Detailed screenshots, project snapshots and raw validation logs remain local and are excluded from Git. The committed verification scripts and Markdown reports describe how to reproduce the controlled checks.
 
 ## License
 

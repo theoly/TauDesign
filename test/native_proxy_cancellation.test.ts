@@ -1,3 +1,5 @@
+import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
+import {AIServiceTransport} from '../src/services/ai/engine/transport/aiServiceTransport';
 import { afterEach, expect, test } from 'bun:test';
 import { streamNativeProxy, type NativeProxyPayload } from '../src/services/ai/nativeProxy';
 import { AIService } from '../src/services/ai/aiService';
@@ -94,4 +96,15 @@ for (const kind of ['handle', 'signal'] as const) test(`TauriRustTransport ${kin
   if (kind === 'handle') result.abort(); else controller.abort();
   await result.promise;
   expect(fixture.cancels).toEqual([id]); expect(events).toEqual([]);
+});
+
+test('AIService native network failure invokes one Rust command and never falls back to browser fetch',async()=>{
+ const fixture=ipcFixture(),fetchBefore=globalThis.fetch;let fetchCalls=0;
+ (globalThis as any).isTauri=true;globalThis.fetch=(async()=>{fetchCalls++;throw Error('unexpected fallback');}) as typeof fetch;
+ try{
+  const core=new DefaultAIEngineCore(new AIServiceTransport()),response=core.streamText({provider:{id:'local',name:'fixture',protocol:'openai_compatible',baseUrl:'https://invalid.test',apiKey:'',isEnabled:true},model:'fixture',messages:[]});
+  const failed=response.textPromise.then(()=>null,error=>error);
+  const [id,request]=[...fixture.requests][0];request.channel.onmessage({type:'Ready',data:id});request.channel.onmessage({type:'Error',data:'native network failure'});request.resolve();
+  expect((await failed)?.message).toContain('network_error');expect(fixture.requests.size).toBe(1);expect(fetchCalls).toBe(0);
+ }finally{globalThis.fetch=fetchBefore;}
 });

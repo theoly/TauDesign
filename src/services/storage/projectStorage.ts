@@ -14,6 +14,8 @@ import { isDesktopRuntime } from './folderPicker';
 
 export interface ProjectStorage {
   readonly kind: 'folder' | 'localStorage';
+  /** Stable persistence scope for coordinating instances that write the same conversation files. */
+  readonly scopeKey?:string;
   ensureDir(rel: string): Promise<void>;
   exists(rel: string): Promise<boolean>;
   readText(rel: string): Promise<string | null>;
@@ -57,6 +59,7 @@ function getInvoke(): Invoke | null {
 /** 工程文件夹实现（Tauri 运行时） */
 export class TauriFolderStorage implements ProjectStorage {
   readonly kind = 'folder' as const;
+  get scopeKey(){return `folder:${this.root}`;}
 
   constructor(private readonly root: string, private readonly invoke: Invoke) {}
 
@@ -99,6 +102,7 @@ export class QuotaExceededError extends Error {
 /** 浏览器回退实现 */
 export class LocalStorageStorage implements ProjectStorage {
   readonly kind = 'localStorage' as const;
+  get scopeKey(){return `localStorage:${this.prefix}`;}
 
   constructor(private readonly prefix: string) {}
 

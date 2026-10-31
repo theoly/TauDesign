@@ -1,0 +1,61 @@
+<!doctype html><html><meta charset="utf-8"><title>规则控制与分析恢复验收</title><body style="margin:0;background:#020617"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {ChatDrawer} from '/src/components/chat/ChatDrawer.tsx';
+import {AIProviderModal} from '/src/components/settings/AIProviderModal.tsx';
+import {DeliveryHistoryPanel} from '/src/components/inspector/DeliveryHistoryPanel.tsx';
+import {PageCreationEvidencePanel} from '/src/components/inspector/PageCreationEvidencePanel.tsx';
+import {ScreenFrame} from '/src/components/canvas/ScreenFrame.tsx';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {MockTransport} from '/src/services/ai/engine/transport/mockTransport.ts';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {useAIConfigStore,defaultProviders,defaultBindings} from '/src/stores/useAIConfigStore.ts';
+import {chatPageTaskPlan} from '/test/fixtures/pageTaskPlan.ts';
+import {techBlueTheme} from '/src/utils/themePresets.ts';
+const query=new URLSearchParams(location.search),device=query.get('device')==='pc'?'pc':'mobile',retry=query.has('retry'),hold=query.has('hold'),repair=query.has('repair'),draft=query.has('draft');
+const store=useProjectStore.getState();store.initNewProject({name:'规则根入口验证',deviceProfile:device,designSystem:techBlueTheme,createSpecimen:false});
+const original='<main data-nid="root0001" class="'+(device==='pc'?'container-max p-4':'p-4')+'"><section data-nid="region01"><h2 data-nid="title001">资料</h2><p data-nid="copy0001">'+('长正文需要完整阅读。'.repeat(10))+'</p><button data-nid="button01" class="btn btn-primary">查看详情</button></section><aside data-nid="outside1">'+Array.from({length:24},(_,i)=>`<p data-nid="keep${i}">保留外部${i}</p>`).join('')+'</aside></main>';
+store.addScreen({name:'资料页',htmlContent:original},'page');
+// Preserve the preference loaded from the real application config; only the Provider is synthetic.
+useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'FIXTURE_SECRET'})),bindings:defaultBindings});
+const state={device,original,requests:[],state:()=>useProjectStore.getState(),config:()=>useAIConfigStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length};window.ruleControlFixture=state;
+const transport=new MockTransport();let analyses=0;
+const core=new DefaultAIEngineCore({id:'local-root-control',stream:(request,event)=>{
+ const body=request.body,schema=body.response_format?.json_schema?.schema,stage=schema?.properties.features?'plan':schema?.properties.summary?'analysis':schema?.properties.requiresPageRewrite?'finite':schema?.properties.operations?'repair':'html';
+ state.requests.push({stage,maxTokens:body.max_tokens,hasRule:body.messages[0].content.includes('DESIGN REFERENCES')||body.messages[0].content.includes('[LY-04@1]')});
+ if(stage==='plan')transport.queueResponse(JSON.stringify(chatPageTaskPlan),10);
+ else if(stage==='analysis'){
+  analyses++;transport.queueResponse(retry&&analyses===1?'not JSON':JSON.stringify({summary:'调整长正文和主操作层级',items:[{title:'主按钮文字层级',reason:'主操作文字层级不足',change:'主按钮文字加粗',scope:'local',operations:[{nid:'button01',type:'add_classes',value:'font-semibold'}]}]}),hold?1000:10);
+ }else if(stage==='repair')transport.queueResponse(JSON.stringify({operations:[{nid:'created1',type:'remove_styles',value:'font-size'}]}),10);
+ else if(stage==='finite')transport.queueResponse(JSON.stringify({requiresPageRewrite:false,reason:'仅修改授权主按钮',operations:[{nid:'button01',type:'add_classes',value:'p-4'}]}),10);
+ else transport.queueResponse('<artifact title="正文页"><main class="'+(device==='pc'?'container-max p-4':'p-4')+'"><h1>正文页</h1><p>完整正文。</p><button data-nid="created1" class="btn btn-primary"'+(repair?' style="font-size:0px"':'')+'>'+(draft?'<svg class="icon" viewBox="0 0 24 24"><path d="M1 1L2 2"/></svg><span></span>':'查看详情')+'</button></main></artifact>',10);
+ return transport.stream(request,event);
+}});
+const stream=DefaultAIEngineCore.prototype.streamText;DefaultAIEngineCore.prototype.streamText=function(options){return stream.call(core,options);};
+function App(){const [settings,setSettings]=React.useState(false);return React.createElement(React.Fragment,null,React.createElement(ChatDrawer,{onOpenSettings:()=>setSettings(true)}),settings&&React.createElement('div',{'data-testid':'settings'},React.createElement(AIProviderModal,{onClose:()=>setSettings(false)})));}
+let appRoot=ReactDOM.createRoot(document.getElementById('root'));appRoot.render(React.createElement(App));
+state.reopen=()=>{appRoot.unmount();appRoot=ReactDOM.createRoot(document.getElementById('root'));appRoot.render(React.createElement(App));};
+state.breakHistory=async()=>{
+ const s=state.state(),conversation=s.getConversationStore();await conversation.loadRecent();const storage=createProjectStorage(s.id,s.folderPath),index=JSON.parse(await storage.readText('conversations/index.json')),path='conversations/'+index.shards.at(-1).shard+'.jsonl';
+ for(let i=0;i<12;i++)await storage.appendLine(path,JSON.stringify({turnId:'invalid-'+i,ts:Date.now(),user:null,assistant:{text:'不应恢复坏行'}}));
+ await storage.appendLine(path,JSON.stringify({turnId:'optional-broken',ts:Date.now(),user:{text:'可选字段损坏但正文保留',reviewRequest:42},assistant:{text:'坏来源正文仍可阅读',designGuidanceHistory:{version:99}},changeSet:{screens:{length:1}}}));
+ await storage.writeTextAtomic('conversations/index.json',JSON.stringify({shards:'broken'}));
+};
+state.showDelivery=()=>{
+ const s=state.state(),host=document.createElement('div');Object.assign(host.style,{position:'absolute',left:'420px',top:'24px',width:'700px'});document.body.append(host);
+ const root=ReactDOM.createRoot(host);state.hideDelivery=()=>{root.unmount();host.remove();};root.render(React.createElement(DeliveryHistoryPanel,{projectId:s.id,folderPath:s.folderPath,screen:s.screens.page,revision:1}));
+};
+state.showCreation=()=>{
+ const created=Object.values(state.state().screens).find(s=>s.id!=='page'),host=document.createElement('div');
+ Object.assign(host.style,{position:'absolute',left:'420px',top:'24px',width:'700px'});document.body.append(host);
+ ReactDOM.createRoot(host).render(React.createElement(PageCreationEvidencePanel,{screen:created}));
+};
+state.preview=()=>{
+ const s=state.state(),c=s.stagedScreen,host=document.createElement('div'),inner=document.createElement('div'),scale=device==='pc'?0.5:1;
+ Object.assign(host.style,{position:'absolute',left:'400px',top:'32px',width:(s.settings.frameWidth*scale)+'px',height:'1000px'});Object.assign(inner.style,{position:'relative',transform:`scale(${scale})`,transformOrigin:'top left'});host.append(inner);document.body.append(host);
+ const root=ReactDOM.createRoot(inner);state.hidePreview=()=>{root.unmount();host.remove();};root.render(React.createElement(ScreenFrame,{screen:{...s.screens.page,htmlContent:c.newHtml,position:{x:0,y:32}},lodLevel:2,isStaged:true,overrideSourceScreenId:'page',renderQualityKey:s.getStagedRenderContextKey(),onRenderQuality:(_id,key,report)=>useProjectStore.getState().setStagedRenderQuality(key,report)}));
+};
+</script></body></html>

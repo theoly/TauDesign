@@ -2,12 +2,14 @@ import { CraftRule } from './types';
 import { typographyCraft } from './typography';
 import { colorCraft } from './color';
 import { antiAiSlopCraft } from './anti-ai-slop';
+import { layoutCraft } from './layout';
 import { GenerationIntent } from '../promptBuilder';
 
 export * from './types';
 export * from './typography';
 export * from './color';
 export * from './anti-ai-slop';
+export * from './layout';
 
 /** 通用工艺规则的固定让位前言：冲突时一律以 DESIGN SPECIFICATION 为准 (REQ-OD-06 / BR-06.1) */
 export const CRAFT_DEFERENCE_PREAMBLE =
@@ -16,7 +18,8 @@ export const CRAFT_DEFERENCE_PREAMBLE =
 export const ALL_CRAFT_RULES: CraftRule[] = [
   typographyCraft,
   colorCraft,
-  antiAiSlopCraft
+  antiAiSlopCraft,
+  layoutCraft
 ];
 
 export function getCraftRules(intent: GenerationIntent = 'create_screen'): CraftRule[] {

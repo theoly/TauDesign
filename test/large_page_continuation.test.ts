@@ -3,6 +3,7 @@ import { streamWithContinuation } from '../src/services/ai/boundedContinuation';
 import { isOutputLimit, readContinuationSuffix } from '../src/services/ai/generationContinuation';
 import type { AIEngineCore, StreamTextOptions } from '../src/services/ai/engine/core/types';
 import { PipelineExecutor } from '../src/services/ai/engine/pipeline/executor';
+import {TaskBudget} from '../src/services/ai/taskBudget';
 const prefix='<artifact type="screen" title="会员"><main class="container-max"><h1>会员权益</h1>';
 const provider={id:'portable',name:'fixture',protocol:'openai_compatible' as const,baseUrl:'https://fixture.invalid/v1',apiKey:'fixture',isEnabled:true};
 const options={provider,model:'qwen3.8-flash',messages:[{role:'user' as const,content:'创建一个会员页面'}],maxTokens:8192};
@@ -60,10 +61,11 @@ test('portable HTML still goes through actual source safety checks',async()=>{
 });
 test('pipeline recovery tolerates new conversation history but blocks a changed authoring baseline',async()=>{
  const f=fixture([[prefix,'length'],['<section>一</section>','length'],['<section>二</section>','length'],['<button class="btn btn-primary">查看权益</button></main></artifact>','stop']]);
- const params={input:{rawPrompt:'新建一个页面',activeScreenId:null},provider,model:options.model,engineCore:f.core,screens:{},deviceProfile:'pc' as const,frameWidth:1440,baseSystemPrompt:'test'};
+ const budget=new TaskBudget({maxRequests:4,maxRequestedOutputTokens:32768,maxDurationMs:900000,maxRequestDurationMs:900000});
+ const params={input:{rawPrompt:'新建一个页面',activeScreenId:null},provider,model:options.model,engineCore:f.core,screens:{},deviceProfile:'pc' as const,frameWidth:1440,baseSystemPrompt:'test',taskBudget:budget};
  const first=await PipelineExecutor.execute(params);expect(first.continuationCheckpoint).toBeDefined();
- const stale=await PipelineExecutor.execute({...params,frameWidth:1500,resume:first.continuationCheckpoint});expect(stale.status).toBe('error');expect(f.calls).toHaveLength(3);
- const next=await PipelineExecutor.execute({...params,resume:first.continuationCheckpoint,conversationHistory:[{role:'assistant',content:'达到上限'}]});expect(next.status).toBe('applied');expect(f.calls).toHaveLength(4);
+ const stale=await PipelineExecutor.execute({...params,frameWidth:1500,resume:first.continuationCheckpoint,resumeContract:first.workflowContract});expect(stale.status).toBe('error');expect(f.calls).toHaveLength(3);
+ const next=await PipelineExecutor.execute({...params,resume:first.continuationCheckpoint,resumeContract:first.workflowContract,conversationHistory:[{role:'assistant',content:'达到上限'}]});expect(next.status).toBe('applied');expect(f.calls).toHaveLength(4);expect(next.taskBudget?.requests).toBe(4);budget.close();
 });
 test('natural stop, filtering, and absent HTML do not invent a suffix continuation',async()=>{
  for(const reason of ['stop','content_filter','SAFETY']){const f=fixture([[prefix,reason]]);await streamWithContinuation(f.core,options);expect(f.calls).toHaveLength(1);}

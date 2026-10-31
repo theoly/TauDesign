@@ -77,6 +77,8 @@ export const THIRD_PARTY_PRESETS: ThirdPartyPreset[] = [
 ];
 
 interface AIConfigState {
+  autoReferenceDesignRules:boolean;
+  setAutoReferenceDesignRules:(enabled:boolean)=>void;
   providers: AIProviderConfig[];
   bindings: Record<ModelRole, ModelRoleBinding>;
   
@@ -167,7 +169,7 @@ function resolveDefaultModel(provider: AIProviderConfig): string {
   return sanitizeModelId(model);
 }
 
-function loadStoredConfig(): { providers: AIProviderConfig[]; bindings: Record<ModelRole, ModelRoleBinding> } {
+function loadStoredConfig(): { providers: AIProviderConfig[]; bindings: Record<ModelRole, ModelRoleBinding>;autoReferenceDesignRules:boolean } {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -189,18 +191,18 @@ function loadStoredConfig(): { providers: AIProviderConfig[]; bindings: Record<M
       });
       return {
         providers,
-        bindings
+        bindings,autoReferenceDesignRules:parsed.autoReferenceDesignRules===true
       };
     }
   } catch (e) {
     // ignore
   }
-  return { providers: defaultProviders, bindings: defaultBindings };
+  return { providers: defaultProviders, bindings: defaultBindings,autoReferenceDesignRules:false };
 }
 
-function saveConfig(providers: AIProviderConfig[], bindings: Record<ModelRole, ModelRoleBinding>) {
+function saveConfig(providers: AIProviderConfig[], bindings: Record<ModelRole, ModelRoleBinding>,autoReferenceDesignRules:boolean) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ providers, bindings }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ providers, bindings,autoReferenceDesignRules }));
   } catch (e) {
     // ignore
   }
@@ -209,6 +211,8 @@ function saveConfig(providers: AIProviderConfig[], bindings: Record<ModelRole, M
 const initial = loadStoredConfig();
 
 export const useAIConfigStore = create<AIConfigState>((set, get) => ({
+  autoReferenceDesignRules:initial.autoReferenceDesignRules,
+  setAutoReferenceDesignRules:enabled=>set(state=>{const value=enabled===true;saveConfig(state.providers,state.bindings,value);return {autoReferenceDesignRules:value};}),
   providers: initial.providers,
   bindings: initial.bindings,
 
@@ -219,7 +223,7 @@ export const useAIConfigStore = create<AIConfigState>((set, get) => ({
         defaultModel: resolveDefaultModel(provider)
       };
       const providers = [...state.providers, providerWithModel];
-      saveConfig(providers, state.bindings);
+      saveConfig(providers, state.bindings,state.autoReferenceDesignRules);
       return { providers };
     });
   },
@@ -234,7 +238,7 @@ export const useAIConfigStore = create<AIConfigState>((set, get) => ({
         }
         return updated;
       });
-      saveConfig(providers, state.bindings);
+      saveConfig(providers, state.bindings,state.autoReferenceDesignRules);
       return { providers };
     });
   },
@@ -255,7 +259,7 @@ export const useAIConfigStore = create<AIConfigState>((set, get) => ({
           }
         });
       }
-      saveConfig(providers, bindings);
+      saveConfig(providers, bindings,state.autoReferenceDesignRules);
       return { providers, bindings };
     });
   },
@@ -263,7 +267,7 @@ export const useAIConfigStore = create<AIConfigState>((set, get) => ({
   setRoleBinding: (role, binding) => {
     set((state) => {
       const bindings = { ...state.bindings, [role]: binding };
-      saveConfig(state.providers, bindings);
+      saveConfig(state.providers, bindings,state.autoReferenceDesignRules);
       return { bindings };
     });
   },

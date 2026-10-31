@@ -175,4 +175,18 @@ describe('restyle batch orchestration and application guards',()=>{
       expect(calls).toBe(1);expect(host.textContent).toContain('重新试跑');expect(useProjectStore.getState().screens.a.htmlContent).toContain('人工修改');
     }finally{streamSpy.mockRestore();binding.mockRestore();}
   });
+  test('batch panel freezes the initial opt-in for trial and all confirmed targets after the global control changes',async()=>{
+    const prior=useAIConfigStore.getState();useAIConfigStore.setState({autoReferenceDesignRules:true});
+    const binding=spyOn(useAIConfigStore.getState(),'getActiveProviderForRole').mockReturnValue({provider,modelId:'test'}),requests:StreamTextOptions[]=[];
+    const streamSpy=spyOn(DefaultAIEngineCore.prototype,'streamText').mockImplementation(o=>{requests.push(o);const source=o.messages.at(-1)!.content,id=['a','b','c'].find(id=>source.endsWith(html(id)))!;return stream(`<artifact>${html(id).replace('p-4','p-6')}</artifact>`);});
+    try{
+      host=document.createElement('div');document.body.append(host);root=createRoot(host);await act(async()=>{root!.render(<RestylePanel scope="all" onClose={()=>{}}/>);});
+      act(()=>useAIConfigStore.getState().setAutoReferenceDesignRules(false));
+      for(let i=0;i<3;i++)await act(async()=>{(host!.querySelectorAll('input[type="checkbox"]')[i] as HTMLInputElement).click();});
+      const find=(text:string)=>Array.from(host!.querySelectorAll('button')).find(b=>b.textContent?.includes(text))!;
+      await act(async()=>{find('试跑单个目标').click();await pause();});expect(requests).toHaveLength(1);expect(host.textContent).toContain('本次设计依据');
+      await act(async()=>{find('确认效果').click();await pause();await pause();});
+      expect(requests).toHaveLength(3);expect(Object.values(useProjectStore.getState().screens).every(s=>s.htmlContent.includes('p-6'))).toBe(true);expect(useAIConfigStore.getState().autoReferenceDesignRules).toBe(false);
+    }finally{streamSpy.mockRestore();binding.mockRestore();useAIConfigStore.setState(prior,true);}
+  });
 });

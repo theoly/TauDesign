@@ -1,5 +1,8 @@
+import {draftExecutionIssue} from '../services/ai/draftExecutionSource';
 import {hasTemplateContract,compileComponentTemplate} from '../utils/componentTemplate';
 import {candidateRepairEligibility,repairCandidate} from '../services/ai/candidateRepair';
+import {isPageRepairRecord} from '../services/ai/pageRepairRecord';
+import {repairGuidanceIssue} from '../services/ai/designKnowledge/repairTrace';
 import type {PageRepairModel} from '../services/ai/controlledStyleRepair';
 import type {PageRepairRecord} from '../services/ai/pageRepairRecord';
 import {inspectDesignEntities,designEntitySummary} from '../services/ai/designEntityValidation';
@@ -66,6 +69,7 @@ import {
 } from '../utils/canvasLayout';
 import { deleteElementByNid } from '../utils/domPatcher';
 import { checkGenerationQuality, checkGenerationSourceSafety } from '../services/ai/generationQuality';
+import {formRuleScope} from '../services/ai/formBehaviorChanges';
 import type { RenderedQualityReport } from '../utils/renderedQuality';
 import { buildScreenDocument } from '../utils/screenDocument';
 import { getBaseCss } from '../styles/baseCss';
@@ -526,12 +530,14 @@ const initialScreen2: Screen = {
 function isStagedTaskCurrent(state: ProjectState): boolean {
   const staged = state.stagedScreen;
   const contract = staged?.workflowContract;
+  if(draftExecutionIssue(staged?.executionRecord,staged?.newHtml))return false;
+  if(staged?.repair&&(!isPageRepairRecord(staged.repair)||(staged.repair.guidance&&(!contract||repairGuidanceIssue(staged.repair.guidance,contract,staged.repair.status==='repaired')))))return false;
   if (staged?.baselineFingerprint && staged.baselineFingerprint !== contentFingerprint(state.screens[staged.targetScreenId]?.htmlContent ?? '')) return false;
   if (staged?.restoredFromDisk && staged.projectFingerprint && staged.projectFingerprint !== knowledgeFingerprint(state)) return false;
   if (staged?.designOriginFingerprint && staged.designOriginFingerprint !== contentFingerprint(JSON.stringify([
     state.designSystemOrigin?.kind, state.designSystemOrigin?.sourceId, state.designSystemOrigin?.sourceFingerprint,
     state.designSystemOrigin?.tokenVersion, state.designSystemOrigin?.tokenFingerprint]))) return false;
-  if (!staged || !contract) return true; // Legacy candidates still use the existing render and quality guards.
+  if (!staged || contract===undefined) return true; // Explicitly malformed contracts cannot become legacy candidates.
   if(!resolveWorkflowValidation(contract,'candidate').ok)return false;
   if(contract.device.profile!==state.settings.deviceProfile || contract.device.frameWidth!==state.settings.frameWidth)return false;
   if (contract.operation !== 'modify' && contract.operation !== 'restyle') return false;
@@ -577,6 +583,8 @@ function stagedDeliveryReport(state: ProjectState): StagedDeliveryReport {
   const staged = state.stagedScreen;
   const target = staged && state.screens[staged.targetScreenId];
   if (!staged || !target) return { status: 'blocked', checks: [{ id: 'task', status: 'blocked', message: '候选或目标页面不存在。' }] };
+  const draftSourceIssue=draftExecutionIssue(staged.executionRecord,staged.newHtml);
+  if(draftSourceIssue)return {status:'blocked',checks:[{id:'task',status:'blocked',message:draftSourceIssue}]};
   if(state.stagedRepairStatus)return {status:'blocked',checks:[{id:'task',status:'blocked',message:'候选正在受控修复与复验，暂不能采纳。'}]};
   const checks: StagedDeliveryReport['checks'] = [];
   const referenceIssue=libraryReferenceIssue(state);
@@ -588,7 +596,7 @@ function stagedDeliveryReport(state: ProjectState): StagedDeliveryReport {
   const safety = checkGenerationSourceSafety(staged.newHtml, options);
   checks.push({ id: 'source', status: safety.passed ? 'passed' : 'blocked', message: safety.passed ? 'HTML 源安全检查通过。' : safety.findings.find(item => item.severity === 'error')?.message ?? 'HTML 源不安全。' });
   const quality = checkGenerationQuality(staged.newHtml, { ...options, baselineHtml: target.htmlContent,
-    protectedNids: state.getProtectedNids(staged.targetScreenId), modificationRequest: staged.modificationRequest });
+    protectedNids: state.getProtectedNids(staged.targetScreenId), modificationRequest: staged.modificationRequest,formRuleRoots:formRuleScope(staged.workflowContract) });
   checks.push({ id: 'quality', status: quality.passed ? 'passed' : 'blocked', message: quality.passed ? '结构、文案与样式规则检查通过。' : quality.findings.find(item => item.severity === 'error')?.message ?? '静态质量检查未通过。' });
   if(taskPlan.ok&&taskPlan.plan.stages.includes('structure')&&staged.workflowContract){
     const structure=inspectWorkflowStructure(staged.workflowContract,target.htmlContent,staged.newHtml,options);
@@ -2323,7 +2331,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       designSystem: { id: state.designSystem.id, tokenFingerprint: designTokenFingerprint(state.designSystem.tokens) },
       ...(state.designLibraryBinding ? { designLibrary: state.designLibraryBinding } : {}), source,
       quality: checkGenerationQuality(candidate.newHtml, { ...options, baselineHtml: target.htmlContent,
-        protectedNids: state.getProtectedNids(candidate.targetScreenId), modificationRequest: candidate.modificationRequest }),
+        protectedNids: state.getProtectedNids(candidate.targetScreenId), modificationRequest: candidate.modificationRequest,formRuleRoots:formRuleScope(candidate.workflowContract) }),
       delivery: stagedDeliveryReport(state), ...(render ? { render } : {}), ...(projectAssets ? { projectAssets } : {}) });
     set({ stagedValidationEvidence: evidence, stagedCandidateSaveStatus: 'pending' });
     const stillCurrent = () => get().id === state.id && get().stagedScreen === candidate && get().stagedValidationEvidence === evidence;
@@ -2423,7 +2431,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   stageScreenChange: (targetScreenId, newHtml, screenName, modificationRequest, workflowContract, executionRecord, repair) => {
     const sourceSafe = checkGenerationSourceSafety(newHtml).passed;
     const normalized = sourceSafe ? normalizeMobileNavigation(newHtml, get().settings) : { html: newHtml, title: undefined };
-    const taskSnapshot = workflowContract ? structuredClone(workflowContract) : undefined;
+    const taskSnapshot = workflowContract===undefined?undefined:structuredClone(workflowContract);
     const state = get();
     const candidate: StagedCandidateData = { ...(repair?{repair:structuredClone(repair)}:{}), candidateId: `candidate-${crypto.randomUUID()}`, targetScreenId, newHtml: normalized.html, screenName,
       baselineFingerprint: contentFingerprint(state.screens[targetScreenId]?.htmlContent ?? ''),

@@ -211,25 +211,43 @@ pub fn project_append_line(root: String, rel: String, line: String) -> Result<()
 
 /// 读取 JSONL 的最后 N 行（打开工程时恢复最近若干轮对话）。
 /// 无法解析的行由调用方跳过——这正是 JSONL 相对单 JSON 的关键优势。
+fn read_jsonl_lines(reader: impl BufRead, limit: Option<usize>) -> Result<Vec<String>, String> {
+    if limit == Some(0) {
+        return Ok(vec![]);
+    }
+    let mut lines = std::collections::VecDeque::with_capacity(limit.unwrap_or(0).min(1024));
+    for bytes in reader.split(b'\n') {
+        let bytes = bytes.map_err(|e| format!("读行失败: {e}"))?;
+        // A crash may cut the final UTF-8 code point. Drop that row, never its valid neighbors.
+        let Ok(mut line) = String::from_utf8(bytes) else {
+            continue;
+        };
+        if line.ends_with('\r') {
+            line.pop();
+        }
+        if line.trim().is_empty() {
+            continue;
+        }
+        if limit.is_some_and(|count| lines.len() == count) {
+            lines.pop_front();
+        }
+        lines.push_back(line);
+    }
+    Ok(lines.into_iter().collect())
+}
+
 #[tauri::command]
-pub fn project_read_tail_lines(root: String, rel: String, limit: usize) -> Result<Vec<String>, String> {
+pub fn project_read_tail_lines(
+    root: String,
+    rel: String,
+    limit: usize,
+) -> Result<Vec<String>, String> {
     let path = resolve(&root, &rel)?;
     if !path.exists() {
         return Ok(vec![]);
     }
     let f = fs::File::open(&path).map_err(|e| format!("读取失败: {e}"))?;
-    let mut buf: std::collections::VecDeque<String> = std::collections::VecDeque::with_capacity(limit);
-    for line in BufReader::new(f).lines() {
-        let line = line.map_err(|e| format!("读行失败: {e}"))?;
-        if line.trim().is_empty() {
-            continue;
-        }
-        if buf.len() == limit {
-            buf.pop_front();
-        }
-        buf.push_back(line);
-    }
-    Ok(buf.into_iter().collect())
+    read_jsonl_lines(BufReader::new(f), Some(limit))
 }
 
 #[tauri::command]
@@ -239,11 +257,7 @@ pub fn project_read_all_lines(root: String, rel: String) -> Result<Vec<String>, 
         return Ok(vec![]);
     }
     let f = fs::File::open(&path).map_err(|e| format!("读取失败: {e}"))?;
-    BufReader::new(f)
-        .lines()
-        .collect::<Result<Vec<_>, _>>()
-        .map(|v| v.into_iter().filter(|l| !l.trim().is_empty()).collect())
-        .map_err(|e| format!("读行失败: {e}"))
+    read_jsonl_lines(BufReader::new(f), None)
 }
 
 /// 写入二进制资产（图片附件转存，T-AE-32）。入参为 base64，不含 data URI 前缀。
@@ -302,6 +316,58 @@ pub fn project_delete(root: String, rel: String) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn jsonl_invalid_utf8_rows_do_not_hide_valid_neighbors() {
+        let root = std::env::temp_dir().join(format!("tdesign-jsonl-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("history.jsonl");
+        let mut bytes = b"{\"turnId\":\"first\"}\r\n\n".to_vec();
+        bytes.extend_from_slice(&[0xff, b'\n']);
+        bytes.extend_from_slice(b"{\"turnId\":\"last\"}\n");
+        bytes.extend_from_slice(&[0xe4, 0xb8]);
+        fs::write(&path, bytes).unwrap();
+        let root_str = root.to_str().unwrap().to_string();
+        let expected = vec![
+            "{\"turnId\":\"first\"}".to_string(),
+            "{\"turnId\":\"last\"}".to_string(),
+        ];
+        assert_eq!(
+            project_read_all_lines(root_str.clone(), "history.jsonl".into()).unwrap(),
+            expected
+        );
+        assert_eq!(
+            project_read_tail_lines(root_str.clone(), "history.jsonl".into(), 1).unwrap(),
+            vec![expected[1].clone()]
+        );
+        assert!(
+            project_read_tail_lines(root_str.clone(), "history.jsonl".into(), 0)
+                .unwrap()
+                .is_empty()
+        );
+        assert_eq!(
+            project_read_tail_lines(root_str, "history.jsonl".into(), usize::MAX).unwrap(),
+            expected
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn jsonl_io_errors_remain_errors() {
+        struct Broken;
+        impl std::io::Read for Broken {
+            fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("disk unavailable"))
+            }
+        }
+        impl BufRead for Broken {
+            fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+                Err(std::io::Error::other("disk unavailable"))
+            }
+            fn consume(&mut self, _: usize) {}
+        }
+        assert!(read_jsonl_lines(Broken, None).is_err());
+    }
 
     #[test]
     fn directory_open_accepts_existing_absolute_folders_only() {

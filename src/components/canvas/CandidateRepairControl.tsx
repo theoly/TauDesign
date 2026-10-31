@@ -3,6 +3,8 @@ import {useProjectStore} from '../../stores/useProjectStore';
 import {useAIConfigStore} from '../../stores/useAIConfigStore';
 import {createAIEngineCore} from '../../services/ai/engine/core';
 import {isPageRepairRecord} from '../../services/ai/pageRepairRecord';
+import {createSingleRequestBudget} from '../../services/ai/taskBudgetPolicy';
+import {RepairGuidanceSource} from '../chat/DesignGuidanceCard';
 
 export function RepairReceipt({value}:{value:unknown}) {
  if(!isPageRepairRecord(value))return value===undefined?null:<p className="text-amber-300">修复记录损坏；不能据此重试或跳过检查。</p>;
@@ -11,6 +13,7 @@ export function RepairReceipt({value}:{value:unknown}) {
   <p className="text-slate-400">{value.message}</p>
   <p className="break-all text-slate-500">{value.beforeHtmlFingerprint} → {value.afterHtmlFingerprint??'无结果'} · 请求 {value.requestFingerprint}</p>
   {value.usage&&<p className="text-slate-500">额外用量{value.usageEstimated?'（估算）':''}：输入 {value.usage.inputTokens} / 输出 {value.usage.outputTokens} Token</p>}
+  <RepairGuidanceSource trace={value.guidance}/>
   {value.operations.map((op,i)=><p key={i} className="break-all text-slate-500">{op.nid} · {op.type} · {op.value}</p>)}
   <p className="text-slate-500">记录用于回溯，采纳前仍执行当前检查。</p>
  </details>;
@@ -24,8 +27,10 @@ export function CandidateRepairControl() {
   setError('');const binding=config.getActiveProviderForRole('code')??config.getActiveProviderForRole('chat');
   if(!binding){setError('请先在 Provider 配置中选择代码模型。');return;}
   const job=new AbortController();controller.current=job;
-  try{await useProjectStore.getState().repairStagedCandidate({core:createAIEngineCore(),provider:binding.provider,model:binding.modelId},job.signal);}
-  finally{if(controller.current===job)controller.current=null;}
+  const budget=createSingleRequestBudget(1800);
+  try{await useProjectStore.getState().repairStagedCandidate({core:createAIEngineCore(),taskBudget:budget,provider:binding.provider,model:binding.modelId},job.signal);}
+  catch(error){setError(error instanceof Error?error.message:'修复请求失败。');}
+  finally{budget.close();if(controller.current===job)controller.current=null;}
  };
  return <section aria-label="候选受控修复" className="space-y-2 border-t border-slate-800 pt-3">
   <button type="button" disabled={busy||!eligibility.allowed} onClick={()=>void start()} className="rounded-lg bg-blue-600 px-3 py-1.5 text-white disabled:bg-slate-800 disabled:text-slate-500">{busy?(state.stagedRepairStatus==='verifying'?'正在完整复验…':'正在修复…'):'修复一次并重新检查'}</button>

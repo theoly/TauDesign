@@ -8,6 +8,9 @@ import {compareStructure} from '../../utils/structureGuard';
 import {checkStructureIntegrity} from './engine/pipeline/interceptors/guardInterceptor';
 import {validReferenceImageIdentity,validLibrarySourceIdentity,creationSourceStages} from './workflowSources';
 import {analyzePipelineIntent} from './engine/pipeline/interceptors/intentInterceptor';
+import {guidancePacketIssue} from './designKnowledge/receipt';
+import {pageTaskPlanIssue} from './pageTaskPlan';
+import {isTaskContractShape} from './taskContractShape';
 
 export interface WorkflowValidationPlan {version:1;workflowId:string;fingerprint:string;stages:WorkflowValidationStage[]}
 export interface WorkflowStageCheck {id:WorkflowValidationStage;status:'passed'|'blocked'|'pending';message:string}
@@ -26,13 +29,14 @@ export function createWorkflowValidationPlan(workflow:WorkflowDescriptor,multiPa
   return {version:1,workflowId:workflow.id,stages,fingerprint:contentFingerprint(JSON.stringify([1,workflow.id,workflow.operation,
     workflow.strategy,workflow.requiredContext,workflow.protectedScope,stages]))};
 }
-export function resolveWorkflowValidation(contract:DesignTaskContract|undefined,purpose:'candidate'|'batch'|'structured'|'create'|'import'|'analysis'|'page-plan'):
+export function resolveWorkflowValidation(contract:DesignTaskContract|undefined,purpose:'candidate'|'batch'|'structured'|'create'|'import'|'analysis'|'page-plan',options:{preflight?:boolean}={}):
   {ok:true;plan:WorkflowValidationPlan;workflow?:WorkflowDescriptor}|{ok:false;message:string} {
-  if(!contract){
+  if(contract===undefined){
     if(purpose==='structured'||purpose==='create'||purpose==='import'||purpose==='analysis'||purpose==='page-plan')return {ok:false,message:'页面执行缺少明确任务合同。'};
     const stages:WorkflowValidationStage[]=[...bottomLine,...(purpose==='batch'?['structure' as const]:[])];
     return {ok:true,plan:{version:1,workflowId:`legacy-${purpose}`,stages,fingerprint:contentFingerprint(JSON.stringify(stages))}};
   }
+  if(!isTaskContractShape(contract))return {ok:false,message:'任务合同结构损坏，不能退回旧版无合同流程。'};
   if(contract.version!==1 || !Object.hasOwn(WORKFLOW_CATALOG,contract.workflowId))return {ok:false,message:'未知或无效的工作流合同，不能应用页面。'};
   const workflow=WORKFLOW_CATALOG[contract.workflowId];
   if(contract.operation!==workflow.operation || contract.strategy!==workflow.strategy)return {ok:false,message:'工作流身份与合同操作或策略不匹配。'};
@@ -47,6 +51,11 @@ export function resolveWorkflowValidation(contract:DesignTaskContract|undefined,
   if((creationSourceStages(workflow.id).includes('reference-input')&&!validReferenceImageIdentity(contract.referenceImage))||
     (creationSourceStages(workflow.id).includes('library-binding')&&(!validLibrarySourceIdentity(contract.librarySource)||!contract.designSystem)))return {ok:false,message:'工作流缺少有效的本轮参考图或设计库来源身份。'};
   if(contract.multiPage&&!validMultiPageScope(contract.multiPage))return {ok:false,message:'多页面任务范围无效。'};
+  const guidanceIssue=guidancePacketIssue(contract,!options.preflight);
+  if(guidanceIssue)return {ok:false,message:guidanceIssue};
+  const planIssue=pageTaskPlanIssue(contract);
+  if(planIssue)return {ok:false,message:planIssue};
+  if(contract.pageTaskPlan?.plan.questions.length)return {ok:false,message:'业务规划仍有待确认项，不能应用页面。'};
   const plan=createWorkflowValidationPlan(workflow,contract.multiPage);
   if(contract.validationPlan!==undefined && JSON.stringify(contract.validationPlan)!==JSON.stringify(plan))return {ok:false,message:'工作流验收计划已变化或被修改，请重新生成候选。'};
   return {ok:true,plan,workflow};
@@ -57,8 +66,10 @@ export function evaluateWorkflowValidation(plan:WorkflowValidationPlan,evidence:
 }
 export function isWorkflowValidationReport(value:unknown):value is WorkflowValidationReport {
   const r=value as WorkflowValidationReport|undefined;
+  const stages:WorkflowValidationStage[]=['design-entities','multi-page-scope','page-plan-schema','reference-input','library-binding','analysis-schema','source-safety','quality','structure','render','import-preview','asset-references','asset-files'];
+  const emptyAllowed=Boolean(r?.plan&&Object.hasOwn(WORKFLOW_CATALOG,r.plan.workflowId)&&['answer','theme-proposal'].includes(WORKFLOW_CATALOG[r.plan.workflowId as keyof typeof WORKFLOW_CATALOG].operation));
   return Boolean(r && ['ready','blocked','pending'].includes(r.status) && r.plan?.version===1 && typeof r.plan.workflowId==='string' && typeof r.plan.fingerprint==='string' &&
-    Array.isArray(r.plan.stages) && r.plan.stages.length<=16 && r.plan.stages.every(s=>typeof s==='string') && new Set(r.plan.stages).size===r.plan.stages.length &&
+    Array.isArray(r.plan.stages) && (r.plan.stages.length>0||emptyAllowed)&&r.plan.stages.length<=16 && r.plan.stages.every(s=>stages.includes(s)) && new Set(r.plan.stages).size===r.plan.stages.length &&
     Array.isArray(r.checks) && r.checks.length===r.plan.stages.length && r.checks.every((c,index)=>c && c.id===r.plan.stages[index] &&
       ['passed','blocked','pending'].includes(c.status) && typeof c.message==='string') &&
     r.status===(r.checks.some(c=>c.status==='blocked')?'blocked':r.checks.some(c=>c.status==='pending')?'pending':'ready'));

@@ -5,6 +5,7 @@ import { MockTransport } from '../src/services/ai/engine/transport/mockTransport
 import { EngineMessage } from '../src/services/ai/engine/core/types';
 import { minimalistSlateTheme } from '../src/utils/themePresets';
 import { AIProviderConfig } from '../src/types/provider';
+import { ALL_CRAFT_RULES } from '../src/services/ai/craft';
 
 /**
  * ISSUE-015 回归：
@@ -67,6 +68,7 @@ describe('ISSUE-015 System Prompt 生产接线与明暗模式', () => {
     expect(sys).toContain('### CLASS WHITELIST');
     expect(sys).toContain('### DESIGN SPECIFICATION');
     expect(sys).toContain('### OUTPUT CONTRACT');
+    for (const rule of ALL_CRAFT_RULES) expect(sys).toContain(rule.body);
     // 白名单必须是真的类名，不是空壳
     expect(sys).toContain('.card');
     expect(sys.length).toBeGreaterThan(2000);

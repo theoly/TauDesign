@@ -19,6 +19,18 @@ export interface WorkflowDescriptor {
   acceptance: readonly string[];
 }
 
+export type DesignRuleProtocol='html'|'finite-json'|'fragment-json'|'style-patch-json'|'analysis-json'|'function-plan-json'|'page-plan-json'|'source-css';
+/** Trusted capability policy; uploaded documents and rule IDs cannot add protocols or mutation rights. */
+export function workflowRulePolicy(id:DesignWorkflowId):{protocols:readonly DesignRuleProtocol[];reason:string} {
+  const workflow=WORKFLOW_CATALOG[id];
+  if(!workflow)return {protocols:[],reason:'未知工作流，不注入规则。'};
+  if(workflow.operation==='create')return {protocols:['html'],reason:'完整页、分区与续写沿用同一工艺窗口。'};
+  if(workflow.operation==='modify')return {protocols:['html','finite-json','fragment-json'],reason:'仅在已授权范围按对应输出协议参考指导。'};
+  if(workflow.operation==='restyle')return {protocols:['html','finite-json','style-patch-json'],reason:'只参考视觉规则，结构与文案保护独立执行。'};
+  if(id==='review-page-modification')return {protocols:['analysis-json'],reason:'仅辅助问题分析，不授予执行权限。'};
+  return {protocols:[],reason:workflow.operation==='import'?'确定性来源CSS适配不接受模型审美改写。':workflow.operation==='analyze'?'先组织任务和页面事实，不用视觉偏好决定功能。':'当前流程不生成或修改页面，不注入设计规则。'};
+}
+
 /** One catalog for the work TauDesign can currently execute. Unsupported prototype behavior is not advertised here. */
 export const WORKFLOW_CATALOG: Readonly<Record<DesignWorkflowId, WorkflowDescriptor>> = {
   'plan-page-variants':{id:'plan-page-variants',priority:83,operation:'analyze',strategy:'review-first',requiredContext:['request','design-system'],protectedScope:'existing-page',validationStages:['page-plan-schema'],acceptance:['为同一页面规划2～4个可比较的方案，确认前不生成HTML、不改工程','用户可编辑方案差异，方案之间不建立业务页面关联','全部通过后并排新增副本供比较，一次撤销；原页面与工程Token保持不变']},

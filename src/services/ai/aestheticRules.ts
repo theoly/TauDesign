@@ -18,15 +18,8 @@ export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY — these rules are
 - 配色可见性与美观度：文字、图标和关键控件必须与实际背景清晰区分，严禁同色或近似色导致内容难以辨认。更换背景时同步检查并调整前景色；图片、渐变、半透明背景按叠加效果判断，必要时使用 Token 底色或遮罩。浅色/深色模式均须清晰可辨，并保持品牌色协调、语义一致和主次层级，不为柔和、低饱和或装饰效果牺牲可见性。
 - COLOR ROLES: 背景 bg，卡片 surface，分组 surface-alt；品牌强调约5–10%，集中于主操作/选中。普通指标/图标用中性色，语义色仅表示状态。主色文字用 .text-primary，主按钮用 .btn-primary；勿写死白字、蓝链接或整段彩色正文。
 - ${colorUsageRules()}
-- TYPOGRAPHY LADDER (3 levels):
-  * Heading: .text-xl / .text-2xl + .font-bold
-  * Subtitle / helper: .text-xs / .text-sm + .text-muted
-  * Body: .text-sm / .text-md, default weight
-  Uniform text size/color is a FAILURE.
-- SPACING RHYTHM (three distinct tiers):
-  * intra-component: .gap-1 / .gap-2
-  * card padding: .p-4 / .p-5 / .p-6
-  * page sections: see the device-specific rules below
+- TYPOGRAPHY LADDER: 标题/正文/辅助三层，具体字号遵守设备档位与排版工艺。
+- SPACING RHYTHM: 组内.gap-1/.gap-2，卡片与章节间距按设备档位；组间大于组内。
 - ICONS: 按钮、输入框、指标卡与列表行须有 Lucide/Heroicons 风格内联SVG图标，class="icon"、stroke="currentColor"；无图标页面不合格。
 - REALISTIC CONTENT: 使用真实感中文姓名、电话、日期、金额和状态徽标；禁用“占位文字”/“Lorem ipsum”/“标题1”。
 - 按钮文字默认不换行：.btn 已设 white-space: nowrap；不插入<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal 覆盖并调高按钮。

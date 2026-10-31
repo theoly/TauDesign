@@ -1,0 +1,30 @@
+<!doctype html><html><meta charset="utf-8"><title>设计依据与属性微调受控验收</title><body style="margin:0;background:#020617"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {TaskBudgetCard} from '/src/components/chat/TaskBudgetCard.tsx';
+import {DesignGuidanceCard} from '/src/components/chat/DesignGuidanceCard.tsx';
+import {DesignBriefCard} from '/src/components/chat/DesignBriefCard.tsx';
+import {PropertyInspector} from '/src/components/inspector/PropertyInspector.tsx';
+import {TaskBudget} from '/src/services/ai/taskBudget.ts';
+import {buildDesignBrief} from '/src/services/ai/designBrief.ts';
+import {buildDesignTaskContract} from '/src/services/ai/designWorkflow.ts';
+import {makeGuidancePacket} from '/src/services/ai/designKnowledge/receipt.ts';
+import {selectDesignRules} from '/src/services/ai/designKnowledge/selector.ts';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useAIConfigStore} from '/src/stores/useAIConfigStore.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+const store=useProjectStore.getState();store.initNewProject({name:'独立受控验收',deviceProfile:'mobile',createSpecimen:false});
+const original='<main data-nid="root0001"><section data-nid="outer001"><section data-nid="inner001"><button data-nid="target01" class="btn btn-primary">继续</button></section><p data-nid="keep0001">保留业务说明</p></section></main>';
+store.addScreen({name:'页面',htmlContent:original},'page');store.selectNodeByNid('page','target01');
+useAIConfigStore.setState({getActiveProviderForRole:()=>({provider:{id:'fixture',name:'本地受控模型',protocol:'openai_compatible',baseUrl:'https://invalid.test',apiKey:'FIXTURE_SECRET'},modelId:'fixture'})});
+const fixture={calls:0,original,state:()=>useProjectStore.getState(),originalGenerateObject:DefaultAIEngineCore.prototype.generateObject};window.fixture=fixture;
+DefaultAIEngineCore.prototype.generateObject=async function(){fixture.calls++;return {requiresPageRewrite:false,reason:'',operations:[{nid:'target01',type:'add_classes',value:'font-semibold'}]};};
+const contract=buildDesignTaskContract({intent:'create_screen',request:'长正文',deviceProfile:'mobile',frameWidth:390});
+contract.designGuidance=makeGuidancePacket(contract,selectDesignRules({request:'长正文',operation:'create',device:'mobile',scope:'page',maxChars:800}));
+const ledger=new TaskBudget({maxRequests:4,maxRequestedOutputTokens:34568,maxDurationMs:900000,maxRequestDurationMs:900000});ledger.reserve(8192).settle({inputTokens:300,outputTokens:500});ledger.close();
+const brief=buildDesignBrief({request:'会员档案',device:'mobile',mode:'light',designSystem:useProjectStore.getState().designSystem,globalDecisions:[],components:[]});
+const section=(title,children)=>React.createElement('section',{style:{minWidth:0}},React.createElement('h1',{style:{color:'#e2e8f0',fontSize:16,marginBottom:12}},title),children);
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement('main',{style:{padding:24,display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:24}},
+section('设计简表',React.createElement(DesignBriefCard,{brief})),section('依据与预算',React.createElement(React.Fragment,null,React.createElement(DesignGuidanceCard,{contract}),React.createElement(TaskBudgetCard,{value:ledger.snapshot()}))),section('属性微调',React.createElement(PropertyInspector))));
+</script></body></html>

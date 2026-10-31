@@ -8,6 +8,8 @@ import { EvidenceRecord } from '../canvas/CandidateEvidencePanel';
 import { DeliveryPreviewImage } from './DeliveryPreviewImage';
 import { RestyleDeliveryHistoryPanel } from './RestyleDeliveryHistoryPanel';
 import {VisualEvidencePanel} from './VisualEvidencePanel';
+import {DesignGuidanceCard} from '../chat/DesignGuidanceCard';
+import {HistoricalDraftSource} from '../chat/HistoricalDraftSource';
 
 const modes = { replace: '替换原页', 'force-replace': '强制采纳', 'keep-both': '保留两版', 'confirm-structure-keep-both': '确认结构变更并保留两版', 'confirm-structure-replace': '确认结构变更并替换' };
 const statuses = { prepared: '状态待确认', applied: '已应用', aborted: '已取消' };
@@ -56,6 +58,8 @@ export function DeliveryHistoryPanel({ projectId, folderPath, screen, revision, 
           {record.reason && <p className="text-amber-300">{record.reason}</p>}
           {record.status === 'prepared' && <p className="text-amber-300">档案准备记录已保存，应用状态未完成确认。</p>}
           <ModificationReviewSource receipt={record.candidate.workflowContract?.modificationReview} />
+          <DesignGuidanceCard contract={record.candidate.workflowContract} historical/>
+          <HistoricalDraftSource execution={record.candidate.executionRecord}/>
           <DeliveryPreviewImage record={record} projectId={projectId} folderPath={folderPath} />
           {record.status==='applied'&&<VisualEvidencePanel projectId={projectId} folderPath={folderPath} kind="single" eventId={record.id} screenId={record.after.id}/>}
           <details><summary className="cursor-pointer text-slate-400">修改前后页面代码</summary>

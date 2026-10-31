@@ -1,7 +1,11 @@
 import {isMultiPageDelivery} from '../../services/ai/multiPageContract';
 import React from 'react';
+import {DesignGuidanceCard,RepairGuidanceSource} from '../chat/DesignGuidanceCard';
+import {HistoricalDraftSource} from '../chat/HistoricalDraftSource';
 import type {Screen} from '../../types/project';
 import {createdPageFingerprint,isPageCreationEvidence} from '../../services/ai/pageCreationValidation';
+import {PageTaskPlanCard} from '../chat/PageTaskPlanCard';
+import {PageTaskCoverageCard} from '../chat/PageTaskCoverageCard';
 
 const stageNames={'design-entities':'设计实体引用','multi-page-scope':'多页面计划范围','page-plan-schema':'页面计划格式','reference-input':'参考图片输入','library-binding':'设计库绑定与组件','source-safety':'源码安全',quality:'静态质量','asset-references':'资源登记','asset-files':'资源文件',render:'实际渲染',structure:'结构授权','analysis-schema':'分析格式','import-preview':'导入预览'};
 
@@ -17,9 +21,13 @@ export function PageCreationEvidencePanel({screen}:{screen:Screen}) {
   return <details className="rounded-xl border border-slate-800 bg-slate-950 p-3 text-xs">
     <summary className="cursor-pointer font-medium text-slate-300">页面创建验收记录</summary>
     <div className="mt-3 space-y-2 break-words text-slate-400">
+      <DesignGuidanceCard contract={raw.contract} historical/>
+      <HistoricalDraftSource execution={raw.execution}/>
       <p>仅记录创建时的检查，不代表当前页面已重新验收。{changed?' 页面内容已变化。':''}</p>
       <p>{new Date(raw.checkedAt).toLocaleString()} · {raw.contract.device?.profile} / {raw.contract.device?.frameWidth}px</p>
       <p>{delivery?.request??raw.contract.request}</p>
+      <PageTaskPlanCard contract={raw.contract}/>
+      {!changed&&<PageTaskCoverageCard contract={raw.contract} html={screen.htmlContent}/>}
       {delivery&&<><p>本页：{historicalPage!.name} · 第 {delivery.pages.findIndex(p=>p.screenId===scope?.screenId)+1} / {delivery.pages.length} {unit}</p>
         <details><summary className="cursor-pointer">本次生成请求（技术记录）</summary><p className="mt-2 whitespace-pre-wrap">{raw.contract.request}</p></details></>}
       {raw.contract.referenceImage&&<p>参考图片：{raw.contract.referenceImage.name} · {raw.contract.referenceImage.fingerprint}。仅记录输入身份，不代表已通过图片视觉相似度检查。</p>}
@@ -37,6 +45,7 @@ export function PageCreationEvidencePanel({screen}:{screen:Screen}) {
         {raw.repair.initialRender.findings.filter(f=>f.severity==='error').map((f,i)=><p key={i}>{f.nid}：{f.message}</p>)}
         {raw.repair.operations.map((op,i)=><p key={i}>{op.nid} · {op.type} · {op.value}</p>)}
         {raw.repair.usage&&<p>{raw.repair.usageEstimated?'估算':'记录'}用量：输入 {raw.repair.usage.inputTokens} / 输出 {raw.repair.usage.outputTokens}</p>}
+        <RepairGuidanceSource trace={raw.repair.guidance}/>
       </details>}
       <p>iframe 检查 {raw.render.inspected} 个节点 · 核对 {raw.files.length} 个本地文件</p>
       {!!raw.quality.findings.length&&<details><summary className="cursor-pointer">静态检查发现 {raw.quality.findings.length} 项</summary>

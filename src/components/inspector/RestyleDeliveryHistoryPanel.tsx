@@ -1,4 +1,5 @@
 import { ModificationReviewSource } from '../chat/ModificationReviewSource';
+import {DesignGuidanceCard} from '../chat/DesignGuidanceCard';
 import React,{useEffect,useState} from 'react';
 import type {Screen} from '../../types/project';
 import {contentFingerprint} from '../../services/ai/designWorkflow';
@@ -51,6 +52,7 @@ export function RestyleDeliveryHistoryPanel({projectId,folderPath,screen,revisio
         <div className="mt-2 space-y-2">
           <p className="whitespace-pre-wrap break-words text-slate-400">{typeof record.outcome.workflowContract?.request==='string'?record.outcome.workflowContract.request:'未记录原始请求；按当时项目设计系统重塑。'}</p>
           <ModificationReviewSource receipt={record.outcome.workflowContract?.modificationReview} />
+          <DesignGuidanceCard contract={record.outcome.workflowContract} historical/>
           {record.batchId&&<p className="break-all text-slate-600">批次：{record.batchId}</p>}
           {record.status==='prepared'&&<p className="text-amber-300">准备档案已保存，应用状态未完成确认。</p>}
           {record.reason&&<p className="text-amber-300">{record.reason}</p>}

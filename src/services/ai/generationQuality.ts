@@ -6,6 +6,7 @@ import { parseHtmlCopy } from '../../utils/htmlDocument';
 import { techBlueTheme } from '../../utils/themePresets';
 import { inspectActionIntegrity } from './actionIntegrity';
 import { htmlIsComplete } from '../../utils/htmlCompleteness';
+import {inspectFormRuleChanges} from './formBehaviorChanges';
 
 export interface QualityFinding {
   code: string;
@@ -25,6 +26,7 @@ export interface QualityOptions {
   preserveNids?: boolean;
   modificationRequest?: string;
   tokenLintContext?: TokenLintContext;
+  formRuleRoots?:string[];
 }
 
 /** 所有生产入口共用；离线DOM检查不冒充像素或光学验收，不自动改写结果。 */
@@ -38,6 +40,7 @@ export function checkGenerationQuality(html: string, options: QualityOptions = {
     if (element.tagName.toLowerCase() === 'template') elements.push(...Array.from((element as HTMLTemplateElement).content.querySelectorAll('*')));
   }
   const findings: QualityFinding[] = [];
+  if(options.baselineHtml&&options.modificationRequest)for(const finding of inspectFormRuleChanges(options.baselineHtml,html,options.modificationRequest,options.formRuleRoots))findings.push({code:'form_rule_not_applied',severity:'error',...finding});
   if (!htmlIsComplete(html)) findings.push({ code: 'incomplete_html', severity: 'error', message: '页面HTML未完整结束或标签嵌套损坏，不能采纳浏览器自动补全后的残缺页面。', actual: '存在未完成的标签、属性、文本容器或必需闭合标签', expected: '重新生成完整页面；原页面保持不变' });
   const byNid = new Map<string, Element>();
   const add = (el: Element, code: string, severity: QualityFinding['severity'], message: string, actual: string, expected: string) =>

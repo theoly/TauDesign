@@ -3,13 +3,17 @@ import type {MultiPageItem,MultiPageReview} from '../../services/ai/multiPageCon
 import {validateVariantItems,validateMultiPageItems} from '../../services/ai/multiPageContract';
 import {pageCreationContext} from '../../services/ai/pageCreationValidation';
 import {useProjectStore} from '../../stores/useProjectStore';
+import {PageTaskPlanContent} from './PageTaskPlanCard';
 const labels={pending:'待生成',generating:'正在生成与检查',checked:'已验收，等待统一加入',applied:'已加入画布',failed:'未通过'};
 export function MultiPagePlanCard({review,disabled,onConfirm,onCancel}:{review:MultiPageReview;disabled:boolean;onConfirm:(pages:MultiPageItem[])=>Promise<void>;onCancel:()=>void}){
  const project=useProjectStore(),[pages,setPages]=useState<MultiPageItem[]>(()=>structuredClone(review.plan?.pages??[])),[busy,setBusy]=useState(false),lock=useRef(false);
  useEffect(()=>{setPages(structuredClone(review.plan?.pages??[]));},[review.plan?.id]);
  const variants=review.plan?.kind==='variants',unit=variants?'个方案':'页',item=variants?'方案':'页';
  const stale=review.status==='ready'&&review.plan?.contextFingerprint!==pageCreationContext(project);
- let issue='';try{if(review.status==='ready'){if(variants)validateVariantItems(pages);else validateMultiPageItems(pages);}}catch(error){issue=error instanceof Error?error.message:'计划无效';}
+ const taskChanged=(page:MultiPageItem)=>{const original=review.plan?.pages.find(p=>p.id===page.id);return page.requirements.trim()!==original?.requirements||JSON.stringify([...page.links].sort())!==JSON.stringify([...(original?.links??[])].sort());};
+ let issue='';try{if(review.status==='ready'){if(variants)validateVariantItems(pages);else validateMultiPageItems(pages);
+  if(pages.some(p=>p.task?.questions.length&&!taskChanged(p)))issue='功能规划仍有待确认问题，请在对应本页要求中补充答案。';
+ }}catch(error){issue=error instanceof Error?error.message:'计划无效';}
  const change=(id:string,update:Partial<MultiPageItem>)=>setPages(current=>current.map(p=>p.id===id?{...p,...update}:p));
  return <section data-testid="multi-page-plan" className="space-y-3 rounded-xl border border-blue-900 bg-slate-950 p-3 text-xs text-slate-300">
   <h3 className="font-semibold text-slate-100">{variants?'同页方案比较':'多页面计划'}</h3>
@@ -21,6 +25,11 @@ export function MultiPagePlanCard({review,disabled,onConfirm,onCancel}:{review:M
      <summary className="cursor-pointer break-words font-medium">{index+1}. {page.name||'未命名页面'}</summary>
      <label className="block space-y-1">{variants?'方案名称':'页面名称'}<input aria-label={`第${index+1}${item}名称`} maxLength={20} disabled={busy||disabled} value={page.name} onChange={e=>change(page.id,{name:e.target.value})} className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-slate-200"/></label>
      <label className="block space-y-1">{variants?'共同功能与本方案差异':'本页要求'}<textarea aria-label={`第${index+1}${item}要求`} maxLength={1600} disabled={busy||disabled} value={page.requirements} onChange={e=>change(page.id,{requirements:e.target.value})} rows={3} className="w-full resize-y rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-slate-200"/></label>
+     {page.task&&<details aria-label={`${page.name}功能规划`} className="space-y-1 rounded border border-slate-800 p-2 text-slate-400">
+      <summary className="cursor-pointer">{taskChanged(page)?'初始功能规划（要求已调整）':'功能、信息与交互规划'}</summary>
+      <PageTaskPlanContent plan={page.task}/>
+     </details>}
+     {taskChanged(page)&&<p className="text-amber-300">本页要求或关联已调整，生成前会在原批次预算内重新梳理本页功能。</p>}
      {!variants&&<fieldset disabled={busy||disabled} className="space-y-1"><legend className="mb-1 text-slate-500">本页需要关联的页面</legend>{pages.filter(p=>p.id!==page.id).map(target=><label key={target.id} className="flex items-start gap-2 break-words text-slate-400"><input type="checkbox" aria-label={`${page.name} → ${target.name}`} checked={page.links.includes(target.id)} onChange={e=>change(page.id,{links:e.target.checked?[...page.links,target.id]:page.links.filter(id=>id!==target.id)})}/>{target.name}</label>)}</fieldset>}
      <button type="button" disabled={busy||disabled||pages.length<=(variants?2:1)} onClick={()=>setPages(current=>current.filter(p=>p.id!==page.id).map(p=>({...p,links:p.links.filter(id=>id!==page.id)})))} className="text-slate-500 hover:text-red-300 disabled:opacity-40">{variants?'移除此方案':'移除此页'}：{page.name}</button>
     </details>)}

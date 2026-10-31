@@ -1,3 +1,4 @@
+import {withMultiPageTasks,multiPageTask} from './fixtures/multiPageTask';
 import {beforeEach,afterEach,expect,test} from 'bun:test';
 import React,{act} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
@@ -16,7 +17,7 @@ beforeEach(async()=>{
  prior=useProjectStore.getState();history=useHistoryStore.getState();config=useAIConfigStore.getState();priorAct=(globalThis as any).IS_REACT_ACT_ENVIRONMENT;(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  useProjectStore.getState().initNewProject({name:'聊天多页',deviceProfile:'mobile',designSystem:neutralModernTheme,createSpecimen:false});useProjectStore.getState().addScreen({name:'原页',htmlContent:'<main data-nid="old">原内容</main>'},'old');
  useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'fixture'})),bindings:defaultBindings});plans=0;streams=0;hold=false;release=undefined;
- DefaultAIEngineCore.prototype.generateObject=async()=>{plans++;return {summary:'两个独立页面',pages:[{name:'登录页',requirements:['手机号登录'],links:['注册页']},{name:'注册页',requirements:['注册资料'],links:[]}]} as any;};
+ DefaultAIEngineCore.prototype.generateObject=async(schema)=>{plans++;if((schema.properties as any)?.features)return multiPageTask('调整后的页面',['用户确认的新要求']) as any;return withMultiPageTasks({summary:'两个独立页面',pages:[{name:'登录页',requirements:['手机号登录'],links:['注册页']},{name:'注册页',requirements:['注册资料'],links:[]}]}) as any;};
  DefaultAIEngineCore.prototype.streamText=options=>{streams++;const scope=JSON.parse(options.messages.find(m=>m.role==='system')!.content.match(/confirmedMultiPageScope=(.*); output exactly this page/)![1]);
  const answer=`<artifact identifier="screen_new" type="screen" title="${scope.name}"><main class="col gap-4 p-4"><h1>${scope.name}</h1><button class="btn btn-primary">提交</button>${scope.requiredTargetIds.map((id:string)=>`<button class="btn" data-target-screen-id="${id}">关联</button>`).join('')}</main></artifact>`;
  const ready=hold?new Promise<void>(r=>release=r):Promise.resolve();return {textStream:(async function*(){await ready;yield answer;})(),reasoningStream:(async function*(){})(),textPromise:ready.then(()=>answer),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('stop'),abort(){release?.();}};
@@ -56,7 +57,7 @@ test('确认前取消不生成；生成期间取消不加入任何页面',async(
 });
 
 test('聊天多方案明确引用原页时只读规划、可补差异、并排生成，无业务关联选项',async()=>{
- DefaultAIEngineCore.prototype.generateObject=async()=>{plans++;return {summary:'同一登录页比较',pages:[{name:'紧凑方案',requirements:['手机号登录','紧凑布局'],links:[]},{name:'引导方案',requirements:['手机号登录','步骤引导'],links:[]}]} as any;};
+ DefaultAIEngineCore.prototype.generateObject=async(schema)=>{plans++;if((schema.properties as any)?.features)return multiPageTask('调整后的页面',['用户确认的新要求']) as any;return withMultiPageTasks({summary:'同一登录页比较',pages:[{name:'紧凑方案',requirements:['手机号登录','紧凑布局'],links:[]},{name:'引导方案',requirements:['手机号登录','步骤引导'],links:[]}]}) as any;};
  const before=useHistoryStore.getState().past.length;
  await send('为当前页面生成两个方案用于比较');expect(plans).toBe(1);expect(streams).toBe(0);expect(card().textContent).toContain('同页方案比较');expect(card().querySelector('input[type="checkbox"]')).toBeNull();
  expect(button('移除此方案：紧凑方案').disabled).toBe(true);await input('第1方案名称','重点方案');await input('第1方案要求','手机号登录，突出按钮与隐私提示');
@@ -65,7 +66,23 @@ test('聊天多方案明确引用原页时只读规划、可补差异、并排�
  const page=Object.values(useProjectStore.getState().screens).find(p=>p.id!=='old')!;act(()=>root.render(<PageCreationEvidencePanel screen={page}/>));expect(host.textContent).toContain('同页方案确认计划');expect(host.textContent).toContain('突出按钮与隐私提示');expect(host.textContent).toContain('原计划 2 个方案');
 });
 test('方案卡片重复名称禁用、取消不生成；恢复单独请求不转宽泛修改分析',async()=>{
- DefaultAIEngineCore.prototype.generateObject=async()=>{plans++;return {summary:'比较设计',pages:[{name:'方案甲',requirements:['当前页布局甲'],links:[]},{name:'方案乙',requirements:['当前页布局乙'],links:[]}]} as any;};
+ DefaultAIEngineCore.prototype.generateObject=async(schema)=>{plans++;if((schema.properties as any)?.features)return multiPageTask('调整后的页面',['用户确认的新要求']) as any;return withMultiPageTasks({summary:'比较设计',pages:[{name:'方案甲',requirements:['当前页布局甲'],links:[]},{name:'方案乙',requirements:['当前页布局乙'],links:[]}]}) as any;};
  await send('基于当前页面生成两个方案');await input('第2方案名称','方案甲');expect(button('确认计划并生成 2 个方案').disabled).toBe(true);
  act(()=>button('取消方案任务').click());expect(card().textContent).toContain('方案任务已取消');expect(streams).toBe(0);expect(useProjectStore.getState().screenOrder).toEqual(['old']);
+});
+test('confirmation shows functional information and feedback, flags edited requirements, and saves actual plan provenance',async()=>{
+ await send();expect(card().textContent).toContain('功能、信息与交互规划');expect(card().textContent).toContain('用户任务：');
+ expect(card().textContent).toContain('需要展示：手机号登录');expect(card().textContent).toContain('前提：信息已填写');expect(card().textContent).toContain('状态：默认');
+ await input('第1页要求','新增邮箱信息');expect(card().textContent).toContain('初始功能规划（要求已调整）');expect(card().textContent).toContain('原批次预算内重新梳理本页功能');
+ await act(async()=>{button('确认计划并生成 2 页').click();await new Promise(r=>setTimeout(r,30));});
+ expect(plans).toBe(2);expect(streams).toBe(2);
+ const page=Object.values(useProjectStore.getState().screens).find(p=>p.name==='注册页')!;
+ act(()=>root.render(<PageCreationEvidencePanel screen={page}/>));expect(host.textContent).toContain('规划来自已确认的多页计划');expect(host.textContent).toContain('需求覆盖线索');
+});
+test('critical questions disable confirmation until the user supplements the page requirements',async()=>{
+ const originalGenerate=DefaultAIEngineCore.prototype.generateObject;
+ DefaultAIEngineCore.prototype.generateObject=async(schema,options)=>{const raw=await originalGenerate.call(new DefaultAIEngineCore(),schema,options) as any;
+  if(raw.pages)raw.pages[0].task.questions=['请补充登录权限'];return raw;};
+ await send();expect(card().textContent).toContain('请补充登录权限');expect(button('确认计划并生成 2 页').disabled).toBe(true);expect(streams).toBe(0);
+ await input('第1页要求','使用手机号与验证码登录，所有访客可用');expect(button('确认计划并生成 2 页').disabled).toBe(false);
 });

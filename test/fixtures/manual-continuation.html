@@ -1,0 +1,35 @@
+<!doctype html><html><meta charset="utf-8"><title>手动续写父任务验收</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {ChatDrawer} from '/src/components/chat/ChatDrawer.tsx';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {MockTransport} from '/src/services/ai/engine/transport/mockTransport.ts';
+import {PipelineExecutor} from '/src/services/ai/engine/pipeline/executor.ts';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {useAIConfigStore,defaultProviders,defaultBindings} from '/src/stores/useAIConfigStore.ts';
+import {chatPageTaskPlan} from '/test/fixtures/pageTaskPlan.ts';
+const exhausted=new URLSearchParams(location.search).get('mode')==='exhausted';
+const store=useProjectStore.getState();store.initNewProject({name:'续写账本验证',deviceProfile:'pc',createSpecimen:false});
+const original='<main data-nid="old00001">旧页面保持完整</main>';store.addScreen({name:'旧页面',htmlContent:original},'old');
+useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'FIXTURE_SECRET'})),bindings:defaultBindings});
+const state={requests:[],outputs:[],ledgers:[],original,state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length};window.manualContinuationFixture=state;
+const transport=new MockTransport();let htmlCalls=0;
+const core=new DefaultAIEngineCore({id:'local-manual',stream:(request,event)=>{
+ const body=request.body,planning=Boolean(body.response_format?.json_schema?.schema?.properties.features);
+ const marker=body.messages.at(-1).content.match(/TAUDESIGN_CONTINUE_[\w-]+/)?.[0];
+ state.requests.push({stage:planning?'plan':'html',maxTokens:body.max_tokens,hasRule:body.messages[0].content.includes('[LY-04@1]')});
+ if(planning)transport.queueResponse(JSON.stringify(chatPageTaskPlan),10);
+ else {
+  htmlCalls++;
+  const prefix='<artifact title="正文页"><main class="container-max p-4"><h1>说明</h1><p>完整正文内容。</p>';
+  const text=htmlCalls===1?prefix:!exhausted&&htmlCalls===2?'missing continuation marker':exhausted?marker+'\n<section><p>尚未结束的正文。</p></section>':marker+'\n<button class="btn btn-primary">查看详情</button></main></artifact>';
+  transport.enqueueScenario({events:[{type:'Delta',text},{type:'Done',finish_reason:exhausted||htmlCalls<3?'length':'stop'}],delayMs:10});
+ }
+ return transport.stream(request,event);
+}});
+const execute=PipelineExecutor.execute;
+PipelineExecutor.execute=async options=>{state.ledgers.push(options.taskBudget);const result=await execute({...options,engineCore:core,contextualGuidance:{features:[options.resume?'badge':'long-copy']}});state.outputs.push(result);return result;};
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(ChatDrawer));
+</script></body></html>

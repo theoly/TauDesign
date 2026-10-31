@@ -7,6 +7,7 @@ import type { HtmlImportMode } from '../../types/htmlImport';
 import { selectChatWorkflow, selectImportWorkflow, selectRestyleWorkflow } from './workflowCatalog';
 import type { DesignWorkflowId } from './workflowCatalog';
 import {createWorkflowValidationPlan,type WorkflowValidationPlan} from './workflowValidation';
+import {renderPageTaskPlan} from './pageTaskPlan';
 import type { ModificationReviewReceipt } from './modificationReview';
 
 export type { DesignWorkflowId } from './workflowCatalog';
@@ -16,6 +17,17 @@ export interface KnowledgeSourceRef {
   id: string;
   fingerprint: string;
   stale?: boolean;
+}
+
+/** Runtime callers may pass a full theme; contracts store identity, never the entire theme or arbitrary caller fields. */
+function designIdentity(system:Pick<DesignSystem,'id'|'name'>,origin?:DesignWorkflowInput['designSystemOrigin']):NonNullable<DesignTaskContract['designSystem']> {
+  return {id:system.id,name:system.name,...(origin?.tokenVersion?{tokenVersion:origin.tokenVersion}:{}),...(origin?.tokenFingerprint?{tokenFingerprint:origin.tokenFingerprint}:{})};
+}
+function originIdentity(origin:NonNullable<DesignWorkflowInput['designSystemOrigin']>):NonNullable<DesignTaskContract['designSystemOrigin']> {
+  return {kind:origin.kind,...Object.fromEntries(Object.entries(origin).filter(([key])=>['sourceId','sourceName','sourceFingerprint','tokenVersion','tokenFingerprint'].includes(key)))};
+}
+function knowledgeIdentity(source:KnowledgeSourceRef):KnowledgeSourceRef {
+  const {kind,id,fingerprint,stale}=source;return {kind,id,fingerprint,...(stale===undefined?{}:{stale})};
 }
 
 function nextTaskId(): string {
@@ -32,6 +44,8 @@ export interface DesignLibrarySourceIdentity {
   mode:DesignLibraryBinding['mode'];sourceProjectId:string;sourceFingerprint:string;sourceTokenVersion:number;bindingFingerprint:string;
 }
 export interface DesignTaskContract {
+  pageTaskPlan?:import('./pageTaskPlan').PageTaskSnapshot;
+  designGuidance?: import('./designKnowledge/receipt').DesignGuidancePacket;
   generationMode?: 'sections';
   version: 1;
   taskId: string;
@@ -101,26 +115,22 @@ export function buildDesignTaskContract(input: DesignWorkflowInput): DesignTaskC
     workflowId: workflow.id, operation: workflow.operation, strategy: workflow.strategy,validationPlan:createWorkflowValidationPlan(workflow,input.multiPage),
     ...(input.target ? { target: { id: input.target.id, name: input.target.name, baselineFingerprint: contentFingerprint(input.target.htmlContent) } } : {}),
     ...(workflow.operation==='create'&&input.multiPage?{multiPage:structuredClone(input.multiPage)}:{}),
-    ...(workflow.operation==='create'&&input.referenceImage?{referenceImage:{name:input.referenceImage.name,fingerprint:input.referenceImage.fingerprint,...(input.referenceImage.region?{region:structuredClone(input.referenceImage.region)}:{})}}:{}),
+    ...(['create','modify'].includes(workflow.operation)&&input.referenceImage?{referenceImage:{name:input.referenceImage.name,fingerprint:input.referenceImage.fingerprint,...(input.referenceImage.region?{region:structuredClone(input.referenceImage.region)}:{})}}:{}),
     ...(workflow.operation==='create'&&input.designLibraryBinding?{librarySource:{mode:input.designLibraryBinding.mode,sourceProjectId:input.designLibraryBinding.sourceProjectId,
       sourceFingerprint:input.designLibraryBinding.sourceFingerprint,sourceTokenVersion:input.designLibraryBinding.sourceTokenVersion,bindingFingerprint:contentFingerprint(JSON.stringify(input.designLibraryBinding))}}:{}),
     ...(input.referencePageId ? { referencePageId: input.referencePageId } : {}),
     ...(input.elementNid ? { elementNid: input.elementNid } : {}),
     device: { profile: input.deviceProfile, frameWidth: input.frameWidth, ...(input.referenceDeviceName ? { referenceDevice: input.referenceDeviceName } : {}) },
-    ...(input.designSystem ? { designSystem: {
-      ...input.designSystem,
-      ...(input.designSystemOrigin?.tokenVersion ? { tokenVersion: input.designSystemOrigin.tokenVersion } : {}),
-      ...(input.designSystemOrigin?.tokenFingerprint ? { tokenFingerprint: input.designSystemOrigin.tokenFingerprint } : {})
-    } } : {}),
-    ...(input.designSystemOrigin ? { designSystemOrigin: { ...input.designSystemOrigin } } : {}),
+    ...(input.designSystem ? { designSystem: designIdentity(input.designSystem,input.designSystemOrigin) } : {}),
+    ...(input.designSystemOrigin ? { designSystemOrigin: originIdentity(input.designSystemOrigin) } : {}),
     ...(input.projectManifest ? {
       projectPages: input.projectManifest.pages.filter(page => page.kind === 'screen').slice(0, 20).map(page => page.name),
       projectPageCount: input.projectManifest.pages.filter(page => page.kind === 'screen').length
     } : {}),
     acceptance: [...workflow.acceptance,...(input.multiPage?[input.multiPage.kind==='variants'?'只交付当前确认方案，同页功能需求一致、布局层级有差异；不将方案互相作为业务跳转，全部通过后一起并排新增，原页与项目Token不变':'只交付当前确认计划中的这一页，静态关联指向约定页面，全部页通过后才一起加入画布']:[])], allowedChanges: [...allowedChanges,...(input.multiPage?[`planned-page:${input.multiPage.planId}:${input.multiPage.itemId}`]:[])],
     protectedNids: [...new Set(input.protectedNids ?? [])],
-    knowledgeSources: [...(input.knowledgeSources ?? []).map(source => ({ ...source })),
-      ...(workflow.operation==='create'&&input.referenceImage?[{kind:'reference-image' as const,id:input.referenceImage.name,fingerprint:input.referenceImage.fingerprint}]:[]),
+    knowledgeSources: [...(input.knowledgeSources ?? []).map(knowledgeIdentity),
+      ...(['create','modify'].includes(workflow.operation)&&input.referenceImage?[{kind:'reference-image' as const,id:input.referenceImage.name,fingerprint:input.referenceImage.fingerprint}]:[]),
       ...(workflow.operation==='create'&&input.designLibraryBinding?[{kind:'design-library' as const,id:input.designLibraryBinding.sourceProjectId,fingerprint:contentFingerprint(JSON.stringify(input.designLibraryBinding))}]:[])],
     ...(input.knowledgeFingerprint ? { knowledgeFingerprint: input.knowledgeFingerprint } : {})
   };
@@ -138,7 +148,7 @@ export function buildHtmlImportContract(input: {
     workflowId: workflow.id, operation: workflow.operation, strategy: workflow.strategy, sourceName: input.fileName,validationPlan:createWorkflowValidationPlan(workflow),
     target: { id: input.fileName, name: input.fileName, baselineFingerprint: contentFingerprint(input.html) },
     device: { profile: input.deviceProfile, frameWidth: input.frameWidth, ...(input.referenceDeviceName ? { referenceDevice: input.referenceDeviceName } : {}) },
-    ...(input.designSystem ? { designSystem: input.designSystem } : {}),
+    ...(input.designSystem ? { designSystem: designIdentity(input.designSystem) } : {}),
     acceptance: [
       ...workflow.acceptance,
       ...(categoryText ? [categoryText] : []),
@@ -160,15 +170,13 @@ export function buildRestyleContract(input: {
     workflowId: workflow.id, operation: workflow.operation, strategy: workflow.strategy,validationPlan:createWorkflowValidationPlan(workflow),
     target: { id: input.target.id, name: input.target.name, baselineFingerprint: contentFingerprint(input.target.html) },
     device: { profile: input.deviceProfile, frameWidth: input.frameWidth, ...(input.referenceDeviceName ? { referenceDevice: input.referenceDeviceName } : {}) },
-    ...(input.designSystem ? { designSystem: { ...input.designSystem,
-      ...(input.designSystemOrigin?.tokenVersion ? { tokenVersion: input.designSystemOrigin.tokenVersion } : {}),
-      ...(input.designSystemOrigin?.tokenFingerprint ? { tokenFingerprint: input.designSystemOrigin.tokenFingerprint } : {}) } } : {}),
-    ...(input.designSystemOrigin ? { designSystemOrigin: { ...input.designSystemOrigin } } : {}),
+    ...(input.designSystem ? { designSystem: designIdentity(input.designSystem,input.designSystemOrigin) } : {}),
+    ...(input.designSystemOrigin ? { designSystemOrigin: originIdentity(input.designSystemOrigin) } : {}),
     acceptance: [
       ...(input.confirmedScope ? [`严格限定在已确认范围：${input.confirmedScope}`] : ['仅调整视觉风格，不改变业务结构与交互']),
       ...workflow.acceptance
     ], allowedChanges: [input.confirmedScope ?? 'visual-style-only'], protectedNids: [...new Set(input.protectedNids ?? [])],
-    knowledgeSources: (input.knowledgeSources ?? []).map(source => ({ ...source })),
+    knowledgeSources: (input.knowledgeSources ?? []).map(knowledgeIdentity),
     ...(input.knowledgeFingerprint ? { knowledgeFingerprint: input.knowledgeFingerprint } : {})
   };
 }
@@ -186,6 +194,7 @@ export function renderDesignTaskContract(contract: DesignTaskContract): string {
     contract.referenceImage?`referenceImage=${JSON.stringify({name:contract.referenceImage.name,fingerprint:contract.referenceImage.fingerprint,region:contract.referenceImage.region})}; source-only, no permission to expand scope${contract.referenceImage.region?'; 用户已选择目标区域，模型收到的是裁切图；不要补回选区外的编辑器工具或其它页面。':''}`:'',
     contract.librarySource?`designLibrarySource=${JSON.stringify(contract.librarySource)}; ${contract.librarySource.mode==='pinned_reference'?'fixed version readonly cache':'editable project copy; current project overrides apply'}`:'',
     contract.multiPage?`confirmedMultiPageScope=${JSON.stringify(contract.multiPage)}; output exactly this page; no partial delivery`:'',
+    contract.pageTaskPlan?renderPageTaskPlan(contract.pageTaskPlan):'',
     contract.operation==='create'?'输出预算：优先完成当前页全部已确认功能与主操作，复用现有样式类，保持HTML紧凑，减少重复装饰/SVG路径和无关注释。不得为了篇幅删除明确要求的字段、内容或条目，也不要把其它业务页的职责堆进当前页；只输出当前页完整产物。':'',
     ['create','modify','restyle','import'].includes(contract.operation)?'实体引用规则：data-component-id只用上下文中真实组件ID，新实例data-component-version使用当前定义版本；原页同身份旧实例保留原版本，不自行同步。data-target-screen-id只指向已知工程页面或已确认计划ID，禁止臆造目标。未提供组件模板时不要伪造绑定标识。':'',
     ['create','modify'].includes(contract.operation)?'可见文案边界：页面只展示本次业务所需内容。合同、计划和参考资料中的静态设计、不发起请求、不实现权限校验、Token/CSS白名单等是生成执行约束，不得转写成终端用户看到的标题、正文、提示或脚注（例如“本页仅展示静态说明，不发起请求或判断权限”）。不要为了声明实现边界而新增工程说明。用户明确要求展示的技术说明及原页面已有文案依本次授权保留，不据此擅自删除或改写。':'',

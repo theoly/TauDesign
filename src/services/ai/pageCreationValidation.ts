@@ -19,6 +19,10 @@ import type {RenderedQualityReport} from '../../utils/renderedQuality';
 import {resolveWorkflowValidation,evaluateWorkflowValidation,isWorkflowValidationReport,type WorkflowValidationReport} from './workflowValidation';
 import type {PageRepairRecord} from './pageRepairRecord';
 import {isPageRepairRecord} from './pageRepairRecord';
+import {repairGuidanceIssue} from './designKnowledge/repairTrace';
+import {isQualityReport,isRenderedQualityReport,isPassedRender} from './evidenceSchema';
+import {taskProvenanceIssue} from './taskProvenance';
+import {draftExecutionIssue} from './draftExecutionSource';
 import {getTokenLintContext} from '../../utils/tokenLint';
 
 export type PageCreationState=KnowledgeState & {settings:ProjectSettings;assets:Record<string,Asset>;designSystemOrigin?:DesignSystemOrigin};
@@ -114,14 +118,13 @@ export async function prepareNewPage(state:PageCreationState,screen:Screen,contr
 /** External project metadata is diagnostic, never an authorization to skip current checks. */
 export function isPageCreationEvidence(value:unknown):value is PageCreationEvidence {
   const e=value as PageCreationEvidence|undefined;
-  const findings=(items:unknown)=>Array.isArray(items)&&items.every(f=>f&&typeof f.message==='string'&&typeof f.code==='string'&&['warning','error'].includes(f.severity));
   return Boolean(e&&e.version===1&&Number.isFinite(e.checkedAt)&&typeof e.contextFingerprint==='string'&&typeof e.pageFingerprint==='string'&&typeof e.tokenFingerprint==='string'&&
-    e.contract&&(!e.contract.multiPage||validMultiPageScope(e.contract.multiPage))&&(!e.contract.referenceImage||validReferenceImageIdentity(e.contract.referenceImage))&&(!e.contract.librarySource||validLibrarySourceIdentity(e.contract.librarySource))&&
+    e.contract&&!taskProvenanceIssue(e.contract)&&!draftExecutionIssue(e.execution)&&(!e.contract.multiPage||validMultiPageScope(e.contract.multiPage))&&(!e.contract.referenceImage||validReferenceImageIdentity(e.contract.referenceImage))&&(!e.contract.librarySource||validLibrarySourceIdentity(e.contract.librarySource))&&
     (!creationSourceStages(e.contract.workflowId).includes('reference-input')||inspectReferenceInput(e.contract).status==='passed')&&
     (!creationSourceStages(e.contract.workflowId).includes('library-binding')||validLibrarySourceIdentity(e.contract.librarySource))&&typeof e.contract.taskId==='string'&&typeof e.contract.request==='string'&&e.contract.device&&['mobile','pc'].includes(e.contract.device.profile)&&Number.isFinite(e.contract.device.frameWidth)&&isWorkflowValidationReport(e.workflow)&&e.workflow.plan.workflowId===e.contract.workflowId&&
-    e.source&&typeof e.source.passed==='boolean'&&findings(e.source.findings)&&e.quality&&typeof e.quality.passed==='boolean'&&findings(e.quality.findings)&&
-    e.render&&['complete','pending','incomplete','unavailable'].includes(e.render.status)&&Number.isFinite(e.render.inspected)&&findings(e.render.findings)&&
+    (e.contract.validationPlan===undefined||JSON.stringify(e.workflow.plan)===JSON.stringify(e.contract.validationPlan))&&isQualityReport(e.source)&&isQualityReport(e.quality)&&
+    isRenderedQualityReport(e.render)&&
     Array.isArray(e.files)&&e.files.every(f=>f&&typeof f.id==='string'&&typeof f.relPath==='string')&&
-    (e.repair===undefined||(isPageRepairRecord(e.repair)&&e.repair.status==='repaired'&&e.repair.contextFingerprint===e.contextFingerprint))&&
-    (e.workflow.status!=='ready'||(e.source.passed&&e.quality.passed&&e.render.status==='complete'&&![...e.source.findings,...e.quality.findings,...e.render.findings].some(f=>f.severity==='error'))));
+    (e.repair===undefined||(isPageRepairRecord(e.repair)&&e.repair.status==='repaired'&&e.repair.contextFingerprint===e.contextFingerprint&&!repairGuidanceIssue(e.repair.guidance,e.contract,true)))&&
+    (e.workflow.status!=='ready'||(e.source.passed&&e.quality.passed&&isPassedRender(e.render))));
 }

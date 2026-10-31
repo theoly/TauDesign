@@ -6,17 +6,55 @@ import { finalizeModelHtml } from './modelHtmlResult';
 import { modelExecutionRecord } from './designExecutionRecord';
 import { acceptRestyleResult, type RestyleOutcome, type RestyleTarget } from './restyleService';
 import {createRestylePatchPlan,executeRestylePatches,RESTYLE_PATCH_THRESHOLD} from './restylePatches';
+import {TaskBudget,withTaskBudget} from './taskBudget';
+import {buildContextualCraft,renderFrozenCraft} from './designKnowledge/promptAdapter';
+import {renderCraftSection} from './craft';
+import {selectTokenGuidance} from './designKnowledge/tokenWindow';
+import {compileTokensToCss} from '../../utils/cssCompiler';
+import {makeGuidancePacket,guidancePacketIssue,withGuidanceReceipts} from './designKnowledge/receipt';
+import type {RuleFeature} from './designKnowledge/types';
+import {resolveWorkflowValidation} from './workflowValidation';
+import {pageRuleFeatures} from './designKnowledge/targetFeatures';
 
 /** The UI assembles the task context; execution, stream failure and terminal HTML handling stay in services. */
 async function executeTarget(core: AIEngineCore, options: {
   target: RestyleTarget; contract: DesignTaskContract; request: StreamTextOptions; quality: QualityOptions; onValidation?: () => void;
   patchContext?:string;onGroup?:(index:number,total:number)=>void;
   colorMode?:'light'|'dark';
+  contextualGuidance?:{features?:RuleFeature[]};
+  taskBudget?:TaskBudget;
 }): Promise<RestyleOutcome> {
   const { target, contract: workflowContract, request, quality } = options;
+  const protocol=target.html.length>RESTYLE_PATCH_THRESHOLD?'style-patch-json':'html';
+  if(options.contextualGuidance||workflowContract.designGuidance){
+    const validation=resolveWorkflowValidation(workflowContract,workflowContract.workflowId==='restyle-batch'?'batch':'candidate',{preflight:true});
+    if(!validation.ok)throw Error(validation.message);
+    if(workflowContract.operation!=='restyle'||workflowContract.target?.id!==target.id||workflowContract.device.profile!==(quality.deviceProfile??'pc')||
+      JSON.stringify([...workflowContract.protectedNids].sort())!==JSON.stringify([...(target.protectedNids??[])].sort()))throw Error('重塑规则与原任务、设备或保护范围不匹配。');
+    if(protocol==='style-patch-json'&&!quality.designSystem)throw Error('大页样式补丁缺少项目主题。');
+    if(workflowContract.designGuidance&&(workflowContract.designGuidance.protocol??'html')!==protocol)throw Error('规则快照与本次重塑输出协议不匹配。');
+    if(!workflowContract.designGuidance){
+      const query={request:workflowContract.request,operation:workflowContract.operation,device:quality.deviceProfile??'pc',scope:'page' as const,features:options.contextualGuidance?.features??pageRuleFeatures(target.html),maxChars:10000};
+      const selection=protocol==='html'?buildContextualCraft('modify_screen',query).selection:
+        selectTokenGuidance(compileTokensToCss(quality.designSystem!.tokens,options.colorMode??'light',quality.deviceProfile??'pc'),query,'css');
+      workflowContract.designGuidance=makeGuidancePacket(workflowContract,selection,protocol);
+    }
+    const issue=guidancePacketIssue(workflowContract,false);if(issue)throw Error(issue);
+    if(protocol==='html'&&workflowContract.designGuidance.selection.body){
+      const baseline=renderCraftSection('modify_screen'),body=renderFrozenCraft('modify_screen',workflowContract.designGuidance.selection);
+      const candidates=request.messages.filter(m=>m.role==='system'&&m.content.includes(baseline));
+      if(candidates.length!==1)throw Error('本次重塑缺少唯一可替换的工艺窗口，未请求模型。');
+      candidates[0].content=candidates[0].content.replace(baseline,body);
+    }
+    core=withGuidanceReceipts(core,workflowContract,workflowContract.designGuidance);
+  }
+  // Denied reservations create neither a request receipt nor monitored model activity.
+  if(options.taskBudget)core=withTaskBudget(core,options.taskBudget);
+  const verifyGuidance=()=>{const issue=guidancePacketIssue(workflowContract);if(issue)throw Error(issue);};
   if(target.html.length>RESTYLE_PATCH_THRESHOLD){
     if(!quality.designSystem)throw new Error('大页样式补丁缺少项目主题。');
-    const patched=await executeRestylePatches(core,{target,request,designSystem:quality.designSystem,deviceProfile:quality.deviceProfile??'pc',colorMode:options.colorMode,context:options.patchContext,onGroup:options.onGroup});
+    const patched=await executeRestylePatches(core,{target,request,designSystem:quality.designSystem,deviceProfile:quality.deviceProfile??'pc',colorMode:options.colorMode,context:options.patchContext,onGroup:options.onGroup,guidanceSelection:workflowContract.designGuidance?.selection});
+    verifyGuidance();
     options.onValidation?.();
     if(!patched.changed)return {target,status:'skipped_unchanged',message:'未发现需要修改的样式，原页面保持原样，可选择其他试跑目标。',workflowContract,
       executionRecord:{source:'model',rawResponse:patched.rawResponse,continuationCount:0,warnings:[]}};
@@ -25,6 +63,7 @@ async function executeTarget(core: AIEngineCore, options: {
       ...(outcome.status==='applied'?{completeHtml:patched.html}:{errorMessage:outcome.message})}};
   }
   const result = await streamWithContinuation(core, request, { allowContinuation: true });
+  if(!result.errorMessage)verifyGuidance();
   if(!result.errorMessage)options.onValidation?.();
   const finalized = finalizeModelHtml(result, { ...quality, baselineHtml: target.html, protectedNids: target.protectedNids,
     preserveNids: true, signal: request.signal, allowRawFragment: true });
@@ -53,8 +92,10 @@ export interface RestyleProgress {
 const phaseLabel:Record<RestylePhase,string>={checking:'检查目标',waiting:'等待模型',reasoning:'接收推理',receiving:'接收正文',continuing:'续写',validating:'校验',complete:'完成',failed:'失败',cancelled:'取消'};
 /** Counts stream text without exposing content; the deadline also covers stalled metadata. */
 export async function executeRestyleTarget(core: AIEngineCore, options: Parameters<typeof executeTarget>[1] & {
+  taskBudget?:TaskBudget;
   onProgress?: (progress: RestyleProgress) => void; totalTimeoutMs?: number; idleTimeoutMs?: number;
 }): Promise<RestyleOutcome> {
+  if(options.contextualGuidance||options.contract.designGuidance)options={...options,contract:structuredClone(options.contract),request:{...options.request,messages:structuredClone(options.request.messages)}};
   const controller = new AbortController(), started = Date.now();
   let lastActivity = started, stopped = false, calls = 0;
   const progress: RestyleProgress = {phase:'checking',provider:options.request.provider.name,model:options.request.model,

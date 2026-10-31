@@ -1,0 +1,20 @@
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
+import {resolve,dirname} from 'node:path';
+import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import {evaluateCalibration} from '../src/services/ai/designKnowledge/calibration';
+import type {RelevanceCase} from '../src/services/ai/designKnowledge/evaluation';
+
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const args=process.argv.slice(2);
+if(args.length&&(args.length!==2||args[0]!=='--output'))throw Error('Usage: bun scripts/evaluate-design-calibration.ts [--output report.json]；本工具只评分校准分区。');
+const fixture='test/fixtures/design-knowledge/relevance-v1.json';
+const paths=[fixture,'scripts/evaluate-design-calibration.ts',...['calibration','catalog','evaluation','selector','types'].map(n=>`src/services/ai/designKnowledge/${n}.ts`)];
+const contents=await Promise.all(paths.map(p=>readFile(resolve(root,p))));
+const fingerprints=Object.fromEntries(paths.map((p,i)=>[p,createHash('sha256').update(contents[i]).digest('hex')]));
+const data=JSON.parse(contents[0].toString());if(data.version!==1)throw Error('未知评估数据版本。');
+const report={...evaluateCalibration(data.cases as RelevanceCase[]),generatedAt:new Date().toISOString(),runtime:{bun:process.versions.bun??'unavailable',platform:process.platform,arch:process.arch},sourceSha256:fingerprints};
+const output=resolve(root,args[1]??'doc/ui-design-workflow/evidence/2026-10-30-calibration/report.json');
+await mkdir(dirname(output),{recursive:true});await writeFile(output,JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify({output,passed:report.passed,contextual:report.contextual.positive,negative:report.contextual.negative,baseline:report.baseline.positive,heldOut:report.heldOut}));
+if(!report.passed)process.exitCode=1;

@@ -1,3 +1,4 @@
+import {withMultiPageTasks} from './fixtures/multiPageTask';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import {useProjectStore} from '../src/stores/useProjectStore';
 import {useHistoryStore} from '../src/stores/useHistoryStore';
@@ -74,7 +75,7 @@ test('删掉目录声明不能关闭实体检查',async()=>{
  finally{workflow.validationStages=old;}
 });
 test('多页面第二页组件引用错误，不交付已经检查通过的第一页',async()=>{
- let calls=0;const core:AIEngineCore={async generateObject(){return {summary:'两个静态页面',pages:[{name:'会员页',requirements:['会员资料'],links:[]},{name:'设置页',requirements:['设置'],links:[]}]} as any;},streamText(options){calls++;const scope=JSON.parse(options.messages.find(m=>m.role==='system')!.content.match(/confirmedMultiPageScope=(.*); output exactly this page/)![1]);
+ let calls=0;const core:AIEngineCore={async generateObject(){return withMultiPageTasks({summary:'两个静态页面',pages:[{name:'会员页',requirements:['会员资料'],links:[]},{name:'设置页',requirements:['设置'],links:[]}]}) as any;},streamText(options){calls++;const scope=JSON.parse(options.messages.find(m=>m.role==='system')!.content.match(/confirmedMultiPageScope=(.*); output exactly this page/)![1]);
   const answer=`<artifact identifier="screen_new" type="screen" title="${scope.name}"><main class="p-4"><h1>${scope.name}</h1><div${calls===2?' data-component-id="missing"':''}>资料</div><button class="btn btn-primary">保存</button></main></artifact>`;
   return {textStream:(async function*(){yield answer;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(answer),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('stop'),abort(){}};
  }};

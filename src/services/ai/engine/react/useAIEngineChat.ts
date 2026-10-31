@@ -1,3 +1,6 @@
+import {requiresFunctionalPlanning,requiresElementStructure} from '../../functionalModification';
+import {parseReferencedElement,extractCleanUserPrompt} from '../../chatReferencePrompt';
+export {parseReferencedElement,extractCleanUserPrompt} from '../../chatReferencePrompt';
 import type { ImageAttachment } from '../../../../types/referenceImage';
 import type { SectionedCheckpoint } from '../../sectionedGeneration';
 import {requiresPageVariantPlan,requiresMultiPagePlan,type MultiPageItem,type MultiPageReview} from '../../multiPageContract';
@@ -12,6 +15,9 @@ import { useState, useRef, useEffect } from 'react';
 import { useProjectStore } from '../../../../stores/useProjectStore';
 import { useAIConfigStore } from '../../../../stores/useAIConfigStore';
 import { useHistoryStore } from '../../../../stores/useHistoryStore';
+import type {PageTaskSnapshot} from '../../pageTaskPlan';
+import {capturePageTaskHistory,readPageTaskHistory,type PageTaskHistory} from '../../pageTaskHistory';
+import {captureDesignGuidanceHistory,readDesignGuidanceHistory,type DesignGuidanceHistory} from '../../designKnowledge/history';
 import { PipelineExecutor } from '../pipeline/executor';
 import { buildDesignProjectManifest } from '../../projectManifest';
 import { PipelineOutput } from '../pipeline/types';
@@ -33,6 +39,8 @@ import {pageCreationContext,isPageCreationEvidence} from '../../pageCreationVali
 import { isOutputLimit, continuationBindingKey, type ContinuationCheckpoint } from '../../generationContinuation';
 import { buildDesignTaskContract, contentFingerprint, type DesignTaskContract } from '../../designWorkflow';
 import { draftRepairTargets, suggestDraftLabels, type DraftLabel } from '../../qualityDraft';
+import type {TaskBudget} from '../../taskBudget';
+import {createChatTaskBudget,createSingleRequestBudget} from '../../taskBudgetPolicy';
 import { saveQualityDraft, loadQualityDrafts, claimDraftSuggestion, type SavedQualityDraft } from '../../../storage/qualityDraftRepository';
 
 export interface ChatMessageItem {
@@ -90,7 +98,14 @@ export interface ChatMessageItem {
   qualityDraftBusy?: boolean;
   qualityDraftNotice?: string;
   workflowContract?: DesignTaskContract;
+  executionRecord?:import('../../designExecutionRecord').DesignExecutionRecord;
+  structuredRetry?:{reviewId:string;selected:string[];extra:string;mode:'local'|'region'};
+  historicalPageTask?:PageTaskHistory;
+  historicalPageTaskNotice?:string;
+  historicalGuidance?:DesignGuidanceHistory;
+  historicalGuidanceNotice?:string;
   designBrief?: DesignBrief;
+  taskBudget?:import('../../taskBudget').TaskBudgetSnapshot;
   modificationReview?: ModificationReviewState;
   pagePlan?:MultiPageReview;
   preActionSnapshot?: {
@@ -108,6 +123,7 @@ export interface ChatMessageItem {
   };
   originalAttachment?: ImageAttachment;
   originalReferencedScreenId?: string | null;
+  usageNote?: string;
   usage?: {
     promptTokens: number;
     completionTokens: number;
@@ -163,49 +179,6 @@ export function hasExplicitModifyIntent(text: string): boolean {
   );
 }
 
-export function parseReferencedElement(text: string): {
-  nid: string;
-  tagName: string;
-  screenName?: string;
-} | null {
-  const match = text.match(
-    /\[引用元素\s+nid="([^"]+)"(?:\s+画框="([^"]*)")?(?:\s+标签=<([^>]+)>)?\]/
-  );
-  if (match) {
-    return {
-      nid: match[1],
-      screenName: match[2] || undefined,
-      tagName: match[3] || 'element'
-    };
-  }
-  const fallbackMatch = text.match(/nid="([^"]+)"/);
-  if (fallbackMatch && text.includes('元素片段:')) {
-    return {
-      nid: fallbackMatch[1],
-      tagName: 'element'
-    };
-  }
-  return null;
-}
-
-export function extractCleanUserPrompt(rawText: string): string {
-  if (!rawText.includes('引用元素') && !rawText.includes('元素片段:')) {
-    return rawText;
-  }
-  let cleaned = rawText;
-  cleaned = cleaned.replace(/^\[引用元素[^\]]*\]\s*/i, '');
-  cleaned = cleaned.replace(/^元素片段:\s*<[\s\S]*?>[\s\S]*?(?=\n\n([^\n<])|$)/i, '');
-  if (cleaned.startsWith('元素片段:')) {
-    const parts = cleaned.split(/\n\n+/);
-    if (parts.length > 1) {
-      cleaned = parts.slice(1).join('\n\n');
-    } else {
-      cleaned = cleaned.replace(/^元素片段:[^\n]*\n?/, '');
-    }
-  }
-  return cleaned.trim();
-}
-
 const WELCOME_MESSAGE: ChatMessageItem = {
   id: 'welcome',
   sender: 'assistant',
@@ -256,12 +229,14 @@ export function useAIEngineChat() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const engineCoreRef = useRef(createAIEngineCore());
   const operationLockRef = useRef(false);
+  const mountedRef=useRef(true);
+  useEffect(()=>{mountedRef.current=true;return()=>{mountedRef.current=false;};},[]);
   const pagePlansRef=useRef(new Map<string,{context:string;projectId:string;folderPath?:string;prepared?:PreparedMultiPagePlan;controller?:AbortController}>());
   const continuationSessionsRef=useRef(new Map<string,{checkpoint?:ContinuationCheckpoint;sectionedCheckpoint?:SectionedCheckpoint;context:string;decision:ReturnType<typeof resolveGenerationTarget>;
-    approved?:{snapshot:ModificationSnapshot;decision:ReturnType<typeof resolveGenerationTarget>;receipt?:ModificationReviewReceipt};textReferences:TextReference[]}>());
+    budget:TaskBudget;contract:DesignTaskContract;pageTaskPlan?:PageTaskSnapshot;approved?:{snapshot:ModificationSnapshot;decision:ReturnType<typeof resolveGenerationTarget>;receipt?:ModificationReviewReceipt;rulePreference?:boolean};textReferences:TextReference[]}>());
   const modificationPlansRef = useRef(new Map<string, {
     request: string; attachment?: ImageAttachment; options?: SendMessageOptions;
-    snapshot: ModificationSnapshot; decision: ReturnType<typeof resolveGenerationTarget>; analysis?: ModificationAnalysis;
+    snapshot: ModificationSnapshot; decision: ReturnType<typeof resolveGenerationTarget>; analysis?: ModificationAnalysis;rulePreference?:boolean;
   }>());
 
   useEffect(() => {
@@ -269,6 +244,7 @@ export function useAIEngineChat() {
     abortControllerRef.current?.abort();
     modificationPlansRef.current.clear();
     pagePlansRef.current.clear();
+    for(const session of continuationSessionsRef.current.values())session.budget.close();
     continuationSessionsRef.current.clear();
     abortControllerRef.current=null;operationLockRef.current=false;setIsGenerating(false);
     setMessages([WELCOME_MESSAGE]);
@@ -282,7 +258,10 @@ export function useAIEngineChat() {
           const restored: ChatMessageItem[] = [];
           for (const t of turns) {
             const rawUserText = t.user.text;
-            const refElem = parseReferencedElement(rawUserText);
+            const savedReference=t.user.reference;
+            const validReference=savedReference&&[savedReference.screen?.id,savedReference.screen?.name,savedReference.element?.nid,savedReference.element?.tagName]
+              .every(v=>typeof v==='string'&&v.trim()&&v.length<=200);
+            const refElem = parseReferencedElement(rawUserText)??(validReference?{nid:savedReference.element.nid,tagName:savedReference.element.tagName,screenName:savedReference.screen.name}:null);
             const cleanText = extractCleanUserPrompt(rawUserText);
             let refScreen: { id: string; name: string } | undefined = undefined;
             if (t.changeSet?.screens && t.changeSet.screens.length > 0) {
@@ -291,6 +270,7 @@ export function useAIEngineChat() {
                 refScreen = { id: rw.id, name: rw.name };
               }
             }
+            if(!refScreen&&validReference)refScreen={id:savedReference.screen.id,name:savedReference.screen.name};
 
             let imageUrl: string | undefined = undefined;
             if (t.user.attachments && t.user.attachments.length > 0) {
@@ -308,7 +288,7 @@ export function useAIEngineChat() {
               id: `usr_${t.turnId}`,
               sender: 'user',
               text: rawUserText,
-              displayText: cleanText !== rawUserText ? cleanText : undefined,
+              displayText:t.user.reviewRequest?`${extractCleanUserPrompt(t.user.reviewRequest)}\n\n${cleanText}`:cleanText !== rawUserText ? cleanText : undefined,
               referencedElement: refElem || undefined,
               referencedScreen: refScreen,
               imageUrl,
@@ -317,11 +297,17 @@ export function useAIEngineChat() {
             const historicalPage=refScreen&&useProjectStore.getState().screens[refScreen.id];
             const creationEvidence=historicalPage?.metadata?.creationEvidence;
             const repairedTurn=t.assistant.text?.startsWith('已完成一次控件样式修复')&&isPageCreationEvidence(creationEvidence)&&creationEvidence.repair?.status==='repaired';
+            const historicalPageTask=readPageTaskHistory(t.assistant.pageTaskHistory,rawUserText);
+            const historicalGuidance=readDesignGuidanceHistory(t.assistant.designGuidanceHistory,rawUserText);
             restored.push({
               id: `ast_${t.turnId}`,
               sender: 'assistant',
               text: t.assistant.text || '已完成设计生成。',
               checkpointId: t.changeSet?.checkpointId,
+              ...(historicalGuidance?{historicalGuidance,historicalGuidanceNotice:'历史设计依据，仅供回溯；不代表当前页面通过，也不能直接采纳或续写。'}:
+                Object.hasOwn(t.assistant,'designGuidanceHistory')?{historicalGuidanceNotice:'历史设计依据损坏或与本轮请求不匹配；会话正文仍可查看。'}:{}),
+              ...(historicalPageTask?{historicalPageTask,historicalPageTaskNotice:'历史功能规划，仅供回溯；不代表当前页面已复验，也不能直接采纳或续写。'}:
+                Object.hasOwn(t.assistant,'pageTaskHistory')?{historicalPageTaskNotice:'历史功能规划记录无效或与本轮请求不匹配；会话正文仍可查看。'}:{}),
               ...(repairedTurn?{creationRepairNotice:'此轮曾完成一次控件样式修复；历史结果不代表当前页面已复验。',htmlOutput:extractArtifact(t.assistant.text)?.html,screenId:refScreen!.id,screenName:refScreen!.name}:{}),
             });
           }
@@ -331,7 +317,7 @@ export function useAIEngineChat() {
         }
         const drafts = await loadQualityDrafts(projectId, folderPath);
         if (!isCancelled && drafts.length) setMessages(prev=>[...prev,...drafts.map(value=>({id:value.id,sender:'assistant' as const,text:'页面草稿已恢复，尚未通过验收。',qualityDraft:value,qualityDraftSaved:true,
-          qualityReport:value.draft.quality,originalUserPrompt:value.request,originalReferencedScreenId:value.decision.targetScreenId,isError:true}))]);
+          workflowContract:value.draft.pageTaskSource??value.draft.guidanceSource,qualityReport:value.draft.quality,originalUserPrompt:value.request,originalReferencedScreenId:value.decision.targetScreenId,isError:true}))]);
       } catch (e) {
         console.warn('Load conversations error:', e);
       } finally {
@@ -342,6 +328,7 @@ export function useAIEngineChat() {
     return () => {
       isCancelled = true;
       abortControllerRef.current?.abort();
+      for(const session of continuationSessionsRef.current.values())session.budget.close();
       continuationSessionsRef.current.clear();
     };
   }, [conversationKey, getConversationStore, getAttachmentStore]);
@@ -391,9 +378,10 @@ export function useAIEngineChat() {
     rawPrompt: string,
     attachment?: ImageAttachment,
     options?: SendMessageOptions,
-    approved?: { snapshot: ModificationSnapshot; decision: ReturnType<typeof resolveGenerationTarget>; receipt?: ModificationReviewReceipt }
+    approved?: { snapshot: ModificationSnapshot; decision: ReturnType<typeof resolveGenerationTarget>; receipt?: ModificationReviewReceipt;rulePreference?:boolean }
   ) => {
     const textToSend = rawPrompt.trim();
+    const contextualGuidance=(approved?.rulePreference??useAIConfigStore.getState().autoReferenceDesignRules)?{}:undefined;
     if (!textToSend || isGenerating || operationLockRef.current) return;
     if (approved && !isModificationSnapshotCurrent(useProjectStore.getState(), approved.snapshot)) return;
     const resuming = options?.continuationMessageId ? continuationSessionsRef.current.get(options.continuationMessageId) : undefined;
@@ -408,8 +396,13 @@ export function useAIEngineChat() {
       setMessages(prev=>prev.map(m=>m.qualityDraft?.id===repairing.value.id?{...m,qualityDraftNotice:'工程、原页或设计约束已变化，请重新生成；旧草稿仅供查看。'}:m));return;
     }
     if(resuming&&resuming.context!==recoveryContext()){
+      resuming.budget.close();
       continuationSessionsRef.current.delete(options!.continuationMessageId!);
       setMessages(prev=>prev.map(m=>m.id===options!.continuationMessageId?{...m,continuationAvailable:false,text:'工程、原页或设计约束已变化，旧片段不能继续使用；请重新生成。'}:m));return;
+    }
+    if(resuming&&!resuming.budget.canReserve(resuming.sectionedCheckpoint?4096:8192)){
+      resuming.budget.close();continuationSessionsRef.current.delete(options!.continuationMessageId!);
+      setMessages(prev=>prev.map(m=>m.id===options!.continuationMessageId?{...m,continuationAvailable:false,sectionedAvailable:false,taskBudget:resuming.budget.snapshot(),text:'原任务预算已耗尽、取消或超过时限，不能继续；请拆分设计或明确重新生成。'}:m));return;
     }
     if(resuming)approved=resuming.approved;
 
@@ -524,6 +517,7 @@ export function useAIEngineChat() {
     const projectKnowledge = [referenceDevicePrompt(settings), mobileNavigationPrompt(settings), knowledgeBundle.content].filter(Boolean).join('\n\n');
 
     if(resuming&&(resuming.checkpoint?.bindingKey??resuming.sectionedCheckpoint?.bindingKey)!==continuationBindingKey({provider:activeRole!.provider,model:activeRole!.modelId})){
+      resuming.budget.close();
       setMessages(prev=>prev.map(m=>m.id===options!.continuationMessageId?{...m,continuationAvailable:false,text:'Provider或模型已变化，请重新生成；未使用旧续写片段。'}:m));continuationSessionsRef.current.delete(options!.continuationMessageId!);return;
     }
     if(repairing && repairing.value.draft.bindingKey!==continuationBindingKey({provider:activeRole.provider,model:activeRole.modelId})) {
@@ -540,7 +534,7 @@ export function useAIEngineChat() {
         {id,sender:'assistant',text:'',pagePlan:{status:'planning',message:variants?'正在整理同页方案差异；确认前不会生成或修改页面。':'正在整理页面清单；确认前不会生成或修改页面。'}}]);
       try{
         const prepared=await prepareMultiPagePlan({state:requestState,request:textToSend,provider:activeRole.provider,model:activeRole.modelId,core:engineCoreRef.current,
-          attachment,textReferences,referencePageId:(variants?(decision.targetScreenId??decision.styleReferenceScreenId):decision.styleReferenceScreenId)??undefined,signal:controller.signal,isCurrent:current,splitFromSingle:options?.splitSinglePage});
+          attachment,textReferences,contextualGuidance,referencePageId:(variants?(decision.targetScreenId??decision.styleReferenceScreenId):decision.styleReferenceScreenId)??undefined,signal:controller.signal,isCurrent:current,splitFromSingle:options?.splitSinglePage});
         if(!current())throw Error('页面计划已取消或工程已变化，请重新规划。');session.prepared=prepared;
         setMessages(prev=>prev.map(m=>m.id===id?{...m,workflowContract:prepared.contract,pagePlan:{status:'ready',plan:prepared.plan,message:prepared.plan.summary}}:m));
       }catch(error){if(pagePlansRef.current.get(id)===session)setMessages(prev=>prev.map(m=>m.id===id?{...m,pagePlan:{status:controller.signal.aborted?'cancelled':'blocked',message:error instanceof Error?error.message:'页面规划失败。'}}:m));}
@@ -569,7 +563,7 @@ export function useAIEngineChat() {
           fingerprint: source.fingerprint ?? '', ...(source.stale ? { stale: true } : {}) })),
           ...textReferences.map(reference => ({ kind: 'text-reference' as const, id: reference.path ?? reference.name, fingerprint: contentFingerprint(reference.content) }))] });
       const reviewId = `review_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      const plan = { request: textToSend, attachment, options, snapshot, decision, analysis: undefined as ModificationAnalysis | undefined };
+      const plan = { request: textToSend, attachment, options, snapshot, decision,rulePreference:Boolean(contextualGuidance), analysis: undefined as ModificationAnalysis | undefined };
       modificationPlansRef.current.set(reviewId, plan);
       const controller = new AbortController();
       abortControllerRef.current = controller;
@@ -585,6 +579,7 @@ export function useAIEngineChat() {
       const update = (review: ModificationReviewState) => setMessages(prev => prev.map(m => m.id === reviewId ? { ...m, modificationReview: review } : m));
       try {
         const analysis = await analyzeScreenModification(engineCoreRef.current, {
+          contextualGuidance,onContract:contract=>{const current=useProjectStore.getState();if(mountedRef.current&&current.id===requestState.id&&current.folderPath===requestState.folderPath)setMessages(prev=>prev.map(m=>m.id===reviewId?{...m,workflowContract:contract}:m));},
           provider: activeRole.provider, model: activeRole.modelId, signal: controller.signal,
           html: screen.htmlContent, name: screen.name, request: textToSend,
           isCurrent: () => isModificationSnapshotCurrent(useProjectStore.getState(), snapshot),
@@ -613,13 +608,18 @@ export function useAIEngineChat() {
     }
 
     if (!repairing && !approved && modifiesExisting && decision.elementNid) {
-      // 明确引用的具体要求只生成该子树的操作，禁止退回整页改写。
+      // Explicit reference authorizes this subtree only. Structural requests never choose an ancestor.
       const current = useProjectStore.getState();
       const screen = current.screens[effectiveScreenId!];
       const snapshot = modificationSnapshot!;
       const controller = new AbortController(); abortControllerRef.current = controller;
       operationLockRef.current = true; setIsGenerating(true); setLastGuardOutput(null);
-      const messageId = `element_${Date.now()}`;
+      const messageId = `element_${Date.now()}_${crypto.randomUUID()}`;
+      const canonicalRequest=extractCleanUserPrompt(textToSend),structural=requiresElementStructure(canonicalRequest);
+      const elementCurrent=()=>{
+        const latest=switchedToVision?getActiveProviderForRole('vision'):(getActiveProviderForRole('code')||getActiveProviderForRole('chat'));
+        return !controller.signal.aborted&&isModificationSnapshotCurrent(useProjectStore.getState(),snapshot)&&Boolean(latest&&continuationBindingKey({provider:latest.provider,model:latest.modelId})===continuationBindingKey({provider:activeRole!.provider,model:activeRole!.modelId}));
+      };
       const startedAt = Date.now();
       const conversationStore = current.getConversationStore(), attachmentStore = current.getAttachmentStore();
       setMessages(prev => [...prev,
@@ -632,7 +632,7 @@ export function useAIEngineChat() {
           originalDecision:{action:'modify_screen',targetScreenId:screen.id,styleReferenceScreenId:null,elementNid:decision.elementNid}}
       ]);
       try {
-        const workflowContract = buildDesignTaskContract({ intent: 'modify_screen', request: textToSend,
+        const workflowContract = buildDesignTaskContract({ intent: 'modify_screen', request: canonicalRequest,
           target: { id: screen.id, name: screen.name, htmlContent: screen.htmlContent }, elementNid: decision.elementNid,
           deviceProfile: current.settings.deviceProfile, frameWidth: current.settings.frameWidth,
           referenceDeviceName: current.settings.referenceDevice?.name, designSystem: current.designSystem,
@@ -642,26 +642,30 @@ export function useAIEngineChat() {
             fingerprint: source.fingerprint ?? '', ...(source.stale ? { stale: true } : {}) })),
             ...textReferences.map(reference => ({ kind: 'text-reference' as const, id: reference.path ?? reference.name, fingerprint: contentFingerprint(reference.content) }))] });
         const candidate = await executeStructuredEdit(engineCoreRef.current,{
+          contextualGuidance,
           mode:'element',binding:{provider:activeRole.provider,model:activeRole.modelId},signal:controller.signal,
-          screen,elementNid:decision.elementNid,request:extractCleanUserPrompt(textToSend),settings:current.settings,contract:workflowContract,
+          screen,elementNid:decision.elementNid,request:canonicalRequest,settings:current.settings,contract:workflowContract,
           designSystem:current.designSystem,colorMode:current.settings.colorMode,protectedNids:current.getProtectedNids(screen.id),
-          isCurrent:()=>isModificationSnapshotCurrent(useProjectStore.getState(),snapshot),
-          imageUrl:attachment?.dataUrl,projectKnowledge:[projectKnowledge,formatTextReferences(textReferences)].filter(Boolean).join('\n\n'),
+          isCurrent:elementCurrent,
+          imageUrl:attachment?.dataUrl,attachment,textReferences,projectKnowledge:[projectKnowledge,formatTextReferences(textReferences)].filter(Boolean).join('\n\n'),
+          onPhase:phase=>{if(elementCurrent())setMessages(prev=>prev.map(m=>m.id===messageId?{...m,thinkingStage:phase==='planning'?1:2,generationProgress:phase==='planning'?'正在梳理所引用元素内的功能、信息与交互…':'正在生成所引用元素的副本修改…'}:m));},
           context:JSON.stringify({scopedCss:screen.scopedCss,overrides:Object.entries(current.overrides).filter(([key])=>key.startsWith(`${screen.id}:`))})
         });
         if (controller.signal.aborted) return;
+        setMessages(prev=>prev.map(m=>m.id===messageId?{...m,workflowContract:candidate.contract,taskBudget:candidate.taskBudget}:m));
         if (candidate.status!=='ready') throw new Error(candidate.message);
-        if (!isModificationSnapshotCurrent(useProjectStore.getState(),snapshot)) throw new Error('原页面或工程已变化，本次未应用修改。');
-        current.stageScreenChange(screen.id,candidate.html,`${screen.name}（元素细节修改候选）`,textToSend,workflowContract,
+        if (!elementCurrent()) throw new Error('原页面、工程或模型已变化，本次未应用修改。');
+        current.stageScreenChange(screen.id,candidate.html,`${screen.name}（${structural?'元素子树':'元素细节'}修改候选）`,textToSend,candidate.contract,
           candidate.executionRecord);
         current.panToScreen(screen.id);
-        const resultText = `已在原页副本中修改所引用元素的局部细节，其他内容保留。请对比后采纳。`;
+        const resultText = structural?'已在原页副本中修改所引用元素的内部结构，其他区域保留。请对比后采纳。':'已在原页副本中修改所引用元素的局部细节，其他内容保留。请对比后采纳。';
         setMessages(prev=>prev.map(m=>m.id===messageId?{...m,text:resultText,isGenerating:false,elapsedSeconds:Number(((Date.now()-startedAt)/1000).toFixed(1)),
-          screenId:screen.id,screenName:screen.name,toolAction:'modified',htmlOutput:candidate.html,qualityReport:candidate.qualityReport,workflowContract}:m));
+          screenId:screen.id,screenName:screen.name,toolAction:'modified',htmlOutput:candidate.html,qualityReport:candidate.qualityReport,workflowContract:candidate.contract,taskBudget:candidate.taskBudget}:m));
         try {
           const saved = attachment ? await attachmentStore.save(attachment.name,attachment.dataUrl) : null;
           await conversationStore.appendTurn({turnId:messageId,ts:Date.now(),user:{text:textToSend,
-            attachments:saved?[saved.relPath]:undefined,textFiles:textReferences.map(file=>file.path || file.name)},assistant:{text:resultText}});
+            reference:{screen:{id:screen.id,name:screen.name},element:{nid:decision.elementNid!,tagName:options?.referencedElement?.tagName??parseReferencedElement(textToSend)?.tagName??'element'}},
+            attachments:saved?[saved.relPath]:undefined,textFiles:textReferences.map(file=>file.path || file.name)},assistant:{text:resultText,pageTaskHistory:capturePageTaskHistory(candidate.contract,textToSend),designGuidanceHistory:captureDesignGuidanceHistory(candidate.contract,textToSend)}});
         } catch (error) { console.warn('Conversation save error:',error); }
       } catch (error) {
         if (!controller.signal.aborted) setMessages(prev=>prev.map(m=>m.id===messageId?{...m,isGenerating:false,isError:true,
@@ -705,6 +709,10 @@ export function useAIEngineChat() {
     const cleanDisplayPrompt =
       options?.displayText || extractCleanUserPrompt(textToSend);
 
+    // Frozen plans survive explicit continuation and local repair. Legacy tasks stay legacy.
+    const inheritedTaskPlan=resuming?.pageTaskPlan??repairing?.value.draft.pageTaskSource?.pageTaskPlan;
+    const planPageTask=Boolean(inheritedTaskPlan||(!resuming&&!repairing&&(decision.action==='create_screen'||(decision.action==='modify_screen'&&!decision.elementNid&&requiresFunctionalPlanning(cleanDisplayPrompt)))));
+
     const taskBrief = decision.action === 'create_screen' ? buildDesignBrief({ request: cleanDisplayPrompt,
       designSystem, device: settings.deviceProfile, mode: settings.colorMode,
       globalDecisions: Object.values(decisions).filter(d => d.active && d.scope === 'global').map(d => d.text),
@@ -728,6 +736,7 @@ export function useAIEngineChat() {
         text: '',
         isGenerating: true,
         designBrief: taskBrief,
+        generationProgress:planPageTask?(inheritedTaskPlan?'正在复核原功能与交互规划…':'正在梳理用户任务、必要信息与交互状态…'):undefined,
         thinkingStage: 1, // 1: 分析需求
         preActionSnapshot: preSnapshot,
         originalUserPrompt: textToSend,
@@ -747,21 +756,22 @@ export function useAIEngineChat() {
     setUnmatchedMentions([]);
     setLastGuardOutput(null);
 
-    // Simulate progressive thinking stages per PRD §3.2.3
-    const stageTimer1 = setTimeout(() => {
+    // Planned tasks advance on real callbacks, never elapsed time.
+    const stageTimer1 = planPageTask ? undefined : setTimeout(() => {
       setThinkingStage(2); // 2: 规划布局
       setMessages((prev) =>
         prev.map((m) => (m.id === assistantMsgId ? { ...m, thinkingStage: 2 } : m))
       );
     }, 600);
 
-    const stageTimer2 = setTimeout(() => {
+    const stageTimer2 = planPageTask ? undefined : setTimeout(() => {
       setThinkingStage(3); // 3: 应用Token
       setMessages((prev) =>
         prev.map((m) => (m.id === assistantMsgId ? { ...m, thinkingStage: 3 } : m))
       );
     }, 1200);
 
+    const generationBudget=resuming?.budget??createChatTaskBudget(Boolean(sections));
     try {
       const activeDecisionsList = Object.values(decisions)
         .filter((d) => d.active)
@@ -792,12 +802,16 @@ export function useAIEngineChat() {
         },
         provider: activeRole.provider,
         model: activeRole.modelId,
-        engineCore: engineCoreRef.current,
+        engineCore: engineCoreRef.current,taskBudget:generationBudget,
+        contextualGuidance:!resuming&&!repairing?contextualGuidance:undefined,
+        pageTaskPlanning:planPageTask?{snapshot:inheritedTaskPlan}:undefined,
+        onTaskPlan:()=>{if(!controller.signal.aborted){setThinkingStage(2);setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,thinkingStage:2,generationProgress:repairing?'原功能规划复核通过，正在定点修复已确认文案…':inheritedTaskPlan?'原功能规划复核通过，正在继续页面设计…':'功能、信息与交互规划已完成，正在生成页面布局…'}:m));}},
         resume: resuming?.checkpoint,
+        resumeContract:resuming?.contract,
         qualityRepair: repairing ? {draft:repairing.value.draft,labels:repairing.labels} : undefined,
         sectioned: sections ? {resume:resuming?.sectionedCheckpoint} : undefined,
         onSectionProgress: message=>{if(!controller.signal.aborted)setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,generationProgress:message}:m));},
-        isCurrent: sections ? ()=>{
+        isCurrent: sections||planPageTask ? ()=>{
           const current=useProjectStore.getState();
           const latest=switchedToVision?getActiveProviderForRole('vision'):(getActiveProviderForRole('code')||getActiveProviderForRole('chat'));
           return !controller.signal.aborted&&current.folderPath===requestState.folderPath&&contentFingerprint(JSON.stringify([current.id,pageCreationContext(current),current.settings,current.overrides,current.components]))===recoveryContext()
@@ -867,18 +881,23 @@ export function useAIEngineChat() {
       const elapsedSeconds = Number(((Date.now() - startTime) / 1000).toFixed(1));
 
       // 失败和质量拒绝同样消耗模型用量；恢复请求的累计统计不能因早退而丢失。
-      const promptTokens = output.usage?.inputTokens ?? Math.max(1, Math.round(textToSend.length / 3.5));
-      const completionTokens = output.usage?.outputTokens ?? Math.max(1, Math.round((output.extractedHtml?.length || output.rawResponse.length || 100) / 3.5));
+      const stoppedBeforeHtml=planPageTask&&!inheritedTaskPlan&&!output.usage&&!output.rawResponse;
+      const promptTokens = stoppedBeforeHtml?0:output.usage?.inputTokens ?? Math.max(1, Math.round(textToSend.length / 3.5));
+      const completionTokens = stoppedBeforeHtml?0:output.usage?.outputTokens ?? Math.max(1, Math.round((output.extractedHtml?.length || output.rawResponse.length || 100) / 3.5));
       let turnUsage = { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens };
       setMessages(prev => prev.map(m => m.id === assistantMsgId ? {
-        ...m, usage: turnUsage, generationWarnings: output.warnings, elapsedSeconds
+        ...m, usage: turnUsage, usageNote:planPageTask&&!inheritedTaskPlan?'用量仅含页面生成与修复；业务规划未返回用量，已计入请求预算。':undefined, generationWarnings: output.warnings, elapsedSeconds,taskBudget:output.taskBudget,workflowContract:output.workflowContract
       } : m));
       if (controller.signal.aborted || useProjectStore.getState().id!==requestState.id || useProjectStore.getState().folderPath!==requestState.folderPath) return;
-      if(output.continuationCheckpoint||output.sectionedCheckpoint){
-        continuationSessionsRef.current.set(assistantMsgId,{checkpoint:output.continuationCheckpoint,sectionedCheckpoint:output.sectionedCheckpoint,context:recoveryContext(),decision:structuredClone(decision),approved,textReferences:structuredClone(textReferences)});
+      const resumable=Boolean((output.continuationCheckpoint||output.sectionedCheckpoint)&&output.workflowContract&&generationBudget.canReserve(output.sectionedCheckpoint?4096:8192)&&
+        (!modificationSnapshot||isModificationSnapshotCurrent(useProjectStore.getState(),modificationSnapshot)));
+      if(resumable){
+        continuationSessionsRef.current.set(assistantMsgId,{checkpoint:output.continuationCheckpoint,sectionedCheckpoint:output.sectionedCheckpoint,context:recoveryContext(),decision:structuredClone(decision),budget:generationBudget,contract:structuredClone(output.workflowContract!),approved,textReferences:structuredClone(textReferences),pageTaskPlan:output.workflowContract?.pageTaskPlan?structuredClone(output.workflowContract.pageTaskPlan):undefined});
       }
-      setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,sectionedMode:sections,sectionedAvailable:!!output.sectionedCheckpoint,continuationAvailable:!!output.continuationCheckpoint||!!output.sectionedCheckpoint,
-        outputLimitReached:!!output.continuationCheckpoint||isOutputLimit(output.executionRecord?.finishReason)}:m));
+      const budgetWarning=(output.continuationCheckpoint||output.sectionedCheckpoint)&&!resumable?'原任务剩余额度或时限不足以继续；请拆分设计或明确重新生成。':undefined;
+      setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,sectionedMode:sections,sectionedAvailable:resumable&&!!output.sectionedCheckpoint,continuationAvailable:resumable,
+        ...(budgetWarning?{generationWarnings:[...(m.generationWarnings??[]),budgetWarning]}:{}),
+        executionRecord:output.executionRecord,outputLimitReached:!!output.continuationCheckpoint||isOutputLimit(output.executionRecord?.finishReason)}:m));
 
       if (modificationSnapshot && !isModificationSnapshotCurrent(useProjectStore.getState(), modificationSnapshot)) {
         setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, isGenerating: false, isError: true, text: '生成期间原页面或工程已变化，本次未应用修改，请重新分析。' } : m));
@@ -1007,7 +1026,7 @@ export function useAIEngineChat() {
         const toolResult = await CanvasToolExecutor.executeAsync(toolCall.tool === 'modify_screen' ? { ...toolCall, params: { ...toolCall.params, modificationRequest: textToSend,
           workflowContract: output.workflowContract,executionRecord:output.executionRecord } } : toolCall.tool==='create_screen'?{...toolCall,params:{...toolCall.params,workflowContract:output.workflowContract,executionRecord:output.executionRecord}}:toolCall,
           {signal:controller.signal,isCurrent:()=>pageCreationContext(useProjectStore.getState())===creationContext,
-            repair:toolCall.tool==='create_screen'&&output.executionRecord?.source==='model'?{core:engineCoreRef.current,provider:activeRole.provider,model:activeRole.modelId,onPhase:phase=>{if(!controller.signal.aborted&&pageCreationContext(useProjectStore.getState())===creationContext)setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,text:phase==='repairing'?'检查发现控件渲染问题，正在尝试一次受控样式修复…':'修复指令已执行，正在重新检查全部门禁…'}:m));}}:undefined});
+            repair:toolCall.tool==='create_screen'&&output.executionRecord?.source==='model'?{core:engineCoreRef.current,taskBudget:generationBudget,provider:activeRole.provider,model:activeRole.modelId,onPhase:phase=>{if(!controller.signal.aborted&&pageCreationContext(useProjectStore.getState())===creationContext)setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,text:phase==='repairing'?'检查发现控件渲染问题，正在尝试一次受控样式修复…':'修复指令已执行，正在重新检查全部门禁…'}:m));}}:undefined});
         if(toolResult.repair?.usage){
           const usage=toolResult.repair.usage;turnUsage={promptTokens:turnUsage.promptTokens+usage.inputTokens,completionTokens:turnUsage.completionTokens+usage.outputTokens,totalTokens:turnUsage.totalTokens+usage.inputTokens+usage.outputTokens};
           setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,usage:{...turnUsage},generationWarnings:[...(output.warnings??[]),...(toolResult.repair!.usageEstimated?['受控修复请求未返回用量，已估算计入本轮。']:[])]}:m));
@@ -1088,6 +1107,8 @@ export function useAIEngineChat() {
             attachments: attachmentPath ? [attachmentPath] : undefined
           },
           assistant: {
+            pageTaskHistory:capturePageTaskHistory(output.workflowContract,textToSend),
+            designGuidanceHistory:captureDesignGuidanceHistory(output.workflowContract,textToSend),
             text: repairNotice&&appliedHtml?`${repairNotice}\n<artifact identifier="screen_new" type="screen" title="${(finalScreenName||'新设计页').replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;')}">${appliedHtml}</artifact>`:output.rawResponse
           },
           changeSet: {
@@ -1109,6 +1130,9 @@ export function useAIEngineChat() {
         )
       );
     } finally {
+      if(controller.signal.aborted)continuationSessionsRef.current.delete(assistantMsgId);
+      if(continuationSessionsRef.current.get(assistantMsgId)?.budget!==generationBudget)generationBudget.close();
+      setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,taskBudget:generationBudget.snapshot()}:m));
       operationLockRef.current = false;
       setIsGenerating(false);
       abortControllerRef.current = null;
@@ -1136,6 +1160,7 @@ export function useAIEngineChat() {
       const regionPlan = getRegionModificationPlan(plan.analysis, selected);
       if (mode === 'local' ? !localPlan : !regionPlan) return;
       const modeName = mode === 'region' ? '完整区块' : '局部';
+      const executionId=`${messageId}-${crypto.randomUUID()}`;
       const controller = new AbortController(); abortControllerRef.current = controller;
       operationLockRef.current = true; setIsGenerating(true); setLastGuardOutput(null);
       const update = (review: ModificationReviewState) => setMessages(prev => prev.map(m => m.id === messageId ? { ...m, modificationReview: review } : m));
@@ -1154,6 +1179,13 @@ export function useAIEngineChat() {
           if (plan.attachment && (!binding || !supportsVision(binding.provider, binding.modelId))) binding = getActiveProviderForRole('vision');
           if (!binding?.provider || (!binding.provider.apiKey && binding.provider.protocol !== 'ollama_native')) throw new Error('请先配置可用的 AI Provider 以解析补充要求。');
         }
+        const structuredCurrent=()=>{
+          if(!isModificationSnapshotCurrent(useProjectStore.getState(),plan.snapshot))return false;
+          if(!binding)return true;
+          let latest=getActiveProviderForRole('code')||getActiveProviderForRole('chat');
+          if(plan.attachment&&(!latest||!supportsVision(latest.provider,latest.modelId)))latest=getActiveProviderForRole('vision');
+          return Boolean(latest&&continuationBindingKey({provider:latest.provider,model:latest.modelId})===continuationBindingKey({provider:binding.provider,model:binding.modelId}));
+        };
         const workflowContract = buildDesignTaskContract({ intent: 'modify_screen', request: scope,
           target: { id: screen.id, name: screen.name, htmlContent: screen.htmlContent },
           deviceProfile: current.settings.deviceProfile, frameWidth: current.settings.frameWidth,
@@ -1166,31 +1198,38 @@ export function useAIEngineChat() {
             ...(plan.options?.textReferences ?? []).map(reference => ({ kind: 'text-reference' as const, id: reference.path ?? reference.name, fingerprint: contentFingerprint(reference.content) }))] });
         workflowContract.modificationReview = receipt;
         const candidate = await executeStructuredEdit(engineCoreRef.current,{
+          contextualGuidance:(plan.rulePreference??useAIConfigStore.getState().autoReferenceDesignRules)?{}:undefined,
           mode,screen,request:scope,contract:workflowContract,settings:current.settings,designSystem:current.designSystem,colorMode:current.settings.colorMode,
-          signal:controller.signal,isCurrent:()=>isModificationSnapshotCurrent(useProjectStore.getState(),plan.snapshot),
+          signal:controller.signal,isCurrent:structuredCurrent,
           binding:binding ? {provider:binding.provider,model:binding.modelId} : undefined,
           local:localPlan ? {...localPlan,supplement:Boolean(extra.trim())} : undefined,regionNids:regionPlan?.targetNids,
-          protectedNids:current.getProtectedNids(screen.id),imageUrl:plan.attachment?.dataUrl,projectKnowledge:confirmedKnowledge
+          protectedNids:current.getProtectedNids(screen.id),imageUrl:plan.attachment?.dataUrl,attachment:plan.attachment,textReferences:plan.options?.textReferences,projectKnowledge:confirmedKnowledge,
+          onPhase:phase=>{if(!controller.signal.aborted&&structuredCurrent())update({...plan.analysis!,status:'submitted',summary:phase==='planning'?'正在梳理已确认区块的功能、信息与交互…':'区块范围已确认，正在生成副本中的对应区块…'});}
         });
-        if(candidate.status!=='ready')throw new Error(candidate.message);
-        current.stageScreenChange(screen.id, candidate.html, `${screen.name}（${modeName}修改候选）`, scope, workflowContract,
+        if(candidate.status!=='ready'){
+          if(!controller.signal.aborted)setMessages(prev=>prev.map(m=>m.id===messageId?{...m,workflowContract:candidate.contract,taskBudget:candidate.taskBudget}:m));
+          throw new Error(candidate.message);
+        }
+        if(!structuredCurrent())throw new Error('原页面、工程或模型已变化，未暂存本次区块结果。');
+        current.stageScreenChange(screen.id, candidate.html, `${screen.name}（${modeName}修改候选）`, scope, candidate.contract,
           candidate.executionRecord);
         current.panToScreen(screen.id);
-        modificationPlansRef.current.delete(messageId);
         update({ ...plan.analysis, status: 'submitted' });
+        setMessages(prev=>prev.map(m=>m.id===messageId?{...m,workflowContract:m.workflowContract?.operation==='analyze'?m.workflowContract:undefined,taskBudget:undefined}:m));
         const resultText = `已在「${screen.name}」的副本上完成 ${mode === 'region' ? regionPlan!.targetNids.length : localPlan!.allowedNids.length} 个目标的${modeName}修改，原页面未替换。请对比后采纳或保留原版。`;
         setMessages(prev => [...prev,
-          { id: `local_usr_${messageId}`, sender: 'user', text: scope },
-          { id: `local_ast_${messageId}`, sender: 'assistant', text: resultText, screenId: screen.id, screenName: screen.name,
-            toolAction: 'modified', qualityReport: candidate.qualityReport, workflowContract, htmlOutput: candidate.html, preActionSnapshot: { screenId: screen.id, screenName: screen.name, htmlContent: screen.htmlContent },
+          { id: `local_usr_${executionId}`, sender: 'user', text: scope },
+          { id: `local_ast_${executionId}`, sender: 'assistant', text: resultText, screenId: screen.id, screenName: screen.name,
+            toolAction: 'modified', qualityReport: candidate.qualityReport, workflowContract:candidate.contract,taskBudget:candidate.taskBudget, htmlOutput: candidate.html, preActionSnapshot: { screenId: screen.id, screenName: screen.name, htmlContent: screen.htmlContent },
+            structuredRetry:{reviewId:messageId,selected:[...selected],extra,mode},
             originalUserPrompt: `${plan.request}\n${scope}`, originalReferencedScreenId: screen.id, originalAttachment: plan.attachment,
             originalDecision: { action: 'modify_screen', targetScreenId: screen.id, styleReferenceScreenId: null, elementNid: null } }
         ]);
         try {
           const savedAttachment = plan.attachment ? await attachmentStore.save(plan.attachment.name, plan.attachment.dataUrl) : null;
-          await conversationStore.appendTurn({ turnId: `local_${messageId}`, ts: Date.now(),
-            user: { text: `${plan.request}\n${scope}`, attachments: savedAttachment ? [savedAttachment.relPath] : undefined,
-              textFiles: plan.options?.textReferences?.map(file => file.path || file.name) }, assistant: { text: resultText } });
+          await conversationStore.appendTurn({ turnId: `local_${executionId}`, ts: Date.now(),
+            user: { text:scope,reviewRequest:plan.request,attachments: savedAttachment ? [savedAttachment.relPath] : undefined,
+              textFiles: plan.options?.textReferences?.map(file => file.path || file.name) }, assistant: { text:resultText,pageTaskHistory:capturePageTaskHistory(candidate.contract,scope),designGuidanceHistory:captureDesignGuidanceHistory(candidate.contract,scope) } });
         } catch (error) { console.warn('Conversation save error:', error); }
       } catch (error) {
         update({ ...plan.analysis, status: controller.signal.aborted ? 'cancelled' : 'ready', summary: `${modeName}修改未执行：${error instanceof Error ? error.message : String(error)}` });
@@ -1474,8 +1513,10 @@ export function useAIEngineChat() {
   const retryTurn = (msgId: string) => {
     const target = messages.find((m) => m.id === msgId);
     if (!target?.originalUserPrompt || isGenerating) return;
+    if(target.structuredRetry){const retry=target.structuredRetry;void confirmModification(retry.reviewId,retry.selected,retry.extra,retry.mode);return;}
     sendMessage(target.originalUserPrompt, target.originalAttachment, {
       sectioned:target.sectionedMode,
+      ...(target.originalDecision?.elementNid?{referencedElement:{nid:target.originalDecision.elementNid,tagName:'element',screenName:target.preActionSnapshot?.screenName}}:{}),
       referencedScreenId: target.originalReferencedScreenId ?? target.preActionSnapshot?.screenId ?? null
     });
   };
@@ -1504,12 +1545,13 @@ export function useAIEngineChat() {
     if(!targets.length){notice('没有可安全建议的文本目标，请查看检查详情。');return;}
     const controller=new AbortController();abortControllerRef.current=controller;operationLockRef.current=true;setIsGenerating(true);
     setMessages(prev=>prev.map(m=>m.id===msgId?{...m,qualityDraftBusy:true,qualityDraftNotice:'仅为报错操作生成一次文案建议，确认前不应用。'}:m));
+    const suggestionBudget=createSingleRequestBudget(1800);
     try {
       if(!await claimDraftSuggestion(value,state.folderPath))throw Error('此草稿已使用过AI建议，请手动填写文案。');
       const claimed={...value,aiAttempted:true};
       setMessages(prev=>prev.map(m=>m.id===msgId?{...m,qualityDraft:claimed}:m));
       if(controller.signal.aborted)throw Error('建议已取消，本次机会已记录。');
-      const result=await suggestDraftLabels(engineCoreRef.current,{provider:actual.provider,model:actual.modelId},value.request,targets,controller.signal);
+      const result=await suggestDraftLabels(engineCoreRef.current,{provider:actual.provider,model:actual.modelId},value.request,targets,controller.signal,suggestionBudget);
       const current=useProjectStore.getState(),same=current.id===state.id&&current.folderPath===state.folderPath;
       const fresh=same&&value.projectContext===contentFingerprint(JSON.stringify([current.id,pageCreationContext(current),current.settings,current.overrides,current.components]));
       const saved={...claimed,suggestions:!result.error&&!controller.signal.aborted&&fresh?result.labels:undefined};
@@ -1518,6 +1560,7 @@ export function useAIEngineChat() {
         usage:result.usage?{promptTokens:(m.usage?.promptTokens??0)+result.usage.inputTokens,completionTokens:(m.usage?.completionTokens??0)+result.usage.outputTokens,totalTokens:(m.usage?.totalTokens??0)+result.usage.inputTokens+result.usage.outputTokens}:m.usage}:m));
     }catch(error){if(useProjectStore.getState().id===state.id)notice(String(error instanceof Error?error.message:error));}
     finally {
+      suggestionBudget.close();
       setMessages(prev=>prev.map(m=>m.id===msgId?{...m,qualityDraftBusy:false}:m));
       if(abortControllerRef.current===controller){abortControllerRef.current=null;operationLockRef.current=false;setIsGenerating(false);}
     }

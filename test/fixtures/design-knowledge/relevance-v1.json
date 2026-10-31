@@ -1,0 +1,915 @@
+{
+  "version": 1,
+  "frozenAt": "2026-10-29",
+  "policy": "Only calibration is scored during implementation; held-out reserved for M5. Canonical unit tests are not held-out evidence.",
+  "cases": [
+    {
+      "id": "cal-copy-1",
+      "family": "copy",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "产品说明长正文需要独立空间"
+      },
+      "acceptable": [
+        "LY-04"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-copy-2",
+      "family": "copy",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "这段长文本不能变成单字竖排"
+      },
+      "acceptable": [
+        "LY-04"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-badge-1",
+      "family": "badge",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "铃铛右上角数字应小一点"
+      },
+      "acceptable": [
+        "CP-02"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-badge-2",
+      "family": "badge",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "badge 附着在通知入口右上"
+      },
+      "acceptable": [
+        "CP-02"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-button-1",
+      "family": "button",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "确认按钮要保留完整文字"
+      },
+      "acceptable": [
+        "TY-06"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-button-2",
+      "family": "button",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "primary button 文案被裁切"
+      },
+      "acceptable": [
+        "TY-06"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-tags-1",
+      "family": "tags",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "多个筛选项要整项换行"
+      },
+      "acceptable": [
+        "CP-03"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-tags-2",
+      "family": "tags",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "chips 选中态不明显"
+      },
+      "acceptable": [
+        "CP-03"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-person-1",
+      "family": "person",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "姓名职业不能挤到一起"
+      },
+      "acceptable": [
+        "CP-04"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-person-2",
+      "family": "person",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "person 的头像不该挤压主体信息"
+      },
+      "acceptable": [
+        "CP-04"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-form-1",
+      "family": "form",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "form 标签要对应输入控件"
+      },
+      "acceptable": [
+        "CP-05"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-form-2",
+      "family": "form",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "填写时错误说明应靠近对应字段"
+      },
+      "acceptable": [
+        "CP-05"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-gradient-1",
+      "family": "gradient",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "gradient 上文字需要清楚"
+      },
+      "acceptable": [
+        "MD-03"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-gradient-2",
+      "family": "gradient",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "沿用当前渐变并核对前景"
+      },
+      "acceptable": [
+        "MD-03"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-fixed-1",
+      "family": "fixed",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "fixed footer 应预留底部空间"
+      },
+      "acceptable": [
+        "LY-07"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-fixed-2",
+      "family": "fixed",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "吸底操作不要遮住末行"
+      },
+      "acceptable": [
+        "LY-07"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-media-1",
+      "family": "media",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "image 应保持主体比例"
+      },
+      "acceptable": [
+        "MD-02"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-media-2",
+      "family": "media",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "媒体的加载空间要稳定"
+      },
+      "acceptable": [
+        "MD-02"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-list-1",
+      "family": "list",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "重复行沿用一致层级"
+      },
+      "acceptable": [
+        "CP-06"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-list-2",
+      "family": "list",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "list 内操作不能挤压内容"
+      },
+      "acceptable": [
+        "CP-06"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "cal-weather",
+      "family": "negative-weather",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "明天会下雨吗"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-arithmetic",
+      "family": "negative-arithmetic",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "计算五加六"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-blank",
+      "family": "negative-blank",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": ""
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-unknown",
+      "family": "negative-unknown",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "创建一个未知的东西"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-question",
+      "family": "negative-question",
+      "split": "calibration",
+      "query": {
+        "operation": "answer",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "按钮怎么设计"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-theme",
+      "family": "negative-theme",
+      "split": "calibration",
+      "query": {
+        "operation": "theme-proposal",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "调整配色"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-import",
+      "family": "negative-import",
+      "split": "calibration",
+      "query": {
+        "operation": "import",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "导入渐变页面"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-preserve",
+      "family": "negative-preserve",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "铃铛角标需要保真",
+        "preserveSource": true
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-target-unknown",
+      "family": "negative-target-unknown",
+      "split": "calibration",
+      "query": {
+        "operation": "modify",
+        "device": "mobile",
+        "scope": "element",
+        "maxChars": 800,
+        "request": "CP-02"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-target-other",
+      "family": "negative-target-other",
+      "split": "calibration",
+      "query": {
+        "operation": "modify",
+        "device": "mobile",
+        "scope": "element",
+        "maxChars": 800,
+        "request": "CP-08 套餐",
+        "features": [
+          "badge"
+        ]
+      },
+      "acceptable": [
+        "CP-02"
+      ],
+      "forbidden": [
+        "CP-08"
+      ]
+    },
+    {
+      "id": "cal-budget-zero",
+      "family": "negative-budget-zero",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 0,
+        "request": "标签换行"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-budget-small",
+      "family": "negative-budget-small",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 1,
+        "request": "长正文"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-token-boundary",
+      "family": "negative-token-boundary",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "iconic art"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-substring",
+      "family": "negative-substring",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "recharger manual"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-url",
+      "family": "negative-url",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "https://example.invalid/abc"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-politics",
+      "family": "negative-politics",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "解释这个词的历史"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-poem",
+      "family": "negative-poem",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "写一首小诗"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-calendar",
+      "family": "negative-calendar",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "今天几号"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-json",
+      "family": "negative-json",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "解析这段 JSON"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "cal-translate",
+      "family": "negative-translate",
+      "split": "calibration",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "翻译 hello"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "hold-detail",
+      "family": "detail",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "为志愿者制作 profile，突出主体身份"
+      },
+      "acceptable": [
+        "CT-01"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "hold-dashboard",
+      "family": "dashboard",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "运营 dashboard 中任务应先于次级入口"
+      },
+      "acceptable": [
+        "CT-04"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "hold-pricing",
+      "family": "pricing",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "为按月服务制作 pricing，保持费用与权益对应"
+      },
+      "acceptable": [
+        "CP-08"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "hold-conversation",
+      "family": "conversation",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "客服 conversation 中正文与复制操作分层"
+      },
+      "acceptable": [
+        "LY-03"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "hold-empty",
+      "family": "empty",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "empty 区域说明当前无记录及下一步"
+      },
+      "acceptable": [
+        "CT-06"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "hold-state",
+      "family": "state",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "state 除色相外也要有可辨认标记"
+      },
+      "acceptable": [
+        "CO-04"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "hold-icon",
+      "family": "icon",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "svg 的 viewBox 留白影响视觉对齐"
+      },
+      "acceptable": [
+        "MD-01"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "hold-spacing",
+      "family": "spacing",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "spacing 应区分同组和跨组距离"
+      },
+      "acceptable": [
+        "LY-02"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "hold-typography",
+      "family": "typography",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "typography 应兼顾阅读与主次"
+      },
+      "acceptable": [
+        "TY-01"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "hold-color",
+      "family": "color",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "color 取自工程现有角色而不是行业默认"
+      },
+      "acceptable": [
+        "CO-01"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "hold-negative-1",
+      "family": "held-negative-1",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "火车什么时候到"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "hold-negative-2",
+      "family": "held-negative-2",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "这个段落是什么意思"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "hold-negative-3",
+      "family": "held-negative-3",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "求三角形面积"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "hold-negative-4",
+      "family": "held-negative-4",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "创作一句口号"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "hold-negative-5",
+      "family": "held-negative-5",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "列出月份"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "hold-negative-6",
+      "family": "held-negative-6",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "讲个故事"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "hold-negative-7",
+      "family": "held-negative-7",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "帮助整理书单"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "hold-negative-8",
+      "family": "held-negative-8",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "选择哪个学科"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "hold-negative-9",
+      "family": "held-negative-9",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "量子纠缠是什么"
+      },
+      "acceptable": [],
+      "forbidden": []
+    },
+    {
+      "id": "hold-negative-10",
+      "family": "held-negative-10",
+      "split": "held-out",
+      "query": {
+        "operation": "create",
+        "device": "mobile",
+        "scope": "page",
+        "maxChars": 800,
+        "request": "烹饪需要多久"
+      },
+      "acceptable": [],
+      "forbidden": []
+    }
+  ]
+}

@@ -2,6 +2,8 @@ import type { Asset, DesignSystemOrigin } from '../../types/project';
 import { knowledgeFingerprint, type KnowledgeState } from './projectKnowledge';
 import { contentFingerprint } from './designWorkflow';
 import type { RestyleOutcome, RestylePlan, RestyleTarget } from './restyleService';
+import {TaskBudget,type TaskBudgetSnapshot} from './taskBudget';
+import {createRestyleBudget} from './taskBudgetPolicy';
 
 /** Ignore canvas positions/measurement but include every input that can change the style/content task. */
 export function restyleContextKey(state: KnowledgeState & { assets: Record<string, Asset>; designSystemOrigin?: DesignSystemOrigin }): string {
@@ -11,6 +13,7 @@ export function restyleContextKey(state: KnowledgeState & { assets: Record<strin
 }
 
 export interface RestyleBatchResult {
+  taskBudget?:TaskBudgetSnapshot;
   status: 'completed' | 'cancelled' | 'stale';
   outcomes: RestyleOutcome[];
   remaining: number;
@@ -27,19 +30,29 @@ export interface RestyleApplicationResult {
 }
 
 /** Sequential, cancellable orchestration shared by the batch UI; model success alone never counts as application. */
-export async function executeRestyleBatch(options: {
+interface RestyleBatchOptions {
   plan: RestylePlan; dryRun: RestyleOutcome; confirmedContextKey: string;
   getContextKey: () => string; resolveTarget: (target: RestyleTarget) => RestyleTarget | null;
-  generate: (target: RestyleTarget) => Promise<RestyleOutcome>;
+  generate: (target: RestyleTarget,taskBudget:TaskBudget) => Promise<RestyleOutcome>;
   apply: (outcome: RestyleOutcome) => boolean | RestyleApplicationResult | Promise<boolean | RestyleApplicationResult>;
   signal?: AbortSignal; onProgress?: (outcomes: RestyleOutcome[]) => void;
-}): Promise<RestyleBatchResult> {
+  taskBudget?:TaskBudget;
+}
+export async function executeRestyleBatch(options:RestyleBatchOptions):Promise<RestyleBatchResult>{
+  const budget=options.taskBudget??createRestyleBudget(options.plan.queue.slice(1));
+  let result:RestyleBatchResult;
+  try {result=await runRestyleBatch(options,budget);}finally {if(!options.taskBudget){if(options.signal?.aborted)budget.cancel('批量重塑已取消。');budget.close();}}
+  return {...result,taskBudget:budget.snapshot()};
+}
+async function runRestyleBatch(options:RestyleBatchOptions,budget:TaskBudget): Promise<RestyleBatchResult> {
   const plan = structuredClone(options.plan), dryRun = structuredClone(options.dryRun);
   const outcomes: RestyleOutcome[] = [];
   const batchId = `restyle-batch-${crypto.randomUUID()}`;
   let expected = options.confirmedContextKey;
-  const stop = (): RestyleBatchResult | undefined => options.signal?.aborted
+  const stop = (beforeGeneration=false): RestyleBatchResult | undefined => options.signal?.aborted
     ? {status:'cancelled',outcomes,remaining:plan.queue.length-outcomes.length,message:'批量重塑已停止，已应用的修改可通过历史撤销。'}
+    : budget.signal.aborted||(beforeGeneration&&budget.snapshot().exhausted)
+      ? {status:'cancelled',outcomes,remaining:plan.queue.length-outcomes.length,message:'批次预算已耗尽或超过时限，剩余项目未请求；已应用项可撤销。'}
     : options.getContextKey() !== expected
       ? {status:'stale',outcomes,remaining:plan.queue.length-outcomes.length,message:'工程或任务上下文已变化，剩余重塑已停止；请重新试跑。'} : undefined;
   const invalid = stop(); if (invalid) return invalid;
@@ -48,11 +61,11 @@ export async function executeRestyleBatch(options: {
     return {status:'stale',outcomes,remaining:plan.queue.length,message:'缺少与确认队列对应的有效试跑结果，请重新试跑。'};
   }
   for (let index=0; index<plan.queue.length; index++) {
-    const interrupted = stop(); if (interrupted) return interrupted;
+    const interrupted = stop(index>0); if (interrupted) return interrupted;
     const target = options.resolveTarget(plan.queue[index]);
     if (!target || (index===0 && target.html !== dryRun.target.html)) return {status:'stale',outcomes,remaining:plan.queue.length-outcomes.length,message:'重塑目标已删除或试跑基线变化，请重新试跑。'};
     let outcome: RestyleOutcome;
-    try { outcome = index===0 ? dryRun : await options.generate(structuredClone(target)); }
+    try { outcome = index===0 ? dryRun : await options.generate(structuredClone(target),budget); }
     catch (error) { outcome = {target,status:'failed',message:error instanceof Error ? error.message : '重塑执行失败'}; }
     const afterGeneration = stop(); if (afterGeneration) return afterGeneration;
     if (outcome.target.id !== target.id || outcome.target.kind !== target.kind || outcome.target.html !== target.html) {

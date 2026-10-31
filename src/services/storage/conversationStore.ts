@@ -1,4 +1,5 @@
 import { ProjectStorage, QuotaExceededError } from './projectStorage';
+import {readConversationTurn} from './conversationSchema';
 
 /**
  * 会话存档 (A2 / T-AE-31, T-AE-32, T-AE-36)。
@@ -42,6 +43,10 @@ export interface ConversationTurn {
   ts: number;
   user: {
     text: string;
+    /** Original broad review request; text remains the exact confirmed execution scope. */
+    reviewRequest?:string;
+    /** Display provenance only; restoration never enables a reference or execution decision. */
+    reference?:{screen:{id:string;name:string};element:{nid:string;tagName:string}};
     /** 附件只存 relPath，绝不存 base64 原文 (T-AE-32) */
     attachments?: string[];
     /** 本轮读取过的文本资料名称/路径，不重复存储正文。 */
@@ -49,6 +54,9 @@ export interface ConversationTurn {
   };
   assistant: {
     text: string;
+    /** Frozen provenance for this turn; omitted by old/compacted records. Read-only. */
+    pageTaskHistory?: import('../ai/pageTaskHistory').PageTaskHistory;
+    designGuidanceHistory?:import('../ai/designKnowledge/history').DesignGuidanceHistory;
     model?: string;
     usage?: { inputTokens?: number; outputTokens?: number };
     durationMs?: number;
@@ -78,19 +86,36 @@ const shardIdFor = (ts: number) => {
 };
 
 const shardPath = (shard: string) => `${CONV_DIR}/${shard}.jsonl`;
+const writes=new Map<string|ProjectStorage,Promise<unknown>>();
+const scope=(storage:ProjectStorage)=>storage.scopeKey??storage;
+function enqueue<T>(storage:ProjectStorage,work:()=>Promise<T>):Promise<T>{
+  const key=scope(storage),next=(writes.get(key)??Promise.resolve()).catch(()=>{}).then(work);
+  writes.set(key,next);void next.finally(()=>{if(writes.get(key)===next)writes.delete(key);}).catch(()=>{});return next;
+}
 
 export class ConversationStore {
   constructor(private readonly storage: ProjectStorage) {}
 
   private async readIndex(): Promise<ConversationIndex> {
     const raw = await this.storage.readText(INDEX_PATH);
-    if (!raw) return { shards: [] };
+    const indexed=new Map<string,ShardMeta>(),duplicates=new Set<string>();
     try {
-      return JSON.parse(raw) as ConversationIndex;
-    } catch {
-      // 索引损坏不应阻断会话读取——分片本身是自足的
-      return { shards: [] };
+      const parsed=raw?JSON.parse(raw):null;
+      if(Array.isArray(parsed?.shards))for(const meta of parsed.shards){
+        if(!meta||typeof meta.shard!=='string'||!/^\d{4}-(0[1-9]|1[0-2])$/.test(meta.shard)||
+          !Number.isSafeInteger(meta.turns)||meta.turns<0||!Number.isFinite(meta.firstTs)||!Number.isFinite(meta.lastTs)||meta.firstTs<0||meta.lastTs<meta.firstTs)continue;
+        if(indexed.has(meta.shard))duplicates.add(meta.shard);else indexed.set(meta.shard,meta);
+      }
+    }catch{/* Recover only from real month files in this controlled directory. */}
+    const files=(await this.storage.listDir(CONV_DIR)).filter(name=>/^\d{4}-(0[1-9]|1[0-2])\.jsonl$/.test(name)).sort();
+    const shards:ShardMeta[]=[];
+    for(const file of files){
+      const shard=file.slice(0,-6),known=indexed.get(shard);
+      if(known&&!duplicates.has(shard)){shards.push(known);continue;}
+      const turns=(await this.storage.readAllLines(shardPath(shard))).map(line=>this.parse(line)).filter((t):t is ConversationTurn=>t!==null);
+      if(turns.length){const span=turns.reduce((a,t)=>({firstTs:Math.min(a.firstTs,t.ts),lastTs:Math.max(a.lastTs,t.ts)}),{firstTs:Infinity,lastTs:0});shards.push({shard,turns:turns.length,...span});}
     }
+    return {shards};
   }
 
   /**
@@ -100,17 +125,22 @@ export class ConversationStore {
    * 就让整个工程保存失败（ISSUE-008 的数据丢失级风险）。
    * 返回 false 表示未落盘，由上层决定是否提示。
    */
-  async appendTurn(turn: ConversationTurn): Promise<boolean> {
+  appendTurn(turn: ConversationTurn): Promise<boolean> {
+    try{const copy=structuredClone(turn);return enqueue(this.storage,()=>this.append(copy));}catch{return Promise.resolve(false);}
+  }
+  private async append(turn:ConversationTurn):Promise<boolean>{
     try {
+      if(!readConversationTurn(turn))return false;
       const shard = shardIdFor(turn.ts);
       await this.storage.ensureDir(CONV_DIR);
-      await this.storage.appendLine(shardPath(shard), JSON.stringify(turn));
-
+      // Recover before append, so the newly appended turn is not counted twice.
       const index = await this.readIndex();
+      await this.storage.appendLine(shardPath(shard), JSON.stringify(turn));
       const existing = index.shards.find((s) => s.shard === shard);
       if (existing) {
         existing.turns += 1;
-        existing.lastTs = turn.ts;
+        existing.firstTs = Math.min(existing.firstTs,turn.ts);
+        existing.lastTs = Math.max(existing.lastTs,turn.ts);
       } else {
         index.shards.push({ shard, turns: 1, firstTs: turn.ts, lastTs: turn.ts });
         index.shards.sort((a, b) => a.shard.localeCompare(b.shard));
@@ -130,8 +160,7 @@ export class ConversationStore {
   /** 解析一行；无法解析的行返回 null 由调用方跳过——JSONL 的关键优势 */
   private parse(line: string): ConversationTurn | null {
     try {
-      const t = JSON.parse(line) as ConversationTurn;
-      return t && typeof t.turnId === 'string' ? t : null;
+      return readConversationTurn(JSON.parse(line));
     } catch {
       return null;
     }
@@ -139,18 +168,26 @@ export class ConversationStore {
 
   /** 打开工程时恢复最近 N 轮 (T-AE-31) */
   async loadRecent(limit = 50): Promise<ConversationTurn[]> {
+    await writes.get(scope(this.storage))?.catch(()=>{});
+    if(!Number.isSafeInteger(limit)||limit<=0)return [];
     const index = await this.readIndex();
     const out: ConversationTurn[] = [];
     for (let i = index.shards.length - 1; i >= 0 && out.length < limit; i--) {
-      const lines = await this.storage.readTailLines(shardPath(index.shards[i].shard), limit - out.length);
-      const turns = lines.map((l) => this.parse(l)).filter((t): t is ConversationTurn => t !== null);
-      out.unshift(...turns);
+      const wanted=limit-out.length;let scanned=wanted,previous=0;
+      while(true){
+        const lines=await this.storage.readTailLines(shardPath(index.shards[i].shard),scanned);
+        const turns=lines.map(line=>this.parse(line)).filter((t):t is ConversationTurn=>t!==null);
+        if(turns.length>=wanted||lines.length<scanned||lines.length<=previous){out.unshift(...turns.slice(-wanted));break;}
+        previous=lines.length;scanned=Math.min(Number.MAX_SAFE_INTEGER,scanned*2);
+      }
     }
     return out.slice(-limit);
   }
 
   /** 向上滚动加载更早的轮次 */
   async loadBefore(ts: number, limit = 50): Promise<ConversationTurn[]> {
+    await writes.get(scope(this.storage))?.catch(()=>{});
+    if(!Number.isFinite(ts)||!Number.isSafeInteger(limit)||limit<=0)return [];
     const index = await this.readIndex();
     const out: ConversationTurn[] = [];
     for (let i = index.shards.length - 1; i >= 0 && out.length < limit; i--) {
@@ -165,6 +202,7 @@ export class ConversationStore {
   }
 
   async stats(): Promise<{ shards: number; turns: number }> {
+    await writes.get(scope(this.storage))?.catch(()=>{});
     const index = await this.readIndex();
     return { shards: index.shards.length, turns: index.shards.reduce((n, s) => n + s.turns, 0) };
   }
@@ -174,6 +212,7 @@ export class ConversationStore {
    * 工程导出**默认不含会话**——会话含用户业务描述，属隐私内容，需显式调用此方法。
    */
   async exportMarkdown(): Promise<string> {
+    await writes.get(scope(this.storage))?.catch(()=>{});
     const index = await this.readIndex();
     const parts: string[] = ['# 会话归档\n'];
     for (const meta of index.shards) {
@@ -184,6 +223,7 @@ export class ConversationStore {
         if (!t) continue;
         parts.push(`\n### ${new Date(t.ts).toLocaleString('zh-CN')}${t.intent ? ` · ${t.intent}` : ''}\n`);
         parts.push(`**用户**：${t.user.text}\n`);
+        if(t.user.reviewRequest)parts.push(`原始优化请求：${t.user.reviewRequest}\n`);
         if (t.user.attachments?.length) parts.push(`附件：${t.user.attachments.join('、')}\n`);
         if (t.assistant.text) parts.push(`\n**助手**：${t.assistant.text.slice(0, 500)}\n`);
         const cs = t.changeSet;
@@ -202,7 +242,8 @@ export class ConversationStore {
    * 超限清理 (T-AE-38)：把最早的分片折叠为**只读摘要**而非直接删除——
    * 保留变更摘要与锚点，丢弃原文。
    */
-  async compactOldest(keepShards: number): Promise<number> {
+  compactOldest(keepShards:number):Promise<number>{return enqueue(this.storage,()=>this.compact(keepShards));}
+  private async compact(keepShards:number):Promise<number>{
     const index = await this.readIndex();
     if (index.shards.length <= keepShards) return 0;
     const drop = index.shards.slice(0, index.shards.length - keepShards);

@@ -1,0 +1,33 @@
+<!doctype html><html><meta charset="utf-8"><title>多页功能规划受控验证</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {ChatDrawer} from '/src/components/chat/ChatDrawer.tsx';
+import {PageCreationEvidencePanel} from '/src/components/inspector/PageCreationEvidencePanel.tsx';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {MockTransport} from '/src/services/ai/engine/transport/mockTransport.ts';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {useAIConfigStore,defaultProviders,defaultBindings} from '/src/stores/useAIConfigStore.ts';
+import {techBlueTheme} from '/src/utils/themePresets.ts';
+import {withMultiPageTasks,multiPageTask} from '/test/fixtures/multiPageTask.ts';
+const store=useProjectStore.getState();store.initNewProject({name:'多页功能验证',deviceProfile:'mobile',designSystem:techBlueTheme,createSpecimen:false});
+const original='<main data-nid="old00001">保留原页</main>';store.addScreen({name:'原页',htmlContent:original},'old');
+useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'FIXTURE_SECRET'})),bindings:defaultBindings});
+const state={requests:[],state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length,original};window.multiFunctionFixture=state;
+const transport=new MockTransport();
+const core=new DefaultAIEngineCore({id:'local',stream:(request,event)=>{
+ const schema=request.body.response_format?.json_schema?.schema;
+ state.requests.push({json:!!schema,stage:schema?.properties.pages?'batch-plan':schema?'page-plan':'html',containsPlan:JSON.stringify(request.body.messages).includes('PAGE TASK PLAN')});
+ if(schema?.properties.pages)transport.queueResponse(JSON.stringify(withMultiPageTasks({summary:'登录和注册',pages:[{name:'登录页',requirements:['手机号登录'],links:['注册页']},{name:'注册页',requirements:['注册资料'],links:[]}]})),20);
+ else if(schema){const task=multiPageTask('邮箱登录',['邮箱']);task.features[0].information=[{label:'邮箱',kind:'input'}];transport.queueResponse(JSON.stringify(task),20);}
+ else{
+  const scope=JSON.parse(request.body.messages[0].content.match(/confirmedMultiPageScope=(.*); output exactly this page/)[1]);
+  transport.queueResponse(`<artifact type="screen" title="${scope.name}"><main class="p-4 col gap-4"><h1 class="text-xl">${scope.name}</h1><p>${scope.index===0?'手机号登录':'注册资料'}</p><label>邮箱<input class="input"/></label><button class="btn btn-primary">提交</button>${scope.requiredTargetIds.map(id=>`<button class="btn" data-target-screen-id="${id}">打开关联页</button>`).join('')}</main></artifact>`,20);
+ }
+ return transport.stream(request,event);
+}});
+const stream=DefaultAIEngineCore.prototype.streamText;DefaultAIEngineCore.prototype.streamText=function(options){return stream.call(core,options);};
+let root=ReactDOM.createRoot(document.getElementById('root'));root.render(React.createElement(ChatDrawer));
+state.inspectSecond=()=>{const page=Object.values(state.state().screens).find(p=>p.name==='注册页');root.unmount();root=ReactDOM.createRoot(document.getElementById('root'));root.render(React.createElement('div',{style:{maxWidth:460,padding:16}},React.createElement(PageCreationEvidencePanel,{screen:page})));};
+</script></body></html>

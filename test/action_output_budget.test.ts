@@ -1,3 +1,8 @@
+import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
+import {TaskBudget,withTaskBudget} from '../src/services/ai/taskBudget';
+import {buildDesignTaskContract} from '../src/services/ai/designWorkflow';
+import {selectDesignRules} from '../src/services/ai/designKnowledge/selector';
+import {makeGuidancePacket,withGuidanceReceipts} from '../src/services/ai/designKnowledge/receipt';
 import { afterEach, describe, expect, test } from 'bun:test';
 import { AIService } from '../src/services/ai/aiService';
 import { AIServiceTransport } from '../src/services/ai/engine/transport/aiServiceTransport';
@@ -60,4 +65,17 @@ describe('操作修改输出预算传到实际网络请求', () => {
     expect(settings('openai_compatible', body)).toEqual({ maxTokens: 16384, temperature: 0.2 });
     expect(events.some(event => event.type === 'Error' && event.kind === 'timeout')).toBe(true);
   });
+});
+
+for(const failure of ['network','429','500'] as const)test(`actual AIService ${failure} failure invokes fetch once, never refills or silently retries`,async()=>{
+ let calls=0;globalThis.fetch=(async()=>{calls++;if(failure==='network')throw new TypeError('Failed to fetch');return new Response('provider unavailable',{status:Number(failure)});}) as typeof fetch;
+ const contract=buildDesignTaskContract({intent:'create_screen',request:'长正文',deviceProfile:'mobile',frameWidth:390});
+ contract.designGuidance=makeGuidancePacket(contract,selectDesignRules({request:'长正文',operation:'create',device:'mobile',scope:'page',maxChars:1500}),'html');
+ const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:8192,maxDurationMs:10000,maxRequestDurationMs:10000});
+ const core=withTaskBudget(withGuidanceReceipts(new DefaultAIEngineCore(new AIServiceTransport()),contract,contract.designGuidance),budget);
+ const request={provider:provider('openai_compatible'),model:'fixture',maxTokens:8192,messages:[{role:'system' as const,content:contract.designGuidance.selection.body}]};
+ await expect(core.streamText(request).textPromise).rejects.toThrow();
+ expect(calls).toBe(1);expect(contract.designGuidance.requests).toHaveLength(1);expect(contract.designGuidance.requests[0].status).toBe('failed');
+ expect(()=>core.streamText(request)).toThrow('预算');expect(calls).toBe(1);expect(contract.designGuidance.requests).toHaveLength(1);
+ expect(budget.snapshot()).toMatchObject({requests:1,requestedOutputTokens:8192,reservedOutputTokens:0});budget.close();
 });

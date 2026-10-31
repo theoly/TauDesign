@@ -20,6 +20,12 @@ doc/restyle-bounded/*
 !doc/desktop-release/
 doc/desktop-release/*
 !doc/desktop-release/*.md
+!doc/ui-design-guidance/
+doc/ui-design-guidance/*
+!doc/ui-design-guidance/*.md
+!doc/ui-design-workflow/
+doc/ui-design-workflow/*
+!doc/ui-design-workflow/*.md
 !doc/text-layout/
 doc/text-layout/*
 !doc/text-layout/*.md

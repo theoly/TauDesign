@@ -62,6 +62,7 @@ export interface PipelineContext {
 }
 
 export interface PipelineOutput {
+  taskBudget?:import('../../taskBudget').TaskBudgetSnapshot;
   status:
     | 'applied'
     | 'staged_side_by_side'

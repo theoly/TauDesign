@@ -102,7 +102,7 @@ test('同事件并发导入只接受一次，取消后可重试',async()=>{
 test('历史资源缺失拒绝任务，文件字节改变使旧任务报告失效',async()=>{
  const repository=new DeliveryRepository(storage(),owner.projectId),record=(await repository.get('page',owner.eventId))!;
  record.after.htmlContent=record.after.htmlContent.replace('</main>','<img src="assets/images/historical.png" alt="历史图"></main>');
- const {contentFingerprint}=await import('../src/services/ai/designWorkflow');record.resultFingerprint=contentFingerprint(record.after.htmlContent);record.assets=[{id:'image',name:'历史图',type:'image',mimeType:'image/png',source:'upload',relPath:'assets/images/historical.png',refCount:1}];await repository.finish(record,'applied');
+ const {contentFingerprint}=await import('../src/services/ai/designWorkflow');record.resultFingerprint=contentFingerprint(record.after.htmlContent);record.candidate.newHtml=record.after.htmlContent;record.candidate.validationEvidence!.candidateFingerprint=record.resultFingerprint;record.assets=[{id:'image',name:'历史图',type:'image',mimeType:'image/png',source:'upload',relPath:'assets/images/historical.png',refCount:1}];await repository.finish(record,'applied');
  await expect(createVisualTask(storage(),owner)).rejects.toThrow('缺失');await storage().writeBinary('assets/images/historical.png',png(1,1));const task=await createVisualTask(storage(),owner);expect(task.document).toContain('data:image/png;base64,');
  const b=await bundle();await storage().writeBinary('assets/images/historical.png',png(2,2));await expect(importVisualEvidence(storage(),owner,JSON.stringify(b.report),b.files,options)).rejects.toThrow('不匹配');
 });

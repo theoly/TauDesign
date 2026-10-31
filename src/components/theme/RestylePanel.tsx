@@ -16,10 +16,13 @@ import { executeStructuredEdit } from '../../services/ai/structuredEditExecutor'
 import { analyzeScreenModification, buildReviewedModificationRequest, buildModificationReviewReceipt, captureModificationSnapshot, isModificationSnapshotCurrent, getLocalModificationPlan,
   type ModificationMode, type ModificationReviewState, type ModificationSnapshot } from '../../services/ai/modificationReview';
 import { ModificationReviewCard } from '../chat/ModificationReviewCard';
+import {DesignGuidanceCard} from '../chat/DesignGuidanceCard';
 import { buildDesignTaskContract, buildRestyleContract, renderDesignTaskContract } from '../../services/ai/designWorkflow';
 import { RestyleDeliveryHistoryPanel } from '../inspector/RestyleDeliveryHistoryPanel';
 import {restyleThinkingOptions} from '../../services/ai/thinkingPolicy';
 import {createRestylePatchPlan,RESTYLE_PATCH_THRESHOLD} from '../../services/ai/restylePatches';
+import {TaskBudget} from '../../services/ai/taskBudget';
+import {createRestyleBudget} from '../../services/ai/taskBudgetPolicy';
 
 /**
  * 批量风格重塑面板 (A3 / T-AE-27)。
@@ -42,6 +45,7 @@ interface RestylePanelProps {
 export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) => {
   const { id:projectId,folderPath,deliveryArchiveRevision,deliveryArchiveNotice,designSystem, designSystemOrigin, settings, buildRestylePlan, screens, overrides } = useProjectStore();
   const { getActiveProviderForRole } = useAIConfigStore();
+  const contextualGuidance=useRef(useAIConfigStore.getState().autoReferenceDesignRules?{}:undefined).current;
 
   const isSingle = scope !== 'all';
   // Polish 就是队列只含一项的 Restyle——同一套结构守卫与 Checkpoint 保护
@@ -80,7 +84,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
   const mountedRef = useRef(true);
   const batchSnapshotRef = useRef<{ plan: RestylePlan; key: string; outcome?: RestyleOutcome } | null>(null);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; controllerRef.current?.abort(); }; }, []);
-  const stop = () => { controllerRef.current?.abort(); setBusy(false); setError('重塑已停止；未应用的页面保持原样，已应用项可撤销。'); };
+  const stop = () => { controllerRef.current?.abort(); setBusy(false);setAnalysis(value=>value?.status==='analyzing'?{...value,status:'cancelled',summary:'分析已停止，原页面未修改。'}:value);setError('重塑已停止；未应用的页面保持原样，已应用项可撤销。'); };
   const close = () => { controllerRef.current?.abort(); onClose(); };
 
   useEffect(()=>{ if(!busyRef.current){if(batchSnapshotRef.current)setError('页面或工程已变化，请重新试跑。');batchSnapshotRef.current=null;setDryOutcome(null);setSelection(null);setPhase('plan'); } },[basePlan,projectId]);
@@ -103,7 +107,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
     });
   };
 
-  const runOne = async (target: RestyleTarget, confirmedScope?: string): Promise<RestyleOutcome> => {
+  const runOne = async (target: RestyleTarget, confirmedScope?: string,parentBudget?:TaskBudget): Promise<RestyleOutcome> => {
     const workflowContract = taskContract(target, confirmedScope);
     const binding = getActiveProviderForRole('code');
     if (!binding?.provider) return { target, status: 'failed', message: '未配置可用的 AI Provider', workflowContract };
@@ -127,14 +131,16 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
     const userRequest = confirmedScope
       ? `${renderDesignTaskContract(workflowContract)}\n\n${projectKnowledge}\n\n仅按已确认范围润色，严格保持元素树与文案：\n${target.html}`
       : `${renderDesignTaskContract(workflowContract)}\n\n${projectKnowledge}\n\n重塑以下${target.kind === 'component' ? '组件' : '页面'}：\n\n${target.html}`;
-    return executeRestyleTarget(coreRef.current, { target, contract: workflowContract,
+    const budget=parentBudget??createRestyleBudget([target]);
+    try {return await executeRestyleTarget(coreRef.current, { target, contract: workflowContract,taskBudget:budget,
+      contextualGuidance,
       quality: { designSystem, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation },
       patchContext:[styleDirective,confirmedScope??'',projectKnowledge].join('\n'),
       colorMode:settings.colorMode,
       onProgress: value => { if(mountedRef.current)setProgress(value); },
       request: { provider: binding.provider, model: binding.modelId, signal: controllerRef.current?.signal, maxTokens: 16384,...restyleThinkingOptions(binding.provider,binding.modelId),
         messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userRequest }] }
-    });
+    });}finally {if(!parentBudget)budget.close();}
   };
 
   const analyzeSingle = async () => {
@@ -156,6 +162,8 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
         protectedNids:current.getProtectedNids(scope),knowledgeFingerprint:bundle.fingerprint,
         knowledgeSources:bundle.sources.map(source=>({kind:source.kind==='document'?'document':'page',id:source.id,fingerprint:source.fingerprint??''})) });
       const result = await analyzeScreenModification(coreRef.current, {
+        contextualGuidance,
+        onContract:contract=>{const latest=useProjectStore.getState();if(mountedRef.current&&controllerRef.current===controller&&latest.id===current.id&&latest.folderPath===current.folderPath)setAnalysis(value=>value?{...value,workflowContract:contract}:value);},
         provider: binding.provider, model: binding.modelId, signal: controller.signal, html: screen.htmlContent, name: screen.name,
         request,workflowContract,isCurrent:()=>isModificationSnapshotCurrent(useProjectStore.getState(),snapshot),
         designSystem:current.designSystem, mode: current.settings.colorMode, deviceProfile: current.settings.deviceProfile, useCustomNavigation: current.settings.useCustomNavigation, frameWidth: current.settings.frameWidth,
@@ -166,7 +174,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
       if (!isModificationSnapshotCurrent(useProjectStore.getState(), snapshot)) throw new Error('原页面或工程已变化，请重新分析。');
       if (!controller.signal.aborted) setAnalysis({ ...result, status: 'ready' });
     } catch (e) {
-      if (!controller.signal.aborted) setAnalysis({ status: 'error', summary: e instanceof Error ? e.message : String(e), items: [] });
+      if (!controller.signal.aborted) setAnalysis(value=>({...value,status:'error',summary:e instanceof Error?e.message:String(e),items:[]}));
     } finally { busyRef.current = false; if (mountedRef.current) setBusy(false); }
   };
 
@@ -195,6 +203,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
         }
         const current = useProjectStore.getState(),snapshot=snapshotRef.current!;
         const candidate = await executeStructuredEdit(coreRef.current,{
+          contextualGuidance,
           mode:'local',screen:current.screens[scope],request,contract:taskContract(plan.dryRun,request),settings:current.settings,
           designSystem:current.designSystem,colorMode:current.settings.colorMode,allowText:false,protectedNids:plan.dryRun.protectedNids,
           binding:binding ? {provider:binding.provider,model:binding.modelId} : undefined,
@@ -256,7 +265,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
           return html === undefined ? null : { ...target,
             html: target.kind === 'screen' ? normalizeMobileNavigation(html, state.settings).html : html,
             protectedNids: target.kind === 'screen' ? state.getProtectedNids(target.id) : target.protectedNids };
-        }, generate: target => runOne(target), apply: outcome => useProjectStore.getState().applyRestyleOutcome(outcome, controller.signal),
+        }, generate: (target,budget) => runOne(target,undefined,budget), apply: outcome => useProjectStore.getState().applyRestyleOutcome(outcome, controller.signal),
         onProgress: results => { if (mountedRef.current) setOutcomes(results); }
       });
       if (mountedRef.current) {
@@ -352,12 +361,14 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
             </div>
           )}
 
+          {phase === 'analysis' && analysis && <DesignGuidanceCard contract={analysis.workflowContract} />}
           {phase === 'analysis' && analysis && <ModificationReviewCard review={analysis} disabled={busy}
             onConfirm={confirmSingle} onCancel={onClose} onRetry={analyzeSingle} />}
 
           {phase === 'review' && dryOutcome && (
             <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
               <div className="font-semibold text-slate-200">试跑结果：{dryOutcome.target.name}</div>
+              <DesignGuidanceCard contract={dryOutcome.workflowContract} />
               {dryOutcome.status === 'applied' ? (
                 <>
                   <div className="flex items-center gap-1.5 text-emerald-400">

@@ -1,5 +1,7 @@
+import {isQualityReport} from '../ai/evidenceSchema';
 import { createProjectStorage } from './projectStorage';
 import type { FailedPageDraft, DraftLabel } from '../ai/qualityDraft';
+import {draftGuidanceIssue} from '../ai/qualityDraft';
 import type { PipelineInput } from '../ai/engine/pipeline/types';
 import type { GenerationTarget } from '../ai/generationTargetResolver';
 import { checkGenerationSourceSafety } from '../ai/generationQuality';
@@ -24,8 +26,9 @@ function valid(value: SavedQualityDraft, projectId: string): boolean {
     && value.decision && ['create_screen','modify_screen','patch_element'].includes(value.decision.action) && typeof value.decision.reason==='string'
     && ['targetScreenId','styleReferenceScreenId','elementNid'].every(key=>(value.decision as unknown as Record<string,unknown>)[key]===null||typeof (value.decision as unknown as Record<string,unknown>)[key]==='string')
     && typeof value.draft?.html==='string' && value.draft.html.length<=500_000 && value.draft.fingerprint===contentFingerprint(value.draft.html)
-    && typeof value.draft.contextKey==='string' && typeof value.draft.bindingKey==='string' && Array.isArray(value.draft.quality?.findings)
-    && value.draft.quality.findings.every(f=>f&&typeof f.code==='string'&&['error','warning'].includes(f.severity)&&typeof f.message==='string'&&typeof f.expected==='string'&&typeof f.actual==='string'&&(f.nid===undefined||typeof f.nid==='string'))
+    && (!value.draft.pageTaskSource||value.draft.pageTaskSource.request===value.request)
+    && !draftGuidanceIssue(value.draft) && (!value.draft.guidanceSource||value.draft.guidanceSource.request===value.request)
+    && typeof value.draft.contextKey==='string' && typeof value.draft.bindingKey==='string' && isQualityReport(value.draft.quality)
     && (value.draft.title===undefined||typeof value.draft.title==='string')
     && (value.suggestions===undefined||(Array.isArray(value.suggestions)&&value.suggestions.length<=8&&value.suggestions.every(l=>l&&typeof l.nid==='string'&&typeof l.text==='string'&&l.text.length<=160)))
     && (value.textReferences===undefined||(Array.isArray(value.textReferences)&&value.textReferences.every(r=>r&&typeof r.name==='string'&&typeof r.content==='string')))

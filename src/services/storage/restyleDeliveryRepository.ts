@@ -1,3 +1,4 @@
+import {isQualityReport,isPassedRender} from '../ai/evidenceSchema';
 import type { DesignSystem } from '../../types/designSystem';
 import type { Asset, ComponentDefinition, DesignLibraryBinding, DesignSystemOrigin, ProjectSettings, Screen, StyleOverride } from '../../types/project';
 import type { RestyleOutcome } from '../ai/restyleService';
@@ -7,6 +8,8 @@ import type { ProjectStorage } from './projectStorage';
 import { deliveryPreviewPath, isDeliveryPreview } from './deliveryPreview';
 import type { PagePreview } from './pagePreview';
 import {isWorkflowValidationReport} from '../ai/workflowValidation';
+import {sameRecordedHtml,taskProvenanceIssue} from '../ai/taskProvenance';
+import {draftExecutionIssue} from '../ai/draftExecutionSource';
 
 export type RestylePageSnapshot = Pick<Screen, 'id' | 'name' | 'htmlContent' | 'scopedCss' | 'metadata'>;
 export interface RestyleDeliveryRecord {
@@ -39,8 +42,7 @@ function validRecord(value: unknown, projectId: string): value is RestyleDeliver
   const r = value as RestyleDeliveryRecord | null;
   const page = (p?: RestylePageSnapshot) => p && typeof p.id === 'string' && typeof p.name === 'string' &&
     typeof p.htmlContent === 'string' && (p.scopedCss === undefined || typeof p.scopedCss === 'string');
-  const passedQuality = (q:RestyleValidationReport['pages'][number]['quality']) => q?.passed === true && Array.isArray(q.findings) &&
-    q.findings.every(f=>f && f.severity === 'warning' && typeof f.code === 'string' && typeof f.message === 'string' && typeof f.actual === 'string' && typeof f.expected === 'string');
+  const passedQuality=(q:unknown)=>isQualityReport(q)&&q.passed;
   if (!r || r.schemaVersion !== 1 || typeof r.id !== 'string' || !validId(r.id) || r.projectId !== projectId ||
     !Number.isFinite(r.createdAt) || !['prepared','applied','aborted'].includes(r.status) ||
     (r.reason !== undefined && typeof r.reason !== 'string') || (r.batchId !== undefined && typeof r.batchId !== 'string') ||
@@ -53,17 +55,19 @@ function validRecord(value: unknown, projectId: string): value is RestyleDeliver
     (r.settings.referenceDevice !== undefined && (!r.settings.referenceDevice || typeof r.settings.referenceDevice.name !== 'string')) ||
     !r.designSystem || typeof r.designSystem.name !== 'string' ||
     (r.designSystemOrigin !== undefined && (!r.designSystemOrigin || (r.designSystemOrigin.sourceName !== undefined && typeof r.designSystemOrigin.sourceName !== 'string'))) ||
-    !r.overrides || !Array.isArray(r.assets)) return false;
+    !r.overrides || !Array.isArray(r.assets)||taskProvenanceIssue(r.outcome.workflowContract)||draftExecutionIssue(r.outcome.executionRecord,r.outcome.html)) return false;
+  const task=r.outcome.workflowContract;
+  if(task!==undefined&&(task.operation!=='restyle'||task.target?.id!==r.outcome.target.id||task.target.baselineFingerprint!==contentFingerprint(r.outcome.target.html)))return false;
+  if(task?.validationPlan!==undefined&&JSON.stringify(r.validation.workflow?.plan)!==JSON.stringify(task.validationPlan))return false;
   if (!r.validation.pages.every(p => p && typeof p.id === 'string' && typeof p.name === 'string' && typeof p.candidateFingerprint === 'string' &&
     passedQuality(p.source) && passedQuality(p.quality) &&
-    p.render?.status === 'complete' && Number.isFinite(p.render.inspected) && Array.isArray(p.render.findings) &&
-    p.render.findings.every(f => f && f.severity === 'warning' && typeof f.code === 'string' && typeof f.message === 'string' &&
-      typeof f.actual === 'string' && typeof f.expected === 'string'))) return false;
+    isPassedRender(p.render))) return false;
   const matches = (id: string, html: string) => r.validation.pages.some(p => p.id === id && p.candidateFingerprint === contentFingerprint(html));
   if (!r.pages.every(p => p && page(p.before) && page(p.after) && p.before.id === p.after.id && matches(p.after.id,p.after.htmlContent)) ||
     new Set(r.pages.map(p=>p.after.id)).size !== r.pages.length ||
     new Set(r.validation.pages.map(p=>p.id)).size !== r.validation.pages.length) return false;
-  if (r.outcome.target.kind === 'screen') return !r.component && r.pages.length === 1 && r.pages[0].after.id === r.outcome.target.id && r.validation.pages.length === 1;
+  if (r.outcome.target.kind === 'screen') return !r.component && r.pages.length === 1 && r.pages[0].after.id === r.outcome.target.id && r.validation.pages.length === 1&&
+    sameRecordedHtml(r.pages[0].before.htmlContent,r.outcome.target.html)&&sameRecordedHtml(r.pages[0].after.htmlContent,r.outcome.html);
   return Boolean(r.component && r.component.before.id === r.outcome.target.id && r.component.after.id === r.outcome.target.id &&
     r.component.before.templateHtml === r.outcome.target.html && r.component.after.templateHtml === r.outcome.html &&
     typeof r.component.before.name === 'string' && typeof r.component.after.name === 'string' &&
@@ -86,6 +90,7 @@ export class RestyleDeliveryRepository {
     await this.storage.ensureDir(directory);await this.storage.writeTextAtomic(path,raw);
   }
   async finish(record: RestyleDeliveryRecord, status: 'applied' | 'aborted', reason?: string): Promise<void> {
+    if(!validRecord(record,this.projectId))throw new Error('重塑来源或页面快照不一致，未更新交付状态。');
     await this.storage.writeTextAtomic(recordPath(record.id),JSON.stringify({...record,status,completedAt:Date.now(),...(reason ? {reason} : {})}));
   }
   async list(options: { screenId?: string; limit?: number } = {}): Promise<{records: RestyleDeliveryRecord[]; invalidFiles: number; hasMore: boolean}> {

@@ -1,3 +1,4 @@
+import {withMultiPageTasks} from './fixtures/multiPageTask';
 import {prepareMultiPagePlan,executeMultiPagePlan} from '../src/services/ai/multiPageService';
 import type {AIEngineCore} from '../src/services/ai/engine/core/types';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
@@ -121,7 +122,7 @@ test('页面润色不能改严格固定区；组件模板润色可更新固定�
 
 test('多页第一份严格模板合格、第二页伪模板失败时不提前加入任何页面',async()=>{
  useProjectStore.setState({components:{card:component}});PageRenderCheck.inspect=async()=>({status:'complete',inspected:8,findings:[]});let calls=0;
- const core:AIEngineCore={async generateObject(){return {summary:'两页资料',pages:[{name:'资料页',requirements:['资料'],links:[]},{name:'设置页',requirements:['设置'],links:[]}]} as any;},streamText(options){
+ const core:AIEngineCore={async generateObject(){return withMultiPageTasks({summary:'两页资料',pages:[{name:'资料页',requirements:['资料'],links:[]},{name:'设置页',requirements:['设置'],links:[]}]}) as any;},streamText(options){
   calls++;const scope=JSON.parse(options.messages.find(m=>m.role==='system')!.content.match(/confirmedMultiPageScope=(.*); output exactly this page/)![1]);
   const html=`<artifact identifier="screen_new" type="screen" title="${scope.name}"><main>${instance().replace('固定提示',calls===2?'坏固定区':'固定提示')}</main></artifact>`;
   return {textStream:(async function*(){yield html;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(html),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('stop'),abort(){}};
