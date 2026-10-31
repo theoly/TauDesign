@@ -364,6 +364,7 @@ export function useAIEngineChat() {
                 isStopped: true,
                 isGenerating: false,
                 qualityDraftBusy:false,
+                qualityDraftNotice:m.qualityDraftBusy?'建议已取消，可手动填写文案。':m.qualityDraftNotice,
                 executionActivity:m.executionActivity?{...m.executionActivity,status:'cancelled',active:0,lastActivityAt:Date.now()}:undefined,
                 pagePlan:m.pagePlan&&['planning','running'].includes(m.pagePlan.status)?{...m.pagePlan,status:'cancelled',message:'多页面生成已取消，未加入页面。'}:m.pagePlan,
                 modificationReview: m.modificationReview ? { ...m.modificationReview, status: 'cancelled' } : undefined,
@@ -781,10 +782,16 @@ export function useAIEngineChat() {
     setLastGuardOutput(null);
 
     const generationBudget=resuming?.budget??createChatTaskBudget(Boolean(sections));
+    const bindingCurrent=()=>{
+      const latest=switchedToVision?getActiveProviderForRole('vision'):(getActiveProviderForRole('code')||getActiveProviderForRole('chat'));
+      return Boolean(latest&&continuationBindingKey({provider:latest.provider,model:latest.modelId})===continuationBindingKey({provider:activeRole!.provider,model:activeRole!.modelId}));
+    };
     const progressCurrent=()=>mountedRef.current&&!controller.signal.aborted&&abortControllerRef.current===controller&&
       useProjectStore.getState().id===requestState.id&&useProjectStore.getState().folderPath===requestState.folderPath;
     const showPhase=(phase:PipelinePhase)=>{if(progressCurrent())setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,
       executionEvents:m.executionEvents?.at(-1)?.phase===phase?m.executionEvents:[...(m.executionEvents??[]),{phase,at:Date.now()}].slice(-24)}:m));};
+    let latestActivity:RequestActivity|undefined,repairActivity:ReturnType<typeof observeRequestActivity>|undefined;
+    const reportActivity=(activity:RequestActivity)=>{if(progressCurrent()){latestActivity=activity;setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,executionActivity:activity,taskBudget:generationBudget.snapshot()}:m));}};
     try {
       const activeDecisionsList = Object.values(decisions)
         .filter((d) => d.active)
@@ -817,7 +824,7 @@ export function useAIEngineChat() {
         model: activeRole.modelId,
         engineCore: engineCoreRef.current,taskBudget:generationBudget,
         onPhase:showPhase,
-        onActivity:activity=>{if(progressCurrent())setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,executionActivity:activity,taskBudget:generationBudget.snapshot()}:m));},
+        onActivity:reportActivity,
         contextualGuidance:!resuming&&!repairing?contextualGuidance:undefined,
         pageTaskPlanning:planPageTask?{snapshot:inheritedTaskPlan}:undefined,
         onTaskPlan:()=>{if(!controller.signal.aborted){setThinkingStage(2);setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,thinkingStage:2,generationProgress:repairing?'原功能规划复核通过，正在定点修复已确认文案…':inheritedTaskPlan?'原功能规划复核通过，正在继续页面设计…':'功能、信息与交互规划已完成，正在生成页面布局…'}:m));}},
@@ -904,6 +911,9 @@ export function useAIEngineChat() {
         ...m, usage: turnUsage, usageNote:planPageTask&&!inheritedTaskPlan?'用量仅含页面生成与修复；业务规划未返回用量，已计入请求预算。':undefined, generationWarnings: output.warnings, elapsedSeconds,taskBudget:output.taskBudget,workflowContract:output.workflowContract
       } : m));
       if (controller.signal.aborted || useProjectStore.getState().id!==requestState.id || useProjectStore.getState().folderPath!==requestState.folderPath) return;
+      if(!bindingCurrent()){
+        setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,isGenerating:false,isError:true,continuationAvailable:false,sectionedAvailable:false,text:'Provider或模型在生成期间已变化，本次结果未应用。请重新发起任务。'}:m));return;
+      }
       const resumable=Boolean((output.continuationCheckpoint||output.sectionedCheckpoint)&&output.workflowContract&&generationBudget.canReserve(output.sectionedCheckpoint?4096:8192)&&
         (!modificationSnapshot||isModificationSnapshotCurrent(useProjectStore.getState(),modificationSnapshot)));
       if(resumable){
@@ -1039,10 +1049,11 @@ export function useAIEngineChat() {
             ? 'modified'
             : 'patched';
 
+        if(toolCall.tool==='create_screen'&&output.executionRecord?.source==='model')repairActivity=observeRequestActivity(engineCoreRef.current,reportActivity,progressCurrent,latestActivity);
         const toolResult = await CanvasToolExecutor.executeAsync(toolCall.tool === 'modify_screen' ? { ...toolCall, params: { ...toolCall.params, modificationRequest: textToSend,
           workflowContract: output.workflowContract,executionRecord:output.executionRecord } } : toolCall.tool==='create_screen'?{...toolCall,params:{...toolCall.params,workflowContract:output.workflowContract,executionRecord:output.executionRecord}}:toolCall,
-          {signal:controller.signal,isCurrent:()=>pageCreationContext(useProjectStore.getState())===creationContext,
-            repair:toolCall.tool==='create_screen'&&output.executionRecord?.source==='model'?{core:engineCoreRef.current,taskBudget:generationBudget,provider:activeRole.provider,model:activeRole.modelId,onPhase:phase=>{if(!controller.signal.aborted&&pageCreationContext(useProjectStore.getState())===creationContext)setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,text:phase==='repairing'?'检查发现控件渲染问题，正在尝试一次受控样式修复…':'修复指令已执行，正在重新检查全部门禁…'}:m));}}:undefined});
+          {signal:controller.signal,isCurrent:()=>pageCreationContext(useProjectStore.getState())===creationContext&&bindingCurrent(),
+            repair:toolCall.tool==='create_screen'&&output.executionRecord?.source==='model'?{core:repairActivity!.core,taskBudget:generationBudget,provider:activeRole.provider,model:activeRole.modelId,onPhase:phase=>{if(!controller.signal.aborted&&pageCreationContext(useProjectStore.getState())===creationContext)setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,text:phase==='repairing'?'检查发现控件渲染问题，正在尝试一次受控样式修复…':'修复指令已执行，正在重新检查全部门禁…'}:m));}}:undefined});
         if(toolResult.repair?.usage){
           const usage=toolResult.repair.usage;turnUsage={promptTokens:turnUsage.promptTokens+usage.inputTokens,completionTokens:turnUsage.completionTokens+usage.outputTokens,totalTokens:turnUsage.totalTokens+usage.inputTokens+usage.outputTokens};
           setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,usage:{...turnUsage},generationWarnings:[...(output.warnings??[]),...(toolResult.repair!.usageEstimated?['受控修复请求未返回用量，已估算计入本轮。']:[])]}:m));
@@ -1148,6 +1159,7 @@ export function useAIEngineChat() {
         )
       );
     } finally {
+      repairActivity?.stop();
       if(controller.signal.aborted)continuationSessionsRef.current.delete(assistantMsgId);
       if(continuationSessionsRef.current.get(assistantMsgId)?.budget!==generationBudget)generationBudget.close();
       if(mountedRef.current)setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,taskBudget:generationBudget.snapshot()}:m));
@@ -1225,6 +1237,7 @@ export function useAIEngineChat() {
           onActivity:a=>publishActivity(messageId,controller,structuredCurrent,a),
           onPhase:phase=>{publishPhase(messageId,controller,structuredCurrent,phase==='planning'?'planning':'generating');if(!controller.signal.aborted&&structuredCurrent())update({...plan.analysis!,status:'submitted',summary:phase==='planning'?'正在梳理已确认区块的功能、信息与交互…':'区块范围已确认，正在生成副本中的对应区块…'});}
         });
+        if(!mountedRef.current||controller.signal.aborted||abortControllerRef.current!==controller)return;
         if(candidate.status!=='ready'){
           if(!controller.signal.aborted)setMessages(prev=>prev.map(m=>m.id===messageId?{...m,workflowContract:candidate.contract,taskBudget:candidate.taskBudget}:m));
           throw new Error(candidate.message);
@@ -1252,8 +1265,12 @@ export function useAIEngineChat() {
               textFiles: plan.options?.textReferences?.map(file => file.path || file.name) }, assistant: { text:resultText,pageTaskHistory:capturePageTaskHistory(candidate.contract,scope),designGuidanceHistory:captureDesignGuidanceHistory(candidate.contract,scope) } });
         } catch (error) { console.warn('Conversation save error:', error); }
       } catch (error) {
-        update({ ...plan.analysis, status: controller.signal.aborted ? 'cancelled' : 'ready', summary: `${modeName}修改未执行：${error instanceof Error ? error.message : String(error)}` });
-        if(mountedRef.current)setMessages(prev=>prev.map(m=>m.id===messageId?{...m,isError:!controller.signal.aborted,isStopped:controller.signal.aborted}:m));
+        // A stopped execution can finish after a retry on the same review message.
+        // Only its current owner may replace the message's status or summary.
+        if(mountedRef.current&&abortControllerRef.current===controller){
+          update({ ...plan.analysis, status: controller.signal.aborted ? 'cancelled' : 'ready', summary: `${modeName}修改未执行：${error instanceof Error ? error.message : String(error)}` });
+          setMessages(prev=>prev.map(m=>m.id===messageId?{...m,isError:!controller.signal.aborted,isStopped:controller.signal.aborted}:m));
+        }
       } finally {
         finishOperation(messageId,controller);
       }
@@ -1487,9 +1504,10 @@ export function useAIEngineChat() {
   const mountMessageHtml = async (msgId: string) => {
     const target = messages.find((m) => m.id === msgId);
     if (!target?.htmlOutput||operationLockRef.current||isGenerating) return;
-    const controller=new AbortController(),context=pageCreationContext(useProjectStore.getState());
+    const state=useProjectStore.getState(),controller=new AbortController(),context=pageCreationContext(state);
     abortControllerRef.current=controller;activeMessageIdRef.current=msgId;operationLockRef.current=true;setIsGenerating(true);
     const current=()=>pageCreationContext(useProjectStore.getState())===context;
+    const sameProject=()=>useProjectStore.getState().id===state.id&&useProjectStore.getState().folderPath===state.folderPath;
     setMessages(prev=>prev.map(m=>m.id===msgId?{...m,isGenerating:true,isStopped:false,thinkingStage:1,executionEvents:[{phase:'rendering',at:Date.now()}],executionActivity:initialRequestActivity()}:m));
     try {
       // 先按该轮的引用画框与用户诉求裁决落点，仅无目标可循时才新建 (BR-GRM-02)
@@ -1500,13 +1518,15 @@ export function useAIEngineChat() {
         target.screenName || '画框 (AI 补挂)',undefined,
         {signal:controller.signal,isCurrent:current}
       );
-      if(controller.signal.aborted)return;
+      if(!progressOwned(controller,sameProject))return;
 
       if(result&&!result.success){
         setMessages(prev=>prev.map(m=>m.id===msgId?{...m,isError:true,text:`本次结果未应用：${result.error}`}:m));return;
       }
       if (result?.success) {
-        publishPhase(msgId,controller,current,result.tool==='create_screen'?'created':'candidate');
+        // The successful action changes the project context itself. Its completion
+        // is bound to the operation/project owner, not the pre-write fingerprint.
+        publishPhase(msgId,controller,sameProject,result.tool==='create_screen'?'created':'candidate');
         setMessages((prev) =>
           prev.map((m) =>
             m.id === msgId
@@ -1514,6 +1534,8 @@ export function useAIEngineChat() {
                   ...m,
                   isGuardRejected: false,
                   isError:false,
+                  text:result.status==='screen_staged'?`已重新检查并生成「${result.screenName||'页面'}」的修改候选，请对比后采纳。`:
+                    result.tool==='create_screen'?`已重新检查并挂载「${result.screenName||'页面'}」。`:`已重新检查并更新「${result.screenName||'页面'}」。`,
                   screenId: result.screenId,
                   screenName: result.screenName,
                   checkpointId: result.checkpointId,
@@ -1582,20 +1604,26 @@ export function useAIEngineChat() {
     try {
       if(!await claimDraftSuggestion(value,state.folderPath))throw Error('此草稿已使用过AI建议，请手动填写文案。');
       const claimed={...value,aiAttempted:true};
-      setMessages(prev=>prev.map(m=>m.id===msgId?{...m,qualityDraft:claimed}:m));
-      if(controller.signal.aborted)throw Error('建议已取消，本次机会已记录。');
+      if(mountedRef.current&&useProjectStore.getState().id===state.id&&useProjectStore.getState().folderPath===state.folderPath)
+        setMessages(prev=>prev.map(m=>m.id===msgId&&m.qualityDraft?.id===value.id?{...m,qualityDraft:{...m.qualityDraft,aiAttempted:true}}:m));
+      if(!progressOwned(controller,suggestionCurrent))throw Error('工程、模型已变化或建议已取消，本次机会已记录。');
       const result=await suggestDraftLabels(observer.core,{provider:actual.provider,model:actual.modelId},value.request,targets,controller.signal,suggestionBudget);
       const current=useProjectStore.getState(),same=current.id===state.id&&current.folderPath===state.folderPath;
       const fresh=same&&suggestionCurrent();
       const saved={...claimed,suggestions:!result.error&&!controller.signal.aborted&&fresh?result.labels:undefined};
       await saveQualityDraft(saved,state.folderPath);
-      if(same)setMessages(prev=>prev.map(m=>m.id===msgId?{...m,qualityDraft:saved,qualityDraftNotice:controller.signal.aborted?'建议已取消，可手动填写文案。':!fresh?'工程已变化，建议未采用。':result.error?`建议未采用：${result.error}；可手动填写。`:`建议已填入，确认或修改后再执行定点修复。${result.estimated?'本次用量为估算。':''}`,
+      // Disk I/O may finish after Stop, a model change or a newer manual repair.
+      // Drop expired suggestions; the repository preserves an already resolved status.
+      if(saved.suggestions&&(controller.signal.aborted||!suggestionCurrent())){
+        saved.suggestions=undefined;await saveQualityDraft(saved,state.folderPath);
+      }
+      if(progressOwned(controller,()=>useProjectStore.getState().id===state.id&&useProjectStore.getState().folderPath===state.folderPath))setMessages(prev=>prev.map(m=>m.id===msgId?{...m,qualityDraft:saved,qualityDraftNotice:!suggestionCurrent()?'工程或模型已变化，建议未采用。':result.error?`建议未采用：${result.error}；可手动填写。`:`建议已填入，确认或修改后再执行定点修复。${result.estimated?'本次用量为估算。':''}`,
         usage:result.usage?{promptTokens:(m.usage?.promptTokens??0)+result.usage.inputTokens,completionTokens:(m.usage?.completionTokens??0)+result.usage.outputTokens,totalTokens:(m.usage?.totalTokens??0)+result.usage.inputTokens+result.usage.outputTokens}:m.usage}:m));
-    }catch(error){if(useProjectStore.getState().id===state.id)notice(String(error instanceof Error?error.message:error));}
+    }catch(error){if(progressOwned(controller,()=>useProjectStore.getState().id===state.id&&useProjectStore.getState().folderPath===state.folderPath))notice(String(error instanceof Error?error.message:error));}
     finally {
       suggestionBudget.close();
       observer.stop();
-      setMessages(prev=>prev.map(m=>m.id===msgId?{...m,qualityDraftBusy:false}:m));
+      if(mountedRef.current&&abortControllerRef.current===controller)setMessages(prev=>prev.map(m=>m.id===msgId?{...m,qualityDraftBusy:false}:m));
       finishOperation(msgId,controller);
     }
   };

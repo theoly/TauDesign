@@ -3,6 +3,8 @@ import {executeStructuredEdit} from '../../services/ai/structuredEditExecutor';
 import {buildDesignTaskContract} from '../../services/ai/designWorkflow';
 import {continuationBindingKey} from '../../services/ai/generationContinuation';
 import {captureModificationSnapshot,isModificationSnapshotCurrent} from '../../services/ai/modificationReview';
+import {type RequestActivity} from '../../services/ai/requestActivity';
+import {RequestActivityCard} from '../chat/RequestActivityCard';
 import { DesignSections, TypographySection } from './DesignSections';
 import { AppearanceSections } from './AppearanceSections';
 import { ImageSection } from './ImageSection';
@@ -82,7 +84,17 @@ export const PropertyInspector: React.FC = () => {
   const [isPointGenerating, setIsPointGenerating] = useState(false);
   const [pointNotice,setPointNotice]=useState('');
   const pointJob=useRef<AbortController|null>(null);
-  useEffect(()=>()=>pointJob.current?.abort(),[projectId,activeScreenId,selectedNid]);
+  const [pointActivity,setPointActivity]=useState<RequestActivity>(),pointMounted=useRef(true);
+  const pointBinding=getActiveProviderForRole('code'),pointBindingKey=pointBinding?continuationBindingKey({provider:pointBinding.provider,model:pointBinding.modelId}):null;
+  const pointContextKey=JSON.stringify([projectId,useProjectStore.getState().folderPath,activeScreenId,selectedNid]),pointContext=useRef({key:pointContextKey,model:pointBindingKey});
+  useEffect(()=>{pointMounted.current=true;return()=>{pointMounted.current=false;const job=pointJob.current;pointJob.current=null;job?.abort();};},[]);
+  useEffect(()=>{
+    const previous=pointContext.current;pointContext.current={key:pointContextKey,model:pointBindingKey};
+    if(previous.key===pointContextKey&&previous.model===pointBindingKey)return;
+    const job=pointJob.current;pointJob.current=null;job?.abort();setIsPointGenerating(false);setPointActivity(undefined);
+    setPointNotice(job?(previous.model!==pointBindingKey?'模型已变化，旧局部修改已取消。':'选中目标或工程已变化，旧局部修改已取消。'):'');
+  },[pointContextKey,pointBindingKey]);
+  const stopPoint=()=>{const job=pointJob.current;pointJob.current=null;job?.abort();setIsPointGenerating(false);setPointNotice('局部修改已取消，原页未改变。');setPointActivity(value=>value?{...value,active:0,status:'cancelled',lastActivityAt:Date.now()}:value);};
 
   // Component states
   const [compNameInput, setCompNameInput] = useState('');
@@ -208,7 +220,7 @@ export const PropertyInspector: React.FC = () => {
     if(!screen)return;
     const snapshot=captureModificationSnapshot(state,activeScreenId),job=new AbortController(),request=pointPrompt.trim();
     pointJob.current=job;setIsPointGenerating(true);setPointNotice('');
-    const current=()=>{const latest=getActiveProviderForRole('code');return !job.signal.aborted&&useProjectStore.getState().activeScreenId===activeScreenId&&useProjectStore.getState().selectedNid===selectedNid&&isModificationSnapshotCurrent(useProjectStore.getState(),snapshot)&&Boolean(latest&&continuationBindingKey({provider:latest.provider,model:latest.modelId})===continuationBindingKey({provider:binding.provider,model:binding.modelId}));};
+    const current=()=>{const latest=useAIConfigStore.getState().getActiveProviderForRole('code');return pointMounted.current&&pointJob.current===job&&!job.signal.aborted&&useProjectStore.getState().activeScreenId===activeScreenId&&useProjectStore.getState().selectedNid===selectedNid&&isModificationSnapshotCurrent(useProjectStore.getState(),snapshot)&&Boolean(latest&&continuationBindingKey({provider:latest.provider,model:latest.modelId})===continuationBindingKey({provider:binding.provider,model:binding.modelId}));};
     try {
       const contract=buildDesignTaskContract({intent:'modify_screen',request,target:screen,elementNid:selectedNid,
         deviceProfile:state.settings.deviceProfile,frameWidth:state.settings.frameWidth,referenceDeviceName:state.settings.referenceDevice?.name,
@@ -217,13 +229,17 @@ export const PropertyInspector: React.FC = () => {
         contextualGuidance:useAIConfigStore.getState().autoReferenceDesignRules?{}:undefined,
         signal:job.signal,screen,elementNid:selectedNid,request,settings:state.settings,contract,designSystem:state.designSystem,colorMode:state.settings.colorMode,
         protectedNids:state.getProtectedNids(activeScreenId),isCurrent:current,
+        onActivity:activity=>{if(current())setPointActivity(activity);},
         onPhase:phase=>{if(current())setPointNotice(phase==='planning'?'正在梳理所选元素内的功能与交互…':'正在生成所选元素的副本修改…');}});
-      if(!current())return;
+      if(!current()){
+        if(pointMounted.current&&pointJob.current===job&&!job.signal.aborted)setPointNotice('原页或工程已变化，本次局部修改未应用。');
+        return;
+      }
       if(candidate.status!=='ready')throw Error(candidate.message);
       useProjectStore.getState().stageScreenChange(activeScreenId,candidate.html,`${screen.name}（局部微调候选）`,request,candidate.contract,candidate.executionRecord);
       setPointPrompt('');setPointNotice('已创建局部修改候选，请比较后采纳。');
-    }catch(error){if(current())setPointNotice(error instanceof Error?error.message:'局部修改失败，原页未改变。');}
-    finally{if(pointJob.current===job){pointJob.current=null;setIsPointGenerating(false);}}
+    }catch(error){if(current())setPointNotice(error instanceof Error?error.message:'局部修改失败，原页未改变。');else if(pointMounted.current&&pointJob.current===job&&!job.signal.aborted)setPointNotice('原页或工程已变化，本次局部修改未应用。');}
+    finally{if(pointJob.current===job){pointJob.current=null;if(pointMounted.current){setIsPointGenerating(false);setPointActivity(value=>value?.active?{...value,active:0,status:'cancelled',lastActivityAt:Date.now()}:value);}}}
   };
 
   // --- Structural Operations (T-P2-07 / PRD §3.6.3 / ISSUE-021) ---
@@ -334,6 +350,8 @@ export const PropertyInspector: React.FC = () => {
             </button>
           </div>
           {pointNotice&&<p role="status" className="text-[11px] leading-relaxed text-purple-200">{pointNotice}</p>}
+          {isPointGenerating&&<button type="button" aria-label="停止局部微调" onClick={stopPoint} className="text-[11px] text-amber-300">停止局部微调</button>}
+          <RequestActivityCard activity={pointActivity} running={isPointGenerating}/>
         </div>
       </div>
 

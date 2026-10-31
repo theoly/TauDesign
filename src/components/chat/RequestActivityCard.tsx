@@ -13,6 +13,6 @@ export function RequestActivityCard({activity,running}:{activity?:RequestActivit
     {activity.model&&<p className="break-all">最近调用：{activity.providerId} / {activity.model}</p>}
     <p>已观察正文 {activity.textChars.toLocaleString()} 字符 · 推理 {activity.reasoningChars.toLocaleString()} 字符 · JSON 结果 {activity.jsonChars.toLocaleString()} 字符</p>
     <p>调用观察耗时 {seconds(activity.startedAt)} 秒{ticking&&activity.lastActivityAt!==undefined?` · 最近应用活动 ${seconds(activity.lastActivityAt)} 秒前`:''}</p>
-    <p className="text-slate-500">应用调用与接收记录，不代表 Provider 接收确认或页面验收通过。</p>
+    <p className="text-slate-500">本次执行的应用调用与接收记录，不代表 Provider 接收确认或页面验收通过；父任务累计额度见任务预算。</p>
   </section>;
 }

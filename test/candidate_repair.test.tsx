@@ -1,7 +1,7 @@
 import {makeGuidancePacket,withGuidanceReceipts} from '../src/services/ai/designKnowledge/receipt';
 import {selectDesignRules} from '../src/services/ai/designKnowledge/selector';
 import {isCandidateValidationEvidence} from '../src/services/ai/candidateValidation';
-import {afterEach,beforeEach,expect,test} from 'bun:test';
+import {afterEach,beforeEach,expect,spyOn,test} from 'bun:test';
 import React from 'react';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
 import {createRoot,type Root} from 'react-dom/client';
@@ -17,6 +17,11 @@ import {createProjectStorage} from '../src/services/storage/projectStorage';
 import {DeliveryRepository} from '../src/services/storage/deliveryRepository';
 import {CandidateRepairControl,RepairReceipt} from '../src/components/canvas/CandidateRepairControl';
 import {isPageRepairRecord} from '../src/services/ai/pageRepairRecord';
+import * as CoreFactory from '../src/services/ai/engine/core';
+import * as CandidateRepository from '../src/services/storage/candidateRepository';
+import {useAIConfigStore} from '../src/stores/useAIConfigStore';
+import {TaskBudget} from '../src/services/ai/taskBudget';
+import * as BudgetPolicy from '../src/services/ai/taskBudgetPolicy';
 import type {AIEngineCore,StreamTextOptions} from '../src/services/ai/engine/core/types';
 const html='<main data-nid="root" class="col gap-4 p-4"><h1 data-nid="title">会员资料</h1><section data-nid="region"><button data-nid="save" class="btn btn-primary"><svg data-nid="icon" class="icon" viewBox="0 0 24 24"><path d="M1 1h8"/></svg><span data-nid="label">保存资料</span></button></section><button data-nid="other" class="btn">暂存</button></main>';
 const broken=html.replace('data-nid="save"','style="font-size:0px" data-nid="save"');
@@ -115,6 +120,62 @@ test('损坏修复记录可以展示但不能再次请求；候选恢复不会�
 test('选中根与allowedChanges同样取交集，不让较宽的elementNid扩大授权',async()=>{
  stage();const s=useProjectStore.getState(),c=s.stagedScreen!;useProjectStore.setState({stagedScreen:{...c,workflowContract:{...c.workflowContract!,elementNid:'root',allowedChanges:['element:other']}}});
  expect(s.getStagedRepairEligibility().allowed).toBe(false);expect(await run()).toBe(false);expect(calls).toHaveLength(0);
+});
+for(const duplicate of [false,true])test(`${duplicate?'duplicate click':'another control'} must retain cancellation of the one active repair`,async()=>{
+ stage();const config=useAIConfigStore.getState();let release!:()=>void,aborts=0;
+ const slow:AIEngineCore={...core,streamText(options){const stream=core.streamText(options),pending=new Promise<void>(resolve=>release=resolve);return {...stream,textStream:(async function*(){await pending;yield answer;})(),textPromise:pending.then(()=>answer),abort(){aborts++;}};}};
+ const factory=spyOn(CoreFactory,'createAIEngineCore').mockReturnValue(slow);useAIConfigStore.setState({getActiveProviderForRole:()=>({provider,modelId:'fixture'})});
+ host=document.createElement('div');document.body.append(host);root=createRoot(host);
+ try{
+  await act(async()=>{root!.render(<><CandidateRepairControl/><CandidateRepairControl/></>);});
+  const start=host.querySelector('button')!;await act(async()=>{start.click();if(duplicate)start.dispatchEvent(new MouseEvent('click',{bubbles:true}));await waitFor(()=>Boolean(release));});expect(calls).toHaveLength(1);
+  const cancel=[...host.querySelectorAll('button')].filter(button=>button.textContent==='取消修复');expect(cancel).toHaveLength(2);await act(async()=>{cancel[duplicate?0:1].click();await new Promise(resolve=>setTimeout(resolve,5));});
+  expect(aborts).toBeGreaterThan(0);expect(useProjectStore.getState().stagedRepairStatus).toBeNull();expect(useProjectStore.getState().stagedScreen?.newHtml).toBe(broken);
+  await act(async()=>{release();await new Promise(resolve=>setTimeout(resolve,5));});expect(calls).toHaveLength(1);expect((await loadStagedCandidate(useProjectStore.getState().id))!.repair).toBeDefined();
+ }finally{await act(async()=>{release?.();await new Promise(resolve=>setTimeout(resolve,5));});factory.mockRestore();useAIConfigStore.setState(config,true);}
+});
+test('a pending candidate repair exposes actual request activity without granting adoption',async()=>{
+ stage();const config=useAIConfigStore.getState();let release!:()=>void;
+ const slow:AIEngineCore={...core,streamText(options){const stream=core.streamText(options),pending=new Promise<void>(resolve=>release=resolve);return {...stream,textStream:(async function*(){await pending;yield answer;})(),textPromise:pending.then(()=>answer),abort(){}};}};
+ const factory=spyOn(CoreFactory,'createAIEngineCore').mockReturnValue(slow);useAIConfigStore.setState({getActiveProviderForRole:()=>({provider,modelId:'fixture'})});host=document.createElement('div');document.body.append(host);root=createRoot(host);
+ try{
+  await act(async()=>{root!.render(<CandidateRepairControl/>);});await act(async()=>{host!.querySelector('button')!.click();await waitFor(()=>Boolean(release));});expect(calls).toHaveLength(1);
+  const summary=host.querySelector('[aria-label="应用调用摘要"]');expect(summary).not.toBeNull();expect(summary!.textContent).toContain('等待调用返回');expect(summary!.textContent).toContain('调用尝试 1 次');expect(await useProjectStore.getState().adoptStagedChange()).toBe(false);
+ }finally{await act(async()=>{release?.();await new Promise(resolve=>setTimeout(resolve,5));});factory.mockRestore();useAIConfigStore.setState(config,true);}
+});
+for(const action of ['model','unmount'] as const)test(`${action} aborts candidate repair and its late response cannot replace the original candidate`,async()=>{
+ stage();const config=useAIConfigStore.getState(),id=useProjectStore.getState().stagedScreen!.candidateId;let release!:()=>void,aborts=0;
+ const slow:AIEngineCore={...core,streamText(options){const stream=core.streamText(options),pending=new Promise<void>(resolve=>release=resolve);return {...stream,textStream:(async function*(){await pending;yield answer;})(),textPromise:pending.then(()=>answer),abort(){aborts++;}};}};
+ const factory=spyOn(CoreFactory,'createAIEngineCore').mockReturnValue(slow);useAIConfigStore.setState({getActiveProviderForRole:()=>({provider,modelId:'fixture'})});host=document.createElement('div');document.body.append(host);root=createRoot(host);
+ try{await act(async()=>{root!.render(<CandidateRepairControl/>);});await act(async()=>{host.querySelector('button')!.click();await waitFor(()=>Boolean(release));});
+  await act(async()=>{if(action==='model')useAIConfigStore.setState({getActiveProviderForRole:()=>({provider,modelId:'changed'})});else {root!.unmount();root=undefined;}await new Promise(resolve=>setTimeout(resolve,5));});expect(aborts).toBeGreaterThan(0);expect(useProjectStore.getState().stagedRepairStatus).toBeNull();
+  await act(async()=>{release();await new Promise(resolve=>setTimeout(resolve,5));});expect(useProjectStore.getState().stagedScreen?.candidateId).toBe(id);expect(useProjectStore.getState().stagedScreen?.newHtml).toBe(broken);expect(calls).toHaveLength(1);if(action==='model')expect(host.textContent).toContain('模型');else expect(host.childElementCount).toBe(0);
+ }finally{await act(async()=>{release?.();await new Promise(resolve=>setTimeout(resolve,5));});factory.mockRestore();useAIConfigStore.setState(config,true);}
+});
+test('an actual repair deadline ends busy UI and consumes only the original one-attempt allowance',async()=>{
+ stage();const config=useAIConfigStore.getState(),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1800,maxDurationMs:1000,maxRequestDurationMs:60});let release!:()=>void,aborts=0;
+ const slow:AIEngineCore={...core,streamText(options){const stream=core.streamText(options),pending=new Promise<void>(resolve=>release=resolve);return {...stream,textStream:(async function*(){await pending;yield answer;})(),textPromise:pending.then(()=>answer),abort(){aborts++;}};}};
+ const factory=spyOn(CoreFactory,'createAIEngineCore').mockReturnValue(slow),policy=spyOn(BudgetPolicy,'createSingleRequestBudget').mockReturnValue(budget);useAIConfigStore.setState({getActiveProviderForRole:()=>({provider,modelId:'fixture'})});host=document.createElement('div');document.body.append(host);root=createRoot(host);
+ try{await act(async()=>{root!.render(<CandidateRepairControl/>);});await act(async()=>{host.querySelector('button')!.click();await waitFor(()=>Boolean(release));await new Promise(resolve=>setTimeout(resolve,100));});expect(useProjectStore.getState().stagedRepairStatus).toBeNull();expect(host.textContent).toContain('超过时限');expect(aborts).toBeGreaterThan(0);expect(host.querySelector('button')!.disabled).toBe(true);
+  await act(async()=>{release();await new Promise(resolve=>setTimeout(resolve,5));});expect(useProjectStore.getState().stagedScreen?.newHtml).toBe(broken);expect(calls).toHaveLength(1);expect(budget.snapshot()).toMatchObject({requests:1,requestedOutputTokens:1800});
+ }finally{release?.();budget.close();policy.mockRestore();factory.mockRestore();useAIConfigStore.setState(config,true);}
+});
+test('global cancellation during verification releases busy immediately and retains a cancelled receipt',async()=>{
+ stage();const s=useProjectStore.getState(),id=s.stagedScreen!.candidateId;let release!:()=>void;
+ PageRenderCheck.inspect=async()=>{await new Promise<void>(resolve=>release=resolve);return good;};
+ const pending=run();await waitFor(()=>Boolean(release));expect(useProjectStore.getState().stagedRepairStatus).toBe('verifying');s.cancelStagedRepair();expect(useProjectStore.getState().stagedRepairStatus).toBeNull();
+ release();expect(await pending).toBe(false);expect(useProjectStore.getState().stagedScreen?.candidateId).toBe(id);expect(useProjectStore.getState().stagedScreen?.repair?.status).toBe('cancelled');expect(calls).toHaveLength(1);expect((await loadStagedCandidate(s.id))!.repair).toBeDefined();
+});
+test('an old delayed reservation cannot dispatch or clear a replacement repair operation',async()=>{
+ stage();const realSave=CandidateRepository.saveStagedCandidate;let releaseReservation!:()=>void,reserved=false,releaseModel!:()=>void;
+ const reservation=new Promise<void>(resolve=>releaseReservation=resolve),save=spyOn(CandidateRepository,'saveStagedCandidate').mockImplementation(async(project,folder,value)=>{await realSave(project,folder,value);if(value.repair?.message?.startsWith('已登记一次修复尝试')&&!reserved){reserved=true;await reservation;}});
+ let first!:Promise<boolean>,second!:Promise<boolean>;
+ try{
+  first=run();await waitFor(()=>reserved);expect(calls).toHaveLength(0);useProjectStore.getState().cancelStagedRepair();stage();const id=useProjectStore.getState().stagedScreen!.candidateId;
+  const slow:AIEngineCore={...core,streamText(options){const stream=core.streamText(options),pending=new Promise<void>(resolve=>releaseModel=resolve);return {...stream,textStream:(async function*(){await pending;yield answer;})(),textPromise:pending.then(()=>answer),abort(){}};}};
+  second=run(undefined,slow);await waitFor(()=>Boolean(releaseModel));expect(calls).toHaveLength(1);releaseReservation();expect(await first).toBe(false);expect(useProjectStore.getState().stagedRepairStatus).toBe('repairing');expect(useProjectStore.getState().stagedScreen?.candidateId).toBe(id);
+  useProjectStore.getState().cancelStagedRepair();releaseModel();expect(await second).toBe(false);expect(calls).toHaveLength(1);
+ }finally{releaseReservation?.();releaseModel?.();await first;await second;save.mockRestore();}
 });
 test('批量润色合同不能借单页候选入口修复',async()=>{
  const s=useProjectStore.getState(),task=buildRestyleContract({scope:'batch',target:{id:'page',name:'会员资料',html},deviceProfile:'mobile',frameWidth:390,designSystem:s.designSystem});

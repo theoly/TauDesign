@@ -11,20 +11,24 @@ import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
 import {useAIConfigStore,defaultProviders,defaultBindings} from '/src/stores/useAIConfigStore.ts';
 import {techBlueTheme} from '/src/utils/themePresets.ts';
 import {withMultiPageTasks,multiPageTask} from '/test/fixtures/multiPageTask.ts';
-const store=useProjectStore.getState();store.initNewProject({name:'多页功能验证',deviceProfile:'mobile',designSystem:techBlueTheme,createSpecimen:false});
+const query=new URLSearchParams(location.search),device=query.get('device')==='pc'?'pc':'mobile',manual=query.has('activity'),variants=query.has('variants');
+const store=useProjectStore.getState();store.initNewProject({name:'多页功能验证',deviceProfile:device,designSystem:techBlueTheme,createSpecimen:false});
 const original='<main data-nid="old00001">保留原页</main>';store.addScreen({name:'原页',htmlContent:original},'old');
 useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'FIXTURE_SECRET'})),bindings:defaultBindings});
-const state={requests:[],state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length,original};window.multiFunctionFixture=state;
+const state={requests:[],pending:[],state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length,original};window.multiFunctionFixture=state;
 const transport=new MockTransport();
 const core=new DefaultAIEngineCore({id:'local',stream:(request,event)=>{
  const schema=request.body.response_format?.json_schema?.schema;
  state.requests.push({json:!!schema,stage:schema?.properties.pages?'batch-plan':schema?'page-plan':'html',containsPlan:JSON.stringify(request.body.messages).includes('PAGE TASK PLAN')});
- if(schema?.properties.pages)transport.queueResponse(JSON.stringify(withMultiPageTasks({summary:'登录和注册',pages:[{name:'登录页',requirements:['手机号登录'],links:['注册页']},{name:'注册页',requirements:['注册资料'],links:[]}]})),20);
- else if(schema){const task=multiPageTask('邮箱登录',['邮箱']);task.features[0].information=[{label:'邮箱',kind:'input'}];transport.queueResponse(JSON.stringify(task),20);}
+ let text;
+ if(schema?.properties.pages)text=JSON.stringify(withMultiPageTasks(variants?{summary:'同页两种布局',pages:[{name:'方案一',requirements:['手机号登录'],links:[]},{name:'方案二',requirements:['注册资料'],links:[]}]}:{summary:'登录和注册',pages:[{name:'登录页',requirements:['手机号登录'],links:['注册页']},{name:'注册页',requirements:['注册资料'],links:[]}]}));
+ else if(schema){const task=multiPageTask('邮箱登录',['邮箱']);task.features[0].information=[{label:'邮箱',kind:'input'}];text=JSON.stringify(task);}
  else{
   const scope=JSON.parse(request.body.messages[0].content.match(/confirmedMultiPageScope=(.*); output exactly this page/)[1]);
-  transport.queueResponse(`<artifact type="screen" title="${scope.name}"><main class="p-4 col gap-4"><h1 class="text-xl">${scope.name}</h1><p>${scope.index===0?'手机号登录':'注册资料'}</p><label>邮箱<input class="input"/></label><button class="btn btn-primary">提交</button>${scope.requiredTargetIds.map(id=>`<button class="btn" data-target-screen-id="${id}">打开关联页</button>`).join('')}</main></artifact>`,20);
+  text=`<artifact type="screen" title="${scope.name}"><main class="${device==='pc'?'container-max ':''}p-4 col gap-4"><h1 class="text-xl">${scope.name}</h1><p>${scope.index===0?'手机号登录':'注册资料'}</p><label>邮箱<input class="input"/></label><button class="btn btn-primary">提交</button>${scope.requiredTargetIds.map(id=>`<button class="btn" data-target-screen-id="${id}">打开关联页</button>`).join('')}</main></artifact>`;
  }
+ if(manual){let resolve;const promise=new Promise(done=>resolve=done);state.pending.push({event,text,resolve});state.release=index=>{const p=state.pending[index];p.event({type:'Delta',text:p.text});p.event({type:'Done',finish_reason:'stop'});p.resolve();};return {promise,abort(){state.aborts=(state.aborts??0)+1;resolve();}};}
+ transport.queueResponse(text,20);
  return transport.stream(request,event);
 }});
 const stream=DefaultAIEngineCore.prototype.streamText;DefaultAIEngineCore.prototype.streamText=function(options){return stream.call(core,options);};

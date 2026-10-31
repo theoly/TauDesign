@@ -904,3 +904,94 @@ WebKit首轮在全页截图后触发iframe重新测量，测试采纳时渲染pe
 独立入口新增服务矩阵158/0（含8项新增），覆盖分析纠正、结构化确定性零请求、迟到取消和规划/批次观察隔离；其完整根UI生命周期竞争验收未全部补齐，PG-03/04保持未完成。现有浏览器套件的通过不能替代该缺口。本次未调用真实Provider，未重跑Rust、原生实机或打包。全量测试仍有既有React act和预期错误日志，不声称日志零警告。
 
 本地证据：`evidence/2026-10-31-readme-commit/`含全量/类型/构建日志与711份源码指纹；`evidence/2026-10-31-readme-commit-ui/result.json`及截图记录当前受控回归，原始文件由Git忽略。
+
+
+## 2026-10-31 独立根生命周期与取消后重试
+
+新增15项根hook矩阵，见`test/independent_progress_lifecycle.test.tsx`。分析/明确元素/确认局部与完整区块/多页均使用实际core观察接线；原页和模型变化、卸载、跨工程、旧finally、非末尾计划停止、分析与零请求执行来源分离、后台历史追加写回原工程均有断言。同reviewId重试的异常迟到响应另以不合作执行器模拟；ready负例由真实确定性executor生成合格结果，不能用无效HTML人为让它被拒。
+
+首次8/1失败来自夹具监视了getConversationStore创建的另一实例；改为原型拦截，并实际读取原/新工程JSONL核对写入归属，未修改存储行为。随后9/1的同消息cancelled竞争暴露旧catch覆盖新重试isStopped/摘要；补当前controller写回检查。10/1的迟到ready负例继续暴露根流程可暂存已取消结果；补await后的mounted/signal/controller最终守卫。全部失败日志保留，未降低交付门禁。
+
+| 检查 | 最终结果 |
+| --- | --- |
+| 新增独立根矩阵 | **15 pass / 0 fail / 143 assertions** |
+| 相关根入口、规则与聊天专项 | 48 pass / 0 fail / 361 assertions / 4 files |
+| bun test | **2655 pass / 0 fail / 17018 assertions / 244 files / 53.91秒** |
+| bun run type-check | exit0 |
+| bun run build | exit0，Vite 2.90秒 |
+| 新增聚焦浏览器矩阵 | Chromium/WebKit，mobile390/PC1440，全通过 |
+| 扩展后完整浏览器套件 | Chromium/WebKit全通过；两档位独立分析1调用、本地确认0调用、元素停止/迟到/新调用、规划1和生成批次2独立计数；批次History1，原页保留；每引擎pageErrors0、externalRequests0 |
+
+已人工查看WebKit移动端零请求确认截图，分析摘要保留1次JSON，执行结果单列0次；候选仍等待iframe实际渲染，未误显示可采纳。未调用真实Provider，未重跑Rust/原生实机/打包；既有React act/预期错误日志仍存在。原27项14完成/13待完成不变，PG-03/04未全部关闭，剩余失败草稿建议/重新挂载/手动续写及其余跨入口终态继续按progress-evidence.md验收。
+
+本地忽略证据：`evidence/2026-10-31-entry-lifecycle/`保存日志与712份源码SHA256；`evidence/2026-10-31-entry-lifecycle-focused-ui/`与`evidence/2026-10-31-entry-lifecycle-ui/`分别记录聚焦和完整结果及截图。本轮没有再次执行Git提交推送。
+
+
+## 2026-10-31 恢复入口、保存竞争与受控修复活动
+
+本轮新增18项：草稿建议9项（原4项扩至13）、重新挂载3项（独立根15扩至18）、手动续写4项（原8扩至12）、活动接续2项（原8扩至10）。实际挂起流和根UI覆盖建议等待/返回、一次标记先落盘、停止/模型/工程变化、重开、保存延迟与资格claim延迟、手动修复后旧任务不能覆盖；补挂0调用/重复点击/取消/上下文失效；续写当前执行1调用与父任务累计4调用分离、取消及模型/工程变化。
+
+打回及修复：
+
+- 补挂17/1：实际创建后原pageCreationContext变化，完成阶段未发布；成功文本原先也未更新。保留写前完整上下文门禁，写后按当前controller/工程归属回报终态并更新文案。
+- 草稿保存竞争9/2：持久层已保持resolved单调，旧建议仍覆盖UI并在取消后回填已保存标签；保存后重新核对，清除过期标签，仅当前owner写界面。claim延迟11/2进一步暴露旧claimed对象和模型变化派发，改为只合并aiAttempted事实、派发前核对、保护catch/finally。
+- 续写11/1：模型在挂起续写期间变化仍创建页面；结果落地前和渲染提交前核对原模型绑定，取消/拒绝不重置原预算。
+- 浏览器实际plan/html/repair三调用，摘要仅二调用：Pipeline结束后已停止观察，画布验收修复漏计。以已结算活动快照接续修复观察，保持同一父预算，禁止接续未结算快照；未增加请求/重试或二次消费流。
+- 首轮恢复截图路径表达式报Path+str，修正括号后聚焦矩阵通过。扩展全套首次在WebKit尾段达到隔离浏览器localStorage配额，应用正确显示保存失败并禁止建议。恢复独立矩阵开始前清理该headless上下文的夹具存储，保留每个矩阵内部重开/历史验证与保存门禁，再跑全套；未修改桌面存储、用户工程或应用配额逻辑。
+
+| 检查 | 最终结果 |
+| --- | --- |
+| 恢复入口/活动接续专项 | **53 pass / 0 fail / 426 assertions / 4 files** |
+| bun test | **2673 pass / 0 fail / 17197 assertions / 244 files / 58.92秒** |
+| bun run type-check | exit0 |
+| bun run build | exit0，Vite 2.76秒 |
+| Python验证器语法 / diff空白检查 | 通过 |
+| 恢复聚焦浏览器矩阵 | Chromium/WebKit mobile390/PC1440均通过，含3调用受控修复、建议停止/重开/零请求修复、补挂成功与停止迟到、续写返回与停止 |
+| 扩展后完整浏览器套件 | 最终两引擎均passed；原矩阵及新增恢复场景通过，每引擎pageErrors0、externalRequests0；两档位续写成功共4调用/1个新增页/History1，停止共4调用/0新增页/History0，始终同一父账本 |
+
+已人工查看WebKit移动端补挂成功截图：实际渲染与加入画布为已完成、当前执行0调用、原父预算2/4已结束，旧失败文案不再残留。既有React act/预期错误日志仍存在，不声称日志零警告。未调用真实Provider，未重跑Rust/原生实机或打包，本轮未提交Git。
+
+本地证据`evidence/2026-10-31-recovery/`保留失败和最终日志、712份源码SHA256；`evidence/2026-10-31-recovery-focused-fixed-ui/`为聚焦结果，最终全套为`evidence/2026-10-31-recovery-final-ui/result.json`及截图。`recovery-ui`是存储配额打回，不能作为最终通过结果；原始证据均由Git忽略。
+
+本轮关闭恢复入口切片；PG-03/04与原M4-04仍待多方案界面、重塑停止即重试的controller归属、属性面板/候选主动修复的操作进度验收。具体剩余路径列于progress-evidence.md，原27项14完成/13待完成、规则默认关闭和M5门槛保持。
+
+
+## 2026-10-31 重塑操作owner、多方案进度与停止即重试
+
+新增15项：`restyle_owner.test.tsx`13项（全量日志实际13通过），多方案根2项（独立根文件18扩至20）。首次6项全部打回：停止未释放busyRef、旧完成/关闭后progress污染、取消分析无重试入口、模型变化接收ready、跨工程未取消旧signal；固定负断言后修复。开发类型检查另暴露无模型操作使用undefined而原绑定API返回null的两项TS错误，改为真实null语义并通过复验，未以断言屏蔽。
+
+重塑操作持有独立controller/工程/模型，runOne和批次固定使用该owner；旧回调/终态/finally不能结束新试跑。停止立即释放锁，批次停止后重新试跑，已实际应用项仍可撤销；关闭后即使父组件未卸载仍不接收旧进度。工程/单页目标/模型改变取消旧任务。最终存储动作兼容现有API，通过可选只读owner守卫在异步渲染与写前核对，不绕过History。单页已取消分析有显式重新分析入口，确定性局部润色0生成调用。
+
+| 检查 | 最终结果 |
+| --- | --- |
+| 新增重塑owner | **13 pass / 0 fail**，106 assertions（全量日志） |
+| 独立根含2项多方案 | 20 pass / 0 fail / 219 assertions |
+| 前期关联专项 | 42 pass / 0 fail / 245 assertions / 4 files（追加单页与目标切换前） |
+| bun test | **2688 pass / 0 fail / 17336 assertions / 245 files / 59.56秒** |
+| bun run type-check | exit0 |
+| bun run build | exit0，Vite 2.58秒 |
+| 两个Python验证器语法 / diff空白检查 | 通过 |
+| 重塑core/executor/UI受控浏览器 | Chromium/WebKit PC/mobile全部通过；每组合5调用/4取消，默认跳过Token页、来源样式推荐、停止即重试/旧迟到/试跑成功/关闭/模型与工程切换、原页保持；pageErrors0/externalRequests0 |
+| 多方案聚焦与完整扩展浏览器 | Chromium/WebKit mobile390/PC1440全部通过；规划1与生成2独立计数；成功同排2方案/History1，第二方案挂起时停止0新增/History0，原页保留；完整套件每引擎pageErrors0/externalRequests0 |
+
+已人工查看WebKit移动档重塑新试跑等待截图：接收正文3字符/推理17字符，未展示私有思考原文，旧迟到内容无污染，停止/关闭可用。测试均使用合成Provider，不发送真实请求；未重跑Rust/原生实机或打包，既有React act/预期错误日志不作为零警告声明。最后补验单页目标切换后重新执行全量/类型/构建，以full-final/types-release/build-release为最终日志，前一轮2687为中间结果。
+
+本地忽略证据：`evidence/2026-10-31-restyle-owner/`保存打回/最终日志与713份源码SHA256；`evidence/2026-10-31-restyle-owner-ui/browser.json`、`evidence/2026-10-31-variants-focused-ui/result.json`和`evidence/2026-10-31-restyle-variants-full-ui/result.json`及截图记录当前浏览器验收。原27项14完成/13待完成不变，PG/M4-04仍待属性面板有限编辑/候选主动修复的进度取消验收，原M3/M4/M5门槛及规则默认关闭不变。本轮未执行Git提交推送。
+
+
+## 2026-10-31 属性面板与候选修复进度、超时与README同步
+
+新增18项（属性面板8、候选8、预算/续写组合2）。先复现属性5/4、候选39/3和基线变化54/1；真实短时限组合59/1进一步发现正文Promise失败后仍等待挂起流，修复错误路径后专项71/0（438断言）通过。失败全量运行曾主动中止（exit130），不计为通过；失败及中间日志保留。生产默认额度未改变，取消不恢复一次修复资格。
+
+| 检查 | 最终结果 |
+| --- | --- |
+| bun test（提交前重跑） | **2706 pass / 0 fail / 17452 assertions / 245 files / 57.87秒** |
+| bun run type-check | exit0 |
+| bun run build | exit0，Vite 2.50秒 |
+| Python验证器语法 | 两份通过 |
+| 完整受控浏览器 | Chromium/WebKit mobile390/PC1440通过；每引擎pageErrors0/externalRequests0；含属性摘要/停止/切选中/模型变化、候选多入口取消/保存重开/真实渲染修复→采纳→撤销→重做 |
+| 独立重塑回归 | 两引擎两档位通过，每组合5调用/4取消，停止即重试、迟到、关闭、模型/工程切换、原页保持 |
+
+完整浏览器证据为`evidence/2026-10-31-panels-release-ui/result.json`，独立重塑为`evidence/2026-10-31-panels-restyle-ui/browser.json`；提交前全量/类型/构建日志、打回日志及源码SHA256保留于`evidence/2026-10-31-panels/`，原始证据由Git忽略。未调用真实Provider、未重跑Rust/原生实机或打包，既有React act/预期错误日志不作为零警告声明。
+
+中英文README同步实际功能与本轮验证基线，保留原生和真实模型、人评及整体重构未验收的范围。属性/候选切片关闭，PG-03/04和M4-04仍待总体时限/生命周期审计；原27项14完成/13待完成、规则默认关闭及M5门槛保持。

@@ -8,6 +8,7 @@ import {AIProviderModal} from '/src/components/settings/AIProviderModal.tsx';
 import {DeliveryHistoryPanel} from '/src/components/inspector/DeliveryHistoryPanel.tsx';
 import {PageCreationEvidencePanel} from '/src/components/inspector/PageCreationEvidencePanel.tsx';
 import {ScreenFrame} from '/src/components/canvas/ScreenFrame.tsx';
+import {PageRenderCheck} from '/src/services/ai/pageRenderCheck.ts';
 import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
 import {MockTransport} from '/src/services/ai/engine/transport/mockTransport.ts';
 import {useProjectStore} from '/src/stores/useProjectStore.ts';
@@ -15,17 +16,23 @@ import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
 import {useAIConfigStore,defaultProviders,defaultBindings} from '/src/stores/useAIConfigStore.ts';
 import {chatPageTaskPlan} from '/test/fixtures/pageTaskPlan.ts';
 import {techBlueTheme} from '/src/utils/themePresets.ts';
-const query=new URLSearchParams(location.search),device=query.get('device')==='pc'?'pc':'mobile',retry=query.has('retry'),hold=query.has('hold'),repair=query.has('repair'),draft=query.has('draft'),activityMode=query.has('activity');
+const query=new URLSearchParams(location.search),device=query.get('device')==='pc'?'pc':'mobile',retry=query.has('retry'),hold=query.has('hold'),repair=query.has('repair'),draft=query.has('draft'),activityMode=query.has('activity'),entryActivity=query.has('entryActivity');
 const store=useProjectStore.getState();store.initNewProject({name:'规则根入口验证',deviceProfile:device,designSystem:techBlueTheme,createSpecimen:false});
 const original='<main data-nid="root0001" class="'+(device==='pc'?'container-max p-4':'p-4')+'"><section data-nid="region01"><h2 data-nid="title001">资料</h2><p data-nid="copy0001">'+('长正文需要完整阅读。'.repeat(10))+'</p><button data-nid="button01" class="btn btn-primary">查看详情</button></section><aside data-nid="outside1">'+Array.from({length:24},(_,i)=>`<p data-nid="keep${i}">保留外部${i}</p>`).join('')+'</aside></main>';
 store.addScreen({name:'资料页',htmlContent:original},'page');
 // Preserve the preference loaded from the real application config; only the Provider is synthetic.
 useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'FIXTURE_SECRET'})),bindings:defaultBindings});
 const state={device,original,requests:[],state:()=>useProjectStore.getState(),config:()=>useAIConfigStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length};window.ruleControlFixture=state;
+if(query.has('remountActivity')){const inspect=PageRenderCheck.inspect;let calls=0;PageRenderCheck.inspect=async(...args)=>{calls++;if(calls===1)return {status:'unavailable',findings:[],inspected:0,reason:'夹具首轮渲染暂不可用'};return new Promise(resolve=>{state.releaseRender=async()=>resolve(await inspect(...args));});};}
 const transport=new MockTransport();let analyses=0;
 const core=new DefaultAIEngineCore({id:'local-root-control',stream:(request,event)=>{
- const body=request.body,schema=body.response_format?.json_schema?.schema,stage=activityMode?'question':schema?.properties.features?'plan':schema?.properties.summary?'analysis':schema?.properties.requiresPageRewrite?'finite':schema?.properties.operations?'repair':'html';
+ const body=request.body,schema=body.response_format?.json_schema?.schema,stage=activityMode?'question':schema?.properties.features?'plan':schema?.properties.summary?'analysis':schema?.properties.requiresPageRewrite?'finite':schema?.properties.operations?'repair':schema?.properties.labels?'suggestion':'html';
  state.requests.push({stage,maxTokens:body.max_tokens,hasRule:body.messages[0].content.includes('DESIGN REFERENCES')||body.messages[0].content.includes('[LY-04@1]')});
+ if(entryActivity&&['analysis','finite','suggestion'].includes(stage)){
+  let resolve;const promise=new Promise(done=>resolve=done),pending={stage,event,resolve,targets:stage==='suggestion'?JSON.parse(body.messages.at(-1).content).targets:undefined};(state.pendingEntries??=[]).push(pending);
+  state.releaseEntry=(index,text)=>{const p=state.pendingEntries[index],value=p.stage==='suggestion'?{labels:p.targets.map(t=>({nid:t.nid,text:'查看详情'}))}:p.stage==='analysis'?{summary:'主按钮层级可优化',items:[{title:'主按钮加粗',reason:'主操作层级不足',change:'主按钮文字加粗',scope:'local',operations:[{nid:'button01',type:'add_classes',value:'font-semibold'}]}]}:{requiresPageRewrite:false,reason:'仅修改授权按钮',operations:[{nid:'button01',type:'add_classes',value:'font-semibold'}]};p.event({type:'Delta',text:text??JSON.stringify(value)});p.event({type:'Done',finish_reason:'stop'});p.resolve();};
+  return {promise,abort(){state.entryAborts=(state.entryAborts??0)+1;resolve();}};
+ }
  if(activityMode){
   let resolve;const promise=new Promise(done=>resolve=done);
   state.releaseActivity=(text='<think>比较布局</think>这是布局解释。')=>{event({type:'Delta',text});event({type:'Usage',input_tokens:5,output_tokens:9});event({type:'Done',finish_reason:'stop'});resolve();};
@@ -35,6 +42,7 @@ const core=new DefaultAIEngineCore({id:'local-root-control',stream:(request,even
  else if(stage==='analysis'){
   analyses++;transport.queueResponse(retry&&analyses===1?'not JSON':JSON.stringify({summary:'调整长正文和主操作层级',items:[{title:'主按钮文字层级',reason:'主操作文字层级不足',change:'主按钮文字加粗',scope:'local',operations:[{nid:'button01',type:'add_classes',value:'font-semibold'}]}]}),hold?1000:10);
  }else if(stage==='repair')transport.queueResponse(JSON.stringify({operations:[{nid:'created1',type:'remove_styles',value:'font-size'}]}),10);
+ else if(stage==='suggestion')transport.queueResponse(JSON.stringify({labels:JSON.parse(body.messages.at(-1).content).targets.map(t=>({nid:t.nid,text:'查看详情'}))}),10);
  else if(stage==='finite')transport.queueResponse(JSON.stringify({requiresPageRewrite:false,reason:'仅修改授权主按钮',operations:[{nid:'button01',type:'add_classes',value:'p-4'}]}),10);
  else transport.queueResponse('<artifact title="正文页"><main class="'+(device==='pc'?'container-max p-4':'p-4')+'"><h1>正文页</h1><p>完整正文。</p><button data-nid="created1" class="btn btn-primary"'+(repair?' style="font-size:0px"':'')+'>'+(draft?'<svg class="icon" viewBox="0 0 24 24"><path d="M1 1L2 2"/></svg><span></span>':'查看详情')+'</button></main></artifact>',10);
  return transport.stream(request,event);

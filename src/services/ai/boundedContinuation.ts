@@ -116,10 +116,11 @@ export async function streamWithContinuation(core: AIEngineCore, options: Stream
           consume(stream.reasoningStream, callbacks.onReasoning)
         ]);
         const complete = (async () => {
-          try {
-            const text = await stream.textPromise;
-            if (active) { suffix = text; textResolved = true; }
-          } finally { await metadata; await consuming; }
+          // A fatal body failure (including the parent deadline) is authoritative.
+          // Waiting for noncooperative iterators/metadata in finally would hide it.
+          const text = await stream.textPromise;
+          if (active) { suffix = text; textResolved = true; }
+          await metadata;await consuming;
         })();
         if (options.signal?.aborted) abort();
         await Promise.race([complete, cancelled]);

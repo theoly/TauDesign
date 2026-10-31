@@ -6,10 +6,11 @@ export interface RequestActivity {
 }
 export const initialRequestActivity=():RequestActivity=>({startedAt:Date.now(),requests:0,active:0,textChars:0,reasoningChars:0,jsonChars:0,status:'idle'});
 /** Application core observations, not HTTP counts or Provider acknowledgements. Never consumes a second stream. */
-export function observeRequestActivity(core:AIEngineCore,onActivity:(snapshot:RequestActivity)=>void,isCurrent=()=>true){
+export function observeRequestActivity(core:AIEngineCore,onActivity:(snapshot:RequestActivity)=>void,isCurrent=()=>true,initial?:Readonly<RequestActivity>){
   let closed=false,lastPublished=0;
   const cleanups=new Set<()=>void>();
-  const state=initialRequestActivity();
+  if(initial?.active)throw Error('只能接续已经结算的应用调用观察。');
+  const state=initial?{...initial}:initialRequestActivity();
   const publish=(force=false)=>{
     if(closed||(!force&&Date.now()-lastPublished<150)||!isCurrent())return;
     lastPublished=Date.now();try{onActivity({...state});}catch{console.warn('[ai-activity] 进度显示回调失败');}

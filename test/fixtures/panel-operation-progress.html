@@ -1,0 +1,36 @@
+<!doctype html><html><meta charset="utf-8"><title>检查器与候选修复任务验收</title><body style="margin:0;background:#020617"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {PropertyInspector} from '/src/components/inspector/PropertyInspector.tsx';
+import {CandidateRepairControl} from '/src/components/canvas/CandidateRepairControl.tsx';
+import {PageRenderCheck} from '/src/services/ai/pageRenderCheck.ts';
+import {buildDesignTaskContract} from '/src/services/ai/designWorkflow.ts';
+import {loadStagedCandidate} from '/src/services/storage/candidateRepository.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {useAIConfigStore} from '/src/stores/useAIConfigStore.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+const query=new URLSearchParams(location.search),device=query.get('device')==='pc'?'pc':'mobile',candidate=query.has('candidate');
+const original='<main data-nid="root0001" class="'+(device==='pc'?'container-max ':'')+'col gap-4 p-4"><h1>资料</h1><section data-nid="region01"><button data-nid="target01" class="btn btn-primary"><svg class="icon" viewBox="0 0 24 24"><path d="M1 1L2 2"/></svg><span>查看详情</span></button></section><button data-nid="other001" class="btn">暂存</button></main>';
+const s=useProjectStore.getState();s.initNewProject({name:'面板任务验证',deviceProfile:device,createSpecimen:false});s.addScreen({name:'资料页',htmlContent:original},'page');s.selectNodeByNid('page','target01');
+let model='fixture';const binding=()=>({provider:{id:'panel-fixture',name:'本地面板夹具',protocol:'openai_compatible',baseUrl:'https://invalid.test',apiKey:'PANEL_SECRET'},modelId:model});
+useAIConfigStore.setState({getActiveProviderForRole:binding,autoReferenceDesignRules:false});
+const f={original,calls:[],pending:[],aborts:0,state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length,
+ select:nid=>useProjectStore.getState().selectNodeByNid('page',nid),changeModel:()=>{model='changed';useAIConfigStore.setState({getActiveProviderForRole:()=>binding()});}};window.panelOperationFixture=f;
+const core=new DefaultAIEngineCore({id:'panel-local',stream:(request,event)=>{
+ let resolve;const promise=new Promise(done=>resolve=done);f.calls.push({maxTokens:request.body.max_tokens});f.pending.push({event,resolve,nid:f.state().selectedNid});
+ return {promise,abort(){f.aborts++;resolve();}};
+}});
+const stream=DefaultAIEngineCore.prototype.streamText;DefaultAIEngineCore.prototype.streamText=function(options){return stream.call(core,options);};
+f.release=index=>{const p=f.pending[index],value=candidate?{operations:[{nid:'target01',type:'remove_styles',value:'font-size'}]}:{requiresPageRewrite:false,reason:'仅微调当前目标',operations:[{nid:p.nid,type:'add_classes',value:'font-semibold'}]};p.event({type:'Delta',text:JSON.stringify(value)});p.event({type:'Done',finish_reason:'stop'});p.resolve();};
+const inspect=PageRenderCheck.inspect;
+if(candidate&&query.has('verifyHold'))PageRenderCheck.inspect=async(...args)=>{await new Promise(resolve=>f.releaseVerify=resolve);return inspect(...args);};
+async function publish(){const state=f.state(),c=state.stagedScreen;const report=await inspect({screen:{...state.screens.page,htmlContent:c.newHtml},settings:state.settings,designSystem:state.designSystem,overrides:state.overrides,assets:Object.values(state.assets)},createProjectStorage(state.id,state.folderPath));state.setStagedRenderQuality(f.state().getStagedRenderContextKey(),report);f.initialReport=report;}
+if(candidate){const state=f.state(),contract=buildDesignTaskContract({intent:'modify_screen',request:'调整按钮字号',target:state.screens.page,elementNid:'region01',deviceProfile:device,frameWidth:state.settings.frameWidth,designSystem:state.designSystem});state.stageScreenChange('page',original.replace('<button data-nid="target01"','<button style="font-size:0px" data-nid="target01"'),'修复候选',contract.request,contract);f.candidateId=f.state().stagedScreen.candidateId;await publish();}
+let root=ReactDOM.createRoot(document.getElementById('root'));
+const render=()=>root.render(candidate?React.createElement('main',{style:{padding:24,display:'flex',gap:24,color:'#cbd5e1'}},...['primary','secondary'].map(name=>React.createElement('section',{'data-control':name,style:{width:340}},React.createElement(CandidateRepairControl)))):React.createElement('div',{style:{width:360,height:'100vh',overflow:'auto',marginLeft:24}},React.createElement(PropertyInspector)));
+render();f.ready=true;f.checkRender=publish;
+f.reopen=async()=>{root.unmount();const state=f.state(),saved=await loadStagedCandidate(state.id);f.savedRepair=saved?.repair;state.restoreStagedCandidate(saved,state.id);await publish();root=ReactDOM.createRoot(document.getElementById('root'));render();};
+</script></body></html>

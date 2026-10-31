@@ -55,6 +55,8 @@ export const ModificationReviewCard: React.FC<{
       <button type="button" disabled={disabled} onClick={onCancel} className="text-slate-400">取消修改</button>
     </div>}
     {review.status === 'submitted' && <p className="text-blue-300">已确认修改内容，执行结果见后续消息。</p>}
-    {review.status === 'cancelled' && <p className="text-slate-400">本次修改已取消。</p>}
+    {review.status === 'cancelled' && <div className="space-y-2"><p className="text-slate-400">本次修改已取消。</p>
+      {onRetry&&<button type="button" disabled={disabled} onClick={onRetry} className="text-blue-400">重新分析</button>}
+    </div>}
   </section>;
 };

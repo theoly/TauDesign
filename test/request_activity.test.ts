@@ -59,6 +59,17 @@ test('synchronous core failure records a failed attempt without a successful ret
  const f=delayed();f.core.streamText=()=>{throw Error('本地失败');};const monitor=observeRequestActivity(f.core,()=>{});
  expect(()=>monitor.core.streamText(options)).toThrow('本地失败');expect(monitor.snapshot()).toMatchObject({requests:1,active:0,status:'failed'});monitor.stop();
 });
+test('a later controlled repair continues settled activity totals without mutating the completed pipeline snapshot',async()=>{
+ const transport=new MockTransport(),core=new DefaultAIEngineCore(transport),first=observeRequestActivity(core,()=>{});
+ transport.queueResponse('{"answer":"规划"}');await first.core.generateObject({type:'object'},options);transport.queueResponse('页面');await first.core.streamText(options).textPromise;
+ const original=first.snapshot();first.stop();const events:RequestActivity[]=[],repair=observeRequestActivity(core,a=>events.push(a),()=>true,original);
+ transport.queueResponse('修复');await repair.core.streamText(options).textPromise;
+ expect(repair.snapshot()).toMatchObject({requests:3,active:0,status:'returned',startedAt:original.startedAt,textChars:original.textChars+2,jsonChars:original.jsonChars});expect(original.requests).toBe(2);expect(events[0]).toEqual(original);repair.stop();
+});
+test('activity continuation rejects an unfinished snapshot without adding a core call',()=>{
+ const f=delayed(),first=observeRequestActivity(f.core,()=>{});first.core.streamText(options);
+ expect(()=>observeRequestActivity(f.core,()=>{},()=>true,first.snapshot())).toThrow('已经结算');expect(f.calls()).toBe(1);first.stop();f.text.resolve('迟到');f.reasoning.resolve(undefined);
+});
 test('pipeline reports only entered phases and real application calls for an ordinary question',async()=>{
  const transport=new MockTransport();transport.queueResponse('这是答复。');const phases:string[]=[],events:RequestActivity[]=[];
  const output=await PipelineExecutor.execute({input:{rawPrompt:'什么是布局？',activeScreenId:null,decision:{intent:'question',targetScreenId:null,reason:'问答'}},

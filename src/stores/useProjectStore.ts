@@ -241,6 +241,9 @@ export interface NodeReference {
   htmlSnippet: string;
 }
 
+// Runtime operation only: never serialized into the project or conversation.
+let activeStagedRepairJob:{cancel:()=>void}|null=null;
+
 interface ProjectState {
   id: string;
   name: string;
@@ -288,7 +291,8 @@ interface ProjectState {
   stagedRepairStatus: 'repairing' | 'verifying' | null;
   stagedRepairError: string | null;
   getStagedRepairEligibility: () => {allowed:boolean;message:string};
-  repairStagedCandidate: (model:PageRepairModel,signal?:AbortSignal) => Promise<boolean>;
+  repairStagedCandidate: (model:PageRepairModel,signal?:AbortSignal,isCurrent?:()=>boolean) => Promise<boolean>;
+  cancelStagedRepair: () => void;
   stagedAdoptionStatus: 'saving' | 'failed' | null;
   stagedAdoptionError: string | null;
   stagedAdoptionAttempt: number;
@@ -363,7 +367,7 @@ interface ProjectState {
   /** 组装 Restyle 的执行队列，组件优先 (T-AE-28) */
   buildRestylePlan: (screenIds?: ScreenId[]) => RestylePlan;
   /** 核验资源、实际渲染与全部实例投影后，单条 History 应用重塑结果。 */
-  applyRestyleOutcome: (outcome: RestyleOutcome, signal?: AbortSignal) => Promise<RestyleApplicationResult>;
+  applyRestyleOutcome: (outcome: RestyleOutcome, signal?: AbortSignal, isCurrent?:()=>boolean) => Promise<RestyleApplicationResult>;
 
   /** 当前工程的会话存档 (T-AE-31)。会话不进 project.json，独立分片存储 */
   getConversationStore: () => ConversationStore;
@@ -998,10 +1002,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return planRestyle(componentTargets, screenTargets);
   },
 
-  applyRestyleOutcome: async (outcome, signal) => {
+  applyRestyleOutcome: async (outcome, signal, isCurrent) => {
     const state = get(), key = restyleContextKey(state);
     const frozenOutcome = structuredClone(outcome), storage = createProjectStorage(state.id,state.folderPath);
-    const current = () => !signal?.aborted && !taskRuleSafetyIssue(frozenOutcome.workflowContract) &&
+    const current = () => !signal?.aborted && (!isCurrent||isCurrent()) && !taskRuleSafetyIssue(frozenOutcome.workflowContract) &&
       !draftExecutionIssue(frozenOutcome.executionRecord,frozenOutcome.html) && restyleContextKey(get()) === key;
     const frozen = structuredClone({id:state.id,folderPath:state.folderPath,settings:state.settings,
       screens:state.screens,overrides:state.overrides,assets:state.assets,designSystem:state.designSystem,components:state.components,
@@ -2412,28 +2416,44 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return candidateRepairEligibility({state,candidate,delivery:stagedDeliveryReport(state),
       render:state.stagedRenderQuality?.key===state.getStagedRenderContextKey()?state.stagedRenderQuality.report:undefined});
   },
-  repairStagedCandidate: async (model,signal) => {
+  cancelStagedRepair:()=>activeStagedRepairJob?.cancel(),
+  repairStagedCandidate: async (model,externalSignal,callerCurrent) => {
     const state=get(),candidate=state.stagedScreen,eligibility=state.getStagedRepairEligibility();
+    if(state.stagedRepairStatus)return false;
     if(!candidate||!eligibility.allowed){set({stagedRepairError:eligibility.message});return false;}
+    activeStagedRepairJob?.cancel();
     const input=structuredClone({state:{id:state.id,folderPath:state.folderPath,settings:state.settings,designSystem:state.designSystem,
       designSystemOrigin:state.designSystemOrigin,designLibraryBinding:state.designLibraryBinding,components:state.components,assets:state.assets,
       screens:state.screens,overrides:state.overrides,decisions:state.decisions,projectDocuments:state.projectDocuments},
       candidate,delivery:stagedDeliveryReport(state),render:state.stagedRenderQuality!.report});
     const context=pageCreationContext(state),key=state.getStagedRenderContextKey(),contract=JSON.stringify([candidate.workflowContract,candidate.executionRecord]);
     const same=()=>get().id===state.id&&get().folderPath===state.folderPath&&get().stagedScreen?.candidateId===candidate.candidateId&&get().stagedScreen?.newHtml===candidate.newHtml;
-    const current=()=>same()&&pageCreationContext(get())===context&&get().getStagedRenderContextKey()===key&&JSON.stringify([get().stagedScreen?.workflowContract,get().stagedScreen?.executionRecord])===contract;
+    const controller=new AbortController(),signal=controller.signal;
+    const job:{cancel:()=>void}={cancel:()=>{
+      if(activeStagedRepairJob!==job){controller.abort();return;}
+      activeStagedRepairJob=null;controller.abort();
+      if(same()){
+        const latest=get().stagedScreen!,repair=isPageRepairRecord(latest.repair)?{...latest.repair,status:'cancelled' as const,checkedAt:Date.now(),message:'修复已取消，本次修复资格不会恢复。'}:undefined;
+        set({stagedRepairStatus:null,stagedRepairError:'修复已取消，未修改候选。',...(repair?{stagedScreen:{...latest,repair}}:{})});get().recordStagedValidationEvidence();
+      }
+    }};
+    const current=()=>activeStagedRepairJob===job&&!signal.aborted&&(!callerCurrent||callerCurrent())&&same()&&pageCreationContext(get())===context&&get().getStagedRenderContextKey()===key&&JSON.stringify([get().stagedScreen?.workflowContract,get().stagedScreen?.executionRecord])===contract;
     const storage=createProjectStorage(state.id,state.folderPath);
+    activeStagedRepairJob=job;
+    const abort=()=>job.cancel();externalSignal?.addEventListener('abort',abort,{once:true});
+    const unsubscribe=useProjectStore.subscribe(()=>{if(activeStagedRepairJob===job&&!current())job.cancel();});
     set({stagedRepairStatus:'repairing',stagedRepairError:null});
     try{
+      if(externalSignal?.aborted)job.cancel();
       const result=await repairCandidate(input,storage,{isCurrent:current,signal,model:{...model,provider:structuredClone(model.provider),
-        onPhase:phase=>{if(current())set({stagedRepairStatus:phase});}},onAttempt:async repair=>{
+        onPhase:phase=>{if(current()){set({stagedRepairStatus:phase});model.onPhase?.(phase);}}},onAttempt:async repair=>{
           if(!current()||signal?.aborted)throw Error('候选已变化或修复取消。');
           const marked={...get().stagedScreen!,repair:{...repair,message:'已登记一次修复尝试；中断后不会自动重复请求。'}};
           set({stagedScreen:marked});
           // Persist the reservation before any provider request, including crash/reopen scenarios.
           await saveStagedCandidate(state.id,state.folderPath,marked);
         }});
-      if(!same())return false;
+      if(!same()||(activeStagedRepairJob&&activeStagedRepairJob!==job))return false;
       if(result.status==='ready'&&current()&&!signal?.aborted){
         get().stageScreenChange(candidate.targetScreenId,result.html,candidate.screenName,candidate.modificationRequest,candidate.workflowContract,
           candidate.executionRecord?{...candidate.executionRecord,completeHtml:result.html}:undefined,result.repair);
@@ -2444,9 +2464,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       set({stagedScreen:{...get().stagedScreen!,...(receipt?{repair:receipt}:{})},stagedRepairStatus:null,stagedRepairError:message});
       get().recordStagedValidationEvidence();return false;
     }catch(error){
-      if(same()){set({stagedRepairStatus:null,stagedRepairError:error instanceof Error?error.message:'修复失败。'});get().recordStagedValidationEvidence();}
+      if(same()&&(!activeStagedRepairJob||activeStagedRepairJob===job)){set({stagedRepairStatus:null,stagedRepairError:error instanceof Error?error.message:'修复失败。'});get().recordStagedValidationEvidence();}
       return false;
-    }
+    }finally{unsubscribe();externalSignal?.removeEventListener('abort',abort);if(activeStagedRepairJob===job)activeStagedRepairJob=null;}
   },
 
   stageScreenChange: (targetScreenId, newHtml, screenName, modificationRequest, workflowContract, executionRecord, repair) => {

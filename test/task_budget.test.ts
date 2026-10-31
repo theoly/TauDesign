@@ -51,6 +51,20 @@ test('parent deadline interrupts stalled text and metadata without waiting for t
   const result=await streamWithContinuation(withTaskBudget(f.core,ledger),options);
   expect(result.errorMessage).toContain('时限');expect(ledger.snapshot().cancelled).toBe(true);expect(ledger.snapshot().reservedOutputTokens).toBe(0);
 });
+for(const bodyFailure of [false,true])test(`${bodyFailure?'body failure':'deadline'} exits bounded consumption even when a stream or metadata ignores cancellation`,async()=>{
+ let release!:()=>void,aborts=0;const gate=new Promise<void>(resolve=>release=resolve),observed:string[]=[];
+ const core:AIEngineCore={async generateObject(){throw Error('unused');},streamText(){return {
+  textStream:(async function*(){await gate;yield 'LATE_BODY';})(),reasoningStream:(async function*(){})(),
+  textPromise:bodyFailure?Promise.reject(Error('body failed')):gate.then(()=>'LATE_BODY'),
+  reasoningPromise:bodyFailure?gate.then(()=>undefined):Promise.resolve(undefined),usagePromise:bodyFailure?gate.then(()=>undefined):Promise.resolve({inputTokens:2,outputTokens:3}),finishReasonPromise:Promise.resolve('stop'),abort(){aborts++;}
+ };}};
+ const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:2048,maxDurationMs:1000,maxRequestDurationMs:20});
+ try{
+  const result=await streamWithContinuation(withTaskBudget(core,budget),{...options,maxTokens:2048},{allowContinuation:false,onText:text=>observed.push(text)});
+  expect(result.errorMessage).toContain(bodyFailure?'body failed':'超过时限');expect(aborts).toBeGreaterThan(0);expect(budget.snapshot()).toMatchObject({requests:1,requestedOutputTokens:2048,reservedOutputTokens:0});
+  const count=observed.length;release();await new Promise(resolve=>setTimeout(resolve,2));expect(observed).toHaveLength(count);expect(result.rawResponse).not.toContain('LATE_BODY');
+ }finally{release();budget.close();}
+});
 test('continuation shares the parent call cap instead of resetting a child allowance',async()=>{
   const f=fake();f.core.streamText=o=>{f.calls.push(o);return {textPromise:Promise.resolve('<artifact><main>未完成'),textStream:(async function*(){})(),reasoningStream:(async function*(){})(),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('length'),abort(){}};};
   const ledger=new TaskBudget({...limits,maxRequests:1});

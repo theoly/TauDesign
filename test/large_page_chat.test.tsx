@@ -14,18 +14,19 @@ import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
 import type {AIEngineCore,StreamTextOptions} from '../src/services/ai/engine/core/types';
 const execute=PipelineExecutor.execute,inspect=PageRenderCheck.inspect,generate=DefaultAIEngineCore.prototype.generateObject;
 const prior=useProjectStore.getState(),history=useHistoryStore.getState(),config=useAIConfigStore.getState();
-let previousAct:unknown,root:Root,host:HTMLDivElement,calls:StreamTextOptions[],plans:number,functionPlans:number,omitHtml:boolean,pauseEarly:boolean,ledgers:any[];
+let previousAct:unknown,root:Root,host:HTMLDivElement,calls:StreamTextOptions[],plans:number,functionPlans:number,omitHtml:boolean,pauseEarly:boolean,ledgers:any[],holdResume:boolean,releaseResume:(text?:string)=>void;
 beforeEach(()=>{
  previousAct=(globalThis as any).IS_REACT_ACT_ENVIRONMENT;(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  localStorage.clear();useHistoryStore.getState().restore(null);
  useProjectStore.getState().initNewProject({name:'长页面恢复',deviceProfile:'pc',designSystem:defaultTheme,createSpecimen:false});
  useProjectStore.getState().addScreen({name:'旧页面',htmlContent:'<main data-nid="old">旧内容</main>'},'old');
  useAIConfigStore.setState({providers:defaultProviders.map(p=>p.id==='prov-deepseek'?{...p,apiKey:'fixture'}:p),bindings:defaultBindings});
- calls=[];plans=0;functionPlans=0;omitHtml=false;pauseEarly=false;ledgers=[];
+ calls=[];plans=0;functionPlans=0;omitHtml=false;pauseEarly=false;ledgers=[];holdResume=false;
  const core:AIEngineCore={streamText(o){calls.push(o);const marker=o.messages.at(-1)?.content.match(/TAUDESIGN_CONTINUE_[\w-]+/)?.[0];
   const complete=calls.length>=(pauseEarly?3:4);
   const fragment=omitHtml?'尚未输出页面代码':calls.length===1?'<artifact type="screen" title="爱情魔方"><main class="container-max"><h1>爱情魔方</h1>':!complete?'<section class="card p-4">会员资料</section>':'<button class="btn btn-primary">开始匹配</button></main></artifact>';
   const text=pauseEarly&&calls.length===2?'missing expected continuation marker':(marker?marker+'\n':'')+fragment;
+  if(holdResume&&calls.length===3){let resolve!:(text:string)=>void;const pending=new Promise<string>(r=>resolve=r);releaseResume=value=>resolve(value??text);return {textStream:(async function*(){yield await pending;})(),reasoningStream:(async function*(){})(),textPromise:pending,reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve({inputTokens:2,outputTokens:3}),finishReasonPromise:Promise.resolve('stop'),abort(){}};}
   return {textStream:(async function*(){yield text;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(text),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve({inputTokens:2,outputTokens:3}),finishReasonPromise:Promise.resolve(complete?'stop':'length'),abort(){}};
  },async generateObject<T>(){functionPlans++;return structuredClone(chatPageTaskPlan) as T;}};
  PipelineExecutor.execute=o=>{ledgers.push(o.taskBudget);return execute({...o,engineCore:core});};PageRenderCheck.inspect=async()=>({status:'complete',findings:[],inspected:5});
@@ -47,6 +48,24 @@ test('explicit continue reuses remaining parent allowance and full prefix, creat
  expect(ledgers[0].snapshot()).toMatchObject({requests:4,closed:true});
  const pages=Object.values(useProjectStore.getState().screens);expect(pages).toHaveLength(2);const created=pages.find(p=>p.id!=='old')!;
  expect(created.htmlContent).toContain('开始匹配');expect(created.htmlContent).not.toContain('TAUDESIGN_CONTINUE');expect(created.metadata?.creationEvidence?.workflow.status).toBe('ready');expect(useProjectStore.getState().screens.old.htmlContent).toContain('旧内容');
+});
+async function pendingResume(){
+ pauseEarly=true;holdResume=true;await send();expect(calls).toHaveLength(2);const summary=host.querySelector('[aria-label="应用调用摘要"]')!;expect(summary.textContent).toContain('调用尝试 3 次');
+ await act(async()=>{const resume=button('继续未完成设计');resume.click();resume.click();await new Promise(r=>setTimeout(r,20));});expect(calls).toHaveLength(3);expect(ledgers[1]).toBe(ledgers[0]);expect(ledgers[0].snapshot()).toMatchObject({requests:4,closed:false});
+ const last=host.querySelectorAll('[aria-label="应用调用摘要"]')[1];expect(last.textContent).toContain('调用尝试 1 次');expect(last.textContent).toContain('进行中 1 次');expect(last.textContent).toContain('等待调用返回');return last;
+}
+test('manual continuation observes this execution separately from the original cumulative allowance',async()=>{
+ const last=await pendingResume();await act(async()=>{releaseResume();await new Promise(r=>setTimeout(r,40));});expect(last.textContent).toContain('调用已返回');expect(last.textContent).toContain('进行中 0 次');expect(last.textContent).toContain('调用尝试 1 次');expect(ledgers[0].snapshot()).toMatchObject({requests:4,closed:true});expect(functionPlans).toBe(1);expect(Object.keys(useProjectStore.getState().screens)).toHaveLength(2);expect(calls).toHaveLength(3);
+});
+for(const change of ['cancel','model','project'] as const)test(`${change} during resumed generation suppresses late output without renewing its allowance`,async()=>{
+ await pendingResume();await act(async()=>{
+  if(change==='cancel')(host.querySelector('button[title*="立即停止"]') as HTMLButtonElement).click();
+  else if(change==='model')useAIConfigStore.getState().setRoleBinding('code',{role:'code',providerId:'prov-openai',modelId:'gpt-4o'});
+  else useProjectStore.getState().initNewProject({name:'新工程',deviceProfile:'pc',designSystem:defaultTheme,createSpecimen:false});
+  await new Promise(r=>setTimeout(r,10));
+ });
+ await act(async()=>{releaseResume();await new Promise(r=>setTimeout(r,40));});expect(calls).toHaveLength(3);expect(functionPlans).toBe(1);expect(ledgers[0].snapshot()).toMatchObject({requests:4,closed:true});expect(host.querySelector('button[title*="立即停止"]')).toBeNull();expect(button('继续未完成设计')).toBeUndefined();expect(Object.keys(useProjectStore.getState().screens)).toEqual(change==='project'?[]:['old']);
+ if(change!=='project')expect(host.querySelectorAll('[aria-label="应用调用摘要"]')[1].textContent).toContain('进行中 0 次');
 });
 test('authoring context change rejects checkpoint without another model request',async()=>{
  pauseEarly=true;await send();act(()=>useProjectStore.getState().addDecision('新的设计规则','global'));
