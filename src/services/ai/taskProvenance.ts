@@ -28,5 +28,5 @@ export function taskProvenanceIssue(value:DesignTaskContract|undefined,completed
  if((value.multiPage!==undefined&&!validMultiPageScope(value.multiPage))||
   (value.referenceImage!==undefined&&!validReferenceImageIdentity(value.referenceImage))||
   (value.librarySource!==undefined&&!validLibrarySourceIdentity(value.librarySource)))return '任务来源身份不完整。';
- return guidancePacketIssue(value,completed)??pageTaskPlanIssue(value);
+ return guidancePacketIssue(value,completed,'history')??pageTaskPlanIssue(value);
 }

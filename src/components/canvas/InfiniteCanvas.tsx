@@ -1,3 +1,4 @@
+import {CandidateRecheckControl} from './CandidateRecheckControl';
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { handleHistoryShortcut } from '../../utils/historyShortcuts';
@@ -354,6 +355,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
           </span>}
           {stagedAdoptionStatus === 'saving' && <span role="status" className="text-slate-300">正在保存交付档案…</span>}
           {stagedAdoptionError && <span role="alert" className="text-amber-300">{stagedAdoptionError}</span>}
+            <CandidateRecheckControl />
           <CandidateEvidencePanel current={stagedValidationEvidence}
             historical={stagedScreen.restoredFromDisk ? stagedScreen.validationEvidence : undefined}
             currentIsStale={Boolean(stagedValidationEvidence && (stagedValidationEvidence.contextFingerprint !== contentFingerprint(renderKey) ||

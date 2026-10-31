@@ -1,3 +1,4 @@
+import {taskRuleSafetyIssue} from './designKnowledge/safety';
 import type {AIEngineCore,StreamTextOptions} from './engine/core/types';
 import type {DesignTaskContract} from './designWorkflow';
 import {contentFingerprint} from './designWorkflow';
@@ -29,8 +30,9 @@ export type StyleRepairProposal={status:'proposed';html:string;record:PageRepair
 export async function proposeStyleRepair(input:{state:PageCreationState;html:string;contract:DesignTaskContract;render:RenderedQualityReport;context:string},
  options:{isCurrent:()=>boolean;signal?:AbortSignal;model:PageRepairModel;allowedNids?:string[];protectedNids?:string[];onAttempt?:(record:PageRepairRecord)=>Promise<void>}):Promise<StyleRepairProposal> {
  const {contract:task,render}=input,model=options.model;
- const current=()=>!options.signal?.aborted&&options.isCurrent();
- const guard=()=>{if(!current())throw Error('修复已取消或工程上下文已变化，未应用结果。');};
+ const safety=taskRuleSafetyIssue(task);if(safety)return {status:'blocked',message:safety};
+ const current=()=>!options.signal?.aborted&&options.isCurrent()&&!taskRuleSafetyIssue(task);
+ const guard=()=>{if(!current())throw Error(taskRuleSafetyIssue(task)??'修复已取消或工程上下文已变化，未应用结果。');};
  const errors=render.findings.filter(f=>f.severity==='error');
  if(!current()||render.status!=='complete'||!errors.length||errors.some(f=>!allowedErrors.has(f.code)||!f.nid))return {status:'skipped',message:'没有可受控修复的完整渲染报告。'};
   const nids=[...new Set(errors.map(f=>f.nid!))];if(nids.length>3||nids.some(nid=>options.allowedNids&&!options.allowedNids.includes(nid)))return {status:'skipped',message:'报错控件无法安全修复。'};

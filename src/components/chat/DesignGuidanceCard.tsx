@@ -1,6 +1,7 @@
 import React from 'react';
 import type {DesignTaskContract} from '../../services/ai/designWorkflow';
 import {guidancePacketIssue} from '../../services/ai/designKnowledge/receipt';
+import {taskRuleSafetyIssue} from '../../services/ai/designKnowledge/safety';
 import {isRepairGuidanceTrace,type RepairGuidanceTrace} from '../../services/ai/designKnowledge/repairTrace';
 const fallback={none:'已选择适用指导','excluded-workflow':'当前流程不注入专项规则','unknown-target':'目标语义不足，沿用通用指导','no-match':'未匹配专项规则，沿用通用指导',budget:'可用空间不足，沿用通用指导'};
 const states={assembled:'已组装',dispatched:'调用中',completed:'返回完成',failed:'调用失败',cancelled:'已取消'};
@@ -14,12 +15,14 @@ export function RepairGuidanceSource({trace}:{trace?:RepairGuidanceTrace}) {
 }
 export function DesignGuidanceCard({contract,historical=false}:{contract?:DesignTaskContract;historical?:boolean}) {
   if(!contract||!Object.hasOwn(contract,'designGuidance'))return null;
-  const invalid=guidancePacketIssue(contract,false);
+  const invalid=guidancePacketIssue(contract,false,'history');
   if(invalid)return <p role="status" className="my-2 text-xs text-amber-300">设计依据记录不可用：{invalid}</p>;
   const packet=contract.designGuidance!,selection=packet.selection;
   const label=historical?'历史设计依据':'本次设计依据';
+  const safety=taskRuleSafetyIssue(contract);
   return <details className="my-2 space-y-2 rounded-lg border border-slate-700 bg-slate-900 p-3 text-xs text-slate-300" aria-label={label}>
     <summary className="cursor-pointer">{label} · {selection.selected.length} 条规则</summary>
+    {safety&&<p role="status" className="text-amber-300">{safety}</p>}
     <p className="text-slate-400">{fallback[selection.fallback]}</p>
     {selection.selected.map(({rule,reason})=><div key={rule.id} className="space-y-1 break-words border-t border-slate-800 pt-2">
       <p>{rule.title} · v{rule.version}</p><p className="text-slate-400">{rule.guidance}</p>

@@ -6,7 +6,7 @@ const operations = new Set(Object.values(WORKFLOW_CATALOG).map(w => w.operation)
 const text = (v: unknown): v is string => typeof v === 'string' && Boolean(v.trim());
 const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every(text);
 /** Strictly data-only: no eval, selectors or checker code is loaded from rules. */
-export function validateRuleCatalog(value: unknown, whitelist: (device: 'pc' | 'mobile') => readonly string[], options:{allowExternalConflicts?:boolean}={}): string[] {
+export function validateRuleCatalog(value: unknown, whitelist: (device: 'pc' | 'mobile') => readonly string[], options:{allowExternalConflicts?:boolean;purpose?:'catalog'|'history'}={}): string[] {
   if (!Array.isArray(value) || value.length > 200) return ['catalog: expected at most 200 rules'];
   const errors: string[] = [], rules: DesignRule[] = [];
   for (const [index, candidate] of value.entries()) {
@@ -24,7 +24,7 @@ export function validateRuleCatalog(value: unknown, whitelist: (device: 'pc' | '
     }
     // Catalog prose/examples are never executable, but reject active-content recommendations too.
     if (/<\s*script\b|javascript:|\bon\w+\s*=/i.test(JSON.stringify(r))) errors.push(`${r.id}: unsafe example`);
-    for (const implementation of r.implementation) if (implementation.mode === 'native-token') {
+    for (const implementation of r.implementation) if (implementation.mode === 'native-token'&&options.purpose!=='history') {
       for (const device of r.scope.devices.length ? r.scope.devices : ['pc','mobile'] as const) {
         const allowed = new Set(whitelist(device));
         for (const name of implementation.classes) if (!allowed.has(name)) errors.push(`${r.id}: unknown ${device} class ${name}`);

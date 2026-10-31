@@ -10,6 +10,8 @@ import type { PagePreview } from './pagePreview';
 import {isWorkflowValidationReport} from '../ai/workflowValidation';
 import {sameRecordedHtml,taskProvenanceIssue} from '../ai/taskProvenance';
 import {draftExecutionIssue} from '../ai/draftExecutionSource';
+import type {RuleEvidencePurpose} from '../ai/designKnowledge/safety';
+import {guidancePacketIssue} from '../ai/designKnowledge/receipt';
 
 export type RestylePageSnapshot = Pick<Screen, 'id' | 'name' | 'htmlContent' | 'scopedCss' | 'metadata'>;
 export interface RestyleDeliveryRecord {
@@ -38,7 +40,7 @@ function recordPath(id: string): string {
   if (!validId(id)) throw new Error('重塑交付 ID 无效。');
   return `${directory}/${id}.json`;
 }
-function validRecord(value: unknown, projectId: string): value is RestyleDeliveryRecord {
+function validRecord(value: unknown, projectId: string,purpose:RuleEvidencePurpose='history'): value is RestyleDeliveryRecord {
   const r = value as RestyleDeliveryRecord | null;
   const page = (p?: RestylePageSnapshot) => p && typeof p.id === 'string' && typeof p.name === 'string' &&
     typeof p.htmlContent === 'string' && (p.scopedCss === undefined || typeof p.scopedCss === 'string');
@@ -55,7 +57,8 @@ function validRecord(value: unknown, projectId: string): value is RestyleDeliver
     (r.settings.referenceDevice !== undefined && (!r.settings.referenceDevice || typeof r.settings.referenceDevice.name !== 'string')) ||
     !r.designSystem || typeof r.designSystem.name !== 'string' ||
     (r.designSystemOrigin !== undefined && (!r.designSystemOrigin || (r.designSystemOrigin.sourceName !== undefined && typeof r.designSystemOrigin.sourceName !== 'string'))) ||
-    !r.overrides || !Array.isArray(r.assets)||taskProvenanceIssue(r.outcome.workflowContract)||draftExecutionIssue(r.outcome.executionRecord,r.outcome.html)) return false;
+    !r.overrides || !Array.isArray(r.assets)||taskProvenanceIssue(r.outcome.workflowContract)||draftExecutionIssue(r.outcome.executionRecord,r.outcome.html,purpose)||
+    (purpose==='execute'&&r.outcome.workflowContract!==undefined&&guidancePacketIssue(r.outcome.workflowContract))) return false;
   const task=r.outcome.workflowContract;
   if(task!==undefined&&(task.operation!=='restyle'||task.target?.id!==r.outcome.target.id||task.target.baselineFingerprint!==contentFingerprint(r.outcome.target.html)))return false;
   if(task?.validationPlan!==undefined&&JSON.stringify(r.validation.workflow?.plan)!==JSON.stringify(task.validationPlan))return false;
@@ -82,7 +85,7 @@ export class RestyleDeliveryRepository {
     try{const record=JSON.parse(raw);return validRecord(record,this.projectId)&&record.id===id?record:null;}catch{return null;}
   }
   async prepare(record: RestyleDeliveryRecord): Promise<void> {
-    if (!validRecord(record,this.projectId) || record.status !== 'prepared' || record.pages.some((p,index) =>
+    if (!validRecord(record,this.projectId,'execute') || record.status !== 'prepared' || record.pages.some((p,index) =>
       p.preview !== undefined && !isDeliveryPreview(p.preview,restylePagePreviewId(record.id,index),contentFingerprint(p.after.htmlContent)))) throw new Error('重塑交付快照不完整，原页面未修改。');
     const raw = JSON.stringify(record), path = recordPath(record.id);
     if (raw.length > maxLength) throw new Error('重塑交付档案过大，请分批处理。');

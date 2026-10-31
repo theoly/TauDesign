@@ -110,7 +110,8 @@ export class CanvasToolExecutor {
     const key=`${state.id}:${contract.taskId}`,context=pageCreationContext(state);
     const failed=(error:string):CanvasToolExecutionResult=>({success:false,tool:'create_screen',status:'failed',error});
     if(pendingCreations.has(key)||Object.values(state.screens).some(screen=>screen.metadata?.creationEvidence?.contract?.taskId===contract.taskId))return failed('同一新建任务正在处理或已经应用。');
-    const current=()=>!options.signal?.aborted&&(options.isCurrent?.()??true)&&pageCreationContext(useProjectStore.getState())===context;
+    const current=()=>!options.signal?.aborted&&(options.isCurrent?.()??true)&&!draftExecutionIssue(params.executionRecord,params.html)&&
+      resolveWorkflowValidation(contract,'create').ok&&pageCreationContext(useProjectStore.getState())===context;
     pendingCreations.add(key);
     try {
       const snapshot=structuredClone({id:state.id,folderPath:state.folderPath,screens:state.screens,settings:state.settings,assets:state.assets,

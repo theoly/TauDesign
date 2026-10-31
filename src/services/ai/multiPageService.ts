@@ -1,3 +1,4 @@
+import {observeRequestActivity,type RequestActivity,type PipelinePhase} from './requestActivity';
 import {prepareNewPageWithRepair} from './pageCreationRepair';
 import {TaskBudget,withTaskBudget} from './taskBudget';
 import {createPlanningBudget,createMultiPageBudget} from './taskBudgetPolicy';
@@ -15,6 +16,7 @@ import {buildProjectKnowledgeBundle} from './projectKnowledge';
 import {buildDesignProjectManifest,renderProjectManifestContext} from './projectManifest';
 import {createProjectStorage} from '../storage/projectStorage';
 import {readProjectRenderResources,verifyProjectAssetFiles,referencedProjectAssets} from './projectAssetIntegrity';
+import {mergeRenderResourceFiles,renderResourceIssue} from '../storage/renderResourceSnapshot';
 import {libraryReferenceIssue,verifyLibraryReferenceFiles} from './designLibraryReference';
 import {referenceImageIdentity} from './workflowSources';
 import {getPageTaskPlanSchema,type PageTaskPlan} from './pageTaskPlan';
@@ -52,7 +54,12 @@ function freezeState(s:PageCreationState):PageCreationState{
  return structuredClone({id:s.id,folderPath:s.folderPath,settings:s.settings,designSystem:s.designSystem,designSystemOrigin:s.designSystemOrigin,designLibraryBinding:s.designLibraryBinding,components:s.components,assets:s.assets,screens:s.screens,overrides:s.overrides,decisions:s.decisions,projectDocuments:s.projectDocuments});
 }
 const manifest=(s:PageCreationState)=>buildDesignProjectManifest({projectId:s.id,projectName:'当前工程',deviceProfile:s.settings.deviceProfile,screens:Object.values(s.screens).map(page=>({...page,position:page.position??{x:0,y:0}})),assets:Object.values(s.assets),components:Object.values(s.components),designSystem:s.designSystem,designSystemOrigin:s.designSystemOrigin,designLibraryBinding:s.designLibraryBinding});
-export async function prepareMultiPagePlan(options:{state:PageCreationState;request:string;provider:AIProviderConfig;model:string;core:AIEngineCore;attachment?:ImageAttachment;textReferences?:TextReference[];referencePageId?:string;signal?:AbortSignal;isCurrent:()=>boolean;splitFromSingle?:boolean;contextualGuidance?:Entry['contextualGuidance']}):Promise<PreparedMultiPagePlan>{
+export async function prepareMultiPagePlan(options:Parameters<typeof prepareMultiPagePlanTask>[0]):Promise<PreparedMultiPagePlan>{
+ const observer=options.onActivity?observeRequestActivity(options.core,options.onActivity,()=>!options.signal?.aborted&&options.isCurrent()):undefined;
+ // The plan registry retains options.core, never the stopped planning observer.
+ try{return await prepareMultiPagePlanTask(options,observer?.core);}finally{observer?.stop();}
+}
+async function prepareMultiPagePlanTask(options:{state:PageCreationState;request:string;provider:AIProviderConfig;model:string;core:AIEngineCore;attachment?:ImageAttachment;textReferences?:TextReference[];referencePageId?:string;signal?:AbortSignal;isCurrent:()=>boolean;splitFromSingle?:boolean;contextualGuidance?:Entry['contextualGuidance'];onActivity?:(activity:RequestActivity)=>void},observedCore?:AIEngineCore):Promise<PreparedMultiPagePlan>{
  const contextualGuidance=options.contextualGuidance?structuredClone(options.contextualGuidance):undefined;
  const state=freezeState(options.state),context=pageCreationContext(state),requestText=options.request.trim();
  const guard=()=>{if(options.signal?.aborted)throw Error('多页面规划已取消。');if(!options.isCurrent())throw Error('工程或设计上下文已变化，请重新规划。');};
@@ -79,7 +86,7 @@ export async function prepareMultiPagePlan(options:{state:PageCreationState;requ
  ]};
  if(options.splitFromSingle)request.messages.push({role:'user',content:'本次已明确选择把原来的单页需求拆分为2～4个独立业务页面。原需求中的“一个主页”等数量只代表拆分前意图，不限制本次页数；保留共同主题与全部功能，不规划同页多个风格方案。先输出可编辑计划，不生成HTML。'});
  let parsed:ReturnType<typeof parsePlan>|undefined,attempts=0;
- const planningBudget=createPlanningBudget(),planningCore=withTaskBudget(options.core,planningBudget);
+ const planningBudget=createPlanningBudget(),planningCore=withTaskBudget(observedCore??options.core,planningBudget);
  try {
  for(let i=0;i<2;i++){
   guard();try{attempts++;const raw=await planningCore.generateObject<unknown>(schema,request);guard();parsed=parsePlan(raw,contract,variants);if(options.splitFromSingle&&parsed.pages.length>4)throw new MultiPagePlanFormatError('大页面拆分应为2～4个职责清晰的页面，请重新规划。');if(expectedCount!==undefined&&parsed.pages.length!==expectedCount)throw new MultiPagePlanFormatError(`原需求明确要求${expectedCount}${variants?'个方案':'页'}，计划必须逐项包含相同数量，不能静默漏页。`);break;}
@@ -104,12 +111,15 @@ export function consumeMultiPageBatch(handle:ReadyMultiPageBatch,state:PageCreat
  entry.claimed=true;return structuredClone(entry.screens);
 }
 /** Sequential generation, no project writes until every actual check succeeds. */
-export async function executeMultiPagePlan(prepared:PreparedMultiPagePlan,edited:MultiPageItem[],options:{getState:()=>PageCreationState;commit:(batch:ReadyMultiPageBatch)=>void;signal?:AbortSignal;onProgress?:(progress:MultiPageProgress[])=>void;isCurrent?:()=>boolean}):Promise<{status:'complete'|'blocked'|'cancelled';message:string;screenIds:string[]}>{
+export async function executeMultiPagePlan(prepared:PreparedMultiPagePlan,edited:MultiPageItem[],options:{getState:()=>PageCreationState;commit:(batch:ReadyMultiPageBatch)=>void;signal?:AbortSignal;onProgress?:(progress:MultiPageProgress[])=>void;onActivity?:(activity:RequestActivity)=>void;onPhase?:(phase:PipelinePhase)=>void;isCurrent?:()=>boolean}):Promise<{status:'complete'|'blocked'|'cancelled';message:string;screenIds:string[]}>{
  const entry=plans.get(prepared);
  if(!entry||entry.status!=='ready')return {status:'blocked',message:'页面计划已使用或正在执行，请重新规划。',screenIds:[]};
  entry.status='running';let progress:MultiPageProgress[]=[],budget:TaskBudget|undefined;
+ const observer=options.onActivity?observeRequestActivity(entry.core,options.onActivity,()=>!options.signal?.aborted&&options.isCurrent?.()!==false&&pageCreationContext(options.getState())===entry.context):undefined;
+ const batchCore=observer?.core??entry.core;
  const guard=()=>{if(options.signal?.aborted)throw Error('多页面生成已取消，未加入任何页面。');if(options.isCurrent?.()===false||pageCreationContext(options.getState())!==entry.context)throw Error('工程或设计上下文已变化，请重新规划；未加入任何页面。');};
  const publish=()=>{try{options.onProgress?.(structuredClone(progress));}catch(error){console.warn('[multi-page] 进度展示失败',error);}};
+ const phase=(value:PipelinePhase)=>{try{if(!options.signal?.aborted&&options.isCurrent?.()!==false)options.onPhase?.(value);}catch{console.warn('[multi-page] 阶段显示回调失败');}};
  try{
   guard();if(contentFingerprint(JSON.stringify(prepared))!==entry.fingerprint)throw Error('原始页面计划记录已变化，请重新规划。');
   const variants=entry.original.plan.kind==='variants';
@@ -144,22 +154,25 @@ export async function executeMultiPagePlan(prepared:PreparedMultiPagePlan,edited
     ...(entry.attachment?{imageFingerprint:referenceImageIdentity(entry.attachment).fingerprint}:{}),
     planSource:{kind:'confirmed-multi-page' as const,planId:plan.id,itemId:page.id,planFingerprint:fingerprint}}}}:{};
    progress[index].message=task?'复用已确认的本页功能规划，正在生成页面…':'本页要求或关联已调整，正在重新梳理功能与交互…';publish();
-   const output=await PipelineExecutor.execute({input:{rawPrompt:request,attachment:entry.attachment,textReferences:entry.textReferences,activeScreenId:null,decision:{intent:'create_screen',targetScreenId:null,styleReferenceScreenId:reference,reason:'已确认多页面计划，逐页新建'}},provider:entry.provider,model:entry.model,engineCore:entry.core,screens:virtual.screens,contextualGuidance:entry.contextualGuidance,
+   const output=await PipelineExecutor.execute({input:{rawPrompt:request,attachment:entry.attachment,textReferences:entry.textReferences,activeScreenId:null,decision:{intent:'create_screen',targetScreenId:null,styleReferenceScreenId:reference,reason:'已确认多页面计划，逐页新建'}},provider:entry.provider,model:entry.model,engineCore:batchCore,screens:virtual.screens,onPhase:phase,contextualGuidance:entry.contextualGuidance,
     deviceProfile:base.settings.deviceProfile,useCustomNavigation:base.settings.useCustomNavigation,frameWidth:base.settings.frameWidth,referenceDevice:base.settings.referenceDevice,viewportGuideHeight:base.settings.viewportGuideHeight,baseSystemPrompt:'按已确认静态页面计划设计高保真页面。',designSystem:base.designSystem,designSystemOrigin:base.designSystemOrigin,designLibraryBinding:base.designLibraryBinding,colorMode:base.settings.colorMode,components:Object.values(base.components),projectManifest:manifest(virtual),projectKnowledge:knowledge.content,knowledgeFingerprint:knowledge.fingerprint,knowledgeSources:entry.original.contract.knowledgeSources,overrides:base.overrides,multiPage:scope,signal:options.signal,taskBudget:budget,pageTaskPlanning,
     isCurrent:()=>!options.signal?.aborted&&options.isCurrent?.()!==false&&pageCreationContext(options.getState())===entry.context});
    guard();if(output.status!=='applied'||!output.extractedHtml||!output.workflowContract)throw Error(`${page.name}：${output.errorMessage??'没有返回完整合格页面。'}`);
    if(output.artifactMetadata?.title!==page.name)throw Error(`${page.name}：输出页面标题与确认计划不一致。`);
-   const result=await prepareNewPageWithRepair(base,{id:page.screenId,name:page.name,position:{x:0,y:0},htmlContent:output.extractedHtml},output.workflowContract,storage,{signal:options.signal,isCurrent:()=>!options.signal?.aborted&&options.isCurrent?.()!==false&&pageCreationContext(options.getState())===entry.context,repair:{core:entry.core,taskBudget:budget,provider:entry.provider,model:entry.model,onPhase:phase=>{progress[index].message=phase==='repairing'?'发现控件渲染问题，正在尝试一次受控样式修复。':'修复指令已执行，正在重新检查全部门禁。';publish();}}});
+   phase('rendering');
+   const result=await prepareNewPageWithRepair(base,{id:page.screenId,name:page.name,position:{x:0,y:0},htmlContent:output.extractedHtml},output.workflowContract,storage,{signal:options.signal,isCurrent:()=>!options.signal?.aborted&&options.isCurrent?.()!==false&&pageCreationContext(options.getState())===entry.context,repair:{core:batchCore,taskBudget:budget,provider:entry.provider,model:entry.model,onPhase:phase=>{progress[index].message=phase==='repairing'?'发现控件渲染问题，正在尝试一次受控样式修复。':'修复指令已执行，正在重新检查全部门禁。';publish();}}});
    guard();if(result.status!=='ready')throw Error(`${page.name}：${result.message}`);
    screens.push({...result.screen,metadata:{...result.screen.metadata,pageGroup:variants?`方案对比 · ${plan.id}`:'多页面计划',multiPageDelivery:delivery,creationEvidence:result.evidence}});progress[index].status='checked';progress[index].message=result.evidence.repair?'一次控件样式修复后，全部检查通过。':undefined;publish();
   }
   guard();const used=new Map(screens.flatMap(s=>referencedProjectAssets(s,Object.values(base.assets))).map(a=>[a.id,a]));
   const finalResources=await readProjectRenderResources(storage,screens,Object.values(base.assets));
   const issues=[...await verifyProjectAssetFiles(storage,[...used.values()]),...finalResources.issues,...await verifyLibraryReferenceFiles(storage,base)];guard();if(issues.length)throw Error(issues[0].message);
+  const resourceIssue=renderResourceIssue(mergeRenderResourceFiles(screens.map(s=>s.metadata?.creationEvidence?.render.resourceFiles??[])),finalResources.resourceFiles);
+  if(resourceIssue)throw Error(resourceIssue);
   const batchFingerprint=contentFingerprint(JSON.stringify(screens)),handle:ReadyMultiPageBatch={version:1,id:plan.id,fingerprint:batchFingerprint,names:pages.map(p=>p.name)};
   batches.set(handle,{context:entry.context,fingerprint:batchFingerprint,screens:structuredClone(screens),claimed:false});
   guard();options.commit(handle);if(!batches.get(handle)!.claimed||screens.some(screen=>options.getState().screens[screen.id]?.htmlContent!==screen.htmlContent))throw Error('多页面提交未经过完整统一History动作。');
   progress=progress.map(p=>({...p,status:'applied'}));publish();entry.status='finished';
   return {status:'complete',message:variants?`已并排新增 ${pages.length} 个方案，全部通过检查。原页与项目Token保持不变，可一次撤销；请选择需要的方案继续编辑。${pages.length<plan.originalPageCount?`原计划${plan.originalPageCount}个方案，用户确认缩减为${pages.length}个。`:''}`:`已按确认计划新增 ${pages.length} 页，全部通过检查。${pages.length<plan.originalPageCount?`原计划${plan.originalPageCount}页，用户确认缩减为${pages.length}页。`:''}可一次撤销。`,screenIds:screens.map(s=>s.id)};
- }catch(error){entry.status='finished';const active=progress.find(p=>p.status==='generating');if(active){active.status='failed';active.message=error instanceof Error?error.message:'生成失败';}publish();return {status:options.signal?.aborted?'cancelled':'blocked',message:error instanceof Error?error.message:'多页面生成失败，未加入任何页面。',screenIds:[]};}finally{budget?.close();}
+ }catch(error){entry.status='finished';const active=progress.find(p=>p.status==='generating');if(active){active.status='failed';active.message=error instanceof Error?error.message:'生成失败';}publish();return {status:options.signal?.aborted?'cancelled':'blocked',message:error instanceof Error?error.message:'多页面生成失败，未加入任何页面。',screenIds:[]};}finally{budget?.close();observer?.stop();}
 }

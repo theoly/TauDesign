@@ -91,7 +91,7 @@ describe('Chat Quick Prompts (对话快捷输入与分级配置)', () => {
     // 核心断言：未触发表单提交/发送
     // 页面不应出现正在生成中或用户发出气泡
     expect(container.textContent).not.toContain('AI 正在生成中');
-    expect(container.textContent).not.toContain('AI 正在深度推理与规划');
+    expect(container.textContent).not.toContain('AI 正在执行请求');
 
     // 再次点击另一个快捷短语「完善表单」，应自动追加文字
     const formPromptBtn = Array.from(container.querySelectorAll('button')).find((b) =>

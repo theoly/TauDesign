@@ -1,5 +1,6 @@
 import { DESIGN_RULE_CATALOG } from './catalog';
 import type { DesignRule, RuleQuery, RuleSelection } from './types';
+import {DesignRuleSafety,ruleSafetyIssue} from './safety';
 
 /** Identity only, never a security signature. Rules are bundled trusted application data. */
 export function ruleFingerprint(value: unknown): string {
@@ -25,7 +26,8 @@ export function selectDesignRules(query: RuleQuery, catalog: readonly DesignRule
   if (!Number.isFinite(query.maxChars) || query.maxChars < 0) return {...result,fallback:'budget'};
   if (query.scope === 'element' && !query.features?.length) return {...result,fallback:'unknown-target'};
   const request = normalize(query.request);
-  const ranked = catalog.filter(r => r.status !== 'deprecated' &&
+  const safety=DesignRuleSafety.read();
+  const ranked = catalog.filter(r => r.status !== 'deprecated' && !ruleSafetyIssue([r],safety) &&
     (!r.scope.operations.length || r.scope.operations.includes(query.operation)) && (!r.scope.devices.length || r.scope.devices.includes(query.device)) &&
     (query.scope !== 'element' || r.triggers.some(f => query.features!.includes(f))))
     .map(rule => {

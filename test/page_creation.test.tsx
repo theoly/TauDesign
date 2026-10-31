@@ -112,10 +112,16 @@ test('creating a separate page does not replace the current candidate or its bas
 
 import {createProjectStorage} from '../src/services/storage/projectStorage';
 const importedFont=`assets/imports/fonts/${'a'.repeat(64)}.woff2`;
-for(const mode of ['present','missing','removed-during-render'] as const)test(`AI creation font ${mode} uses actual resource reads and records dependencies`,async()=>{
+for(const mode of ['present','missing','removed-during-render','replaced-during-render'] as const)test(`AI creation font ${mode} uses actual resource reads and records dependencies`,async()=>{
  const state=useProjectStore.getState(),storage=createProjectStorage(state.id),value=`<style>@font-face{font-family:Imported;src:url(${importedFont})}</style>${html}`;
  if(mode!=='missing')await storage.writeBinary(importedFont,'dGVzdA==');
- PageRenderCheck.inspect=async()=>{if(mode==='removed-during-render')await storage.remove(importedFont);return {status:'complete',findings:[],inspected:3};};
+ PageRenderCheck.inspect=async request=>{
+  const {readProjectRenderResources}=await import('../src/services/ai/projectAssetIntegrity');
+  const proof=await readProjectRenderResources(storage,[request.screen],request.assets,request.overrides);
+  if(mode==='removed-during-render')await storage.remove(importedFont);
+  if(mode==='replaced-during-render')await storage.writeBinary(importedFont,btoa('new font bytes'));
+  return {status:'complete',findings:[],inspected:3,resourceFiles:proof.resourceFiles};
+ };
  const result=await CanvasToolExecutor.executeAsync({tool:'create_screen',params:{title:'字体页',html:value,workflowContract:task()}});
  expect(result.success).toBe(mode==='present');
  if(mode==='present'){const page=Object.values(useProjectStore.getState().screens)[0];expect(page.metadata?.creationEvidence?.files.map(f=>f.relPath)).toContain(importedFont);}

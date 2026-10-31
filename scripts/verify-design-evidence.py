@@ -332,10 +332,15 @@ async def verify_guidance_reopen(page,engine,device,kind):
         await page.evaluate('ruleControlFixture.showDelivery()')
         panel=page.get_by_label('页面交付历史',exact=True)
         await panel.locator('details').filter(has=page.locator('summary',has_text='替换原页 · 已应用')).first.locator(':scope > summary').click()
-        saved=panel.get_by_label('历史设计依据',exact=True)
+        saved=panel.get_by_label('历史设计依据',exact=True).last
         await saved.locator('summary').first.click()
         await saved.get_by_text('调用记录 · 1 次',exact=True).click()
         assert '返回完成' in await saved.inner_text()
+        await panel.get_by_text('已确认的分析来源',exact=True).click()
+        analysis=panel.get_by_label('历史设计依据',exact=True).first
+        await analysis.locator('summary').first.click()
+        await analysis.get_by_text('调用记录 · 2 次',exact=True).click()
+        assert '调用失败（由后续格式纠正替代）' in await analysis.inner_text()
     await page.screenshot(path=str(OUT/f'{engine}-rule-history-{kind}-{device}.png'),full_page=True)
     if kind=='modify': await page.evaluate('ruleControlFixture.hideDelivery()')
     return {'callsUnchanged':True,'historyUnchanged':True,'pagesUnchanged':True,'frozenReceiptsShown':True}
@@ -523,6 +528,128 @@ async def verify_local_draft_source(page,engine,device):
     assert undone
     return {**result,'undoRedo':True,'newModelCallsForRepair':0}
 
+async def verify_rule_withdrawal(page,engine,device):
+    await page.goto('http://127.0.0.1:5174/test/fixtures/rule-control.html?device='+device,wait_until='networkidle')
+    await page.evaluate('''async()=>{
+      const f=ruleControlFixture,s=f.state();
+      const {buildDesignTaskContract}=await import('/src/services/ai/designWorkflow.ts');
+      const {makeGuidancePacket}=await import('/src/services/ai/designKnowledge/receipt.ts');
+      const {selectDesignRules}=await import('/src/services/ai/designKnowledge/selector.ts');
+      const c=buildDesignTaskContract({intent:'modify_screen',request:'调整长正文间距',target:s.screens.page,
+        deviceProfile:f.device,frameWidth:s.settings.frameWidth,designSystem:s.designSystem});
+      c.designGuidance=makeGuidancePacket(c,selectDesignRules({request:'长正文',operation:'modify',device:f.device,scope:'page',maxChars:1000}));
+      const p=c.designGuidance;
+      p.requests=[{requestId:c.taskId+':request-1',parentTaskId:c.taskId,providerId:'fixture',model:'fixture',
+        messageFingerprint:'1234abcd',injectedRuleIds:p.selection.selected.map(s=>s.rule.id),status:'completed',outputProtocol:'stream-text'}];
+      f.safetyContract=c;f.safetyBefore={calls:f.requests.length,history:f.history().past.length,html:s.screens.page.htmlContent};
+      s.stageScreenChange('page',f.original,'候选','调整长正文间距',c);f.preview();
+    }''')
+    await page.wait_for_function('ruleControlFixture.state().getStagedDeliveryReport().status==="ready"')
+    result=await page.evaluate('''async()=>{
+      const f=ruleControlFixture,s=f.state(),c=f.safetyContract;
+      const {DesignRuleSafety}=await import('/src/services/ai/designKnowledge/safety.ts');
+      // Isolated fixture injection models a future reviewed application policy, never project configuration.
+      DesignRuleSafety.read=()=>({revision:'browser-test',withdrawals:[{id:'LY-04',throughVersion:1,reason:'受控验收模拟撤回'}]});
+      const blocked=[await s.adoptStagedChange(),await s.forceAdoptStagedChange(),await s.keepBothScreens()];
+      const {default:React}=await import('/node_modules/.vite/deps/react.js');
+      const {default:ReactDOM}=await import('/node_modules/.vite/deps/react-dom_client.js');
+      const {DesignGuidanceCard}=await import('/src/components/chat/DesignGuidanceCard.tsx');
+      const host=document.createElement('div');Object.assign(host.style,{position:'absolute',left:'400px',top:'24px',width:'500px',zIndex:100});document.body.append(host);
+      ReactDOM.createRoot(host).render(React.createElement(DesignGuidanceCard,{contract:c,historical:true}));
+      return {blocked,taskCurrent:s.isStagedTaskCurrent(),delivery:s.getStagedDeliveryReport().status,
+        unchanged:s.screens.page.htmlContent===f.safetyBefore.html,calls:f.requests.length-f.safetyBefore.calls,
+        history:f.history().past.length-f.safetyBefore.history,pages:Object.keys(s.screens).length};
+    }''')
+    assert result=={'blocked':[False,False,False],'taskCurrent':False,'delivery':'blocked','unchanged':True,'calls':0,'history':0,'pages':1},result
+    card=page.get_by_label('历史设计依据',exact=True)
+    await card.locator('summary').first.click()
+    assert '已被安全撤回' in await card.inner_text() and '历史记录仍可查看' in await card.inner_text()
+    await page.screenshot(path=str(OUT/f'{engine}-rule-withdrawal-{device}.png'),full_page=True)
+    return result
+
+async def verify_resource_invalidation(page,engine,device):
+    await page.goto('http://127.0.0.1:5174/test/fixtures/rule-control.html?device='+device,wait_until='networkidle')
+    await page.evaluate('''async()=>{
+      const f=ruleControlFixture,s=f.state(),path='assets/images/resource-proof.svg';
+      const {createProjectStorage}=await import('/src/services/storage/projectStorage.ts');
+      const {buildDesignTaskContract}=await import('/src/services/ai/designWorkflow.ts');
+      const {setTextByNid}=await import('/src/utils/textNode.ts');
+      const svg=color=>btoa('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="60"><rect width="80" height="60" fill="'+color+'"/></svg>');
+      f.resourceStorage=createProjectStorage(s.id);f.resourcePath=path;f.resourceNext=svg('#2255cc');
+      await f.resourceStorage.writeBinary(path,svg('#cc5522'));
+      s.addAsset({id:'resource-proof',name:'资源验收图',type:'image',mimeType:'image/svg+xml',source:'upload',relPath:path,refCount:1});
+      s.updateScreenHtml('page',s.screens.page.htmlContent.replace('</main>','<img data-nid="resource01" src="'+path+'" width="80" height="60" alt="资源验收图"></main>'));
+      f.resourceOriginal=f.state().screens.page.htmlContent;f.resourceCandidate=setTextByNid(f.resourceOriginal,'button01','查看最新详情');
+      const c=buildDesignTaskContract({intent:'modify_screen',request:'修改按钮文案',target:f.state().screens.page,
+        deviceProfile:f.device,frameWidth:s.settings.frameWidth,designSystem:s.designSystem});
+      s.stageScreenChange('page',f.resourceCandidate,'资源候选','修改按钮文案',c);f.preview();
+    }''')
+    await page.wait_for_function('ruleControlFixture.state().getStagedDeliveryReport().status==="ready"')
+    changed=await page.evaluate('''async()=>{
+      const f=ruleControlFixture,s=f.state(),key=s.getStagedRenderContextKey(),proof=s.stagedRenderQuality.report,history=f.history().past.length;
+      f.resourceOldProof=proof;f.resourceCalls=f.requests.length;f.resourceHistory=history;
+      await f.resourceStorage.writeBinary(f.resourcePath,f.resourceNext);
+      const adopted=await s.adoptStagedChange(),next=s.getStagedRenderContextKey();
+      s.setStagedRenderQuality(key,proof);
+      return {adopted,keyChanged:key!==next,taskCurrent:s.isStagedTaskCurrent(),sameHtml:f.state().screens.page.htmlContent===f.resourceOriginal,
+        candidateUnchanged:f.state().stagedScreen.newHtml===f.resourceCandidate,historyUnchanged:f.history().past.length===history,
+        rejectedLate:f.state().stagedRenderQuality?.key!==key};
+    }''')
+    assert changed=={'adopted':False,'keyChanged':True,'taskCurrent':True,'sameHtml':True,'candidateUnchanged':True,'historyUnchanged':True,'rejectedLate':True},changed
+    await page.wait_for_function('ruleControlFixture.state().getStagedDeliveryReport().status==="ready"')
+    await page.get_by_role('button',name='刷新预览并复验',exact=True).first.click()
+    await page.wait_for_function('ruleControlFixture.state().getStagedDeliveryReport().status==="ready"')
+    proof=await page.evaluate('''()=>{
+      const f=ruleControlFixture,s=f.state(),files=s.stagedRenderQuality.report.resourceFiles;
+      return {files,changed:files[0].sha256!==f.resourceOldProof.resourceFiles[0].sha256,
+        materialized:document.querySelector('iframe[data-inspector-screen="page"]').contentDocument.querySelector('[data-nid="resource01"]').src.includes(f.resourceNext),
+        noCalls:f.requests.length===f.resourceCalls,taskCurrent:s.isStagedTaskCurrent()};
+    }''')
+    assert proof['changed'] and proof['materialized'] and proof['noCalls'] and proof['taskCurrent'],proof
+    await page.screenshot(path=str(OUT/f'{engine}-resource-proof-{device}.png'),full_page=True)
+    await page.get_by_role('button',name='采纳新版 (替换原版)',exact=True).first.click()
+    await page.wait_for_function('!ruleControlFixture.state().stagedScreen')
+    delivered=await page.evaluate('''()=>{
+      const f=ruleControlFixture,s=f.state(),applied=s.screens.page.htmlContent===f.resourceCandidate,history=f.history().past.length-f.resourceHistory;
+      f.history().undo();const undone=f.state().screens.page.htmlContent===f.resourceOriginal;
+      f.history().redo();return {applied,history,undone,redone:f.state().screens.page.htmlContent===f.resourceCandidate,noCalls:f.requests.length===f.resourceCalls};
+    }''')
+    assert delivered=={'applied':True,'history':1,'undone':True,'redone':True,'noCalls':True},delivered
+    return {'changed':changed,'refreshed':proof,'delivered':delivered}
+
+async def verify_request_activity(page,engine,device):
+    await page.goto('http://127.0.0.1:5174/test/fixtures/rule-control.html?device='+device+'&activity=1',wait_until='networkidle')
+    async def send():
+        await page.locator('textarea[placeholder^="输入设计诉求"]').fill('什么是布局？')
+        await page.locator('button[title*="发送设计诉求"]').click()
+    await send()
+    card=page.get_by_label('应用调用摘要',exact=True).last
+    await card.get_by_text('等待调用返回',exact=False).wait_for()
+    # This is a negative regression past the deleted 600/1200ms timers, not a phase driver.
+    await page.wait_for_timeout(1350)
+    waiting=await card.inner_text()
+    assert '正文 0 字符' in waiting and '推理 0 字符' in waiting and '调用尝试 1 次' in waiting,waiting
+    body=await page.locator('body').inner_text()
+    assert '检查返回内容与源码' not in body and '构建组件语义树' not in body and '流式编写页面代码' not in body and 'FIXTURE_SECRET' not in body
+    assert await page.evaluate('ruleControlFixture.requests.length')==1
+    await page.screenshot(path=str(OUT/f'{engine}-request-waiting-{device}.png'),full_page=True)
+    await page.evaluate('ruleControlFixture.releaseActivity()')
+    await card.get_by_text('调用已返回',exact=False).wait_for()
+    returned=await card.inner_text()
+    assert '正文 7 字符' in returned and '推理 4 字符' in returned and '进行中 0 次' in returned,returned
+    await send()
+    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('等待调用返回',exact=False).wait_for()
+    await page.locator('button[title*="立即停止"]').click()
+    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('调用已停止',exact=False).wait_for()
+    await page.evaluate('ruleControlFixture.releaseActivity("<think>LATE_REASONING</think>LATE_RESPONSE")')
+    body=await page.locator('body').inner_text()
+    assert 'LATE_RESPONSE' not in body and 'LATE_REASONING' not in body and 'FIXTURE_SECRET' not in body
+    result=await page.evaluate('''()=>({requests:ruleControlFixture.requests.length,aborts:ruleControlFixture.activityAborts,
+      pages:Object.keys(ruleControlFixture.state().screens).length,history:ruleControlFixture.history().past.length-ruleControlFixture.before})''')
+    assert result['requests']==2 and result['aborts']>=1 and result['pages']==1 and result['history']==0,result
+    await page.screenshot(path=str(OUT/f'{engine}-request-stopped-{device}.png'),full_page=True)
+    return {**result,'noTimedPhases':True,'textChars':7,'reasoningChars':4,'lateSuppressed':True}
+
 async def main():
     OUT.mkdir(parents=True,exist_ok=True);results=[]
     (OUT/'result.json').unlink(missing_ok=True)
@@ -598,7 +725,8 @@ async def main():
                 await page.get_by_text('正在梳理用户任务、必要信息与交互状态…',exact=True).wait_for()
                 await page.wait_for_timeout(1250)
                 assert await page.evaluate('functionChatFixture.requests.length')==1
-                assert await page.get_by_text('意图推理与多模态反推',exact=True).locator('xpath=../..').locator('svg.animate-spin').count()==1
+                assert await page.get_by_text('梳理功能、信息与交互',exact=True).locator('xpath=../..').locator('svg.animate-spin').count()==1
+                assert await page.get_by_text('调用模型生成结果',exact=True).count()==0
                 await page.wait_for_function('Object.keys(functionChatFixture.state().screens).length===2')
                 await page.get_by_label('功能与交互规划',exact=True).locator('summary').click()
                 await page.get_by_label('功能与交互规划',exact=True).scroll_into_view_if_needed()
@@ -687,12 +815,21 @@ async def main():
                 runtime_pc=await verify_runtime_recovery(page,engine,'pc')
                 draft_mobile=await verify_local_draft_source(page,engine,'mobile')
                 draft_pc=await verify_local_draft_source(page,engine,'pc')
+                safety_mobile=await verify_rule_withdrawal(page,engine,'mobile')
+                safety_pc=await verify_rule_withdrawal(page,engine,'pc')
+                resources_mobile=await verify_resource_invalidation(page,engine,'mobile')
+                resources_pc=await verify_resource_invalidation(page,engine,'pc')
+                activity_mobile=await verify_request_activity(page,engine,'mobile')
+                activity_pc=await verify_request_activity(page,engine,'pc')
                 assert not errors,errors
                 assert not external,external
                 results.append({'engine':engine,'status':'passed',**result,'svgRestrictedXml':svg_safe,'jsonPilot':json_pilot,'functionFirst':function_first,'functionChat':function_chat,'functionalModify':functional_modify,'creationHistory':creation_history,'modificationHistory':modification_history,'referenceCreation':reference_creation,'referenceHistory':reference_history,'referenceModify':reference_modify,'multiUnchanged':multi_unchanged,'multiEdited':multi_edited,'regionText':region_text,'regionReference':region_reference,'elementText':element_text,'elementReference':element_reference,'elementDecorative':element_decorative,'elementForm':element_form,'pageErrors':errors,'externalRequests':external})
                 results[-1].update(protocolMobile=protocol_mobile,protocolPc=protocol_pc,runtimeRecoveryMobile=runtime_mobile,runtimeRecoveryPc=runtime_pc,localDraftMobile=draft_mobile,localDraftPc=draft_pc)
                 results[-1].update(manualResumed=manual_resumed,manualExhausted=manual_exhausted)
                 results[-1].update(ruleControlMobile=rule_mobile,ruleControlPc=rule_pc,guidedRepairMobile=repair_mobile,guidedRepairPc=repair_pc)
+                results[-1].update(ruleWithdrawalMobile=safety_mobile,ruleWithdrawalPc=safety_pc)
+                results[-1].update(resourceEvidenceMobile=resources_mobile,resourceEvidencePc=resources_pc)
+                results[-1].update(requestActivityMobile=activity_mobile,requestActivityPc=activity_pc)
                 print(json.dumps(results[-1],ensure_ascii=False),flush=True)
             except Exception:
                 await page.screenshot(path=str(OUT/f'{engine}-failed.png'),full_page=True)

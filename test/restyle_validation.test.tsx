@@ -1,3 +1,4 @@
+import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
 import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
 import { useProjectStore } from '../src/stores/useProjectStore';
 import { useHistoryStore } from '../src/stores/useHistoryStore';
@@ -16,7 +17,7 @@ beforeEach(()=>{
   prior=useProjectStore.getState();history=useHistoryStore.getState();
   useProjectStore.getState().initNewProject({name:'核验工程',deviceProfile:'mobile',designSystem:neutralModernTheme,createSpecimen:false});
   useProjectStore.getState().addScreen({name:'页面',htmlContent:source,position:{x:0,y:0}},'a');
-  render=spyOn(PageRenderCheck,'inspect').mockResolvedValue(ready);
+  render=spyOn(PageRenderCheck,'inspect').mockImplementation((request,storage)=>resourceRenderReport(request,storage,ready));
 });
 afterEach(()=>{render.mockRestore();useProjectStore.setState(prior,true);useHistoryStore.setState(history,true);});
 const outcome=()=>acceptRestyleResult({kind:'screen',id:'a',name:'页面',html:source},source.replace('p-4','p-6'));

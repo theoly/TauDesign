@@ -1,5 +1,6 @@
 import type {QualityFinding,QualityReport} from './generationQuality';
 import type {RenderedQualityReport} from '../../utils/renderedQuality';
+import {validRenderResourceFiles} from '../storage/renderResourceSnapshot';
 
 export function isQualityFinding(value:unknown):value is QualityFinding {
  const f=value as QualityFinding|undefined;
@@ -12,7 +13,8 @@ export function isQualityReport(value:unknown):value is QualityReport {
 export function isRenderedQualityReport(value:unknown):value is RenderedQualityReport {
  const r=value as RenderedQualityReport|undefined;
  return Boolean(r&&['pending','complete','incomplete','unavailable'].includes(r.status)&&Number.isSafeInteger(r.inspected)&&r.inspected>=0&&
-  Array.isArray(r.findings)&&r.findings.every(isQualityFinding)&&(r.reason===undefined||typeof r.reason==='string'));
+  Array.isArray(r.findings)&&r.findings.every(isQualityFinding)&&(r.reason===undefined||typeof r.reason==='string')&&
+  (r.resourceFiles===undefined||validRenderResourceFiles(r.resourceFiles)));
 }
 export function isPassedRender(value:unknown):value is RenderedQualityReport {
  return isRenderedQualityReport(value)&&value.status==='complete'&&!value.findings.some(f=>f.severity==='error');

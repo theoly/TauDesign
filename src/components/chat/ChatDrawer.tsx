@@ -1,3 +1,7 @@
+import {CandidateRecheckControl} from '../canvas/CandidateRecheckControl';
+import {RequestActivityCard} from './RequestActivityCard';
+import {executionPhaseLabels} from '../../services/ai/requestActivity';
+import type {ChatMessageItem} from '../../services/ai/engine/react/useAIEngineChat';
 import {HistoricalDraftSource} from './HistoricalDraftSource';
 import {PageTaskCoverageCard} from './PageTaskCoverageCard';
 import {MultiPagePlanCard} from './MultiPagePlanCard';
@@ -76,30 +80,12 @@ interface ThinkingStep {
   status: 'pending' | 'active' | 'completed' | 'stopped' | 'error';
 }
 
-function getThinkingSteps(stage?: number, isGenerating?: boolean, isStopped?: boolean): ThinkingStep[] {
-  const s = stage || 0;
-  return [
-    {
-      title: '意图推理与多模态反推',
-      description: '解析用户诉求与设计规范，提取关键组件与意图',
-      status: s > 1 ? 'completed' : s === 1 ? (isStopped ? 'stopped' : 'active') : 'pending'
-    },
-    {
-      title: '检索设计规范与工程约定',
-      description: '匹配主题 Tokens (主色、字阶、间距) 与工程约定约束',
-      status: s > 2 ? 'completed' : s === 2 ? (isStopped ? 'stopped' : 'active') : 'pending'
-    },
-    {
-      title: '构建组件语义树与响应式布局',
-      description: '规划画框容器结构与响应式视口',
-      status: s > 3 ? 'completed' : s === 3 ? (isStopped ? 'stopped' : 'active') : 'pending'
-    },
-    {
-      title: '高保真代码生成与画布同步',
-      description: '流式编写高保真 HTML / CSS 样式并同步至设计画板...',
-      status: s >= 4 && !isGenerating ? (isStopped ? 'stopped' : 'completed') : s >= 4 ? 'active' : 'pending'
-    }
-  ];
+function getThinkingSteps(message:ChatMessageItem):ThinkingStep[] {
+  const status:ThinkingStep['status']=message.isStopped?'stopped':message.isGenerating?'active':message.isError||message.isGuardRejected?'error':'completed';
+  if(message.executionEvents?.length)return message.executionEvents.map((event,index)=>({title:executionPhaseLabels[event.phase],
+    description:`记录于 ${new Date(event.at).toLocaleTimeString('zh-CN')}`,status:index===message.executionEvents!.length-1?status:'completed'}));
+  return [{title:message.isGenerating?message.generationProgress??'正在执行当前请求':message.isStopped?'请求已停止':status==='error'?'本次请求未完成':'本次请求已结束',
+    description:'未记录分阶段证据；请以结果和交付检查为准。',status}];
 }
 
 export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
@@ -710,6 +696,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             {candidateDelivery && <p role="status" className="text-[10px] text-purple-300/80">交付检查 {candidateDelivery.checks.filter(check => check.status === 'passed').length}/{candidateDelivery.checks.length}{candidateDelivery.status !== 'ready' ? ` · ${candidateDelivery.checks.find(check => check.status === 'blocked' || check.status === 'pending')?.message ?? '检查未完成'}` : ''}</p>}
             {stagedAdoptionStatus === 'saving' && <p role="status" className="text-[11px] text-slate-300">正在保存交付档案…</p>}
             {stagedAdoptionError && <p role="alert" className="text-[11px] text-amber-300">{stagedAdoptionError}</p>}
+            <CandidateRecheckControl />
             <div className="space-y-1.5 pt-0.5">
               <button
                 type="button"
@@ -769,7 +756,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           const isExpanded = expandedThinkingIds[m.id] !== undefined
             ? expandedThinkingIds[m.id]
             : isCurrentGenerating;
-          const thinkingSteps = getThinkingSteps(m.thinkingStage, m.isGenerating, m.isStopped);
+          const thinkingSteps = getThinkingSteps(m);
 
           return (
             <div key={m.id} className="space-y-2">
@@ -810,7 +797,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       <div className="flex items-center gap-2 truncate">
                         <span className="font-semibold text-slate-200 text-[11px]">
                           {isCurrentGenerating
-                            ? 'AI 正在深度推理与规划...'
+                            ? 'AI 正在执行请求…'
                             : m.isStopped
                             ? 'AI 思考过程 (已中止)'
                             : 'AI 思考与反馈过程'}
@@ -840,7 +827,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                     <div className="px-3 pb-2 pt-0.5 flex items-center gap-1.5 text-[10px] text-slate-400 overflow-hidden">
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
                       <span className="truncate">
-                        {m.text ? '已完成设计推理并输出结果' : '正在规划布局与 Design Tokens...'}
+                        {m.isGenerating?m.generationProgress??executionPhaseLabels[m.executionEvents?.at(-1)?.phase??'preparing']:m.isStopped?'请求已停止':m.isError||m.isGuardRejected?'结果未应用，请查看原因':'请求已结束，请查看结果与检查记录'}
                       </span>
                     </div>
                   )}
@@ -1147,6 +1134,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               <PageTaskPlanCard contract={m.workflowContract??m.historicalPageTask?.contract}/>
               <PageTaskCoverageCard contract={m.workflowContract} html={m.htmlOutput}/>
               <TaskBudgetCard value={m.taskBudget}/>
+              <RequestActivityCard activity={m.executionActivity} running={m.isGenerating||m.qualityDraftBusy}/>
               {m.isGenerating&&m.generationProgress&&<p role="status" className="text-[11px] leading-relaxed text-sky-300/80">{m.generationProgress}</p>}
               {m.qualityReport && <QualityReportCard report={m.qualityReport} />}
               {m.qualityDraft && <FailedDraftCard value={m.qualityDraft} saved={m.qualityDraftSaved} busy={engine.isGenerating||m.qualityDraftBusy} notice={m.qualityDraftNotice}
@@ -1227,7 +1215,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   ) : isCurrentGenerating && !m.text ? (
                     <div className="flex items-center gap-2 text-slate-400 text-xs">
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                      <span>正在分析设计规范并流式编写页面代码...</span>
+                      <span>{m.executionEvents?.length?`${executionPhaseLabels[m.executionEvents.at(-1)!.phase]}…`:m.generationProgress??'正在执行请求，等待返回…'}</span>
                     </div>
                   ) : m.qualityDraft ? null : m.htmlOutput ? (
                     (() => {

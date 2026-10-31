@@ -1,3 +1,4 @@
+import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
 import {withMultiPageTasks,multiPageTask} from './fixtures/multiPageTask';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import {prepareMultiPagePlan,executeMultiPagePlan,consumeMultiPageBatch,type PreparedMultiPagePlan} from '../src/services/ai/multiPageService';
@@ -21,7 +22,7 @@ let objectCalls:number,streamCalls:StreamTextOptions[],rawQueue:unknown[],answer
 beforeEach(()=>{prior=useProjectStore.getState();history=useHistoryStore.getState();inspect=PageRenderCheck.inspect;
  useProjectStore.getState().initNewProject({name:'多页工程',deviceProfile:'mobile',designSystem:neutralModernTheme,createSpecimen:false});
  useProjectStore.getState().addScreen({name:'原页',htmlContent:'<main data-nid="old" class="p-4"><h1>原始页面</h1></main>'},'old');
- PageRenderCheck.inspect=async()=>({status:'complete',findings:[],inspected:5});objectCalls=0;streamCalls=[];rawQueue=[rawPlan()];answerMode='normal';
+ PageRenderCheck.inspect=(request,storage)=>resourceRenderReport(request,storage,{status:'complete',findings:[],inspected:5});objectCalls=0;streamCalls=[];rawQueue=[rawPlan()];answerMode='normal';
 });
 afterEach(()=>{PageRenderCheck.inspect=inspect;useProjectStore.setState(prior,true);useHistoryStore.setState(history,true);});
 const core:AIEngineCore={async generateObject(schema){objectCalls++;if((schema.properties as any)?.features)return multiPageTask('调整后的页面',['用户确认的新要求']) as any;const value=rawQueue.shift();if(value instanceof Error)throw value;return value as any;},streamText(options){streamCalls.push(options);
@@ -246,9 +247,29 @@ test('多个业务页再做多方案须拆分，不静默只生成一个业务�
 });
 
 import {createProjectStorage} from '../src/services/storage/projectStorage';
-test('font removed while a later scheme is generating blocks the complete batch, not just the last page',async()=>{
+for(const change of ['removed','replaced'] as const)test(`font ${change} while a later scheme is generating blocks the complete batch, not just the last page`,async()=>{
  const font=`assets/imports/fonts/${'a'.repeat(64)}.woff2`,storage=createProjectStorage(useProjectStore.getState().id);await storage.writeBinary(font,'dGVzdA==');
  const plan=await prepareVariants({core:{...core,streamText(options){const output=core.streamText(options);if(streamCalls.length===1){const inject=(text:string)=>text.replace('<main ',`<style>@font-face{font-family:Imported;src:url(${font})}</style><main `);return {...output,textStream:(async function*(){yield inject(await output.textPromise);})(),textPromise:output.textPromise.then(inject)};}return output;}}});
- PageRenderCheck.inspect=async()=>{if(streamCalls.length===2)await storage.remove(font);return {status:'complete',findings:[],inspected:4};};
- const before=useHistoryStore.getState().past.length,result=await run(plan);expect(result.status).toBe('blocked');expect(result.message).toContain('不存在');expect(streamCalls).toHaveLength(2);expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past.length).toBe(before);
+ PageRenderCheck.inspect=async(request,memory)=>{const report=await resourceRenderReport(request,memory);if(streamCalls.length===2){if(change==='removed')await storage.remove(font);else await storage.writeBinary(font,btoa('changed font'));}return report;};
+ const before=useHistoryStore.getState().past.length,result=await run(plan);expect(result.status).toBe('blocked');expect(result.message).toContain(change==='removed'?'不存在':'资源内容已变化');expect(streamCalls).toHaveLength(2);expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past.length).toBe(before);
+});
+
+test('planning and generation use separate observers; a closed planning observer is never stored in the plan core',async()=>{
+ const planning:import('../src/services/ai/requestActivity').RequestActivity[]=[],batch:import('../src/services/ai/requestActivity').RequestActivity[]=[],phases:string[]=[];
+ const plan=await prepare({onActivity:a=>planning.push(a)}),count=planning.length;
+ expect(planning.at(-1)).toMatchObject({requests:1,active:0,status:'returned'});expect(planning.at(-1)!.jsonChars).toBeGreaterThan(0);
+ const result=await run(plan,{onActivity:a=>batch.push(a),onPhase:p=>phases.push(p)});
+ expect(result.status).toBe('complete');expect(planning).toHaveLength(count);expect(batch.at(-1)).toMatchObject({requests:2,active:0,status:'returned'});
+ expect(batch.at(-1)!.textChars).toBeGreaterThan(0);expect(streamCalls).toHaveLength(2);expect(objectCalls).toBe(1);
+ expect(phases.filter(p=>p==='rendering')).toHaveLength(2);
+});
+test('a cancelled batch observer cannot leak progress into another task or publish a late return',async()=>{
+ const plan=await prepare(),events:import('../src/services/ai/requestActivity').RequestActivity[]=[],controller=new AbortController();
+ const actual=core.streamText;let release!:(text:string)=>void;
+ core.streamText=options=>{const r=actual(options);return {...r,textPromise:new Promise(resolve=>release=resolve),textStream:(async function*(){yield await new Promise<string>(resolve=>{release=resolve;});})()};};
+ try{
+  const pending=run(plan,{signal:controller.signal,onActivity:a=>events.push(a)});await new Promise(r=>setTimeout(r,0));
+  const count=events.length;controller.abort();release('迟到');const result=await pending;
+  expect(result.status).toBe('cancelled');expect(events).toHaveLength(count);expect(Object.keys(useProjectStore.getState().screens)).toEqual(['old']);
+ }finally{core.streamText=actual;}
 });

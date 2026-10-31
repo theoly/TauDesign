@@ -55,3 +55,20 @@ test('DOM simulators without a viewport fail explicitly rather than reporting a 
   const result=await PageRenderCheck.inspect(request(),createProjectStorage('render-test'));
   expect(result.status).toBe('unavailable');expect(result.reason).toContain('实际渲染视口');
 });
+
+test('render proof fingerprints the same local image/font/L4 bytes materialized into srcdoc',async()=>{
+ const {readProjectRenderResources}=await import('../src/services/ai/projectAssetIntegrity');
+ const image='assets/images/render.png',font=`assets/imports/fonts/${'b'.repeat(64)}.woff2`,storage=createProjectStorage(`render-${crypto.randomUUID()}`);
+ await storage.writeBinary(image,btoa('image'));await storage.writeBinary(font,btoa('font'));
+ const r=request();r.screen.htmlContent=`<main data-nid="a"><style>@font-face{font-family:Local;src:url('${font}')}</style><img src="${image}" alt="例图"></main>`;
+ r.assets=[{id:'image',relPath:image} as never];r.overrides={a:{nid:'a',declarations:{background:`url('${image}')`}}};
+ let publish!:(report:any)=>void;
+ const pending=PageRenderCheck.inspect(r,storage,{observe:(_frame,callback)=>{publish=callback;return()=>{};}});
+ const {doc}=await loadFrame();
+ try{
+  expect(doc.querySelector('img')!.getAttribute('src')).toContain('data:image/png;base64,');
+  expect(doc.querySelector('style[data-taudesign-runtime="overrides"]')!.textContent).toContain('data:image/png;base64,');
+  const expected=await readProjectRenderResources(storage,[r.screen],r.assets,r.overrides);
+  publish({status:'complete',findings:[],inspected:2});expect((await pending).resourceFiles).toEqual(expected.resourceFiles);
+ }finally{publish({status:'complete',findings:[],inspected:2});await pending;}
+});

@@ -9,6 +9,8 @@ import {sameRecordedHtml,taskProvenanceIssue} from '../ai/taskProvenance';
 import {isPageRepairRecord} from '../ai/pageRepairRecord';
 import {repairGuidanceIssue} from '../ai/designKnowledge/repairTrace';
 import {draftExecutionIssue} from '../ai/draftExecutionSource';
+import type {RuleEvidencePurpose} from '../ai/designKnowledge/safety';
+import {guidancePacketIssue} from '../ai/designKnowledge/receipt';
 
 export type DeliveryMode = 'replace' | 'force-replace' | 'keep-both' | 'confirm-structure-keep-both' | 'confirm-structure-replace';
 type PageSnapshot = Pick<Screen, 'id' | 'name' | 'htmlContent' | 'scopedCss' | 'metadata'>;
@@ -40,7 +42,7 @@ function recordPath(screenId: string, id: string): string {
   return `${directory(screenId)}/${id}.json`;
 }
 
-function validRecord(value: unknown, projectId: string, screenId: string): value is DeliveryRecord {
+function validRecord(value: unknown, projectId: string, screenId: string, purpose:RuleEvidencePurpose='history'): value is DeliveryRecord {
   const r = value as DeliveryRecord | null;
   const page = (p: PageSnapshot | undefined) => p && typeof p.id === 'string' && typeof p.name === 'string' &&
     typeof p.htmlContent === 'string' && (p.scopedCss === undefined || typeof p.scopedCss === 'string');
@@ -53,14 +55,15 @@ function validRecord(value: unknown, projectId: string, screenId: string): value
     (r.candidate.modificationRequest === undefined || typeof r.candidate.modificationRequest === 'string') &&
     isCandidateValidationEvidence(r.candidate.validationEvidence) &&
     r.candidate.validationEvidence.candidateFingerprint === contentFingerprint(r.candidate.newHtml)&&sameRecordedHtml(r.candidate.newHtml,r.after.htmlContent)&&
-    !taskProvenanceIssue(r.candidate.workflowContract)&&!draftExecutionIssue(r.candidate.executionRecord,r.candidate.newHtml)&&
+    !taskProvenanceIssue(r.candidate.workflowContract)&&!draftExecutionIssue(r.candidate.executionRecord,r.candidate.newHtml,purpose)&&
+    (purpose==='history'||r.candidate.workflowContract===undefined||!guidancePacketIssue(r.candidate.workflowContract))&&
     (r.candidate.workflowContract?.validationPlan===undefined||JSON.stringify(r.candidate.validationEvidence.delivery.workflow?.plan)===JSON.stringify(r.candidate.workflowContract.validationPlan))&&
     (r.candidate.workflowContract===undefined||(r.candidate.workflowContract.operation==='modify'||r.candidate.workflowContract.operation==='restyle')&&
       r.candidate.targetScreenId===r.before.id&&r.candidate.workflowContract.target?.id===r.before.id&&
       r.candidate.workflowContract.target.baselineFingerprint===contentFingerprint(r.before.htmlContent))&&
     (r.candidate.repair===undefined||(isPageRepairRecord(r.candidate.repair)&&
       JSON.stringify(r.candidate.repair)===JSON.stringify(r.candidate.validationEvidence.repair)&&
-      (!r.candidate.repair.guidance||(r.candidate.workflowContract!==undefined&&!repairGuidanceIssue(r.candidate.repair.guidance,r.candidate.workflowContract,r.candidate.repair.status==='repaired'))))));
+      (!r.candidate.repair.guidance||(r.candidate.workflowContract!==undefined&&!repairGuidanceIssue(r.candidate.repair.guidance,r.candidate.workflowContract,r.candidate.repair.status==='repaired',purpose))))));
 }
 
 /** Historical events remain available after undo; the project document remains the current-page authority. */
@@ -74,7 +77,7 @@ export class DeliveryRepository {
   }
 
   async prepare(record: DeliveryRecord): Promise<void> {
-    if (!validRecord(record, this.projectId, record.after.id) || record.status !== 'prepared' ||
+    if (!validRecord(record, this.projectId, record.after.id,'execute') || record.status !== 'prepared' ||
       (record.preview !== undefined && !isDeliveryPreview(record.preview, record.id, record.resultFingerprint))) throw new Error('交付快照不完整，未应用候选。');
     const serialized = JSON.stringify(record);
     if (serialized.length > 24_000_000) throw new Error('交付档案过大，请精简页面后重试。');

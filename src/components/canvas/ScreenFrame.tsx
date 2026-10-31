@@ -11,7 +11,8 @@ import { getBaseCss } from '../../styles/baseCss';
 import { NidEngine } from '../../utils/nidEngine';
 import { buildScreenDocument, projectCssForScreen, runtimeStyle } from '../../utils/screenDocument';
 import {screenBackgroundCss,syncScreenBackgroundStyle,manualBackgroundResetCss} from '../../utils/screenBackgrounds';
-import { useScreenResources } from '../../hooks/useScreenResources';
+import { useScreenResources,useStyleResources } from '../../hooks/useScreenResources';
+import {mergeRenderResourceFiles} from '../../services/storage/renderResourceSnapshot';
 import { inspectText, setDirectText, setTextByNid } from '../../utils/textNode';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { handleHistoryShortcut } from '../../utils/historyShortcuts';
@@ -69,7 +70,8 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
   const frameWidth = settings.frameWidth;
   const showGuide = settings.showViewportGuide;
 
-  const { screen: renderScreen, loading: resourcesLoading, error: resourceError } = useScreenResources(screen);
+  const resourceRevision=useProjectStore(state=>isStaged?state.stagedRenderRevision:0);
+  const { screen: renderScreen, loading: resourcesLoading, error: resourceError,resourceFiles } = useScreenResources(screen,resourceRevision);
   const imported = !!screen.metadata?.importedHtml;
   const viewport = resolveProjectViewport(settings);
   const viewportHeight = viewport.height;
@@ -90,7 +92,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
   const frameFg = resolvedColors.textSecondary;
 
   // Compile L4 Overrides for this screen
-  const screenOverrides = viewportCss(projectCssForScreen(screen, Object.entries(overrides)
+  const rawScreenOverrides = viewportCss(projectCssForScreen(screen, Object.entries(overrides)
     .filter(([key]) => key.startsWith(`${overrideSourceScreenId || screen.id}:`))
     .map(([key, ov]) => {
       const declarationsStr = Object.entries(ov.declarations)
@@ -100,6 +102,12 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       return `[data-nid="${ov.nid}"] { ${declarationsStr} }`;
     })
     .join('\n')));
+  const styleResources=useStyleResources(rawScreenOverrides,resourceRevision);
+  const screenOverrides=styleResources.css;
+  const renderResources=useMemo(()=>{
+    try{return {files:mergeRenderResourceFiles([resourceFiles,styleResources.resourceFiles])};}
+    catch(error){return {error:error instanceof Error?error.message:'资源版本不一致。'};}
+  },[resourceFiles,styleResources.resourceFiles]);
 
   const backgroundCss=projectCssForScreen(screen,screenBackgroundCss(screen,settings.colorMode,screenOverrides));
   // load可能晚于样式热更新；回调始终读取当前值，避免把新版样式回滚。
@@ -182,9 +190,10 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
 
   useEffect(() => {
     const iframe = iframeRef.current;
-    if (!iframe || !onRenderQuality || !renderQualityKey || !(isStaged || isActive) || lodLevel === 0) return;
-    return observeRenderedQuality(iframe, report => onRenderQuality(screen.id, renderQualityKey, report));
-  }, [screen.id, frameDocument, renderQualityKey, onRenderQuality, isStaged, isActive, lodLevel]);
+    if (!iframe || !frameDocument || !onRenderQuality || !renderQualityKey || !(isStaged || isActive) || lodLevel === 0 || styleResources.loading) return;
+    if(styleResources.error||renderResources.error){onRenderQuality(screen.id,renderQualityKey,{status:'unavailable',inspected:0,findings:[],reason:styleResources.error??renderResources.error});return;}
+    return observeRenderedQuality(iframe, report => onRenderQuality(screen.id, renderQualityKey, {...report,resourceFiles:renderResources.files}));
+  }, [screen.id, frameDocument, renderQualityKey, onRenderQuality, isStaged, isActive, lodLevel,styleResources.loading,styleResources.error,renderResources]);
 
   useEffect(() => {
     const iframe = iframeRef.current;

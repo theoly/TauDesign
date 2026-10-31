@@ -3,6 +3,7 @@ import type {RuleSelection} from './types';
 import {guidancePacketIssue,type GuidanceRequestReceipt} from './receipt';
 import {renderRule,ruleFingerprint} from './selector';
 import {renderTokenGuidance} from './tokenWindow';
+import type {RuleEvidencePurpose} from './safety';
 
 /** The original selection lives in the task contract; repair stores only its identity and actual use. */
 export interface RepairGuidanceTrace {
@@ -23,11 +24,12 @@ export function isRepairGuidanceTrace(value:unknown,completed=false):value is Re
     JSON.stringify(request.injectedRuleIds)===JSON.stringify(r.injectedRuleIds)));
  }catch{return false;}
 }
-export function repairGuidanceIssue(trace:RepairGuidanceTrace|undefined,task:DesignTaskContract,completed=false):string|undefined {
+export function repairGuidanceIssue(trace:RepairGuidanceTrace|undefined,task:DesignTaskContract,completed=false,purpose:RuleEvidencePurpose='execute'):string|undefined {
  if(!trace)return undefined; // Legacy repair records have no provenance; never synthesize it.
  if(!isRepairGuidanceTrace(trace,completed))return '修复规则调用记录无效。';
  const parent=task.designGuidance;
- if(!parent||guidancePacketIssue(task)||trace.parentTaskId!==task.taskId||trace.parentBindingFingerprint!==parent.bindingFingerprint||
+ const issue=guidancePacketIssue(task,true,purpose);if(issue)return issue;
+ if(!parent||trace.parentTaskId!==task.taskId||trace.parentBindingFingerprint!==parent.bindingFingerprint||
   trace.parentSelectionFingerprint!==ruleFingerprint(parent.selection))return '修复来源与原冻结任务不一致。';
  const ids=parent.selection.selected.map(s=>s.rule.id);
  if(ids.length!==trace.injectedRuleIds.length+trace.omittedRuleIds.length||
@@ -36,8 +38,8 @@ export function repairGuidanceIssue(trace:RepairGuidanceTrace|undefined,task:Des
 }
 /** Fit whole rules from the frozen order into existing generated-CSS whitespace. No new lookup. */
 export function frozenRepairGuidance<T extends {tokens:string}>(task:DesignTaskContract,payload:T):{selection:RuleSelection;payload:T;suffix:string;trace:RepairGuidanceTrace}|undefined {
- if(!task.designGuidance)return undefined;
  const issue=guidancePacketIssue(task);if(issue)throw Error(issue);
+ if(!task.designGuidance)return undefined;
  const parent=task.designGuidance,selection=structuredClone(parent.selection),omitted:string[]=[];
  selection.selected=[];selection.body='';
  for(const item of parent.selection.selected){

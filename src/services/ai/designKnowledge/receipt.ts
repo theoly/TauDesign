@@ -6,6 +6,7 @@ import {validateRuleCatalog} from './validation';
 import {getBaseCss} from '../../../styles/baseCss';
 import {extractClassWhitelist} from '../../../utils/cssCompiler';
 import {workflowRulePolicy,type DesignRuleProtocol} from '../workflowCatalog';
+import {taskRuleSafetyIssue,type RuleEvidencePurpose} from './safety';
 
 export interface GuidanceRequestReceipt {
   requestId:string;parentTaskId:string;providerId:string;model:string;
@@ -36,6 +37,7 @@ export function makeGuidancePacket(contract:DesignTaskContract,selection:RuleSel
 export function withGuidanceReceipts(core:AIEngineCore,contract:DesignTaskContract,packet:DesignGuidancePacket,namespace?:'style-repair'):AIEngineCore {
   const begin=(options:StreamTextOptions,outputProtocol:NonNullable<GuidanceRequestReceipt['outputProtocol']>)=>{
       if(options.signal?.aborted)throw new DOMException('生成已取消','AbortError');
+      const safety=taskRuleSafetyIssue(contract);if(safety)throw Error(safety);
       if(packet.requests.length>=64)throw Error('规则请求回执超过安全上限，未继续发送。');
       const system=options.messages.filter(m=>m.role==='system').map(m=>m.content).join('\n');
       const receipt:GuidanceRequestReceipt={requestId:`${contract.taskId}:${namespace?`${namespace}:`:''}request-${packet.requests.length+1}`,parentTaskId:contract.taskId,
@@ -48,7 +50,7 @@ export function withGuidanceReceipts(core:AIEngineCore,contract:DesignTaskContra
       options.signal?.addEventListener('abort',abort,{once:true});
       const settle=(status:'completed'|'failed')=>{
         options.signal?.removeEventListener('abort',abort);
-        if(receipt.status!=='cancelled')receipt.status=options.signal?.aborted?'cancelled':status;
+        if(receipt.status==='assembled'||receipt.status==='dispatched')receipt.status=options.signal?.aborted?'cancelled':status;
       };
       return {receipt,abort,settle,dispatch:()=>{if(receipt.status!=='cancelled')receipt.status='dispatched';}};
   };
@@ -61,7 +63,9 @@ export function withGuidanceReceipts(core:AIEngineCore,contract:DesignTaskContra
         state.dispatch();
         const result=await pending;
         if(options.signal?.aborted)throw new DOMException('生成已取消','AbortError');
-        state.settle('completed');return result;
+        state.settle('completed');
+        const safety=taskRuleSafetyIssue(contract);if(safety)throw Error(safety);
+        return result;
       } catch(error){state.settle('failed');throw error;}
     },
     streamText(options:StreamTextOptions){
@@ -70,16 +74,16 @@ export function withGuidanceReceipts(core:AIEngineCore,contract:DesignTaskContra
         const stream=core.streamText(options);
         dispatch();
         const completed=Promise.all([stream.textPromise,stream.reasoningPromise,stream.usagePromise,stream.recoveryPromise,stream.finishReasonPromise]);
-        return {...stream,abort:()=>{abort();stream.abort();},textPromise:completed.then(([text])=>{settle('completed');return text;},error=>{settle('failed');throw error;})};
+        return {...stream,abort:()=>{abort();stream.abort();},textPromise:completed.then(([text])=>{settle('completed');const safety=taskRuleSafetyIssue(contract);if(safety)throw Error(safety);return text;},error=>{settle('failed');throw error;})};
       } catch(error){settle('failed');throw error;}
     }
   };
 }
 
 /** Restored evidence uses the frozen snapshot, not the current catalog. */
-export function guidancePacketIssue(contract:DesignTaskContract,requireCompleted=true):string|undefined {
+export function guidancePacketIssue(contract:DesignTaskContract,requireCompleted=true,purpose:RuleEvidencePurpose='execute'):string|undefined {
   const packet=contract.designGuidance;
-  if(packet===undefined)return undefined;
+  if(packet===undefined)return purpose==='execute'?taskRuleSafetyIssue(contract):undefined;
   const hash=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}$/.test(v);
   try {
     if(!packet||JSON.stringify(packet).length>24000||packet.version!==1||packet.bindingFingerprint!==guidanceBinding(contract,packet.protocol))return '设计规则与当前任务范围不匹配。';
@@ -89,7 +93,7 @@ export function guidancePacketIssue(contract:DesignTaskContract,requireCompleted
       !Array.isArray(selection.selected)||selection.selected.length>3||!Array.isArray(selection.omitted)||selection.omitted.length>200||
       !['none','excluded-workflow','unknown-target','no-match','budget'].includes(selection.fallback)||typeof selection.body!=='string')return '设计规则选择快照无效。';
     const ids=selection.selected.map(s=>s.rule?.id);
-    if(validateRuleCatalog(selection.selected.map(s=>s.rule),device=>extractClassWhitelist(getBaseCss(device)),{allowExternalConflicts:true}).length)return '设计规则快照结构无效。';
+    if(validateRuleCatalog(selection.selected.map(s=>s.rule),device=>extractClassWhitelist(getBaseCss(device)),{allowExternalConflicts:true,purpose:purpose==='history'?'history':'catalog'}).length)return '设计规则快照结构无效。';
     if(!['create','modify',...(packet.protocol?['restyle','analyze']:[])].includes(contract.operation)||selection.selected.some(s=>
       (s.rule.scope.operations.length&&!s.rule.scope.operations.includes(contract.operation))||
       (s.rule.scope.devices.length&&!s.rule.scope.devices.includes(contract.device.profile))))return '设计规则不适用于当前操作或设备。';
@@ -110,5 +114,5 @@ export function guidancePacketIssue(contract:DesignTaskContract,requireCompleted
     }))return '格式纠正回执的替代关系无效。';
     if(requireCompleted&&(!packet.requests.length||packet.requests.some(r=>(r.status!=='completed'&&!(r.status==='failed'&&r.supersededByRequestId))||ids.some(id=>!r.injectedRuleIds.includes(id)))))return '缺少完整且与实际请求一致的设计规则输入回执。';
   } catch {return '设计规则回执无法读取。';}
-  return undefined;
+  return purpose==='execute'?taskRuleSafetyIssue(contract):undefined;
 }

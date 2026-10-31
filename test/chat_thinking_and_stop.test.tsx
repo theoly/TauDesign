@@ -60,7 +60,7 @@ describe('ChatDrawer: AI Thinking & Collapsible Feedback & Click-to-Stop', () =>
         promise: new Promise((resolve) => {
           // Delay resolve to test in-flight thinking state
           setTimeout(() => {
-            onEvent({ type: 'Delta', text: '```html\n<div class="card">Hello</div>\n```' });
+            onEvent({ type: 'Delta', text: '这是布局建议。' });
             onEvent({ type: 'Done', finish_reason: 'stop' });
             resolve();
           }, 100);
@@ -77,7 +77,7 @@ describe('ChatDrawer: AI Thinking & Collapsible Feedback & Click-to-Stop', () =>
 
     // Type prompt
     act(() => {
-      fireChange(textarea!, '生成科技感仪表盘');
+      fireChange(textarea!, '什么是布局？');
     });
 
     // Find submit button
@@ -90,8 +90,8 @@ describe('ChatDrawer: AI Thinking & Collapsible Feedback & Click-to-Stop', () =>
     });
 
     // 1. Verify thinking card appears during generation
-    expect(container.textContent).toContain('AI 正在深度推理与规划');
-    expect(container.textContent).toContain('意图推理与多模态反推');
+    expect(container.textContent).toContain('AI 正在执行请求');
+    expect(container.textContent).toContain('核对请求与任务范围');
 
     // Wait for the stream promise to finish
     await act(async () => {
@@ -114,8 +114,8 @@ describe('ChatDrawer: AI Thinking & Collapsible Feedback & Click-to-Stop', () =>
 
     // Detailed steps are now visible
     expect(container.textContent).toContain('收起');
-    expect(container.textContent).toContain('检索设计规范与工程约定');
-    expect(container.textContent).toContain('高保真代码生成与画布同步');
+    expect(container.textContent).toContain('组装页面、主题与工程上下文');
+    expect(container.textContent).toContain('调用模型生成结果');
 
     // Click again to collapse
     act(() => {

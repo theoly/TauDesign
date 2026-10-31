@@ -19,6 +19,7 @@ import { makeFailedPageDraft, repairDraftLabels, draftGuidanceIssue, type Failed
 import { continuationBindingKey } from '../../generationContinuation';
 import { generateSectionedPage, type SectionedCheckpoint, type SectionedResult } from '../../sectionedGeneration';
 import { AIEngineCore, type EngineMessage } from '../core/types';
+import {observeRequestActivity,type RequestActivity,type PipelinePhase} from '../../requestActivity';
 import { enrichContext } from '../context/contextEnricher';
 import { analyzePipelineIntent } from './interceptors/intentInterceptor';
 import { extractDeviationNote } from './interceptors/streamTransform';
@@ -85,10 +86,19 @@ export interface ExecutePipelineOptions {
   sectioned?: {resume?:SectionedCheckpoint};
   isCurrent?:()=>boolean;
   onSectionProgress?:(message:string)=>void;
+  onPhase?:(phase:PipelinePhase)=>void;
+  onActivity?:(activity:RequestActivity)=>void;
 }
 
 export class PipelineExecutor {
   public static async execute(options: ExecutePipelineOptions): Promise<PipelineOutput> {
+    const activity=options.onActivity?observeRequestActivity(options.engineCore,options.onActivity,()=>!options.signal?.aborted&&options.isCurrent?.()!==false):undefined;
+    try{return await PipelineExecutor.executeTask({...options,engineCore:activity?.core??options.engineCore});}
+    finally{activity?.stop();}
+  }
+  private static async executeTask(options:ExecutePipelineOptions):Promise<PipelineOutput>{
+    const phase=(value:PipelinePhase)=>{if(!options.signal?.aborted&&options.isCurrent?.()!==false){try{options.onPhase?.(value);}catch{console.warn('[pipeline] 阶段显示回调失败');}}};
+    phase('preparing');
     const {
       input,
       provider,
@@ -187,6 +197,7 @@ export class PipelineExecutor {
     }
 
     if(options.pageTaskPlanning){
+      phase('planning');
       try{
         if(!['create','modify'].includes(workflowContract.operation)||workflowContract.elementNid)throw Error('当前业务规划入口仅支持新建或已授权的页面功能修改。');
         if(options.pageTaskPlanning.snapshot&&options.pageTaskPlanning.confirmed)throw Error('业务规划不能同时指定续写快照和确认计划。');
@@ -225,6 +236,7 @@ export class PipelineExecutor {
     const evidenceCore=workflowContract.designGuidance?withGuidanceReceipts(engineCore,workflowContract,workflowContract.designGuidance):engineCore;
     // Reserve before recording an actual core call. A denied reservation is not a failed dispatch.
     const requestCore=taskBudget?withTaskBudget(evidenceCore,taskBudget):evidenceCore;
+    phase('assembling');
     const systemPrompt = designSystem
       ? PromptBuilder.buildSystemPrompt({
           contextualGuidance:guidanceQuery,
@@ -317,6 +329,7 @@ export class PipelineExecutor {
     }
     const qualityOptions = {deviceProfile,useCustomNavigation:options.useCustomNavigation,designSystem,baselineHtml:enriched.targetScreen?screens[enriched.targetScreen.id]?.htmlContent:undefined,protectedNids,modificationRequest:input.rawPrompt};
     let recovered: SectionedResult;
+    phase(options.qualityRepair?'local-repair':'generating');
     if (options.qualityRepair) {
       const {draft,labels} = options.qualityRepair;
       if (draft.contextKey !== contextKey || draft.bindingKey !== continuationBindingKey({provider,model})) return attachContract({status:'error',rawResponse:'',usage:{inputTokens:0,outputTokens:0},errorMessage:'草稿的工程、原页或模型上下文已变化，请重新生成。'});
@@ -340,6 +353,7 @@ export class PipelineExecutor {
     const recoveryWarnings = [...enriched.warnings,...recovered.warnings];
     if (recovered.errorMessage) return attachContract({ status: 'error', rawResponse, reasoningText, usage, recoveredStreamError,
       warnings: recoveryWarnings, errorMessage: recovered.errorMessage });
+    phase('validating');
     const guidanceIssue=guidancePacketIssue(workflowContract);
     if(guidanceIssue)return attachContract({status:'error',rawResponse,reasoningText,usage,errorMessage:guidanceIssue,warnings:recoveryWarnings});
 

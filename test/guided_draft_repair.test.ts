@@ -34,7 +34,9 @@ test('guided rejected draft reuses frozen evidence for local repair without send
   expect(draft.guidanceSource?.designGuidance?.selection.selected[0].rule.id).toBe('LY-04');
   const labels=draftRepairTargets(draft).map(t=>({nid:t.nid,text:'继续查看'}));
   // The current setting may be absent; original source must still be recoverable.
-  const repaired=await PipelineExecutor.execute({...f.options,contextualGuidance:undefined,qualityRepair:{draft,labels}});
+  const activity:import('../src/services/ai/requestActivity').RequestActivity[]=[],phases:string[]=[];
+  const repaired=await PipelineExecutor.execute({...f.options,contextualGuidance:undefined,qualityRepair:{draft,labels},onActivity:a=>activity.push(a),onPhase:p=>phases.push(p)});
+  expect(activity.at(-1)?.requests).toBe(0);expect(phases).toContain('local-repair');expect(phases).not.toContain('generating');
   expect(repaired.status).toBe('applied');expect(f.calls()).toBe(1);expect(repaired.usage).toEqual({inputTokens:0,outputTokens:0});
   expect(repaired.workflowContract?.designGuidance).toBeUndefined();
   expect(repaired.executionRecord?.draftRepair?.historicalGuidanceSource).toEqual(draft.guidanceSource);

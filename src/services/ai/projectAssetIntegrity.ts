@@ -1,6 +1,7 @@
 import type { Asset, Screen, StyleOverride } from '../../types/project';
 import type { ProjectStorage } from '../storage/projectStorage';
 import { resolveImportedResources } from '../import/importResources';
+import {createRenderResourceSnapshot,type RenderResourceFile} from '../storage/renderResourceSnapshot';
 
 export interface ProjectAssetIssue {
   code: 'invalid_asset_path' | 'unresolved_asset_id' | 'unregistered_asset_reference' | 'missing_asset_file' | 'asset_check_unavailable';
@@ -18,8 +19,9 @@ export interface ProjectAssetAuditReport {
 /** Read the same local URL locations that the renderer materializes, including
  * imported fonts. Base64 and the materialized copy are ephemeral, never evidence. */
 export async function readProjectRenderResources(storage: ProjectStorage, screens: Screen[], assets: Asset[],
-  overrides: Record<string, StyleOverride> = {}): Promise<Pick<ProjectAssetAuditReport, 'files' | 'issues'>> {
+  overrides: Record<string, StyleOverride> = {}): Promise<Pick<ProjectAssetAuditReport, 'files' | 'issues'>&{resourceFiles:RenderResourceFile[]}> {
   const files = new Map<string, {id:string;relPath:string}>(), issues: ProjectAssetIssue[] = [];
+  const snapshot=createRenderResourceSnapshot(storage);
   const registered = new Map(assets.map(asset => [asset.relPath, asset]));
   for (const screen of screens) {
     const tracked = Object.create(storage) as ProjectStorage;
@@ -27,7 +29,7 @@ export async function readProjectRenderResources(storage: ProjectStorage, screen
     tracked.readBinary = async path => {
       files.set(path, {id:registered.get(path)?.id ?? `render-resource:${path}`,relPath:path});
       try {
-        const bytes = await storage.readBinary(path);
+        const bytes = await snapshot.storage.readBinary(path);
         if (bytes === null) {
           readFailed = true;
           const message = `页面「${screen.name}」的资源文件 ${path} 不存在。`;
@@ -52,7 +54,7 @@ export async function readProjectRenderResources(storage: ProjectStorage, screen
         message:`页面「${screen.name}」资源读取检查未完成：${error instanceof Error ? error.message : String(error)}`});
     }
   }
-  return {files:[...files.values()],issues};
+  return {files:[...files.values()],issues,resourceFiles:await snapshot.files()};
 }
 
 export function isSafeProjectAssetPath(path: string): boolean {

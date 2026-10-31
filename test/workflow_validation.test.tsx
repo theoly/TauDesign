@@ -1,3 +1,4 @@
+import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import {useProjectStore} from '../src/stores/useProjectStore';
 import {useHistoryStore} from '../src/stores/useHistoryStore';
@@ -80,6 +81,7 @@ for(const registered of [false,true])test(`${registered?'registered but missing'
   const s=useProjectStore.getState();s.setOverride('a','root',{'background-image':'url(assets/images/l4.png)'});
   if(registered)s.addAsset({id:'l4',name:'覆盖背景',type:'image',mimeType:'image/png',source:'upload',refCount:1,relPath:'assets/images/l4.png'});
   const store=stage();await loadStagedCandidate(store.id);
+  for(let i=0;i<30&&store.getStagedDeliveryReport().status==='pending';i++)await new Promise(resolve=>setTimeout(resolve,0));
   expect(store.getStagedDeliveryReport().status).toBe('blocked');
   expect(await store.forceAdoptStagedChange()).toBe(false);
 });

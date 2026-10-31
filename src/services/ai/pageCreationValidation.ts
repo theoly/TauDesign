@@ -17,6 +17,8 @@ import {readProjectRenderResources,inspectProjectAssetReferences,referencedProje
 import {PageRenderCheck} from './pageRenderCheck';
 import type {RenderedQualityReport} from '../../utils/renderedQuality';
 import {resolveWorkflowValidation,evaluateWorkflowValidation,isWorkflowValidationReport,type WorkflowValidationReport} from './workflowValidation';
+import {taskRuleSafetyIssue} from './designKnowledge/safety';
+import {renderResourceIssue,type RenderResourceFile} from '../storage/renderResourceSnapshot';
 import type {PageRepairRecord} from './pageRepairRecord';
 import {isPageRepairRecord} from './pageRepairRecord';
 import {repairGuidanceIssue} from './designKnowledge/repairTrace';
@@ -50,8 +52,8 @@ export function importPreviewFingerprint(screen:Pick<Screen,'name'|'htmlContent'
 /** Pure preparation. Actual viewport evidence is required; this function never writes project or History state. */
 export async function prepareNewPage(state:PageCreationState,screen:Screen,contract:DesignTaskContract,storage:ProjectStorage,
   options:{isCurrent:()=>boolean;signal?:AbortSignal;purpose?:'create'|'import';preview?:HtmlImportPreviewReceipt}):Promise<PreparedNewPage> {
-  const current=()=>!options.signal?.aborted&&options.isCurrent();
-  const fail=(message:string)=>({status:'blocked' as const,message});
+  const current=()=>!options.signal?.aborted&&options.isCurrent()&&!taskRuleSafetyIssue(contract);
+  const fail=(message:string)=>({status:'blocked' as const,message:taskRuleSafetyIssue(contract)??message});
   try{
     if(!current())return fail('生成上下文已变化或创建已取消，请重新生成。');
     const referenceIssue=libraryReferenceIssue(state);if(referenceIssue)return fail(referenceIssue);
@@ -87,8 +89,9 @@ export async function prepareNewPage(state:PageCreationState,screen:Screen,contr
     if(references.length)return fail(references[0].message);
     const files=referencedProjectAssets(normalized,assets);
     let readFiles:Array<{id:string;relPath:string}>=[];
+    let resourceFiles:RenderResourceFile[]=[];
     const checkFiles=async()=>{
-      const rendered=await readProjectRenderResources(storage,[normalized],assets);readFiles=rendered.files;
+      const rendered=await readProjectRenderResources(storage,[normalized],assets);readFiles=rendered.files;resourceFiles=rendered.resourceFiles;
       return [...await verifyProjectAssetFiles(storage,files),...rendered.issues,...await verifyLibraryReferenceFiles(storage,state)];
     };
     const issues=await checkFiles();
@@ -100,6 +103,7 @@ export async function prepareNewPage(state:PageCreationState,screen:Screen,contr
     const finalFiles=await checkFiles();
     if(!current())return fail('应用前工程已变化或创建已取消。');
     if(finalFiles.length)return fail(finalFiles[0].message);
+    const resourceIssue=renderResourceIssue(render.resourceFiles,resourceFiles);if(resourceIssue)return fail(resourceIssue);
     const workflow=evaluateWorkflowValidation(task.plan,{
       ...sources.checks,
       'design-entities':{status:'passed',message:designEntitySummary(entities)},
@@ -119,12 +123,12 @@ export async function prepareNewPage(state:PageCreationState,screen:Screen,contr
 export function isPageCreationEvidence(value:unknown):value is PageCreationEvidence {
   const e=value as PageCreationEvidence|undefined;
   return Boolean(e&&e.version===1&&Number.isFinite(e.checkedAt)&&typeof e.contextFingerprint==='string'&&typeof e.pageFingerprint==='string'&&typeof e.tokenFingerprint==='string'&&
-    e.contract&&!taskProvenanceIssue(e.contract)&&!draftExecutionIssue(e.execution)&&(!e.contract.multiPage||validMultiPageScope(e.contract.multiPage))&&(!e.contract.referenceImage||validReferenceImageIdentity(e.contract.referenceImage))&&(!e.contract.librarySource||validLibrarySourceIdentity(e.contract.librarySource))&&
+    e.contract&&!taskProvenanceIssue(e.contract)&&!draftExecutionIssue(e.execution,undefined,'history')&&(!e.contract.multiPage||validMultiPageScope(e.contract.multiPage))&&(!e.contract.referenceImage||validReferenceImageIdentity(e.contract.referenceImage))&&(!e.contract.librarySource||validLibrarySourceIdentity(e.contract.librarySource))&&
     (!creationSourceStages(e.contract.workflowId).includes('reference-input')||inspectReferenceInput(e.contract).status==='passed')&&
     (!creationSourceStages(e.contract.workflowId).includes('library-binding')||validLibrarySourceIdentity(e.contract.librarySource))&&typeof e.contract.taskId==='string'&&typeof e.contract.request==='string'&&e.contract.device&&['mobile','pc'].includes(e.contract.device.profile)&&Number.isFinite(e.contract.device.frameWidth)&&isWorkflowValidationReport(e.workflow)&&e.workflow.plan.workflowId===e.contract.workflowId&&
     (e.contract.validationPlan===undefined||JSON.stringify(e.workflow.plan)===JSON.stringify(e.contract.validationPlan))&&isQualityReport(e.source)&&isQualityReport(e.quality)&&
     isRenderedQualityReport(e.render)&&
     Array.isArray(e.files)&&e.files.every(f=>f&&typeof f.id==='string'&&typeof f.relPath==='string')&&
-    (e.repair===undefined||(isPageRepairRecord(e.repair)&&e.repair.status==='repaired'&&e.repair.contextFingerprint===e.contextFingerprint&&!repairGuidanceIssue(e.repair.guidance,e.contract,true)))&&
+    (e.repair===undefined||(isPageRepairRecord(e.repair)&&e.repair.status==='repaired'&&e.repair.contextFingerprint===e.contextFingerprint&&!repairGuidanceIssue(e.repair.guidance,e.contract,true,'history')))&&
     (e.workflow.status!=='ready'||(e.source.passed&&e.quality.passed&&isPassedRender(e.render))));
 }

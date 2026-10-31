@@ -1,3 +1,4 @@
+import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -201,7 +202,7 @@ describe('候选采纳底线', () => {
     await store.adoptStagedChange(); await store.forceAdoptStagedChange();
     expect(useProjectStore.getState().screens.action.htmlContent).toBe(baseline);
     await createProjectStorage(projectId).writeBinary(path, 'dGVzdA==');
-    store.recheckStagedAssetFiles();
+    store.refreshStagedRender();await stageResourceReport(clean);
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(store.getStagedDeliveryReport().checks.find(check => check.id === 'asset_files')?.status).toBe('passed');
     await store.adoptStagedChange();

@@ -14,6 +14,8 @@ import { contentFingerprint } from './designWorkflow';
 import { readProjectRenderResources, inspectProjectAssetReferences, referencedProjectAssets, screenForAssetAudit, verifyProjectAssetFiles, type ProjectAssetIssue } from './projectAssetIntegrity';
 import { PageRenderCheck } from './pageRenderCheck';
 import {resolveWorkflowValidation,evaluateWorkflowValidation,type WorkflowValidationReport} from './workflowValidation';
+import {taskRuleSafetyIssue} from './designKnowledge/safety';
+import {mergeRenderResourceFiles,renderResourceIssue} from '../storage/renderResourceSnapshot';
 
 export interface RestyleValidationReport {
   status: 'passed' | 'blocked'; checkedAt: number; contextFingerprint: string;
@@ -37,8 +39,8 @@ export async function prepareCheckedRestyle(state: RestyleValidationState, outco
   options: {contextKey:string;isCurrent:()=>boolean;signal?:AbortSignal}): Promise<CheckedRestylePlan> {
   const report: RestyleValidationReport = {status:'blocked',checkedAt:Date.now(),contextFingerprint:options.contextKey,pages:[],assetIssues:[]};
   const result: CheckedRestylePlan = {screens:[],referencedAssets:[],validation:report};
-  const current = () => !options.signal?.aborted && options.isCurrent();
-  const fail = (message:string) => {report.message = message;return result;};
+  const current = () => !options.signal?.aborted && options.isCurrent()&&!taskRuleSafetyIssue(outcome.workflowContract);
+  const fail = (message:string) => {report.message = taskRuleSafetyIssue(outcome.workflowContract)??message;return result;};
   try {
     if (!current()) return fail('工程已变化或重塑已取消。');
     const {target,html} = outcome;
@@ -98,6 +100,10 @@ export async function prepareCheckedRestyle(state: RestyleValidationState, outco
       report.pages[index].render = render;
       if (!current()) return fail('渲染期间工程已变化或重塑已取消。');
       if (render.status !== 'complete' || render.findings.some(f=>f.severity === 'error')) return fail(`${screen.name}：${render.findings.find(f=>f.severity === 'error')?.message ?? render.reason ?? 'iframe 检查尚未完整通过。'}`);
+      const actual=await readProjectRenderResources(storage,[screen],assets,perPageOverrides(screen.id));
+      if(!current())return fail('核对渲染资源期间工程已变化或重塑已取消。');
+      if(actual.issues.length)return fail(actual.issues[0].message);
+      const resourceIssue=renderResourceIssue(render.resourceFiles,actual.resourceFiles);if(resourceIssue)return fail(resourceIssue);
     }
     const finalResources=await readProjectRenderResources(storage,auditScreens,assets);
     report.files=finalResources.files;report.assetIssues.push(...finalResources.issues);
@@ -105,6 +111,8 @@ export async function prepareCheckedRestyle(state: RestyleValidationState, outco
     if (!current()) return fail('应用前工程已变化或重塑已取消。');
     if (report.assetIssues.length) return fail(report.assetIssues[0].message);
     const passed=(message:string)=>({status:'passed' as const,message});
+    const resourceIssue=renderResourceIssue(mergeRenderResourceFiles(report.pages.map(p=>p.render?.resourceFiles??[])),finalResources.resourceFiles);
+    if(resourceIssue)return fail(resourceIssue);
     report.workflow=evaluateWorkflowValidation(task.plan,{
       'design-entities':passed(entityReports.map((entities,index)=>`${checked[index].name}：${designEntitySummary(entities)}`).join('\n')),
       'source-safety':passed(`已检查 ${checked.length} 个页面/模板的实际源码。`),quality:passed(`已检查 ${checked.length} 个页面/模板的静态质量。`),

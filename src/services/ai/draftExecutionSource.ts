@@ -1,9 +1,11 @@
 import type {DesignExecutionRecord} from './designExecutionRecord';
 import {sameRecordedHtml,taskProvenanceIssue} from './taskProvenance';
 import {isQualityReport} from './evidenceSchema';
+import type {RuleEvidencePurpose} from './designKnowledge/safety';
+import {guidancePacketIssue} from './designKnowledge/receipt';
 
 /** Local text repair retains generation provenance, never a new rule dispatch. */
-export function draftExecutionIssue(record:DesignExecutionRecord|undefined,resultHtml?:string):string|undefined {
+export function draftExecutionIssue(record:DesignExecutionRecord|undefined,resultHtml?:string,purpose:RuleEvidencePurpose='execute'):string|undefined {
  if(record?.draftRepair===undefined)return;
  const r=record.draftRepair;
  if(!r||record.source!=='local-edit'||record.rawResponse!==''||record.continuationCount!==0||typeof record.completeHtml!=='string'||
@@ -17,6 +19,7 @@ export function draftExecutionIssue(record:DesignExecutionRecord|undefined,resul
  for(const [source,kind] of [[r.historicalGuidanceSource,'rules'],[r.historicalPageTaskSource,'plan']] as const){
   if(source===undefined)continue;
   if(taskProvenanceIssue(source)||source.taskId!==r.sourceTaskId||(kind==='rules'?!source.designGuidance:!source.pageTaskPlan))return '草稿修复的历史来源无效或不属于原生成任务。';
+  if(purpose==='execute'){const issue=guidancePacketIssue(source);if(issue)return issue;}
  }
  if(r.historicalGuidanceSource&&r.historicalPageTaskSource&&r.historicalGuidanceSource.request!==r.historicalPageTaskSource.request)return '草稿修复的原规则与业务规划来源不一致。';
  return undefined;

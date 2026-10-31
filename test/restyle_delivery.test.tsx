@@ -1,3 +1,4 @@
+import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
 import {afterEach,beforeEach,expect,spyOn,test} from 'bun:test';
 import React,{act} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
@@ -25,7 +26,7 @@ beforeEach(()=>{
   prior=useProjectStore.getState();history=useHistoryStore.getState();
   const store=useProjectStore.getState();store.initNewProject({name:'重塑档案',deviceProfile:'mobile',designSystem:neutralModernTheme,createSpecimen:false});
   store.addScreen({name:'页面甲',htmlContent:source,position:{x:0,y:0}},'a');
-  render=spyOn(PageRenderCheck,'inspect').mockResolvedValue({status:'complete',findings:[],inspected:2});
+  render=spyOn(PageRenderCheck,'inspect').mockImplementation((request,storage)=>resourceRenderReport(request,storage,{status:'complete',findings:[],inspected:2}));
   capture=spyOn(PagePreviewCapture,'capture').mockImplementation((request,storage,deps)=>actualCapture(request,storage,{...deps,
     render:async()=>({dataUrl:`data:image/png;base64,${png(390,844)}`,engine:'foreign-object',cssHeight:844})}));
 });
@@ -193,4 +194,15 @@ test('late history reads from another project never appear in the current panel'
     await act(async()=>{oldRelease(previous);release({records:[],invalidFiles:0,hasMore:false});await pause();});
     expect(host.textContent).not.toContain('页面甲');expect(host.textContent).toContain('暂无重塑记录');
   }finally{read.mockRestore();}
+});
+
+test('same-path resource replacement during archive preparation rejects the restyle with no History changes',async()=>{
+ const store=useProjectStore.getState(),storage=createProjectStorage(store.id),path='assets/images/replaced.png';
+ await storage.writeBinary(path,png(1,1));store.addAsset({id:'replaced',name:'图片',relPath:path,type:'image',mimeType:'image/png',source:'upload',refCount:1});
+ store.updateScreenHtml('a',source.replace('</main>',`<img src="${path}" alt="照片"></main>`));const before=useProjectStore.getState().screens.a.htmlContent,count=useHistoryStore.getState().past.length;
+ const real=RestyleDeliveryRepository.prototype.prepare,prepare=spyOn(RestyleDeliveryRepository.prototype,'prepare').mockImplementation(async function(record){await real.call(this,record);await storage.writeBinary(path,png(2,2));});
+ try{const result=await store.applyRestyleOutcome(proposal());expect(result.applied).toBe(false);expect(result.message).toContain('资源内容已变化');
+  expect(useProjectStore.getState().screens.a.htmlContent).toBe(before);expect(useHistoryStore.getState().past.length).toBe(count);
+  expect((await repo().list()).records[0].status).toBe('aborted');
+ }finally{prepare.mockRestore();}
 });

@@ -1,3 +1,4 @@
+import {observeRequestActivity,type RequestActivity} from './requestActivity';
 import type { DesignSystem } from '../../types/designSystem';
 import type { ProjectSettings } from '../../types/project';
 import type { AIEngineCore, StreamTextOptions } from './engine/core/types';
@@ -39,6 +40,7 @@ export interface StructuredEditOptions {
   signal?:AbortSignal;isCurrent:()=>boolean;
   taskBudget?:TaskBudget;textReferences?:TextReference[];attachment?:ImageAttachment;
   onPhase?:(phase:'planning'|'editing')=>void;
+  onActivity?:(activity:RequestActivity)=>void;
   /** Internal opt-in; output-specific adapters never alter authorization or response schemas. */
   contextualGuidance?:{features?:RuleFeature[]};
 }
@@ -50,7 +52,11 @@ class Interrupted extends Error {constructor(readonly status:'cancelled'|'stale'
 
 /** All structured edit entry points share this read-only executor. Staging, History and persistence stay in their existing owners. */
 export async function executeStructuredEdit(core:AIEngineCore|undefined,options:StructuredEditOptions):Promise<StructuredEditResult> {
-  const {signal,isCurrent,taskBudget,onPhase,...data}=options;
+  const observer=core&&options.onActivity?observeRequestActivity(core,options.onActivity,()=>!options.signal?.aborted&&options.isCurrent()):undefined;
+  try{return await executeStructuredEditTask(observer?.core??core,options);}finally{observer?.stop();}
+}
+async function executeStructuredEditTask(core:AIEngineCore|undefined,options:StructuredEditOptions):Promise<StructuredEditResult> {
+  const {signal,isCurrent,taskBudget,onPhase,onActivity,...data}=options;
   let budget=taskBudget,ownsBudget=false;
   const input=structuredClone(data),contract=input.contract;
   const guard=()=>{

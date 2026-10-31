@@ -1,4 +1,6 @@
 import {draftExecutionIssue} from '../services/ai/draftExecutionSource';
+import {mergeRenderResourceFiles,renderResourceIssue} from '../services/storage/renderResourceSnapshot';
+import {taskRuleSafetyIssue} from '../services/ai/designKnowledge/safety';
 import {taskInputBinding,renderEvidenceIdentity} from '../services/ai/evidenceIdentity';
 import {isTaskContractShape} from '../services/ai/taskContractShape';
 import {hasTemplateContract,compileComponentTemplate} from '../utils/componentTemplate';
@@ -301,6 +303,7 @@ interface ProjectState {
   stagedAssetAuditRevision: number;
   stagedRenderRevision: number;
   getStagedRenderContextKey: () => string;
+  refreshStagedRender: (reason?:string) => void;
   isStagedTaskCurrent: () => boolean;
   getStagedAssetIssues: () => ProjectAssetIssue[];
   getStagedDeliveryReport: () => StagedDeliveryReport;
@@ -998,7 +1001,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   applyRestyleOutcome: async (outcome, signal) => {
     const state = get(), key = restyleContextKey(state);
     const frozenOutcome = structuredClone(outcome), storage = createProjectStorage(state.id,state.folderPath);
-    const current = () => !signal?.aborted && restyleContextKey(get()) === key;
+    const current = () => !signal?.aborted && !taskRuleSafetyIssue(frozenOutcome.workflowContract) &&
+      !draftExecutionIssue(frozenOutcome.executionRecord,frozenOutcome.html) && restyleContextKey(get()) === key;
     const frozen = structuredClone({id:state.id,folderPath:state.folderPath,settings:state.settings,
       screens:state.screens,overrides:state.overrides,assets:state.assets,designSystem:state.designSystem,components:state.components,
       decisions:state.decisions,projectDocuments:state.projectDocuments,designLibraryBinding:state.designLibraryBinding,designSystemOrigin:state.designSystemOrigin});
@@ -1019,6 +1023,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const issues = [...await verifyProjectAssetFiles(storage,plan.referencedAssets),...resources.issues,...await verifyLibraryReferenceFiles(storage,frozen)];
       if (!current()) throw new Error('保存重塑档案期间工程已变化或执行已取消。');
       if (issues.length) {plan.validation.assetIssues.push(...issues);throw new Error(issues[0].message);}
+      const resourceIssue=renderResourceIssue(mergeRenderResourceFiles(plan.validation.pages.map(p=>p.render?.resourceFiles??[])),resources.resourceFiles);
+      if(resourceIssue)throw Error(resourceIssue);
     } catch (error) {
       const message = error instanceof Error ? error.message : '重塑档案保存失败，原页面未修改。';
       if (record && prepared) await repository.finish(record,'aborted',message).catch(()=>{});
@@ -1143,6 +1149,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         if(!await storage.exists(file.relPath))throw new Error(`导入资源文件不存在：${file.relPath}`);
         requireCurrent();
       }
+      const importedResources=await readProjectRenderResources(storage,[prepared.screen],Object.values(snapshot.assets));requireCurrent();
+      if(importedResources.issues.length)throw Error(importedResources.issues[0].message);
+      const resourceIssue=renderResourceIssue(prepared.evidence.render.resourceFiles,importedResources.resourceFiles);
+      if(resourceIssue)throw Error(resourceIssue);
       const {id,position:_position,...checked}=prepared.screen;
       return get().addScreen({...checked,metadata:{...checked.metadata,creationEvidence:prepared.evidence}},id,{autoPan:true,importSetup:input.setup});
     }finally{pendingImports.delete(projectId);}
@@ -2273,6 +2283,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       Object.values(state.assets).map(asset => [asset.id, asset.relPath]).sort(([a], [b]) => a.localeCompare(b))]);
   },
 
+  refreshStagedRender: reason => {
+    if(!get().stagedScreen)return;
+    set({stagedRenderRevision:get().stagedRenderRevision+1,stagedRenderQuality:null,stagedValidationEvidence:null,stagedPreview:null,
+      stagedAssetFiles:null,stagedProjectAssetAudit:null,stagedAdoptionAttempt:get().stagedAdoptionAttempt+1,
+      stagedAdoptionStatus:reason?'failed':null,stagedAdoptionError:reason??null});
+    get().recheckStagedAssetFiles();
+  },
   isStagedTaskCurrent: () => isStagedTaskCurrent(get()),
   getStagedAssetIssues: () => candidateBrokenAssetReferences(get()),
   getStagedDeliveryReport: () => stagedDeliveryReport(get()),
@@ -2521,6 +2538,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         get().recordStagedValidationEvidence();
         throw new Error(issues[0].message);
       }
+      const resourceIssue=renderResourceIssue(state.stagedRenderQuality?.report.resourceFiles,resources.resourceFiles);
+      if(resourceIssue){get().refreshStagedRender(resourceIssue);throw Error(resourceIssue);}
       // A font-only candidate may finish rendering before the background project
       // audit. Archive the files actually read here instead of losing that proof.
       const audit=get().stagedProjectAssetAudit;
@@ -2557,6 +2576,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         set({stagedAssetFiles:{key,status:'blocked',issues:finalReferenceIssues},stagedProjectAssetAudit:null});
         get().recordStagedValidationEvidence();throw new Error(finalReferenceIssues[0].message);
       }
+      const finalResourceIssue=renderResourceIssue(state.stagedRenderQuality?.report.resourceFiles,finalResources.resourceFiles);
+      if(finalResourceIssue){get().refreshStagedRender(finalResourceIssue);throw Error(finalResourceIssue);}
       if (keepBoth) {
         get().addScreen({ name: resultName, htmlContent: result.htmlContent, scopedCss: result.scopedCss,
           metadata: { ...result.metadata, basedOnScreenId: target.id } }, resultId,

@@ -1,3 +1,4 @@
+import {observeRequestActivity,type RequestActivity} from './requestActivity';
 import { mobileNavigationPrompt, normalizeMobileNavigation } from '../../utils/mobileNavigation';
 import type { ProjectDocumentEntry } from '../../types/projectDocument';
 import type { AIEngineCore, StreamTextOptions } from './engine/core/types';
@@ -18,6 +19,7 @@ import type {RuleFeature} from './designKnowledge/types';
 import {targetRuleFeatures,pageRuleFeatures} from './designKnowledge/targetFeatures';
 import {selectTokenGuidance,renderTokenGuidance} from './designKnowledge/tokenWindow';
 import {makeGuidancePacket,withGuidanceReceipts,guidancePacketIssue} from './designKnowledge/receipt';
+import {taskProvenanceIssue} from './taskProvenance';
 
 export interface ModificationSuggestion {
   id: string; title: string; reason: string; change: string;
@@ -111,16 +113,18 @@ function validateAnalysis(raw: unknown): asserts raw is RawAnalysis {
 function analysisFingerprint(analysis: ModificationAnalysis): string {
   return contentFingerprint(JSON.stringify([analysis.summary, analysis.items, analysis.elementCount]));
 }
-function analysisSourceValid(analysis:ModificationAnalysis):boolean {
+function analysisSourceValid(analysis:ModificationAnalysis,historical=false):boolean {
  const c=analysis.workflowContract,e=analysis.evidence;
- return c===undefined||Boolean(c&&e&&c.taskId===e.taskId&&c.target?.id===e.targetId&&c.target.baselineFingerprint===e.baselineFingerprint&&resolveWorkflowValidation(c,'analysis').ok);
+ return c===undefined||Boolean(c&&e&&c.taskId===e.taskId&&c.target?.id===e.targetId&&c.target.baselineFingerprint===e.baselineFingerprint&&
+  (historical?c.workflowId==='review-page-modification'&&!taskProvenanceIssue(c)&&
+    (c.validationPlan===undefined||JSON.stringify(c.validationPlan)===JSON.stringify(e.workflow.plan)):resolveWorkflowValidation(c,'analysis').ok));
 }
 
 /** Tolerant history reader: malformed diagnostics must not crash the editor or grant authorization. */
 export function isModificationReviewReceipt(value: unknown): value is ModificationReviewReceipt {
   try {
     const receipt = value as ModificationReviewReceipt | null, analysis = receipt?.analysis, evidence = analysis?.evidence;
-    return Boolean(analysis && analysisSourceValid(analysis) && typeof analysis.summary === 'string' && Array.isArray(analysis.items) && analysis.items.length <= 8 &&
+    return Boolean(analysis && analysisSourceValid(analysis,true) && typeof analysis.summary === 'string' && Array.isArray(analysis.items) && analysis.items.length <= 8 &&
       analysis.items.every(item => item && ['id','title','reason','change'].every(key => typeof item[key as keyof ModificationSuggestion] === 'string')) &&
       evidence?.version === 1 && ['taskId','targetId','baselineFingerprint','analysisFingerprint'].every(key => typeof evidence[key as keyof ModificationAnalysisEvidence] === 'string') &&
       evidence.analysisFingerprint === analysisFingerprint(analysis) && [1,2].includes(evidence.attempts) && isWorkflowValidationReport(evidence.workflow) &&
@@ -149,7 +153,11 @@ export function buildModificationReviewReceipt(analysis: ModificationAnalysis, s
   return structuredClone({ analysis: analysis as ModificationAnalysis & { evidence: ModificationAnalysisEvidence }, selectedIds: selected, extra: extra.trim() });
 }
 
-export async function analyzeScreenModification(core: AIEngineCore, options: {
+export async function analyzeScreenModification(core:AIEngineCore,options:Parameters<typeof analyzeScreenModificationTask>[1]):Promise<ModificationAnalysis>{
+ const observer=options.onActivity?observeRequestActivity(core,options.onActivity,()=>!options.signal?.aborted&&options.isCurrent?.()!==false):undefined;
+ try{return await analyzeScreenModificationTask(observer?.core??core,options);}finally{observer?.stop();}
+}
+async function analyzeScreenModificationTask(core: AIEngineCore, options: {
   provider: StreamTextOptions['provider']; model: string; signal?: AbortSignal;
   html: string; name: string; request: string; designSystem: DesignSystem;
   mode: 'light' | 'dark'; elementNid?: string | null; imageUrl?: string;
@@ -161,6 +169,7 @@ export async function analyzeScreenModification(core: AIEngineCore, options: {
   isCurrent?: () => boolean;
   contextualGuidance?:{features?:RuleFeature[]};
   onContract?:(contract:DesignTaskContract)=>void;
+  onActivity?:(activity:RequestActivity)=>void;
 }): Promise<ModificationAnalysis> {
   const signal = options.signal, isCurrent = options.isCurrent;
   const guard = () => {
@@ -169,7 +178,7 @@ export async function analyzeScreenModification(core: AIEngineCore, options: {
   };
   guard();
   // Freeze data independently of AbortSignal/functions and of caller-owned mutable objects.
-  const { signal: _signal, isCurrent: _current,onContract, ...input } = options;
+  const { signal: _signal, isCurrent: _current,onContract,onActivity, ...input } = options;
   options = { ...structuredClone(input), signal };
   const contract = options.workflowContract ?? buildDesignTaskContract({ intent: 'modify_screen', reviewRequired: true,
     request: options.request, target: { id: 'analysis-target', name: options.name, htmlContent: options.html },

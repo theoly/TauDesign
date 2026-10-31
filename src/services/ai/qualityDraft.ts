@@ -33,18 +33,19 @@ export interface FailedPageDraft {
 }
 export interface DraftLabel { nid: string; text: string }
 export interface DraftRepairTarget { nid: string; fragment: string; originalLabel: string }
-export function draftGuidanceIssue(draft:FailedPageDraft):string|undefined {
+export function draftGuidanceIssue(draft:FailedPageDraft,purpose:import('./designKnowledge/safety').RuleEvidencePurpose='execute'):string|undefined {
   if(draft.pageTaskSource!==undefined){
     const source=draft.pageTaskSource;
     if(!source||!source.pageTaskPlan||source.taskId!==draft.sourceTaskId)return '草稿缺少匹配的原业务规划来源。';
     const provenance=taskProvenanceIssue(source);if(provenance)return provenance;
+    const guidance=guidancePacketIssue(source,true,purpose);if(guidance)return guidance;
     const issue=pageTaskPlanIssue(source);if(issue)return issue;
     if(source.pageTaskPlan.plan.questions.length)return '草稿业务规划仍有待确认问题。';
   }
   if(draft.guidanceSource===undefined)return;
   const source=draft.guidanceSource;
   if(!source||!source.designGuidance||source.taskId!==draft.sourceTaskId)return '草稿缺少匹配的原始规则来源。';
-  return taskProvenanceIssue(source)??guidancePacketIssue(source);
+  return taskProvenanceIssue(source)??guidancePacketIssue(source,true,purpose);
 }
 const repairCodes = new Set(['action_label_missing', 'action_label_lost']);
 

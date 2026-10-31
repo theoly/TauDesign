@@ -2,12 +2,15 @@ import type { QualityFinding } from '../services/ai/generationQuality';
 import { hasAccessibleActionName } from '../services/ai/actionIntegrity';
 import { contrastRatio } from './colorHarmony';
 import { inspectText } from './textNode';
+import type {RenderResourceFile} from '../services/storage/renderResourceSnapshot';
 
 export interface RenderedQualityReport {
   status: 'pending' | 'complete' | 'incomplete' | 'unavailable';
   findings: QualityFinding[];
   inspected: number;
   reason?: string;
+  /** Local file bytes used by this rendering, never their binary content. */
+  resourceFiles?:RenderResourceFile[];
 }
 const tolerance = 2;
 type Color = [number, number, number, number];

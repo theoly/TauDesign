@@ -141,3 +141,28 @@ for(const mode of ['element','local','region'] as const)test(`${mode} rejects a 
  expect(result.status).toBe('failed');expect(result.executionRecord.errorMessage).toContain('输出上限');expect('html' in result).toBe(false);expect(calls).toBe(1);
  expect(useProjectStore.getState().screens).toBe(before);expect(useHistoryStore.getState().past.length).toBe(past);
 });
+
+test('deterministic structured edits report zero actual calls without cloning their observer',async()=>{
+ const events:import('../src/services/ai/requestActivity').RequestActivity[]=[];let calls=0;
+ const result=await executeStructuredEdit(coreWith(async()=>{calls++;throw Error('unexpected model');}),{...base(),onActivity:a=>events.push(a)});
+ expect(result.status).toBe('ready');expect(calls).toBe(0);expect(events.at(-1)).toMatchObject({status:'idle',requests:0,active:0});
+});
+test('finite element JSON waits and returns one actual call with its original output cap',async()=>{
+ const events:import('../src/services/ai/requestActivity').RequestActivity[]=[],options=base();options.mode='element';options.elementNid='region';options.binding=binding;
+ options.contract=buildDesignTaskContract({intent:'modify_screen',request:options.request,target:{id:'a',name:'页面',htmlContent:source},elementNid:'region',deviceProfile:'mobile',frameWidth:390});
+ let resolve!:(value:unknown)=>void,cap=0;
+ const pending=executeStructuredEdit(coreWith(async(_schema,request)=>{cap=request.maxTokens;return new Promise(r=>resolve=r);}),{...options,onActivity:a=>events.push(a)});
+ await new Promise(r=>setTimeout(r,0));expect(events.at(-1)).toMatchObject({requests:1,active:1,status:'waiting',jsonChars:0});
+ resolve({requiresPageRewrite:false,operations:[{nid:'title',type:'add_classes',value:'font-bold'}]});
+ const result=await pending;expect(result.status).toBe('ready');expect(cap).toBe(2048);expect(result.taskBudget?.requests).toBe(1);
+ expect(events.at(-1)).toMatchObject({requests:1,active:0,status:'returned'});expect(events.at(-1)!.jsonChars).toBeGreaterThan(0);
+});
+for(const change of ['stale','cancelled'] as const)test(`structured ${change} result cannot publish late completion or return candidate HTML`,async()=>{
+ const events:import('../src/services/ai/requestActivity').RequestActivity[]=[],options=base(),controller=new AbortController();let current=true,resolve!:(value:unknown)=>void;
+ options.local!.supplement=true;options.binding=binding;
+ const pending=executeStructuredEdit(coreWith(async()=>new Promise(r=>resolve=r)),{...options,signal:controller.signal,isCurrent:()=>current,onActivity:a=>events.push(a)});
+ await new Promise(r=>setTimeout(r,0));const count=events.length;
+ if(change==='stale')current=false;else controller.abort();
+ resolve({requiresPageRewrite:false,operations:[]});const result=await pending;
+ expect(result.status).toBe(change);expect('html'in result).toBe(false);expect(events).toHaveLength(count);
+});

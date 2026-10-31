@@ -1,3 +1,4 @@
+import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import {useProjectStore} from '../src/stores/useProjectStore';
 import {useHistoryStore} from '../src/stores/useHistoryStore';
@@ -18,7 +19,7 @@ import {createProjectStorage,LocalStorageStorage} from '../src/services/storage/
 import {warmCoralTheme} from '../src/utils/themePresets';
 import type {HtmlImportMode} from '../src/types/htmlImport';
 const originalInspect=PageRenderCheck.inspect;
-beforeEach(()=>{PageRenderCheck.inspect=async()=>({status:'complete',findings:[],inspected:4});});
+beforeEach(()=>{PageRenderCheck.inspect=(request,storage)=>resourceRenderReport(request,storage);});
 afterEach(()=>{PageRenderCheck.inspect=originalInspect;});
 const markup='<html><head><style>.original{padding:17px;background:#ff9800;color:#222;border-radius:13px}</style></head><body><main class="original"><h1>原始标题</h1><button>保存</button></main></body></html>';
 function request(mode:HtmlImportMode='preserve',setup:any={},source=markup){
@@ -73,7 +74,7 @@ function withResources(kind:'image'|'font'){
 }
 for(const kind of ['image','font'] as const)test(`${kind} is checked from memory before writing, then physically rechecked and recorded`,async()=>{
  const r=withResources(kind),storage=createProjectStorage(useProjectStore.getState().id),path=kind==='image'?imagePath:fontPath;
- PageRenderCheck.inspect=async(_request,memory)=>{expect(await storage.exists(path)).toBe(false);expect(await memory.readBinary(path)).toBe('dGVzdA==');return {status:'complete',findings:[],inspected:4};};
+ PageRenderCheck.inspect=async(request,memory)=>{expect(await storage.exists(path)).toBe(false);expect(await memory.readBinary(path)).toBe('dGVzdA==');return resourceRenderReport(request,memory);};
  const id=await useProjectStore.getState().importHtmlScreen(r.screen,r.setup,r.application);
  expect(await storage.readBinary(path)).toBe('dGVzdA==');expect(useProjectStore.getState().screens[id].metadata!.creationEvidence!.files.map(f=>f.relPath)).toContain(path);
  expect(JSON.stringify(useProjectStore.getState().screens[id].metadata)).not.toContain('dGVzdA==');

@@ -7,6 +7,7 @@ import { compileTokensToCss } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
 import { resolveProjectViewport } from '../../utils/referenceDevice';
 import { observeRenderedQuality, type RenderedQualityReport } from '../../utils/renderedQuality';
+import {createRenderResourceSnapshot,type RenderResourceFile} from '../storage/renderResourceSnapshot';
 
 export interface PageRenderRequest {
   screen: Screen; designSystem: DesignSystem; settings: ProjectSettings;
@@ -23,10 +24,11 @@ export const PageRenderCheck = {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let abort = () => {};
     let stopped = false;
+    let resourceFiles:RenderResourceFile[]|undefined;
     return new Promise<RenderedQualityReport>(resolve => {
       const finish = (report: RenderedQualityReport) => {
         if (stopped) return;stopped = true;
-        clearTimeout(timer);deps.signal?.removeEventListener('abort', abort);dispose();iframe?.remove();resolve(report);
+        clearTimeout(timer);deps.signal?.removeEventListener('abort', abort);dispose();iframe?.remove();resolve({...report,...(resourceFiles?{resourceFiles}:{})});
       };
       abort = () => finish({status:'unavailable',findings:[],inspected:0,reason:'渲染检查已取消。'});
       if (deps.signal?.aborted) {abort();return;}
@@ -41,8 +43,10 @@ export const PageRenderCheck = {
           const css = Object.values(request.overrides).map(ov => `[data-nid="${ov.nid}"] { ${Object.entries(ov.declarations)
             .filter(([,value]) => value !== '' && value !== null && value !== undefined)
             .map(([key,value]) => `${key}: ${value.replace(/\s*!important\s*$/i, '')} !important;`).join(' ')} }`).join('\n');
-          const resources = await resolveImportedResources(request.screen.htmlContent, request.screen.scopedCss, storage, allowed);
-          const overrides = await resolveImportedResources('<body></body>', css, storage, allowed);
+          const snapshot=createRenderResourceSnapshot(storage);
+          const resources = await resolveImportedResources(request.screen.htmlContent, request.screen.scopedCss, snapshot.storage, allowed);
+          const overrides = await resolveImportedResources('<body></body>', css, snapshot.storage, allowed);
+          resourceFiles=await snapshot.files();
           if (stopped) return;
           const viewport = resolveProjectViewport(request.settings);
           if (viewport.width * viewport.height > 6_000_000) throw new Error('参考设备尺寸超出检查上限。');

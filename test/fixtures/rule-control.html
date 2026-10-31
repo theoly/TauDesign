@@ -15,7 +15,7 @@ import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
 import {useAIConfigStore,defaultProviders,defaultBindings} from '/src/stores/useAIConfigStore.ts';
 import {chatPageTaskPlan} from '/test/fixtures/pageTaskPlan.ts';
 import {techBlueTheme} from '/src/utils/themePresets.ts';
-const query=new URLSearchParams(location.search),device=query.get('device')==='pc'?'pc':'mobile',retry=query.has('retry'),hold=query.has('hold'),repair=query.has('repair'),draft=query.has('draft');
+const query=new URLSearchParams(location.search),device=query.get('device')==='pc'?'pc':'mobile',retry=query.has('retry'),hold=query.has('hold'),repair=query.has('repair'),draft=query.has('draft'),activityMode=query.has('activity');
 const store=useProjectStore.getState();store.initNewProject({name:'规则根入口验证',deviceProfile:device,designSystem:techBlueTheme,createSpecimen:false});
 const original='<main data-nid="root0001" class="'+(device==='pc'?'container-max p-4':'p-4')+'"><section data-nid="region01"><h2 data-nid="title001">资料</h2><p data-nid="copy0001">'+('长正文需要完整阅读。'.repeat(10))+'</p><button data-nid="button01" class="btn btn-primary">查看详情</button></section><aside data-nid="outside1">'+Array.from({length:24},(_,i)=>`<p data-nid="keep${i}">保留外部${i}</p>`).join('')+'</aside></main>';
 store.addScreen({name:'资料页',htmlContent:original},'page');
@@ -24,8 +24,13 @@ useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'FIXT
 const state={device,original,requests:[],state:()=>useProjectStore.getState(),config:()=>useAIConfigStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length};window.ruleControlFixture=state;
 const transport=new MockTransport();let analyses=0;
 const core=new DefaultAIEngineCore({id:'local-root-control',stream:(request,event)=>{
- const body=request.body,schema=body.response_format?.json_schema?.schema,stage=schema?.properties.features?'plan':schema?.properties.summary?'analysis':schema?.properties.requiresPageRewrite?'finite':schema?.properties.operations?'repair':'html';
+ const body=request.body,schema=body.response_format?.json_schema?.schema,stage=activityMode?'question':schema?.properties.features?'plan':schema?.properties.summary?'analysis':schema?.properties.requiresPageRewrite?'finite':schema?.properties.operations?'repair':'html';
  state.requests.push({stage,maxTokens:body.max_tokens,hasRule:body.messages[0].content.includes('DESIGN REFERENCES')||body.messages[0].content.includes('[LY-04@1]')});
+ if(activityMode){
+  let resolve;const promise=new Promise(done=>resolve=done);
+  state.releaseActivity=(text='<think>比较布局</think>这是布局解释。')=>{event({type:'Delta',text});event({type:'Usage',input_tokens:5,output_tokens:9});event({type:'Done',finish_reason:'stop'});resolve();};
+  return {promise,abort(){state.activityAborts=(state.activityAborts??0)+1;resolve();}};
+ }
  if(stage==='plan')transport.queueResponse(JSON.stringify(chatPageTaskPlan),10);
  else if(stage==='analysis'){
   analyses++;transport.queueResponse(retry&&analyses===1?'not JSON':JSON.stringify({summary:'调整长正文和主操作层级',items:[{title:'主按钮文字层级',reason:'主操作文字层级不足',change:'主按钮文字加粗',scope:'local',operations:[{nid:'button01',type:'add_classes',value:'font-semibold'}]}]}),hold?1000:10);
@@ -56,6 +61,8 @@ state.showCreation=()=>{
 state.preview=()=>{
  const s=state.state(),c=s.stagedScreen,host=document.createElement('div'),inner=document.createElement('div'),scale=device==='pc'?0.5:1;
  Object.assign(host.style,{position:'absolute',left:'400px',top:'32px',width:(s.settings.frameWidth*scale)+'px',height:'1000px'});Object.assign(inner.style,{position:'relative',transform:`scale(${scale})`,transformOrigin:'top left'});host.append(inner);document.body.append(host);
- const root=ReactDOM.createRoot(inner);state.hidePreview=()=>{root.unmount();host.remove();};root.render(React.createElement(ScreenFrame,{screen:{...s.screens.page,htmlContent:c.newHtml,position:{x:0,y:32}},lodLevel:2,isStaged:true,overrideSourceScreenId:'page',renderQualityKey:s.getStagedRenderContextKey(),onRenderQuality:(_id,key,report)=>useProjectStore.getState().setStagedRenderQuality(key,report)}));
+ const reportQuality=(_id,key,report)=>useProjectStore.getState().setStagedRenderQuality(key,report);
+ const Preview=()=>{const view=useProjectStore();if(!view.stagedScreen)return null;return React.createElement(ScreenFrame,{screen:{...view.screens.page,htmlContent:view.stagedScreen.newHtml,position:{x:0,y:32}},lodLevel:2,isStaged:true,overrideSourceScreenId:'page',renderQualityKey:view.getStagedRenderContextKey(),onRenderQuality:reportQuality});};
+ const root=ReactDOM.createRoot(inner);state.hidePreview=()=>{root.unmount();host.remove();};root.render(React.createElement(Preview));
 };
 </script></body></html>

@@ -48,7 +48,7 @@ export function readDesignGuidanceHistory(value:unknown,request:string):DesignGu
   if(c.request!==request&&!(ref&&ref.nid===c.elementNid&&(!ref.screenName||ref.screenName===c.target?.name)&&extractCleanUserPrompt(request)===c.request))return;
   if(taskProvenanceIssue(c,false))return;
   const projected=projectContract(c);
-  if(guidancePacketIssue(projected,false)||pageTaskPlanIssue(projected))return;
+  if(guidancePacketIssue(projected,false,'history')||pageTaskPlanIssue(projected))return;
   return structuredClone({version:1,contract:projected});
  }catch{return;}
 }

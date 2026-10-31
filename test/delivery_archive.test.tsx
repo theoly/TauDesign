@@ -1,3 +1,4 @@
+import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -144,7 +145,7 @@ describe('durable delivery archive', () => {
   for(const mode of ['replace','force-replace','keep-both'] as const)test(`resource removed after archive prepare blocks ${mode} without page/history changes`,async()=>{
     const state=useProjectStore.getState(),path='assets/images/final-check.png',storage=createProjectStorage(state.id);
     await storage.writeBinary(path,'dGVzdA==');state.addAsset({id:'final-photo',name:'最终资源',type:'image',mimeType:'image/png',source:'upload',relPath:path,refCount:1});
-    state.stageScreenChange('target',`${after}<img src="${path}" alt="最终资源">`,'最终候选');ready();await pause();
+    state.stageScreenChange('target',`${after}<img src="${path}" alt="最终资源">`,'最终候选');await stageResourceReport();await pause();
     const historyCount=useHistoryStore.getState().past.length,checkpoints=useHistoryStore.getState().checkpoints.length,candidate=useProjectStore.getState().stagedScreen;
     const originalPrepare=DeliveryRepository.prototype.prepare;let recordId='',screenId='';
     const prepare=spyOn(DeliveryRepository.prototype,'prepare').mockImplementation(async function(record){await originalPrepare.call(this,record);recordId=record.id;screenId=record.after.id;await storage.remove(path);});
@@ -168,7 +169,7 @@ describe('durable delivery archive', () => {
       return actualRead.call(this,path);
     });
     try{
-      state.stageScreenChange('target',after,'字体候选');ready();await started;
+      state.stageScreenChange('target',after,'字体候选');await started;await stageResourceReport();
       expect(useProjectStore.getState().stagedProjectAssetAudit).toBeNull();expect(await state.adoptStagedChange()).toBe(true);
       const record=(await repository().listForScreen('target')).records[0];
       expect(record.candidate.validationEvidence?.projectAssets?.files.map(f=>f.relPath)).toContain(font);

@@ -125,3 +125,17 @@ for(const custom of [false,true])test(`移动导航分析操作域与实际执�
   expect(result.elementCount).toBe(custom?21:19);
   expect(buildModificationReviewReceipt(result,['suggestion-1'],'',{...target,htmlContent:input.html}).analysis.evidence.targetId).toBe('page');
 });
+
+test('analysis JSON observations preserve the corrective request count and exclude raw messages',async()=>{
+ const events:import('../src/services/ai/requestActivity').RequestActivity[]=[],input=options();
+ const f=core(call=>call===1?{invalid:'not an analysis'}:{summary:'页面需要优化',items:[]});
+ const analysis=await analyzeScreenModification(f.engine,{...input,onActivity:a=>events.push(a)});
+ expect(analysis.items).toEqual([]);expect(f.calls()).toBe(2);expect(events.at(-1)).toMatchObject({requests:2,active:0,status:'returned'});
+ expect(events.at(-1)!.jsonChars).toBeGreaterThan(0);expect(JSON.stringify(events)).not.toContain(input.html);
+});
+test('analysis observer does not survive cancellation or emit a late successful state',async()=>{
+ const events:import('../src/services/ai/requestActivity').RequestActivity[]=[],controller=new AbortController();let resolve!:(value:unknown)=>void;
+ const f=core(()=>new Promise(r=>resolve=r)),pending=analyzeScreenModification(f.engine,{...options(),signal:controller.signal,onActivity:a=>events.push(a)});
+ await new Promise(r=>setTimeout(r,0));const count=events.length;controller.abort();resolve({summary:'迟到',items:[]});
+ await expect(pending).rejects.toThrow('取消');expect(events).toHaveLength(count);expect(f.calls()).toBe(1);
+});

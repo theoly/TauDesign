@@ -27,7 +27,7 @@ function valid(value: SavedQualityDraft, projectId: string): boolean {
     && ['targetScreenId','styleReferenceScreenId','elementNid'].every(key=>(value.decision as unknown as Record<string,unknown>)[key]===null||typeof (value.decision as unknown as Record<string,unknown>)[key]==='string')
     && typeof value.draft?.html==='string' && value.draft.html.length<=500_000 && value.draft.fingerprint===contentFingerprint(value.draft.html)
     && (!value.draft.pageTaskSource||value.draft.pageTaskSource.request===value.request)
-    && !draftGuidanceIssue(value.draft) && (!value.draft.guidanceSource||value.draft.guidanceSource.request===value.request)
+    && !draftGuidanceIssue(value.draft,'history') && (!value.draft.guidanceSource||value.draft.guidanceSource.request===value.request)
     && typeof value.draft.contextKey==='string' && typeof value.draft.bindingKey==='string' && isQualityReport(value.draft.quality)
     && (value.draft.title===undefined||typeof value.draft.title==='string')
     && (value.suggestions===undefined||(Array.isArray(value.suggestions)&&value.suggestions.length<=8&&value.suggestions.every(l=>l&&typeof l.nid==='string'&&typeof l.text==='string'&&l.text.length<=160)))
@@ -67,7 +67,7 @@ export function claimDraftSuggestion(value:SavedQualityDraft,folderPath?:string)
     const storage=createProjectStorage(value.projectId,folderPath),path=rel(value.id),raw=await storage.readText(path);
     if(!raw)throw Error('草稿尚未保存，不能请求AI建议。');
     const current=JSON.parse(raw) as SavedQualityDraft;
-    if(!valid(current,value.projectId)||current.status!=='blocked'||current.aiAttempted)return false;
+    if(!valid(current,value.projectId)||draftGuidanceIssue(current.draft)||current.status!=='blocked'||current.aiAttempted)return false;
     current.aiAttempted=true;await storage.writeTextAtomic(path,JSON.stringify(current));return true;
   });
 }
