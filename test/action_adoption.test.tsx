@@ -285,7 +285,7 @@ describe('候选采纳底线', () => {
     expect(await store.adoptStagedChange()).toBe(false);expect(await store.forceAdoptStagedChange()).toBe(false);expect(await store.keepBothScreens()).toBe(false);
     expect(useProjectStore.getState().screens.action.htmlContent).toBe(original);
   });
-  test('通过报告不能覆盖变化后的主题；迟到旧报告也被忽略', async () => {
+  test('手动覆盖变化使原候选持续失效，重新发起任务并复验后才可采纳', async () => {
     const store = useProjectStore.getState();
     store.stageScreenChange('action', candidate, '候选', '缩短按钮文字');
     expect(useProjectStore.getState().stagedScreen?.modificationRequest).toBe('缩短按钮文字');
@@ -294,6 +294,12 @@ describe('候选采纳底线', () => {
     store.setStagedRenderQuality(old, clean);
     await store.adoptStagedChange();
     expect(useProjectStore.getState().stagedScreen).not.toBeNull();
+    store.setStagedRenderQuality(key(), clean);
+    await store.adoptStagedChange();
+    expect(useProjectStore.getState().stagedScreen).not.toBeNull();
+    expect(useProjectStore.getState().screens.action.htmlContent).toBe(original);
+    store.stageScreenChange('action', candidate, '候选', '缩短按钮文字');
+    expect(useProjectStore.getState().stagedRenderQuality).toBeNull();
     store.setStagedRenderQuality(key(), clean);
     await store.adoptStagedChange();
     expect(useProjectStore.getState().stagedScreen).toBeNull();

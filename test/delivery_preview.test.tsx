@@ -99,6 +99,8 @@ describe('delivery first-screen previews', () => {
   test('keep-both copies L4 in the page History transaction and retains the archived image after undo', async () => {
     const store = useProjectStore.getState();
     useProjectStore.setState({overrides:{'target:button01':{nid:'button01',declarations:{color:'var(--color-primary)'}}}});
+    // Freeze a new task after changing inputs; a recheck alone cannot renew the old authorization.
+    store.stageScreenChange('target', '<main data-nid="root0001"><button data-nid="button01">确认提交</button></main>', '新版', '修改按钮文案');
     store.setStagedRenderQuality(store.getStagedRenderContextKey(),{status:'complete',findings:[],inspected:2});
     const capture = mockCapture();
     try { expect(await store.keepBothScreens()).toBe(true); } finally { capture.mockRestore(); }

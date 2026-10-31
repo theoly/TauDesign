@@ -60,6 +60,8 @@ Tasks retain their selected rules, target baseline and request receipts. Candida
 
 Supported invisible-label or zero-size control failures can receive one restricted style repair and a full recheck. Automatic repair shares the generation task's remaining quota; a user-triggered candidate repair is a separate single request. Confirmed draft-label repair changes only authorized text and records that it made no model call. Failed, cancelled or inconsistent evidence does not unlock adoption.
 
+New candidates freeze their task inputs and authorized changes even when automatic design guidance is disabled. Changes to the baseline, project documents, theme or manual overrides require a new task; another passing render cannot renew that authorization. Checker revision, base CSS and browser rendering identity are tracked separately, so changed check dependencies require fresh render evidence. Moving a frame does not invalidate the task. The [invalidation checklist](./doc/ui-design-workflow/invalidation.md) records the implemented subset and remaining work, including trusted rule withdrawal and the complete browser acceptance matrix.
+
 Conversation history uses append-only monthly JSONL files. Readers isolate malformed rows, recover missing or damaged indexes from valid month files and coordinate concurrent writes to the same project. Desktop readers also isolate invalid UTF-8 rows; these safeguards do not replace project backups.
 
 ### Large pages and generation limits
@@ -206,7 +208,9 @@ The [Desktop release workflow](./.github/workflows/release.yml) supports version
 - Stable DOM identifiers, manual override layers and History protect local edits.
 - The current refactor has unit, browser and macOS native evidence. Windows/Linux native acceptance remains a recorded gap; configured build targets do not replace platform testing.
 
-### Latest recorded verification
+### Recorded verification
+
+The candidate-invalidation update on **2026-10-31** passed **2,588 frontend tests** (0 failures), type checking and the production build. This includes eight new input/authorization/checker tests. Browser and native checks were not rerun for this update; their earlier baseline is recorded below.
 
 The following checks were recorded on **2026-10-31** for application code in [acd3ea5](https://github.com/theoly/TauDesign/commit/acd3ea53c46e8fa1053a401ce3a25014434d4d44):
 

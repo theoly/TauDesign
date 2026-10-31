@@ -19,6 +19,8 @@ export interface StagedCandidateData {
   baselineFingerprint?: string;
   projectFingerprint?: string;
   designOriginFingerprint?: string;
+  /** Frozen input/authorization identity for newly staged contracts; absent on older candidates. */
+  taskBindingFingerprint?:string;
   /** Runtime marker; restored candidates require fresh project-context checks. */
   restoredFromDisk?: boolean;
   modificationRequest?: string;

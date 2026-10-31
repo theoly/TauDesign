@@ -1,4 +1,6 @@
 import {draftExecutionIssue} from '../services/ai/draftExecutionSource';
+import {taskInputBinding,renderEvidenceIdentity} from '../services/ai/evidenceIdentity';
+import {isTaskContractShape} from '../services/ai/taskContractShape';
 import {hasTemplateContract,compileComponentTemplate} from '../utils/componentTemplate';
 import {candidateRepairEligibility,repairCandidate} from '../services/ai/candidateRepair';
 import {isPageRepairRecord} from '../services/ai/pageRepairRecord';
@@ -530,10 +532,11 @@ const initialScreen2: Screen = {
 function isStagedTaskCurrent(state: ProjectState): boolean {
   const staged = state.stagedScreen;
   const contract = staged?.workflowContract;
+  if(staged&&Object.hasOwn(staged,'taskBindingFingerprint')&&(!isTaskContractShape(contract)||typeof staged.taskBindingFingerprint!=='string'||staged.taskBindingFingerprint!==taskInputBinding(contract)))return false;
   if(draftExecutionIssue(staged?.executionRecord,staged?.newHtml))return false;
   if(staged?.repair&&(!isPageRepairRecord(staged.repair)||(staged.repair.guidance&&(!contract||repairGuidanceIssue(staged.repair.guidance,contract,staged.repair.status==='repaired')))))return false;
   if (staged?.baselineFingerprint && staged.baselineFingerprint !== contentFingerprint(state.screens[staged.targetScreenId]?.htmlContent ?? '')) return false;
-  if (staged?.restoredFromDisk && staged.projectFingerprint && staged.projectFingerprint !== knowledgeFingerprint(state)) return false;
+  if (staged?.projectFingerprint && staged.projectFingerprint !== knowledgeFingerprint(state)) return false;
   if (staged?.designOriginFingerprint && staged.designOriginFingerprint !== contentFingerprint(JSON.stringify([
     state.designSystemOrigin?.kind, state.designSystemOrigin?.sourceId, state.designSystemOrigin?.sourceFingerprint,
     state.designSystemOrigin?.tokenVersion, state.designSystemOrigin?.tokenFingerprint]))) return false;
@@ -2264,7 +2267,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!staged) return '';
     const target = state.screens[staged.targetScreenId];
     const renderSubject = [staged.targetScreenId, staged.newHtml, staged.navigationTitle, staged.modificationRequest];
-    return JSON.stringify([state.id, state.stagedRenderRevision, renderSubject, state.settings,
+    return JSON.stringify([state.id, state.stagedRenderRevision, renderSubject, state.settings,renderEvidenceIdentity(state.settings.deviceProfile),
+      isTaskContractShape(staged.workflowContract)?taskInputBinding(staged.workflowContract):staged.workflowContract===undefined?'legacy':'invalid-task',
       state.designSystem.tokens, state.overrides, target?.htmlContent, target?.scopedCss, target?.metadata,
       Object.values(state.assets).map(asset => [asset.id, asset.relPath]).sort(([a], [b]) => a.localeCompare(b))]);
   },
@@ -2439,6 +2443,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       designOriginFingerprint: contentFingerprint(JSON.stringify([state.designSystemOrigin?.kind, state.designSystemOrigin?.sourceId,
         state.designSystemOrigin?.sourceFingerprint, state.designSystemOrigin?.tokenVersion, state.designSystemOrigin?.tokenFingerprint])),
       modificationRequest, navigationTitle: normalized.title, workflowContract: taskSnapshot,
+      ...(isTaskContractShape(taskSnapshot)?{taskBindingFingerprint:taskInputBinding(taskSnapshot)}:{}),
       executionRecord: executionRecord ? { ...structuredClone(executionRecord),
         ...(executionRecord.completeHtml ? { completeHtml: normalized.html } : {}) } : undefined };
     set({
