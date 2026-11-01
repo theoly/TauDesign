@@ -1041,6 +1041,7 @@ export function useAIEngineChat() {
 
       let toolAction: 'created' | 'modified' | 'patched' | undefined;
       if (toolCall) {
+        generationBudget.assertActive();
         if(toolCall.tool==='create_screen')showPhase('rendering');
         toolAction =
           toolCall.tool === 'create_screen'
@@ -1052,7 +1053,7 @@ export function useAIEngineChat() {
         if(toolCall.tool==='create_screen'&&output.executionRecord?.source==='model')repairActivity=observeRequestActivity(engineCoreRef.current,reportActivity,progressCurrent,latestActivity);
         const toolResult = await CanvasToolExecutor.executeAsync(toolCall.tool === 'modify_screen' ? { ...toolCall, params: { ...toolCall.params, modificationRequest: textToSend,
           workflowContract: output.workflowContract,executionRecord:output.executionRecord } } : toolCall.tool==='create_screen'?{...toolCall,params:{...toolCall.params,workflowContract:output.workflowContract,executionRecord:output.executionRecord}}:toolCall,
-          {signal:controller.signal,isCurrent:()=>pageCreationContext(useProjectStore.getState())===creationContext&&bindingCurrent(),
+          {signal:controller.signal,taskBudget:generationBudget,isCurrent:()=>pageCreationContext(useProjectStore.getState())===creationContext&&bindingCurrent(),
             repair:toolCall.tool==='create_screen'&&output.executionRecord?.source==='model'?{core:repairActivity!.core,taskBudget:generationBudget,provider:activeRole.provider,model:activeRole.modelId,onPhase:phase=>{if(!controller.signal.aborted&&pageCreationContext(useProjectStore.getState())===creationContext)setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,text:phase==='repairing'?'检查发现控件渲染问题，正在尝试一次受控样式修复…':'修复指令已执行，正在重新检查全部门禁…'}:m));}}:undefined});
         if(toolResult.repair?.usage){
           const usage=toolResult.repair.usage;turnUsage={promptTokens:turnUsage.promptTokens+usage.inputTokens,completionTokens:turnUsage.completionTokens+usage.outputTokens,totalTokens:turnUsage.totalTokens+usage.inputTokens+usage.outputTokens};
@@ -1307,8 +1308,10 @@ export function useAIEngineChat() {
     fallbackScreenId?: string | null,
     createTitle?: string,
     forceInPlace?: boolean,
-    executionOptions: {signal?:AbortSignal;isCurrent?:()=>boolean}={}
+    executionOptions: {signal?:AbortSignal;isCurrent?:()=>boolean;taskBudget?:TaskBudget}={}
   ) => {
+    executionOptions.taskBudget?.assertActive();
+    if(executionOptions.signal?.aborted||executionOptions.isCurrent?.()===false)throw Error('复验已取消或原任务上下文已变化。');
     const userPrompt = msg?.originalUserPrompt || '';
     const storeScreens = useProjectStore.getState().screens;
 
@@ -1505,6 +1508,7 @@ export function useAIEngineChat() {
     const target = messages.find((m) => m.id === msgId);
     if (!target?.htmlOutput||operationLockRef.current||isGenerating) return;
     const state=useProjectStore.getState(),controller=new AbortController(),context=pageCreationContext(state);
+    const validationBudget=createSingleRequestBudget(1); // Independent zero-model verification, not renewed generation authority.
     abortControllerRef.current=controller;activeMessageIdRef.current=msgId;operationLockRef.current=true;setIsGenerating(true);
     const current=()=>pageCreationContext(useProjectStore.getState())===context;
     const sameProject=()=>useProjectStore.getState().id===state.id&&useProjectStore.getState().folderPath===state.folderPath;
@@ -1516,7 +1520,7 @@ export function useAIEngineChat() {
         target.htmlOutput,
         null,
         target.screenName || '画框 (AI 补挂)',undefined,
-        {signal:controller.signal,isCurrent:current}
+        {signal:controller.signal,isCurrent:current,taskBudget:validationBudget}
       );
       if(!progressOwned(controller,sameProject))return;
 
@@ -1551,8 +1555,9 @@ export function useAIEngineChat() {
         );
       }
     } catch(error){
-      if(progressOwned(controller,current))setMessages(prev=>prev.map(m=>m.id===msgId?{...m,isError:true,text:`本次结果未应用：${error instanceof Error?error.message:'重新检查失败。'}`}:m));
+      if(progressOwned(controller,sameProject))setMessages(prev=>prev.map(m=>m.id===msgId?{...m,isError:true,text:`本次结果未应用：${error instanceof Error?error.message:'重新检查失败。'}`}:m));
     } finally {
+      validationBudget.close();
       finishOperation(msgId,controller);
     }
   };
@@ -1594,6 +1599,7 @@ export function useAIEngineChat() {
     setMessages(prev=>prev.map(m=>m.id===msgId?{...m,qualityDraftBusy:true,qualityDraftNotice:'仅为报错操作生成一次文案建议，确认前不应用。'}:m));
     const suggestionBudget=createSingleRequestBudget(1800);
     const suggestionCurrent=()=>{
+      if(suggestionBudget.signal.aborted||suggestionBudget.remainingMs()<=0)return false;
       const latest=useProjectStore.getState();
       let configured=getActiveProviderForRole('code')||getActiveProviderForRole('chat');
       if(value.attachment&&configured&&!supportsVision(configured.provider,configured.modelId))configured=getActiveProviderForRole('vision');
@@ -1601,13 +1607,16 @@ export function useAIEngineChat() {
         Boolean(configured&&continuationBindingKey({provider:configured.provider,model:configured.modelId})===value.draft.bindingKey);
     };
     const observer=observeRequestActivity(engineCoreRef.current,a=>publishActivity(msgId,controller,suggestionCurrent,a),()=>!controller.signal.aborted&&suggestionCurrent());
+    let claimStarted=false;
     try {
+      const {saved,result}=await suggestionBudget.run(async taskSignal=>{
+      claimStarted=true;
       if(!await claimDraftSuggestion(value,state.folderPath))throw Error('此草稿已使用过AI建议，请手动填写文案。');
       const claimed={...value,aiAttempted:true};
       if(mountedRef.current&&useProjectStore.getState().id===state.id&&useProjectStore.getState().folderPath===state.folderPath)
         setMessages(prev=>prev.map(m=>m.id===msgId&&m.qualityDraft?.id===value.id?{...m,qualityDraft:{...m.qualityDraft,aiAttempted:true}}:m));
       if(!progressOwned(controller,suggestionCurrent))throw Error('工程、模型已变化或建议已取消，本次机会已记录。');
-      const result=await suggestDraftLabels(observer.core,{provider:actual.provider,model:actual.modelId},value.request,targets,controller.signal,suggestionBudget);
+      const result=await suggestDraftLabels(observer.core,{provider:actual.provider,model:actual.modelId},value.request,targets,taskSignal,suggestionBudget);
       const current=useProjectStore.getState(),same=current.id===state.id&&current.folderPath===state.folderPath;
       const fresh=same&&suggestionCurrent();
       const saved={...claimed,suggestions:!result.error&&!controller.signal.aborted&&fresh?result.labels:undefined};
@@ -1617,9 +1626,15 @@ export function useAIEngineChat() {
       if(saved.suggestions&&(controller.signal.aborted||!suggestionCurrent())){
         saved.suggestions=undefined;await saveQualityDraft(saved,state.folderPath);
       }
+      return {saved,result};
+      },controller.signal);
+      suggestionBudget.assertActive();
       if(progressOwned(controller,()=>useProjectStore.getState().id===state.id&&useProjectStore.getState().folderPath===state.folderPath))setMessages(prev=>prev.map(m=>m.id===msgId?{...m,qualityDraft:saved,qualityDraftNotice:!suggestionCurrent()?'工程或模型已变化，建议未采用。':result.error?`建议未采用：${result.error}；可手动填写。`:`建议已填入，确认或修改后再执行定点修复。${result.estimated?'本次用量为估算。':''}`,
         usage:result.usage?{promptTokens:(m.usage?.promptTokens??0)+result.usage.inputTokens,completionTokens:(m.usage?.completionTokens??0)+result.usage.outputTokens,totalTokens:(m.usage?.totalTokens??0)+result.usage.inputTokens+result.usage.outputTokens}:m.usage}:m));
-    }catch(error){if(progressOwned(controller,()=>useProjectStore.getState().id===state.id&&useProjectStore.getState().folderPath===state.folderPath))notice(String(error instanceof Error?error.message:error));}
+    }catch(error){
+      if(claimStarted&&suggestionBudget.signal.aborted)void saveQualityDraft({...value,aiAttempted:true,suggestions:undefined},state.folderPath).catch(()=>console.warn('[quality-draft] 清理过期建议失败'));
+      if(progressOwned(controller,()=>useProjectStore.getState().id===state.id&&useProjectStore.getState().folderPath===state.folderPath))notice(String(error instanceof Error?error.message:error));
+    }
     finally {
       suggestionBudget.close();
       observer.stop();

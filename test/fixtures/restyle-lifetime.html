@@ -1,0 +1,27 @@
+<!doctype html><html><meta charset="utf-8"><title>重塑提交边界验收</title><body><pre id="result">等待开始</pre><script type="module">
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {TaskBudget} from '/src/services/ai/taskBudget.ts';
+import {executeRestyleBatch,restyleContextKey} from '/src/services/ai/restyleBatch.ts';
+import {acceptRestyleResult} from '/src/services/ai/restyleService.ts';
+import {PageRenderCheck} from '/src/services/ai/pageRenderCheck.ts';
+import {RestyleDeliveryRepository} from '/src/services/storage/restyleDeliveryRepository.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+const query=new URLSearchParams(location.search),phase=query.get('phase')??'render',device=query.get('device')==='pc'?'pc':'mobile';
+const s=useProjectStore.getState();s.initNewProject({name:'重塑总时限验收',deviceProfile:device,createSpecimen:false});
+const html=id=>`<main data-nid="${id}root001" class="${device==='pc'?'container-max ':''}col gap-4 p-4"><h1>资料</h1><button data-nid="${id}action1" class="btn btn-primary">确认</button></main>`;
+for(const id of ['a','b'])s.addScreen({name:id,htmlContent:html(id)},id);
+const f={phase,device,before:useHistoryStore.getState().past.length,generated:0,original:html('a'),state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState()};window.lifetimeFixture=f;
+let release;const gate=new Promise(resolve=>release=resolve);f.release=()=>release();
+if(phase==='render'){const inspect=PageRenderCheck.inspect;PageRenderCheck.inspect=async(...args)=>{f.entered=true;await gate;return inspect(...args);};}
+else{const original=RestyleDeliveryRepository.prototype[phase];RestyleDeliveryRepository.prototype[phase]=async function(...args){f.entered=true;await gate;return original.apply(this,args);};}
+f.run=()=>{
+ const plan=f.state().buildRestylePlan();f.budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:4,maxDurationMs:5000,maxRequestDurationMs:5000});
+ f.running=executeRestyleBatch({plan,dryRun:acceptRestyleResult(plan.dryRun,plan.dryRun.html.replace('p-4','p-6')),taskBudget:f.budget,confirmedContextKey:restyleContextKey(f.state()),getContextKey:()=>restyleContextKey(f.state()),resolveTarget:target=>({...target,html:f.state().screens[target.id].htmlContent}),
+ generate:async target=>{f.generated++;return acceptRestyleResult(target,target.html.replace('p-4','p-6'));},
+ apply:(value,scope)=>{const application=f.state().applyRestyleOutcome(value,scope.signal,scope.isCurrent,scope.onCommitted);void application.finally(()=>f.applicationSettled=true).catch(()=>{});return application;}
+ }).then(result=>{f.result=result;f.finished=true;document.getElementById('result').textContent=JSON.stringify(result,null,2);});
+};
+f.records=()=>new RestyleDeliveryRepository(createProjectStorage(f.state().id,f.state().folderPath),f.state().id).list();
+f.ready=true;
+</script></body></html>

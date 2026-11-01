@@ -1,3 +1,5 @@
+import * as BudgetPolicy from '../src/services/ai/taskBudgetPolicy';
+import {TaskBudget} from '../src/services/ai/taskBudget';
 import {afterEach,beforeEach,expect,spyOn,test} from 'bun:test';
 import React,{act} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
@@ -173,4 +175,19 @@ for(const stop of [false,true])test(`page variants ${stop?'stopped':'completed'}
  expect(engine.isGenerating).toBe(false);expect(message().executionActivity).toMatchObject({requests:2,active:0,status:stop?'cancelled':'returned'});expect(calls).toHaveLength(1);expect(useProjectStore.getState().screens.page.htmlContent).toBe(source);
  const variants=Object.values(useProjectStore.getState().screens).filter(s=>s.id!=='page');expect(variants).toHaveLength(stop?0:2);expect(useHistoryStore.getState().past.length).toBe(before+(stop?0:1));
  if(!stop){expect(variants.every(s=>s.metadata?.multiPageDelivery?.kind==='variants')).toBe(true);expect(variants[0].position.y).toBe(variants[1].position.y);expect(variants[1].position.x).toBeGreaterThan(variants[0].position.x);}
+});
+
+test('a zero-call remount stops waiting at its own deadline and ignores a late rendered page',async()=>{
+ const target=await unappliedPage(),render=defer<Awaited<ReturnType<typeof PageRenderCheck.inspect>>>();renderCheck.mockImplementationOnce(()=>render.promise);
+ const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1,maxDurationMs:80,maxRequestDurationMs:80}),policy=spyOn(BudgetPolicy,'createSingleRequestBudget').mockReturnValue(budget),before=useHistoryStore.getState().past.length;
+ let pending!:Promise<void>;
+ try{await act(async()=>{pending=engine.mountMessageHtml(target.id);await new Promise(resolve=>setTimeout(resolve,125));});expect(engine.isGenerating).toBe(false);expect(message().text).toContain('总时限');expect(budget.snapshot()).toMatchObject({requests:0,cancelled:true});render.resolve({status:'complete',findings:[],inspected:5});await act(async()=>{await pending;await pause();});expect(Object.keys(useProjectStore.getState().screens)).toEqual(['page']);expect(useHistoryStore.getState().past).toHaveLength(before);}
+ finally{render.resolve({status:'complete',findings:[],inspected:5});await act(async()=>{await pending;});policy.mockRestore();budget.close();}
+});
+
+test('a successful zero-call remount uses its verification window without renewing original model allowance',async()=>{
+ const target=await unappliedPage(),originalBudget=structuredClone(target.taskBudget);renderCheck.mockResolvedValue({status:'complete',findings:[],inspected:5});
+ const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1,maxDurationMs:10000,maxRequestDurationMs:10000}),policy=spyOn(BudgetPolicy,'createSingleRequestBudget').mockReturnValue(budget);
+ try{await act(async()=>{await engine.mountMessageHtml(target.id);});expect(message().toolAction).toBe('created');expect(message().taskBudget).toEqual(originalBudget);expect(message().executionActivity?.requests).toBe(0);expect(budget.snapshot()).toMatchObject({requests:0,reservedOutputTokens:0,closed:true,cancelled:false});expect(policy.mock.calls.at(-1)?.[0]).toBe(1);}
+ finally{policy.mockRestore();budget.close();}
 });

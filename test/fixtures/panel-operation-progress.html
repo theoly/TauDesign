@@ -3,8 +3,9 @@ import React from '/node_modules/.vite/deps/react.js';
 import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
 import '/src/styles/index.css';
 import {PropertyInspector} from '/src/components/inspector/PropertyInspector.tsx';
-import {CandidateRepairControl} from '/src/components/canvas/CandidateRepairControl.tsx';
+import {CandidateRepairControl,RepairReceipt} from '/src/components/canvas/CandidateRepairControl.tsx';
 import {PageRenderCheck} from '/src/services/ai/pageRenderCheck.ts';
+import {TaskBudget} from '/src/services/ai/taskBudget.ts';
 import {buildDesignTaskContract} from '/src/services/ai/designWorkflow.ts';
 import {loadStagedCandidate} from '/src/services/storage/candidateRepository.ts';
 import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
@@ -12,6 +13,10 @@ import {useProjectStore} from '/src/stores/useProjectStore.ts';
 import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
 import {useAIConfigStore} from '/src/stores/useAIConfigStore.ts';
 import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {MockTransport} from '/src/services/ai/engine/transport/mockTransport.ts';
+import {makeGuidancePacket,withGuidanceReceipts} from '/src/services/ai/designKnowledge/receipt.ts';
+import {selectDesignRules} from '/src/services/ai/designKnowledge/selector.ts';
+import {LocalStorageStorage} from '/src/services/storage/projectStorage.ts';
 const query=new URLSearchParams(location.search),device=query.get('device')==='pc'?'pc':'mobile',candidate=query.has('candidate');
 const original='<main data-nid="root0001" class="'+(device==='pc'?'container-max ':'')+'col gap-4 p-4"><h1>资料</h1><section data-nid="region01"><button data-nid="target01" class="btn btn-primary"><svg class="icon" viewBox="0 0 24 24"><path d="M1 1L2 2"/></svg><span>查看详情</span></button></section><button data-nid="other001" class="btn">暂存</button></main>';
 const s=useProjectStore.getState();s.initNewProject({name:'面板任务验证',deviceProfile:device,createSpecimen:false});s.addScreen({name:'资料页',htmlContent:original},'page');s.selectNodeByNid('page','target01');
@@ -25,12 +30,26 @@ const core=new DefaultAIEngineCore({id:'panel-local',stream:(request,event)=>{
 }});
 const stream=DefaultAIEngineCore.prototype.streamText;DefaultAIEngineCore.prototype.streamText=function(options){return stream.call(core,options);};
 f.release=index=>{const p=f.pending[index],value=candidate?{operations:[{nid:'target01',type:'remove_styles',value:'font-size'}]}:{requiresPageRewrite:false,reason:'仅微调当前目标',operations:[{nid:p.nid,type:'add_classes',value:'font-semibold'}]};p.event({type:'Delta',text:JSON.stringify(value)});p.event({type:'Done',finish_reason:'stop'});p.resolve();};
+// An explicit short test ledger exercises the real store/UI and native-verification timeout.
+f.startDeadline=()=>{const role=binding();f.budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1800,maxDurationMs:2000,maxRequestDurationMs:2000});
+ f.running=f.state().repairStagedCandidate({core,provider:role.provider,model:role.modelId,taskBudget:f.budget}).then(result=>{f.outcome=result;f.finished=true;});};
+if(candidate&&query.has('claimHold')){const write=LocalStorageStorage.prototype.writeTextAtomic;LocalStorageStorage.prototype.writeTextAtomic=async function(rel,text){
+ if(rel==='candidates/current.json'&&JSON.parse(text).candidate.repair?.message?.startsWith('已登记一次修复尝试')){f.claimHeld=true;await new Promise(resolve=>f.releaseClaim=resolve);}
+ try{return await write.call(this,rel,text);}finally{if(f.claimHeld)f.claimWriteFinished=true;}
+};}
 const inspect=PageRenderCheck.inspect;
-if(candidate&&query.has('verifyHold'))PageRenderCheck.inspect=async(...args)=>{await new Promise(resolve=>f.releaseVerify=resolve);return inspect(...args);};
+if(candidate&&query.has('verifyHold'))PageRenderCheck.inspect=async(...args)=>{await new Promise(resolve=>f.releaseVerify=resolve);try{return await inspect(...args);}finally{f.verifyFinished=true;}};
 async function publish(){const state=f.state(),c=state.stagedScreen;const report=await inspect({screen:{...state.screens.page,htmlContent:c.newHtml},settings:state.settings,designSystem:state.designSystem,overrides:state.overrides,assets:Object.values(state.assets)},createProjectStorage(state.id,state.folderPath));state.setStagedRenderQuality(f.state().getStagedRenderContextKey(),report);f.initialReport=report;}
-if(candidate){const state=f.state(),contract=buildDesignTaskContract({intent:'modify_screen',request:'调整按钮字号',target:state.screens.page,elementNid:'region01',deviceProfile:device,frameWidth:state.settings.frameWidth,designSystem:state.designSystem});state.stageScreenChange('page',original.replace('<button data-nid="target01"','<button style="font-size:0px" data-nid="target01"'),'修复候选',contract.request,contract);f.candidateId=f.state().stagedScreen.candidateId;await publish();}
+if(candidate){const state=f.state(),contract=buildDesignTaskContract({intent:'modify_screen',request:'调整按钮字号',target:state.screens.page,elementNid:'region01',deviceProfile:device,frameWidth:state.settings.frameWidth,designSystem:state.designSystem});if(query.has('guidance')){
+ contract.designGuidance=makeGuidancePacket(contract,selectDesignRules({request:contract.request,operation:'modify',device,scope:'element',features:['button'],maxChars:1500}),'html');
+ const transport=new MockTransport();transport.queueResponse(original);const parent=new DefaultAIEngineCore(transport);parent.streamText=options=>stream.call(parent,options);
+ await withGuidanceReceipts(parent,contract,contract.designGuidance).streamText({provider:binding().provider,model:binding().modelId,messages:[{role:'system',content:contract.designGuidance.selection.body}]}).textPromise;
+ f.parentRequestIds=contract.designGuidance.requests.map(r=>r.requestId);f.plannedRules=contract.designGuidance.selection.selected.map(s=>s.rule.id);
+ }
+ state.stageScreenChange('page',original.replace('<button data-nid="target01"','<button style="font-size:0px" data-nid="target01"'),'修复候选',contract.request,contract);f.candidateId=f.state().stagedScreen.candidateId;await publish();}
 let root=ReactDOM.createRoot(document.getElementById('root'));
-const render=()=>root.render(candidate?React.createElement('main',{style:{padding:24,display:'flex',gap:24,color:'#cbd5e1'}},...['primary','secondary'].map(name=>React.createElement('section',{'data-control':name,style:{width:340}},React.createElement(CandidateRepairControl)))):React.createElement('div',{style:{width:360,height:'100vh',overflow:'auto',marginLeft:24}},React.createElement(PropertyInspector)));
+function BoundReceipt(){const state=useProjectStore();return React.createElement(RepairReceipt,{value:state.stagedScreen?.repair});}
+const render=()=>root.render(candidate?React.createElement('main',{style:{padding:24,display:'flex',gap:24,color:'#cbd5e1'}},...['primary','secondary'].map(name=>React.createElement('section',{'data-control':name,style:{width:340}},React.createElement(CandidateRepairControl))),query.has('guidance')?React.createElement(BoundReceipt):null):React.createElement('div',{style:{width:360,height:'100vh',overflow:'auto',marginLeft:24}},React.createElement(PropertyInspector)));
 render();f.ready=true;f.checkRender=publish;
 f.reopen=async()=>{root.unmount();const state=f.state(),saved=await loadStagedCandidate(state.id);f.savedRepair=saved?.repair;state.restoreStagedCandidate(saved,state.id);await publish();root=ReactDOM.createRoot(document.getElementById('root'));render();};
 </script></body></html>

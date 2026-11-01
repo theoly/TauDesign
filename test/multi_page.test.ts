@@ -1,6 +1,8 @@
+import * as BudgetPolicy from '../src/services/ai/taskBudgetPolicy';
+import {TaskBudget} from '../src/services/ai/taskBudget';
 import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
 import {withMultiPageTasks,multiPageTask} from './fixtures/multiPageTask';
-import {afterEach,beforeEach,expect,test} from 'bun:test';
+import {afterEach,beforeEach,expect,spyOn,test} from 'bun:test';
 import {prepareMultiPagePlan,executeMultiPagePlan,consumeMultiPageBatch,type PreparedMultiPagePlan} from '../src/services/ai/multiPageService';
 import {requiresMultiPagePlan,validateMultiPageItems,isMultiPageDelivery,type MultiPageProgress} from '../src/services/ai/multiPageContract';
 import {useProjectStore} from '../src/stores/useProjectStore';
@@ -272,4 +274,27 @@ test('a cancelled batch observer cannot leak progress into another task or publi
   const count=events.length;controller.abort();release('迟到');const result=await pending;
   expect(result.status).toBe('cancelled');expect(events).toHaveLength(count);expect(Object.keys(useProjectStore.getState().screens)).toEqual(['old']);
  }finally{core.streamText=actual;}
+});
+
+test('parent expiry in the final page render refuses the complete batch without partial History',async()=>{
+ const plan=await prepare();let now=0,rendered=0;
+ const budget=new TaskBudget({maxRequests:2,maxRequestedOutputTokens:16384,maxDurationMs:100,maxRequestDurationMs:100},()=>now);
+ const mock=spyOn(BudgetPolicy,'createMultiPageBudget').mockReturnValue(budget),before=useHistoryStore.getState().past.length;
+ PageRenderCheck.inspect=async(request,storage)=>{const report=await resourceRenderReport(request,storage,{status:'complete',findings:[],inspected:5});if(++rendered===2)now=100;return report;};
+ try{const result=await run(plan);expect(result.status).toBe('blocked');expect(streamCalls).toHaveLength(2);expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past).toHaveLength(before);expect(budget.snapshot().cancelled).toBe(true);}
+ finally{mock.mockRestore();budget.close();}
+});
+
+test('exact final model allowance permits a timely full multi-page batch',async()=>{
+ const plan=await prepare(),budget=new TaskBudget({maxRequests:2,maxRequestedOutputTokens:16384,maxDurationMs:10000,maxRequestDurationMs:10000});
+ const mock=spyOn(BudgetPolicy,'createMultiPageBudget').mockReturnValue(budget),before=useHistoryStore.getState().past.length;
+ try{expect((await run(plan)).status).toBe('complete');expect(useProjectStore.getState().screenOrder).toHaveLength(3);expect(useHistoryStore.getState().past).toHaveLength(before+1);expect(budget.snapshot()).toMatchObject({requests:2,requestedOutputTokens:16384,exhausted:true,cancelled:false,closed:true});}
+ finally{mock.mockRestore();budget.close();}
+});
+test('a hung final-page renderer is interrupted by the parent deadline without a partial batch',async()=>{
+ const plan=await prepare(),budget=new TaskBudget({maxRequests:2,maxRequestedOutputTokens:16384,maxDurationMs:250,maxRequestDurationMs:250});
+ let release!:()=>void,rendered=0;const gate=new Promise<void>(resolve=>release=resolve),mock=spyOn(BudgetPolicy,'createMultiPageBudget').mockReturnValue(budget),before=useHistoryStore.getState().past.length;
+ PageRenderCheck.inspect=async(request,storage)=>{if(++rendered===2)await gate;return resourceRenderReport(request,storage,{status:'complete',findings:[],inspected:5});};
+ try{const result=await run(plan);expect(result.status).toBe('blocked');expect(result.message).toContain('总时限');expect(rendered).toBe(2);expect(streamCalls).toHaveLength(2);expect(useProjectStore.getState().screenOrder).toEqual(['old']);release();await new Promise(resolve=>setTimeout(resolve,2));expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past).toHaveLength(before);}
+ finally{release();mock.mockRestore();budget.close();}
 });

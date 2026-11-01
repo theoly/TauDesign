@@ -117,7 +117,7 @@ export async function executeMultiPagePlan(prepared:PreparedMultiPagePlan,edited
  entry.status='running';let progress:MultiPageProgress[]=[],budget:TaskBudget|undefined;
  const observer=options.onActivity?observeRequestActivity(entry.core,options.onActivity,()=>!options.signal?.aborted&&options.isCurrent?.()!==false&&pageCreationContext(options.getState())===entry.context):undefined;
  const batchCore=observer?.core??entry.core;
- const guard=()=>{if(options.signal?.aborted)throw Error('多页面生成已取消，未加入任何页面。');if(options.isCurrent?.()===false||pageCreationContext(options.getState())!==entry.context)throw Error('工程或设计上下文已变化，请重新规划；未加入任何页面。');};
+ const guard=()=>{budget?.assertActive();if(options.signal?.aborted)throw Error('多页面生成已取消，未加入任何页面。');if(options.isCurrent?.()===false||pageCreationContext(options.getState())!==entry.context)throw Error('工程或设计上下文已变化，请重新规划；未加入任何页面。');};
  const publish=()=>{try{options.onProgress?.(structuredClone(progress));}catch(error){console.warn('[multi-page] 进度展示失败',error);}};
  const phase=(value:PipelinePhase)=>{try{if(!options.signal?.aborted&&options.isCurrent?.()!==false)options.onPhase?.(value);}catch{console.warn('[multi-page] 阶段显示回调失败');}};
  try{
@@ -131,6 +131,7 @@ export async function executeMultiPagePlan(prepared:PreparedMultiPagePlan,edited
   });if(variants)validateVariantItems(pages);else validateMultiPageItems(pages);
   if(pages.length>entry.original.plan.originalPageCount)throw Error('本次确认只能编辑或缩减计划，请重新规划以增加页面。');
   budget=createMultiPageBudget(pages.length);
+  const {screens,handle,plan}=await budget.run(async taskSignal=>{
   const originalIds=new Set(entry.original.plan.pages.map(p=>p.id));if(pages.some(p=>!originalIds.has(p.id)))throw Error('页面身份不属于原计划，请重新规划。');
   validateMultiPageTasks(pages,entry.original.contract);
   const unresolved=pages.find(p=>p.task?.questions.length);
@@ -155,12 +156,12 @@ export async function executeMultiPagePlan(prepared:PreparedMultiPagePlan,edited
     planSource:{kind:'confirmed-multi-page' as const,planId:plan.id,itemId:page.id,planFingerprint:fingerprint}}}}:{};
    progress[index].message=task?'复用已确认的本页功能规划，正在生成页面…':'本页要求或关联已调整，正在重新梳理功能与交互…';publish();
    const output=await PipelineExecutor.execute({input:{rawPrompt:request,attachment:entry.attachment,textReferences:entry.textReferences,activeScreenId:null,decision:{intent:'create_screen',targetScreenId:null,styleReferenceScreenId:reference,reason:'已确认多页面计划，逐页新建'}},provider:entry.provider,model:entry.model,engineCore:batchCore,screens:virtual.screens,onPhase:phase,contextualGuidance:entry.contextualGuidance,
-    deviceProfile:base.settings.deviceProfile,useCustomNavigation:base.settings.useCustomNavigation,frameWidth:base.settings.frameWidth,referenceDevice:base.settings.referenceDevice,viewportGuideHeight:base.settings.viewportGuideHeight,baseSystemPrompt:'按已确认静态页面计划设计高保真页面。',designSystem:base.designSystem,designSystemOrigin:base.designSystemOrigin,designLibraryBinding:base.designLibraryBinding,colorMode:base.settings.colorMode,components:Object.values(base.components),projectManifest:manifest(virtual),projectKnowledge:knowledge.content,knowledgeFingerprint:knowledge.fingerprint,knowledgeSources:entry.original.contract.knowledgeSources,overrides:base.overrides,multiPage:scope,signal:options.signal,taskBudget:budget,pageTaskPlanning,
+    deviceProfile:base.settings.deviceProfile,useCustomNavigation:base.settings.useCustomNavigation,frameWidth:base.settings.frameWidth,referenceDevice:base.settings.referenceDevice,viewportGuideHeight:base.settings.viewportGuideHeight,baseSystemPrompt:'按已确认静态页面计划设计高保真页面。',designSystem:base.designSystem,designSystemOrigin:base.designSystemOrigin,designLibraryBinding:base.designLibraryBinding,colorMode:base.settings.colorMode,components:Object.values(base.components),projectManifest:manifest(virtual),projectKnowledge:knowledge.content,knowledgeFingerprint:knowledge.fingerprint,knowledgeSources:entry.original.contract.knowledgeSources,overrides:base.overrides,multiPage:scope,signal:taskSignal,taskBudget:budget,pageTaskPlanning,
     isCurrent:()=>!options.signal?.aborted&&options.isCurrent?.()!==false&&pageCreationContext(options.getState())===entry.context});
    guard();if(output.status!=='applied'||!output.extractedHtml||!output.workflowContract)throw Error(`${page.name}：${output.errorMessage??'没有返回完整合格页面。'}`);
    if(output.artifactMetadata?.title!==page.name)throw Error(`${page.name}：输出页面标题与确认计划不一致。`);
    phase('rendering');
-   const result=await prepareNewPageWithRepair(base,{id:page.screenId,name:page.name,position:{x:0,y:0},htmlContent:output.extractedHtml},output.workflowContract,storage,{signal:options.signal,isCurrent:()=>!options.signal?.aborted&&options.isCurrent?.()!==false&&pageCreationContext(options.getState())===entry.context,repair:{core:batchCore,taskBudget:budget,provider:entry.provider,model:entry.model,onPhase:phase=>{progress[index].message=phase==='repairing'?'发现控件渲染问题，正在尝试一次受控样式修复。':'修复指令已执行，正在重新检查全部门禁。';publish();}}});
+   const result=await prepareNewPageWithRepair(base,{id:page.screenId,name:page.name,position:{x:0,y:0},htmlContent:output.extractedHtml},output.workflowContract,storage,{signal:taskSignal,isCurrent:()=>{guard();return true;},repair:{core:batchCore,taskBudget:budget,provider:entry.provider,model:entry.model,onPhase:phase=>{progress[index].message=phase==='repairing'?'发现控件渲染问题，正在尝试一次受控样式修复。':'修复指令已执行，正在重新检查全部门禁。';publish();}}});
    guard();if(result.status!=='ready')throw Error(`${page.name}：${result.message}`);
    screens.push({...result.screen,metadata:{...result.screen.metadata,pageGroup:variants?`方案对比 · ${plan.id}`:'多页面计划',multiPageDelivery:delivery,creationEvidence:result.evidence}});progress[index].status='checked';progress[index].message=result.evidence.repair?'一次控件样式修复后，全部检查通过。':undefined;publish();
   }
@@ -171,6 +172,8 @@ export async function executeMultiPagePlan(prepared:PreparedMultiPagePlan,edited
   if(resourceIssue)throw Error(resourceIssue);
   const batchFingerprint=contentFingerprint(JSON.stringify(screens)),handle:ReadyMultiPageBatch={version:1,id:plan.id,fingerprint:batchFingerprint,names:pages.map(p=>p.name)};
   batches.set(handle,{context:entry.context,fingerprint:batchFingerprint,screens:structuredClone(screens),claimed:false});
+  return {screens,handle,plan};
+  },options.signal);
   guard();options.commit(handle);if(!batches.get(handle)!.claimed||screens.some(screen=>options.getState().screens[screen.id]?.htmlContent!==screen.htmlContent))throw Error('多页面提交未经过完整统一History动作。');
   progress=progress.map(p=>({...p,status:'applied'}));publish();entry.status='finished';
   return {status:'complete',message:variants?`已并排新增 ${pages.length} 个方案，全部通过检查。原页与项目Token保持不变，可一次撤销；请选择需要的方案继续编辑。${pages.length<plan.originalPageCount?`原计划${plan.originalPageCount}个方案，用户确认缩减为${pages.length}个。`:''}`:`已按确认计划新增 ${pages.length} 页，全部通过检查。${pages.length<plan.originalPageCount?`原计划${plan.originalPageCount}页，用户确认缩减为${pages.length}页。`:''}可一次撤销。`,screenIds:screens.map(s=>s.id)};

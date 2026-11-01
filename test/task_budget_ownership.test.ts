@@ -46,3 +46,29 @@ test('planning retry and confirmed page counts have finite independent root allo
   expect(small.snapshot().limits.maxRequests).toBe(3);expect(large.snapshot().limits.maxRequests).toBe(16);
   for(const budget of [single,two,small,large])budget.close();
 });
+
+test('a restyle application must recheck the parent at its actual write boundary',async()=>{
+ const f=fixture();let now=0,writes=0;const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:4,maxDurationMs:100,maxRequestDurationMs:100},()=>now);
+ const single={...f.options,plan:{...f.options.plan,queue:[f.queue[0]]}};
+ try{const result=await executeRestyleBatch({...single,taskBudget:budget,generate:async t=>outcome(t),apply:async(_result,lifetime?:any)=>{now=100;if(lifetime?.isCurrent()===false)return false;writes++;return true;}} as any);expect(writes).toBe(0);expect(result.status).toBe('cancelled');}
+ finally{budget.close();}
+});
+
+test('a hanging application exits at the parent deadline and cannot perform its late guarded write',async()=>{
+ const f=fixture(),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:4,maxDurationMs:25,maxRequestDurationMs:25});let release!:()=>void,writes=0;
+ const gate=new Promise<void>(resolve=>release=resolve),single={...f.options,plan:{...f.options.plan,queue:[f.queue[0]]}};
+ try{const result=await executeRestyleBatch({...single,taskBudget:budget,generate:async t=>outcome(t),apply:async(_value,scope)=>{await gate;if(scope.isCurrent())writes++;return true;}});expect(result.status).toBe('cancelled');expect(writes).toBe(0);release();await Promise.resolve();expect(writes).toBe(0);expect(budget.snapshot().requests).toBe(0);}
+ finally{release();budget.close();}
+});
+test('a reported History commit remains applied if only archive finalization exceeds the deadline',async()=>{
+ const f=fixture(),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:4,maxDurationMs:25,maxRequestDurationMs:25});let release!:()=>void;
+ const gate=new Promise<void>(resolve=>release=resolve),single={...f.options,plan:{...f.options.plan,queue:[f.queue[0]]}};
+ try{const result=await executeRestyleBatch({...single,taskBudget:budget,generate:async t=>outcome(t),apply:async(_value,scope)=>{scope.onCommitted({applied:true,appliedContextKey:'current'});await gate;return true;}});expect(result.status).toBe('cancelled');expect(result.outcomes.map(o=>o.status)).toEqual(['applied']);expect(result.remaining).toBe(0);}
+ finally{release();budget.close();}
+});
+test('a stalled pure generator after the trial cannot keep the batch alive past its parent deadline',async()=>{
+ const f=fixture(),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:4,maxDurationMs:25,maxRequestDurationMs:25});let release!:(value:RestyleOutcome)=>void;
+ const gate=new Promise<RestyleOutcome>(resolve=>release=resolve);
+ try{const result=await executeRestyleBatch({...f.options,taskBudget:budget,generate:()=>gate});expect(result.status).toBe('cancelled');expect(result.outcomes.map(o=>o.status)).toEqual(['applied']);expect(result.remaining).toBe(2);expect(budget.signal.aborted).toBe(true);}
+ finally{release(outcome(f.queue[1]));budget.close();}
+});

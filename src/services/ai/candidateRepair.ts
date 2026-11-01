@@ -59,7 +59,17 @@ export function candidateRepairEligibility(input:CandidateRepairInput):{allowed:
 }
 export type CandidateRepairResult={status:'ready';html:string;repair:PageRepairRecord;render:RenderedQualityReport}|{status:'blocked';message:string;repair?:PageRepairRecord};
 /** Validates source, original contract, entities, actual files, exact L4 and a new independent iframe. No state writes. */
-export async function repairCandidate(input:CandidateRepairInput,storage:ProjectStorage,options:{isCurrent:()=>boolean;signal?:AbortSignal;model:PageRepairModel;onAttempt?:(record:PageRepairRecord)=>Promise<void>}):Promise<CandidateRepairResult> {
+type CandidateRepairOptions={isCurrent:()=>boolean;signal?:AbortSignal;model:PageRepairModel;onAttempt?:(record:PageRepairRecord)=>Promise<void>};
+export async function repairCandidate(input:CandidateRepairInput,storage:ProjectStorage,options:CandidateRepairOptions):Promise<CandidateRepairResult> {
+ const budget=options.model.taskBudget;if(!budget)return repairCandidateTask(input,storage,options);
+ let attempt:PageRepairRecord|undefined;
+ try{return await budget.run(signal=>repairCandidateTask(input,storage,{...options,signal,
+  isCurrent:()=>{budget.assertActive();return options.isCurrent();},
+  onAttempt:async record=>{attempt=structuredClone(record);await options.onAttempt?.(record);}},record=>attempt=structuredClone(record)),options.signal);}
+ catch(error){const message=error instanceof Error?error.message:'修复失败。';return {status:'blocked',message,
+  ...(attempt?{repair:{...attempt,status:'cancelled' as const,checkedAt:Date.now(),message}}:{})};}
+}
+async function repairCandidateTask(input:CandidateRepairInput,storage:ProjectStorage,options:CandidateRepairOptions,onReceipt?:(record:PageRepairRecord)=>void):Promise<CandidateRepairResult> {
  const eligibility=candidateRepairEligibility(input);if(!eligibility.allowed)return {status:'blocked',message:eligibility.message};
  const {state,candidate}=input,task=candidate.workflowContract!,baseline=state.screens[candidate.targetScreenId] as Screen;
  const current=()=>!options.signal?.aborted&&options.isCurrent();
@@ -82,6 +92,7 @@ export async function repairCandidate(input:CandidateRepairInput,storage:Project
   await validate(candidate.newHtml);
   const proposal=await proposeStyleRepair({state,html:candidate.newHtml,contract:task,render:input.render!,context:pageCreationContext(state)},
    {...options,allowedNids:eligibility.allowedNids,protectedNids:eligibility.protectedNids});
+  if(proposal.status==='proposed')onReceipt?.(proposal.record);else if(proposal.repair)onReceipt?.(proposal.repair);
   if(proposal.status!=='proposed')return {status:'blocked',message:proposal.message,repair:proposal.repair};
   receipt=proposal.record;guard();options.model.onPhase?.('verifying');guard();await validate(proposal.html);
   const render=await PageRenderCheck.inspect({screen:makeScreen(proposal.html),settings:state.settings,designSystem:state.designSystem,assets:Object.values(state.assets),

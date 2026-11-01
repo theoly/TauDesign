@@ -1,10 +1,15 @@
+import {captureDesignGuidanceHistory,readDesignGuidanceHistory} from '../src/services/ai/designKnowledge/history';
+import {isPageCreationEvidence} from '../src/services/ai/pageCreationValidation';
+import {CanvasToolExecutor} from '../src/services/tools/canvasToolExecutor';
+import {ruleFingerprint} from '../src/services/ai/designKnowledge/selector';
+import type {RepairGuidanceTrace} from '../src/services/ai/designKnowledge/repairTrace';
 import {afterEach,beforeEach,expect,spyOn,test} from 'bun:test';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
 import {useProjectStore} from '../src/stores/useProjectStore';
 import {useHistoryStore} from '../src/stores/useHistoryStore';
 import {buildDesignTaskContract,buildRestyleContract,contentFingerprint} from '../src/services/ai/designWorkflow';
-import {makeGuidancePacket,withGuidanceReceipts} from '../src/services/ai/designKnowledge/receipt';
+import {makeGuidancePacket,withGuidanceReceipts,guidancePacketIssue} from '../src/services/ai/designKnowledge/receipt';
 import {selectDesignRules} from '../src/services/ai/designKnowledge/selector';
 import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
 import {MockTransport} from '../src/services/ai/engine/transport/mockTransport';
@@ -16,7 +21,7 @@ import {RestyleDeliveryRepository} from '../src/services/storage/restyleDelivery
 import {createProjectStorage} from '../src/services/storage/projectStorage';
 import {acceptRestyleResult} from '../src/services/ai/restyleService';
 import {loadStagedCandidate} from '../src/services/storage/candidateRepository';
-import {DesignGuidanceCard} from '../src/components/chat/DesignGuidanceCard';
+import {DesignGuidanceCard,RepairGuidanceSource} from '../src/components/chat/DesignGuidanceCard';
 const html='<main data-nid="root" class="p-4"><button data-nid="action" class="btn btn-primary">保存资料</button></main>',after=html.replace('p-4','p-6');
 const provider={id:'fixture',name:'fixture',protocol:'openai_compatible' as const,baseUrl:'https://invalid.test',apiKey:'ARCHIVE_PRIVATE_KEY'};
 let prior:ReturnType<typeof useProjectStore.getState>,history:ReturnType<typeof useHistoryStore.getState>,render:ReturnType<typeof spyOn>,capture:ReturnType<typeof spyOn>,pageCapture:ReturnType<typeof spyOn>;
@@ -49,9 +54,10 @@ for(const kind of ['single','restyle'] as const)test(`${kind} frozen sources rou
  const ui=renderToStaticMarkup(<DesignGuidanceCard contract={source} historical/>);expect(ui).toContain('历史设计依据');expect(ui).toContain('返回完成');expect(ui).not.toContain(provider.apiKey);
  expect(record.status).toBe('applied');
 });
-for(const kind of ['single','restyle'] as const)for(const corrupt of ['scope','binding','cancelled','null','target','result','before'] as const)test(`${kind} rejects ${corrupt} archive sources on read and new prepare`,async()=>{
+for(const kind of ['single','restyle'] as const)for(const corrupt of ['scope','binding','cancelled','null','target','result','before','request-task','request-index'] as const)test(`${kind} rejects ${corrupt} archive sources on read and new prepare`,async()=>{
  const {record,path}=await archived(kind),s=useProjectStore.getState(),storage=createProjectStorage(s.id),copy=structuredClone(record) as any;
  const owner=kind==='single'?copy.candidate:copy.outcome,c=owner.workflowContract;
+ if(corrupt==='request-task')c.designGuidance.requests[0].requestId='foreign-task:request-1';if(corrupt==='request-index')c.designGuidance.requests[0].requestId=`${c.taskId}:request-9`;
  if(corrupt==='scope')c.allowedChanges=['screen:outside'];if(corrupt==='binding')c.designGuidance.bindingFingerprint='12345678';if(corrupt==='cancelled')c.designGuidance.requests[0].status='cancelled';if(corrupt==='null')owner.workflowContract=null;if(corrupt==='target')c.target.id='other';
  if(corrupt==='result'){if(kind==='single'){copy.after.htmlContent+='<p>不相干结果</p>';copy.resultFingerprint=contentFingerprint(copy.after.htmlContent);}else{copy.pages[0].after.htmlContent+='<p>不相干结果</p>';copy.validation.pages[0].candidateFingerprint=contentFingerprint(copy.pages[0].after.htmlContent);}}
  if(corrupt==='before'){if(kind==='single')copy.before.htmlContent+='<p>不相干基线</p>';else copy.pages[0].before.htmlContent+='<p>不相干基线</p>';}
@@ -74,4 +80,63 @@ for(const kind of ['single','restyle'] as const)test(`${kind} retains already-fr
  const saved=kind==='single'?raw.candidate.workflowContract:raw.outcome.workflowContract;
  expect(saved).toEqual(contract);expect(saved.designSystem.tokens).toEqual(s.designSystem.tokens);
  const list=kind==='single'?await new DeliveryRepository(storage,s.id).listForScreen('page'):await new RestyleDeliveryRepository(storage,s.id).list();expect(list.records).toHaveLength(1);expect(list.invalidFiles).toBe(0);expect(record.status).toBe('applied');
+});
+
+test('a repair selection with no call receipt is displayed as assembled rather than actually injected',async()=>{
+ const {contract}=await archived('single'),packet=contract.designGuidance!;
+ const trace:RepairGuidanceTrace={version:1,parentTaskId:contract.taskId,parentBindingFingerprint:packet.bindingFingerprint,parentSelectionFingerprint:ruleFingerprint(packet.selection),injectedRuleIds:packet.selection.selected.map(s=>s.rule.id),omittedRuleIds:[],requests:[]};
+ expect(trace.injectedRuleIds.length).toBeGreaterThan(0);const ui=renderToStaticMarkup(<RepairGuidanceSource trace={trace}/>);
+ expect(ui).not.toContain('实际注入');expect(ui).toContain('尚无实际调用回执');
+});
+
+function repairTrace(contract:ReturnType<typeof buildDesignTaskContract>):RepairGuidanceTrace{
+ const packet=contract.designGuidance!;return {version:1,parentTaskId:contract.taskId,parentBindingFingerprint:packet.bindingFingerprint,parentSelectionFingerprint:ruleFingerprint(packet.selection),injectedRuleIds:packet.selection.selected.map(s=>s.rule.id),omittedRuleIds:[],requests:[]};
+}
+for(const status of ['assembled','dispatched','completed','failed','cancelled'] as const)test(`repair source keeps ${status} separate from assembly and acceptance`,async()=>{
+ const {contract}=await archived('single'),trace=repairTrace(contract);
+ trace.requests=[{requestId:`${contract.taskId}:style-repair:request-1`,parentTaskId:contract.taskId,providerId:'fixture',model:'fixture',messageFingerprint:'12345678',outputProtocol:'stream-text',injectedRuleIds:[...trace.injectedRuleIds],status}];
+ const ui=renderToStaticMarkup(<RepairGuidanceSource trace={trace}/>);
+ expect(ui).toContain('本次组装');expect(ui).toContain(`修复调用尝试 ${status==='assembled'?0:1} 次`);expect(ui).toContain('不表示 Provider 已确认收到');
+ expect(ui.includes('调用输入记录包含')).toBe(status!=='assembled');expect(ui.includes('尚无实际调用回执')).toBe(status==='assembled');
+});
+test('a completed repair with every rule omitted records one call and zero rule inputs',async()=>{
+ const {contract}=await archived('single'),trace=repairTrace(contract);trace.omittedRuleIds=[...trace.injectedRuleIds];trace.injectedRuleIds=[];
+ trace.requests=[{requestId:`${contract.taskId}:style-repair:request-1`,parentTaskId:contract.taskId,providerId:'fixture',model:'fixture',messageFingerprint:'12345678',outputProtocol:'stream-text',injectedRuleIds:[],status:'completed'}];
+ const ui=renderToStaticMarkup(<RepairGuidanceSource trace={trace}/>);expect(ui).toContain('调用输入记录包含 0 条规则');expect(ui).toContain('修复调用尝试 1 次');expect(ui).not.toContain('尚无实际调用回执');
+});
+test('legacy generated IDs without outputProtocol remain readable without inventing the missing field',async()=>{
+ const {contract}=await archived('single');delete contract.designGuidance!.requests[0].outputProtocol;
+ const saved=captureDesignGuidanceHistory(contract,contract.request),restored=readDesignGuidanceHistory(saved,contract.request);
+ expect(restored).toBeDefined();expect(restored!.contract.designGuidance!.requests[0].outputProtocol).toBeUndefined();expect(restored!.contract.designGuidance!.requests[0].requestId).toBe(`${contract.taskId}:request-1`);
+});
+for(const kind of ['foreign','skipped','repair'] as const)test(`read-only history does not upgrade ${kind} request identity`,async()=>{
+ const {contract}=await archived('single');contract.designGuidance!.requests[0].requestId=kind==='foreign'?'another:request-1':kind==='skipped'?`${contract.taskId}:request-8`:`${contract.taskId}:style-repair:request-1`;
+ expect(captureDesignGuidanceHistory(contract,contract.request)).toBeUndefined();expect(readDesignGuidanceHistory({version:1,contract},contract.request)).toBeUndefined();
+});
+async function tracedContract(operation:'create'|'modify'){
+ const s=useProjectStore.getState(),request=operation==='create'?'创建资料页':'调整主按钮周围间距';
+ const contract=buildDesignTaskContract({intent:operation==='create'?'create_screen':'modify_screen',request,...(operation==='modify'?{target:s.screens.page}:{}),deviceProfile:'mobile',frameWidth:390,designSystem:s.designSystem});
+ contract.designGuidance=makeGuidancePacket(contract,selectDesignRules({request,operation,device:'mobile',scope:'page',features:['button'],maxChars:1500}),'html');
+ const transport=new MockTransport();transport.queueResponse(after);await withGuidanceReceipts(new DefaultAIEngineCore(transport),contract,contract.designGuidance).streamText({provider,model:'fixture',messages:[{role:'system',content:contract.designGuidance.selection.body}]}).textPromise;
+ return contract;
+}
+test('new-page sidecars retain actual receipt IDs and reject an altered child identity',async()=>{
+ const contract=await tracedContract('create'),result=await CanvasToolExecutor.executeAsync({tool:'create_screen',params:{title:'资料新页',html:after,workflowContract:contract}});
+ expect(result.success).toBe(true);const evidence=useProjectStore.getState().screens[result.screenId!].metadata!.creationEvidence!;
+ expect(isPageCreationEvidence(evidence)).toBe(true);expect(evidence.contract.designGuidance).toEqual(contract.designGuidance);
+ const bad=structuredClone(evidence);bad.contract.designGuidance!.requests[0].requestId='foreign-task:request-1';expect(isPageCreationEvidence(bad)).toBe(false);
+});
+test('candidate roundtrip keeps a corrupt receipt for diagnostics and never grants adoption',async()=>{
+ const contract=await tracedContract('modify'),s=useProjectStore.getState();s.stageScreenChange('page',after,'资料',contract.request,contract);let current=useProjectStore.getState();current.setStagedRenderQuality(current.getStagedRenderContextKey(),{status:'complete',findings:[],inspected:2});expect(current.getStagedDeliveryReport().status).toBe('ready');
+ const bad=structuredClone(contract);bad.designGuidance!.requests[0].requestId='foreign-task:request-1';s.stageScreenChange('page',after,'资料',bad.request,bad);const restored=(await loadStagedCandidate(s.id))!;
+ expect(restored.workflowContract!.designGuidance!.requests[0].requestId).toBe('foreign-task:request-1');current=useProjectStore.getState();current.setStagedRenderQuality(current.getStagedRenderContextKey(),{status:'complete',findings:[],inspected:2});expect(current.getStagedDeliveryReport().status).toBe('blocked');
+ const before=useHistoryStore.getState().past.length;expect(await current.adoptStagedChange()).toBe(false);expect(useProjectStore.getState().screens.page.htmlContent).toBe(html);expect(useHistoryStore.getState().past).toHaveLength(before);
+});
+
+for(const status of ['assembled','dispatched','completed','failed','cancelled'] as const)test(`historical ${status} receipt is readable without claiming dispatch or execution success`,async()=>{
+ const {contract}=await archived('single');contract.designGuidance!.requests[0].status=status;
+ expect(Boolean(guidancePacketIssue(contract))).toBe(status!=='completed');
+ const saved=captureDesignGuidanceHistory(contract,contract.request),restored=readDesignGuidanceHistory(saved,contract.request);expect(restored).toBeDefined();
+ const ui=renderToStaticMarkup(<DesignGuidanceCard contract={restored!.contract} historical/>);
+ expect(ui).toContain('请求记录 · 1 条');expect(ui.includes('已组装输入')).toBe(status==='assembled');expect(ui).not.toContain('实际进入请求');expect(ui).not.toContain(provider.apiKey);
 });

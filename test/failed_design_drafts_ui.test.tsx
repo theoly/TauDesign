@@ -1,3 +1,5 @@
+import * as BudgetPolicy from '../src/services/ai/taskBudgetPolicy';
+import {TaskBudget} from '../src/services/ai/taskBudget';
 import {chatPageTaskPlan} from './fixtures/pageTaskPlan';
 import {afterEach,beforeEach,expect,spyOn,test} from 'bun:test';
 import React,{act} from 'react';
@@ -124,4 +126,33 @@ for(const change of ['cancel-repair','model'] as const)test(`${change} during th
   if(change==='cancel-repair'){expect(await loadQualityDrafts(id)).toEqual([]);expect(card().textContent).toContain('原失败草稿 · 已完成修复');}
   else {expect((await loadQualityDrafts(id))[0].aiAttempted).toBe(true);expect(button('AI建议文案（限一次）').disabled).toBe(true);}
  }finally{release();claim.mockRestore();}
+});
+
+test('parent deadline releases a suggestion stuck in its persisted qualification without a late request',async()=>{
+ await send();const id=useProjectStore.getState().id,realClaim=DraftRepository.claimDraftSuggestion;let release!:()=>void,claimed=false;
+ const gate=new Promise<void>(resolve=>release=resolve),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1800,maxDurationMs:80,maxRequestDurationMs:80}),policy=spyOn(BudgetPolicy,'createSingleRequestBudget').mockReturnValue(budget);
+ const claim=spyOn(DraftRepository,'claimDraftSuggestion').mockImplementation(async(value,folder)=>{const result=await realClaim(value,folder);claimed=true;await gate;return result;});
+ try{await act(async()=>{button('AI建议文案（限一次）').click();await new Promise(resolve=>setTimeout(resolve,125));});expect(claimed).toBe(true);expect(Boolean(host.querySelector('button[title*="立即停止"]'))).toBe(false);expect(card().textContent).toContain('总时限');expect(calls).toHaveLength(2);release();await act(async()=>{await drain();});expect(calls).toHaveLength(2);expect((await loadQualityDrafts(id))[0].aiAttempted).toBe(true);}
+ finally{release();await act(async()=>{await drain();});claim.mockRestore();policy.mockRestore();budget.close();}
+});
+
+test('parent deadline during suggestion save clears late labels on disk and after reopening',async()=>{
+ await send();const id=useProjectStore.getState().id,realSave=DraftRepository.saveQualityDraft;let release!:()=>void,entered=false;
+ const gate=new Promise<void>(resolve=>release=resolve),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1800,maxDurationMs:80,maxRequestDurationMs:80}),policy=spyOn(BudgetPolicy,'createSingleRequestBudget').mockReturnValue(budget);
+ const save=spyOn(DraftRepository,'saveQualityDraft').mockImplementation(async(value,folder)=>{if(value.suggestions?.length){entered=true;await gate;}return realSave(value,folder);});
+ try{
+  await act(async()=>{button('AI建议文案（限一次）').click();await new Promise(resolve=>setTimeout(resolve,150));});expect(entered).toBe(true);expect(Boolean(host.querySelector('button[title*="立即停止"]'))).toBe(false);expect(card().textContent).toContain('总时限');
+  release();await act(async()=>{await drain();});const saved=(await loadQualityDrafts(id))[0];expect(saved.aiAttempted).toBe(true);expect(saved.suggestions).toBeUndefined();expect((card().querySelector('input') as HTMLInputElement).value).toBe('');
+  await act(async()=>{root.unmount();root=createRoot(host);root.render(<ChatDrawer/>);await drain();});expect((card().querySelector('input') as HTMLInputElement).value).toBe('');expect(button('AI建议文案（限一次）').disabled).toBe(true);
+ }finally{release();await act(async()=>{await drain();});save.mockRestore();policy.mockRestore();budget.close();}
+});
+test('a timed-out qualification cannot undo a newer zero-request manual draft repair',async()=>{
+ await send();const id=useProjectStore.getState().id,realClaim=DraftRepository.claimDraftSuggestion;let release!:()=>void;
+ const gate=new Promise<void>(resolve=>release=resolve),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1800,maxDurationMs:80,maxRequestDurationMs:80}),policy=spyOn(BudgetPolicy,'createSingleRequestBudget').mockReturnValue(budget);
+ const claim=spyOn(DraftRepository,'claimDraftSuggestion').mockImplementation(async(value,folder)=>{const result=await realClaim(value,folder);await gate;return result;});
+ try{
+  await act(async()=>{button('AI建议文案（限一次）').click();await new Promise(resolve=>setTimeout(resolve,125));});await fill(card().querySelector('input')!,'手动确认');
+  await act(async()=>{button('确认文案并定点修复').click();await drain();});expect(await loadQualityDrafts(id)).toEqual([]);const before=useHistoryStore.getState().past.length;
+  release();await act(async()=>{await drain();});expect(await loadQualityDrafts(id)).toEqual([]);expect(card().textContent).toContain('原失败草稿 · 已完成修复');expect(useHistoryStore.getState().past).toHaveLength(before);expect(calls).toHaveLength(2);
+ }finally{release();await act(async()=>{await drain();});claim.mockRestore();policy.mockRestore();budget.close();}
 });

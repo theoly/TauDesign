@@ -166,3 +166,15 @@ for(const change of ['stale','cancelled'] as const)test(`structured ${change} re
  resolve({requiresPageRewrite:false,operations:[]});const result=await pending;
  expect(result.status).toBe(change);expect('html'in result).toBe(false);expect(events).toHaveLength(count);
 });
+
+test('an expired supplied parent cannot authorize even a deterministic local result',async()=>{
+ const {TaskBudget}=await import('../src/services/ai/taskBudget');let now=0;const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:4,maxDurationMs:100,maxRequestDurationMs:100},()=>now);now=100;
+ try{const result=await executeStructuredEdit(undefined,{...base(),taskBudget:budget});expect(result.status).toBe('failed');if(result.status!=='ready')expect(result.message).toContain('总时限');expect(budget.snapshot()).toMatchObject({cancelled:true,requests:0});}
+ finally{budget.close();}
+});
+
+test('an exactly spent but active parent still authorizes a deterministic scoped result',async()=>{
+ const {TaskBudget}=await import('../src/services/ai/taskBudget'),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:4,maxDurationMs:10000,maxRequestDurationMs:10000});budget.reserve(4).settle();
+ try{const result=await executeStructuredEdit(undefined,{...base(),taskBudget:budget});expect(result.status).toBe('ready');expect(budget.snapshot()).toMatchObject({requests:1,exhausted:true,cancelled:false,closed:false});}
+ finally{budget.close();}
+});

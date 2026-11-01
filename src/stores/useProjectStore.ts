@@ -367,7 +367,7 @@ interface ProjectState {
   /** 组装 Restyle 的执行队列，组件优先 (T-AE-28) */
   buildRestylePlan: (screenIds?: ScreenId[]) => RestylePlan;
   /** 核验资源、实际渲染与全部实例投影后，单条 History 应用重塑结果。 */
-  applyRestyleOutcome: (outcome: RestyleOutcome, signal?: AbortSignal, isCurrent?:()=>boolean) => Promise<RestyleApplicationResult>;
+  applyRestyleOutcome: (outcome: RestyleOutcome, signal?: AbortSignal, isCurrent?:()=>boolean, onCommitted?:(result:RestyleApplicationResult)=>void) => Promise<RestyleApplicationResult>;
 
   /** 当前工程的会话存档 (T-AE-31)。会话不进 project.json，独立分片存储 */
   getConversationStore: () => ConversationStore;
@@ -1002,7 +1002,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return planRestyle(componentTargets, screenTargets);
   },
 
-  applyRestyleOutcome: async (outcome, signal, isCurrent) => {
+  applyRestyleOutcome: async (outcome, signal, isCurrent, onCommitted) => {
     const state = get(), key = restyleContextKey(state);
     const frozenOutcome = structuredClone(outcome), storage = createProjectStorage(state.id,state.folderPath);
     const current = () => !signal?.aborted && (!isCurrent||isCurrent()) && !taskRuleSafetyIssue(frozenOutcome.workflowContract) &&
@@ -1048,6 +1048,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       patches.push({op:'replace',path:['components',plan.component.id],value:plan.component});
       inverse.push({op:'replace',path:['components',plan.component.id],value:components[plan.component.id]});components[plan.component.id] = plan.component;
     }
+    // Patch construction can consume the last part of a deadline. Authorize the
+    // synchronous checkpoint/History section immediately before its first write.
+    try{if(!current())throw Error('提交前工程已变化或重塑已取消。');}
+    catch(error){
+      const message=error instanceof Error?error.message:'重塑提交已失效。';
+      await repository.finish(record,'aborted',message).catch(()=>{});
+      return {applied:false,message,validation:{...plan.validation,status:'blocked',message}};
+    }
     for (const screen of plan.screens) {
       const before = get().screens[screen.id];
       useHistoryStore.getState().addCheckpoint(`风格重塑前备份: ${before.name}`,{screenId:before.id,htmlContent:before.htmlContent,scopedCss:before.scopedCss});
@@ -1056,6 +1064,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({screens,components});get().saveProject();
     const appliedContextKey = restyleContextKey(get());
     const delivery:RestyleDeliveryReceipt = {id:record.id,status:'applied'};
+    try{onCommitted?.({applied:true,validation:structuredClone(plan.validation),delivery:{id:record.id,status:'prepared'},appliedContextKey});}
+    catch{console.warn('[restyle] 已提交状态回报失败');}
     try {await repository.finish(record,'applied');}
     catch {
       delivery.status = 'prepared';delivery.message = '重塑已应用，档案状态写入失败；准备记录已保留，可在重塑历史中查看。';
@@ -2455,6 +2465,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         }});
       if(!same()||(activeStagedRepairJob&&activeStagedRepairJob!==job))return false;
       if(result.status==='ready'&&current()&&!signal?.aborted){
+        model.taskBudget?.assertActive();
         get().stageScreenChange(candidate.targetScreenId,result.html,candidate.screenName,candidate.modificationRequest,candidate.workflowContract,
           candidate.executionRecord?{...candidate.executionRecord,completeHtml:result.html}:undefined,result.repair);
         return true;

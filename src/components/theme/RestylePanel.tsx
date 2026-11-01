@@ -161,7 +161,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
       quality: { designSystem, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation },
       patchContext:[styleDirective,confirmedScope??'',projectKnowledge].join('\n'),
       colorMode:settings.colorMode,
-      onProgress: value => { if(isLive(operation))setProgress(value); },
+      onProgress: value => { if(isLive(operation)&&!budget.signal.aborted)setProgress(value); },
       request: { provider: binding.provider, model: binding.modelId, signal: operation.controller.signal, maxTokens: 16384,...restyleThinkingOptions(binding.provider,binding.modelId),
         messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userRequest }] }
     });if(!isLive(operation))throw Error('工程、目标或模型已变化，未采用旧重塑结果。');return outcome;}finally {if(!parentBudget)budget.close();}
@@ -284,7 +284,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
           return html === undefined ? null : { ...target,
             html: target.kind === 'screen' ? normalizeMobileNavigation(html, state.settings).html : html,
             protectedNids: target.kind === 'screen' ? state.getProtectedNids(target.id) : target.protectedNids };
-        }, generate: (target,budget) => runOne(target,operation,undefined,budget), apply: outcome => useProjectStore.getState().applyRestyleOutcome(outcome,controller.signal,()=>isLive(operation)),
+        }, generate: (target,budget) => runOne(target,operation,undefined,budget), apply: (outcome,lifetime) => useProjectStore.getState().applyRestyleOutcome(outcome,lifetime.signal,()=>isLive(operation)&&lifetime.isCurrent(),lifetime.onCommitted),
         onProgress: results => { if (isLive(operation)) setOutcomes(results); }
       });
       if (isLive(operation)) {

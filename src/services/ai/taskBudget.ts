@@ -22,6 +22,7 @@ export class TaskBudget {
   private readonly started:number;
   private requests=0;private requested=0;private reserved=0;private input=0;private output=0;private unreported=0;
   private closed=false;
+  private windows=0;
   private denied=false;
   private readonly limits:TaskBudgetLimits;
   private readonly tasks=new Set<string>();
@@ -38,8 +39,35 @@ export class TaskBudget {
   matchesContinuation(taskId:string,proof:string){return this.continuations.get(taskId)===proof;}
   consumeContinuation(taskId:string,proof:string){if(!this.matchesContinuation(taskId,proof))return false;this.continuations.delete(taskId);return true;}
   cancel(reason='父任务已取消'){if(!this.signal.aborted)this.controller.abort(new Error(reason));}
-  close(){this.closed=true;this.continuations.clear();if(this.reserved)this.cancel('父任务已结束。');}
+  close(){this.closed=true;this.continuations.clear();if(this.reserved||this.windows)this.cancel('父任务已结束。');}
   remainingMs(){return Math.max(0,this.limits.maxDurationMs-(this.now()-this.started));}
+  /** Execution authority is independent of whether another model request can be reserved. */
+  assertActive(){
+    if(this.signal.aborted)throw this.signal.reason;
+    if(this.closed)throw Error('父任务已结束。');
+    if(!this.remainingMs()){this.cancel('父任务超过总时限。');throw this.signal.reason;}
+  }
+  /** Bound non-model awaits to this ledger; callers must still guard every eventual write. */
+  async run<T>(operation:(signal:AbortSignal)=>Promise<T>,externalSignal?:AbortSignal):Promise<T>{
+    if(externalSignal?.aborted)this.cancel('生成已取消');
+    this.assertActive();this.windows++;
+    let timer:ReturnType<typeof setTimeout>|undefined,rejectAbort!:(reason:unknown)=>void;
+    const interrupted=new Promise<never>((_,reject)=>rejectAbort=reject);void interrupted.catch(()=>{});
+    const abort=()=>rejectAbort(this.signal.reason),external=()=>this.cancel('生成已取消');
+    this.signal.addEventListener('abort',abort,{once:true});externalSignal?.addEventListener('abort',external,{once:true});
+    const schedule=()=>{
+      const remaining=this.remainingMs();
+      if(!remaining){this.cancel('父任务超过总时限。');return;}
+      timer=setTimeout(schedule,Math.min(remaining,2147483647));
+    };
+    try{
+      schedule();this.assertActive();
+      const result=await Promise.race([operation(this.signal),interrupted]);
+      this.assertActive();return result;
+    }finally{
+      clearTimeout(timer);this.signal.removeEventListener('abort',abort);externalSignal?.removeEventListener('abort',external);this.windows--;
+    }
+  }
   /** Read-only UI probe; it never reserves, resets a deadline or refunds earlier requests. */
   canReserve(tokens:number){return !this.closed&&!this.signal.aborted&&!this.denied&&this.remainingMs()>0&&Number.isSafeInteger(tokens)&&tokens>0&&
     this.requests<this.limits.maxRequests&&tokens<=this.limits.maxRequestedOutputTokens-this.requested;}
@@ -53,8 +81,9 @@ export class TaskBudget {
     if(!Number.isSafeInteger(tokens)||tokens<1)throw Error('请求输出预算无效。');
     if(this.denied||this.requests>=this.limits.maxRequests||tokens>this.limits.maxRequestedOutputTokens-this.requested){this.denied=true;throw Error('父任务请求次数或累计申请输出预算已耗尽；未发送本次请求。');}
     this.requests++;this.requested+=tokens;this.reserved+=tokens;
+    const reservedAt=this.now(),deadline=Math.min(this.started+this.limits.maxDurationMs,reservedAt+this.limits.maxRequestDurationMs);
     let settled=false;
-    return {timeoutMs:Math.min(this.remainingMs(),this.limits.maxRequestDurationMs),settle:(usage?:TokenUsage)=>{
+    return {timeoutMs:Math.max(0,deadline-reservedAt),expired:()=>this.now()>=deadline,settle:(usage?:TokenUsage)=>{
       if(settled)return;settled=true;this.reserved-=tokens;
       if(usage&&[usage.inputTokens,usage.outputTokens].every(n=>Number.isFinite(n)&&n>=0)) {this.input+=usage.inputTokens;this.output+=usage.outputTokens;}
       else this.unreported+=tokens;
@@ -80,7 +109,12 @@ export function withTaskBudget(core:AIEngineCore,budget:TaskBudget):AIEngineCore
     try {
       const running=start({...options,maxTokens,signal:controller.signal});transportAbort=running.abort;
       void running.usage?.then(u=>{if(!controller.signal.aborted)usage=u;}).catch(()=>{});
-      const done=race(running.done).catch(error=>{controller.abort(error);try{transportAbort?.();}catch{/* failure cannot leave a live request */}throw error;}).finally(cleanup);void done.catch(()=>{});
+      const done=race(running.done).then(value=>{
+        // Timers may be delayed by a busy event loop; a late success cannot clear the deadline.
+        if(reservation.expired())budget.cancel('父任务或当前请求超过时限。');
+        if(budget.signal.aborted)throw budget.signal.reason;
+        return value;
+      }).catch(error=>{controller.abort(error);try{transportAbort?.();}catch{/* failure cannot leave a live request */}throw error;}).finally(cleanup);void done.catch(()=>{});
       return {value:running.value,race,done,abort:external};
     } catch(error){cleanup();throw error;}
   };

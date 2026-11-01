@@ -61,6 +61,7 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
   const input=structuredClone(data),contract=input.contract;
   const guard=()=>{
     if(signal?.aborted)throw new Interrupted('cancelled','局部修改已取消。');
+    budget?.assertActive();
     if(!isCurrent())throw new Interrupted('stale','原页面或工程已变化，请重新分析或指定目标。');
   };
   const finish=(result:StructuredEditResult):StructuredEditResult=>{if(ownsBudget)budget?.close();return {...result,...(budget?{taskBudget:budget.snapshot()}:{})};};

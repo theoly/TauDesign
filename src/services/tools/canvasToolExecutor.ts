@@ -13,6 +13,7 @@ import {createProjectStorage} from '../storage/projectStorage';
 import type { DesignExecutionRecord } from '../ai/designExecutionRecord';
 import {draftExecutionIssue} from '../ai/draftExecutionSource';
 import {resolveWorkflowValidation} from '../ai/workflowValidation';
+import type {TaskBudget} from '../ai/taskBudget';
 
 export type CanvasToolCall =
   | {
@@ -97,7 +98,7 @@ export function sanitizeScreenTitle(rawTitle?: string): string {
 const pendingCreations=new Set<string>();
 export class CanvasToolExecutor {
   /** The only AI creation entry. Low-level blank/specimen/duplicate store actions remain synchronous. */
-  static async executeAsync(call:CanvasToolCall,options:{signal?:AbortSignal;isCurrent?:()=>boolean;repair?:PageRepairModel}={}):Promise<CanvasToolExecutionResult> {
+  static async executeAsync(call:CanvasToolCall,options:{signal?:AbortSignal;isCurrent?:()=>boolean;repair?:PageRepairModel;taskBudget?:TaskBudget}={}):Promise<CanvasToolExecutionResult> {
     if(call.tool!=='create_screen')return this.execute(call);
     const params=structuredClone(call.params),state=useProjectStore.getState();
     const contract=params.workflowContract===undefined?buildDesignTaskContract({intent:'create_screen',request:params.title||'创建新页面',
@@ -110,8 +111,8 @@ export class CanvasToolExecutor {
     const key=`${state.id}:${contract.taskId}`,context=pageCreationContext(state);
     const failed=(error:string):CanvasToolExecutionResult=>({success:false,tool:'create_screen',status:'failed',error});
     if(pendingCreations.has(key)||Object.values(state.screens).some(screen=>screen.metadata?.creationEvidence?.contract?.taskId===contract.taskId))return failed('同一新建任务正在处理或已经应用。');
-    const current=()=>!options.signal?.aborted&&(options.isCurrent?.()??true)&&!draftExecutionIssue(params.executionRecord,params.html)&&
-      resolveWorkflowValidation(contract,'create').ok&&pageCreationContext(useProjectStore.getState())===context;
+    const current=()=>{options.taskBudget?.assertActive();return !options.signal?.aborted&&(options.isCurrent?.()??true)&&!draftExecutionIssue(params.executionRecord,params.html)&&
+      resolveWorkflowValidation(contract,'create').ok&&pageCreationContext(useProjectStore.getState())===context;};
     pendingCreations.add(key);
     try {
       const snapshot=structuredClone({id:state.id,folderPath:state.folderPath,screens:state.screens,settings:state.settings,assets:state.assets,
@@ -119,8 +120,9 @@ export class CanvasToolExecutor {
         components:state.components,decisions:state.decisions,projectDocuments:state.projectDocuments,overrides:state.overrides});
       const id=params.screenId&&!state.screens[params.screenId]?params.screenId:crypto.randomUUID();
       const name=sanitizeScreenTitle(params.title?.trim()||`画框 ${state.screenOrder.length+1}`);
-      const prepared=await prepareNewPageWithRepair(snapshot,{id,name,htmlContent:params.html,position:{x:0,y:0}},contract,
-        createProjectStorage(state.id,state.folderPath),{isCurrent:current,signal:options.signal,repair:options.repair});
+      const prepare=(signal?:AbortSignal)=>prepareNewPageWithRepair(snapshot,{id,name,htmlContent:params.html,position:{x:0,y:0}},contract,
+        createProjectStorage(state.id,state.folderPath),{isCurrent:current,signal,repair:options.repair});
+      const prepared=options.taskBudget?await options.taskBudget.run(prepare,options.signal):await prepare(options.signal);
       if(prepared.status!=='ready')return {...failed(prepared.message),repair:prepared.repair};
       if(!current())return failed('应用前工程已变化或创建已取消。');
       const {position:_position,...screen}=prepared.screen;

@@ -995,3 +995,117 @@ WebKit首轮在全页截图后触发iframe重新测量，测试采纳时渲染pe
 完整浏览器证据为`evidence/2026-10-31-panels-release-ui/result.json`，独立重塑为`evidence/2026-10-31-panels-restyle-ui/browser.json`；提交前全量/类型/构建日志、打回日志及源码SHA256保留于`evidence/2026-10-31-panels/`，原始证据由Git忽略。未调用真实Provider、未重跑Rust/原生实机或打包，既有React act/预期错误日志不作为零警告声明。
 
 中英文README同步实际功能与本轮验证基线，保留原生和真实模型、人评及整体重构未验收的范围。属性/候选切片关闭，PG-03/04和M4-04仍待总体时限/生命周期审计；原27项14完成/13待完成、规则默认关闭及M5门槛保持。
+
+
+## 2026-11-01 请求截止时间结算修复
+
+TaskBudget原本只通过超时定时器取消；事件循环尚未调度定时器时，超时响应可先完成并清除定时器。预留时现在冻结单调截止点（父任务总时限与当前请求时限取更早者），成功结果结算时再次检查，到期取消整个父账本和传输；释放在途预留但保留已申请额度，后续请求不可复活。未修改生产预算、默认重试、输出解析或运行时schema。
+
+先记录测试问题与有效负例：首次15/0因Bun拒绝断言提前等待真实定时器，不能证明同一事件循环竞态。改为先注册Promise终态、同步推进注入时钟并resolve后，得到11通过/4失败（流式/JSON × 父/单请求），全部错误resolved。修复后新增边界/并行断言，最终专项25/0（111断言），相较基线新增14项。
+
+完整浏览器首轮Chromium通过，WebKit PC多方案在原始pending队列出现第3请求后立即读取React摘要，2次调用断言失败；截图与日志保留。验证器改为最多5秒等待界面出现精确计数，仍严格要求2次调用/0在途、没有部分页面、History和原页符合预期，没有改生产计数或增加等待百分比。随后聚焦及全套均通过。
+
+| 检查 | 最终结果 |
+| --- | --- |
+| bun test | **2720 pass / 0 fail / 17522 assertions / 245 files / 57.65秒** |
+| bun run type-check | exit0 |
+| bun run build | exit0，Vite 2.81秒 |
+| Python验证器语法 / git diff --check | 通过 |
+| 多方案聚焦浏览器 | Chromium/WebKit × mobile390/PC1440通过 |
+| 完整浏览器回归 | 两引擎均passed，移动/PC、恢复、多页/多方案、属性/候选及实际iframe验收通过；各引擎pageErrors0/externalRequests0 |
+| 重塑专用回归 | 两引擎×两档位passed；每组合5调用/4取消，立即重试/关闭/模型与工程切换通过 |
+
+最终全套证据：`evidence/2026-11-01-deadline-release-ui/result.json`；聚焦：`evidence/2026-11-01-deadline-variants/result.json`；重塑：`evidence/2026-11-01-deadline-restyle/browser.json`。失败全套保留于`evidence/2026-11-01-deadline-ui/`；所有原始/中间/最终日志和714份源码SHA256在`evidence/2026-11-01-deadline/`，均按既有规则Git忽略。最终日志以release-full/types/build为准，前轮57.02秒为中间回归。
+
+未调用真实Provider、未重跑Rust/原生实机或打包；既有React act/预期错误日志不等于零警告。未自动执行Git任务。原顶层14完成/13待完成不变：本轮证明模型请求成功结算截止时间，不证明后续实际渲染/保存全阶段均受总时限控制；具体调用方与不误拒绝恰好用完额度结果的约束已列入request-trace-repair.md。M3-03、M4-04及M5仍开放，规则继续默认关闭。
+
+
+## 2026-11-01 运行中交付阶段总时限
+
+本轮新增20项：TaskBudget运行窗口8项、普通创建4项、候选修复5项、多页3项。首轮170通过/3失败，实际证明普通创建、候选复验、多页最后渲染过期后仍交付。通过原账本`run`为非模型等待建立有界窗口和父取消signal，`assertActive`独立检查执行存活，最终写前核对。正常完成不关闭调用方账本；关闭账本在没有Token预留时也能中断运行窗口。不恢复额度、不重置时钟，最后合法请求恰好耗尽次数/输出仍可交付。
+
+普通创建在资源/iframe准备窗口后、History提交前检查；多页所有等待共享原批次账本，全部通过后统一同步提交；候选资格先保存、复验仍在同一一次请求预算内，超时即时释放全局修复状态，保留已实际取得的修复操作/用量回执。真实原子资格写入阻塞的测试证明保存队列保持顺序：超时不发模型请求，迟到写入不能覆盖新候选；已登记一次尝试不会因取消恢复。
+
+浏览器聚焦首轮通过后，审计发现旧迟到断言只读candidateId，可能在底层inspect结束前满足。主动中止当时全套；实际exit1，因为驱动被中断后Browser.close连接已关闭，非完成证据。增加inspect的finally完成标记，聚焦与全套重新执行；释放迟到检查、等待其结束后再断言候选/原页/History/调用数。未修改生产检查阈值或计数。
+
+| 检查 | 最终结果 |
+| --- | --- |
+| 账本/创建/候选/多页专项 | **215 pass / 0 fail / 960 assertions / 4 files** |
+| bun test（增强夹具后重跑） | **2740 pass / 0 fail / 17616 assertions / 245 files / 61.15秒** |
+| bun run type-check | exit0（final-types） |
+| bun run build | exit0，Vite 2.72秒（final-build） |
+| 验证器Python语法 / git diff --check | 通过 |
+| 增强后面板聚焦 | Chromium/WebKit × mobile390/PC1440通过；一次请求1800上限、超时status清空、原候选/原页/History保持，迟到复验确实结束后仍无写入 |
+| 最终完整浏览器 | 两引擎均passed，移动/PC完整矩阵及新增deadline场景通过；pageErrors0/externalRequests0 |
+| 重塑独立浏览器 | 两引擎×两档位passed；每组合5调用/4取消，既有停止即重试/关闭/工程/模型保护保持 |
+
+已查看WebKit移动端超时截图：两个入口均结束等待，显示父任务超过总时限，已有一次尝试不能重复请求。浏览器直接调用真实store的一次修复服务并传入独立2秒测试账本，实际检查为浏览器iframe；不声称其通过真实按钮发起或验证了Tauri原生WebView。正常按钮发起/多入口取消/修复采纳等仍由同套既有矩阵覆盖。
+
+最终证据：`evidence/2026-11-01-lifetime-release-ui/result.json`、`evidence/2026-11-01-lifetime-panels-settled/result.json`及截图；重塑`evidence/2026-11-01-lifetime-restyle/browser.json`。负例、中间/最终日志及714份源码SHA256保存于`evidence/2026-11-01-lifetime/`；未增强的panels和主动中断的ui仅作中间记录，均由Git忽略。
+
+未调用真实Provider、未重跑Rust/原生实机/打包、未自动提交Git；既有React act/预期错误日志仍存在，不声称零警告。原27项14完成/13待完成不变，M3-03/M4-04保持开放：重塑最终异步应用、结构化执行器和恢复入口仍须按原清单审计；M5真实模型/独立人评等门槛保持，规则默认关闭。
+
+## 2026-11-01 剩余执行/恢复窗口与M4-04总审计
+
+本轮新增14项：批次账本4项、实际重塑档案3项、结构化2项、建议3项、补挂2项。原始负例证明重塑写前/到期零请求修改/补挂等待越界；建议资格等待仍显示停止按钮。首轮Bun打印React DOM对象产生46MB错误日志，主动中止exit130，不作为完整套件结果；改用布尔断言后，UI负例完整33通过/2失败，再修复并重验。初次固定四套75/0，最终关联五套101/0。
+
+重塑批次为纯生成和最终应用提供同一父账本窗口、signal和写前权限；唯一生产调用方RestylePanel传递该运行上下文，旧进度也检查原账本取消。实际Store仅在同步checkpoint/History提交后回报onCommitted，运行函数/账本不序列化。提交前到期不写页面；提交已完成而档案finish挂起，到期后仍保留applied、准备记录和撤销/重做，余项目不请求。最终档案迟到结尾可完成，不能再写页面。
+
+结构化执行器全部await为已有受预算保护的功能规划/有限JSON，无另外的文件等待；其guard补原账本assertActive，精确耗尽额度仍允许合法结果。一次草稿建议的资格落盘/请求/保存共享原单次窗口；超时后台清理过期标签但不恢复次数，迟到不能覆盖新手填修复。用户显式补挂以既有标准15分钟的独立零模型复验窗口执行，不恢复原生成额度；成功时旧taskBudget保持原值，本次调用0。模型续写仍沿用原父账本。
+
+| 检查 | 最终结果 |
+| --- | --- |
+| 账本/档案/结构化/建议/补挂专项 | **101 pass / 0 fail / 612 assertions / 5 files** |
+| bun test | **2754 pass / 0 fail / 17698 assertions / 245 files / 61.25秒** |
+| bun run type-check | exit0 |
+| bun run build | exit0，Vite 2.94秒 |
+| Python验证器语法 / git diff --check | 通过 |
+| 完整design-evidence浏览器 | Chromium/WebKit各移动390/PC1440通过，含恢复/续写、有限修改、多页/多方案、候选修复与渲染门禁；每引擎pageErrors0/externalRequests0 |
+| 新重塑运行窗口浏览器 | **12项通过**：2引擎×2设备×render/prepare/finish；实际Store、iframe、预览/档案写入，无模型调用；迟到application完全结束后核对页/History/档案 |
+| 既有重塑UI根浏览器 | 两引擎两档位通过；每组合5应用调用/4取消，实际等待、停止即重试、旧迟到、关闭、模型与工程切换保持 |
+
+新浏览器严格断言：render/prepare到期时History0、原页保留；finish到期时History1、结果applied、prepared收尾状态，可撤销/重做；后续目标生成0次，页面乙不变。释放底层挂起工作并等待整个application结束，档案分别为无记录/aborted/applied且invalidFiles0，页面与History保持相同。页面错误与外部请求均经脚本断言为0。该夹具直接调用真实批次与Store，不能描述为通过产品按钮启动；产品UI实际生命周期由既有restyle-progress与前端根测试补充。
+
+最终完整浏览器：`evidence/2026-11-01-remaining-lifetime-ui/result.json`；新窗口：`evidence/2026-11-01-remaining-restyle-lifetime/result.json`；既有UI：`evidence/2026-11-01-remaining-restyle-progress/browser.json`。全部负例/中间/最终日志及716份源码SHA256在`evidence/2026-11-01-remaining-lifetime/`，按工程规则Git忽略。原始46MB失败日志保留，不打印为普通工具输出。
+
+完成逐路径审计文档[progress-audit.md](./progress-audit.md)，仅关闭M4-04、PG-03/04及AC-19。原27顶层任务现在15完成/12待完成；M3其它来源/预算/兼容/失效审计、M4其它检测交付门禁、M5留出/真实模型对照/两位独立人工评审未据此放行。自动规则继续默认关闭。
+
+未调用真实Provider、未重跑Rust/原生实机或打包、未自动执行Git；浏览器iframe不替代Tauri原生WebView。既有React act与预期错误日志仍存在，不声称零警告。
+
+
+## 2026-11-01 M3-02请求来源与侧车绑定审计
+
+本轮新增25项：普通请求身份3、普通/重塑档案4、修复显示7、旧字段兼容1、坏历史3、新页1、候选1、历史五状态5。首轮35/4实际复现异任务ID/跳号/误用修复namespace被接受，以及零修复调用来源仍声称实际注入；修复后扩展77/1是新测试误用不存在的adoptStagedScreen，改实际adoptStagedChange并断言false。普通来源卡同类问题另以36/5负例证明；全部失败日志保留。
+
+普通请求ID现按taskId:request-N与数组顺序核对，父字段、去重及其它回执检查保留；style-repair:request-1继续由独立修复trace验证，不能出现在普通packet。已核对历史acd3ea5源代码使用相同生成格式，缺outputProtocol的旧合法记录读回仍保持缺失，没有升级或重发。
+
+普通卡使用请求记录条数，assembled标已组装输入，其他状态标调用输入记录。修复卡区分本次组装与实际记录到的调用输入；空/仅组装回执不声称注入。failed/cancelled仍保留，completed只代表Core返回，不替代源码/渲染；历史各状态可读，但未完成不能通过执行门禁。
+
+候选保存坏ID后可诊断而不能采纳；单页/重塑档案在prepare、finish和读回拒绝坏身份；新页通过实际Core回执与Canvas异步校验取得metadata，再改child ID即被证据验证拒绝。会话历史投影与请求匹配、缺来源不补造、手填修复仅复用历史来源等链路按request-provenance-audit.md逐项核对。
+
+浏览器新增场景使用真实修复服务、实际iframe检查与受控Core：父规则输入有真实记录；资格原子写入被挂起时没有修复调用，超时释放后保存/重开仍0；正常完成后父ID与style-repair子ID各自正确，实际输入规则等于冻结选择。普通卡更名后首轮验证器仍使用两处旧正文定位而失败，修正精确新文案后全套通过；没有放宽数量断言。
+
+归档审计又发现仅查折叠详情的DOM文本不足以证明可见UI；最终脚本实际点击summary展开并断言来源区可见，覆盖0调用/重开与完成后截图。已查看WebKit移动端截图，显示本次组装TY-06、尚无实际调用回执与尝试0，资格已消耗不能重复但未被冒充为模型调用。
+
+| 检查 | 最终结果 |
+| --- | --- |
+| 来源/档案/分析/有限JSON/重塑/会话专项 | **102 pass / 0 fail / 572 assertions / 6 files** |
+| bun test（可见性增强后） | **2779 pass / 0 fail / 17827 assertions / 245 files / 64.26秒** |
+| bun run type-check | exit0（visible-types） |
+| bun run build | exit0，Vite 2.63秒（visible-build） |
+| Python验证器语法 / git diff --check | 通过 |
+| 最终完整浏览器 | Chromium/WebKit × mobile390/PC1440通过，含全部既有源/候选/恢复/多页/多方案/实际渲染及新来源状态；每引擎pageErrors0/externalRequests0 |
+
+最终浏览器证据：`evidence/2026-11-01-provenance-visible-ui/result.json`及组装/完成详情截图。panels为早期修复卡聚焦，final-ui为可见性增强前中间全套，release-ui为旧文案断言失败；这些均保留，不冒充最终结果。所有中间/失败/最终日志和716文件源码SHA256在`evidence/2026-11-01-provenance/`，按工程规则Git忽略。最终前端日志以visible-full/types/build为准，final-focused为最新专项；full2774与final-full2779/65.77秒均为中间记录。
+
+M3-02按原范围关闭；顶层现在16完成/11待完成，M3-03全部协议预算、M3-04全部schema/旧工程迁移、M3-05完整失效矩阵及M4/M5其它要求保持。没有把本地可编辑JSON一致性检查说成密码学证明，也不证明Provider确认收到或模型遵从。未执行真实Provider/人评、未重跑Rust/原生实机/打包、未自动Git提交；现有React act/预期错误日志不代表零警告。自动规则仍默认关闭。
+
+## 2026-11-01 README 同步与提交前回归
+
+按用户 `update readme, commit & push` 请求，同步 README.md 与 README.CN.md 的请求来源、执行时限、M3-02/M4-04 验收范围及 16/27 当前状态，保留 11 项未完成门槛和规则默认关闭。未修改生产源码。
+
+- 顺序重跑 `bun test`：2779 pass / 0 fail / 17827 assertions / 245 files / 65.20 秒。现有 React act/预期错误输出仍在，不称零警告。
+- `bun run type-check`：exit 0；`bun run build`：exit 0，Vite 2.52 秒。
+- 两份 README 各 15 个本地 Markdown 链接全部存在；`git diff --check` 通过。
+- 716 文件与 provenance/source.sha256 指纹一致，因此保留同一源码的 Chromium/WebKit 两档位完整浏览器及 12 项重塑时限验收记录，本次未重复浏览器/原生/真实 Provider/打包/发布。
+- 本轮命令日志在 `/private/tmp/taudesign-readme-push-{tests,types,build}.log`；原始日志按工程规范不提交 Git。提交和推送结果以 Git 引用及最终执行回执为准。

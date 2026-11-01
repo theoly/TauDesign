@@ -101,8 +101,8 @@ export function guidancePacketIssue(contract:DesignTaskContract,requireCompleted
       selection.body!==selection.selected.map(s=>renderRule(s.rule)).join('')||(ids.length>0)!==(selection.fallback==='none')||
       selection.omitted.some(s=>!s||typeof s.id!=='string'||!['budget','limit'].includes(s.reason)))return '设计规则正文或身份已变化。';
     if(selection.selected.some(s=>s.rule.conflictsWith.some(id=>ids.includes(id))))return '设计规则选择包含冲突。';
-    if(!Array.isArray(packet.requests)||packet.requests.length>64||new Set(packet.requests.map(r=>r.requestId)).size!==packet.requests.length||packet.requests.some(r=>
-      !r||typeof r.requestId!=='string'||!r.requestId||r.parentTaskId!==contract.taskId||typeof r.providerId!=='string'||!r.providerId||typeof r.model!=='string'||!r.model||!hash(r.messageFingerprint)||
+    if(!Array.isArray(packet.requests)||packet.requests.length>64||new Set(packet.requests.map(r=>r.requestId)).size!==packet.requests.length||packet.requests.some((r,index)=>
+      !r||r.requestId!==`${contract.taskId}:request-${index+1}`||r.parentTaskId!==contract.taskId||typeof r.providerId!=='string'||!r.providerId||typeof r.model!=='string'||!r.model||!hash(r.messageFingerprint)||
       (r.outputProtocol!==undefined&&!['stream-text','json-object'].includes(r.outputProtocol))||
       !Array.isArray(r.injectedRuleIds)||new Set(r.injectedRuleIds).size!==r.injectedRuleIds.length||r.injectedRuleIds.some(id=>!ids.includes(id))||
       !['assembled','dispatched','completed','failed','cancelled'].includes(r.status)))return '设计规则请求回执无效。';

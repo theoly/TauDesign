@@ -29,12 +29,16 @@ export interface RestyleApplicationResult {
   appliedContextKey?: string;
 }
 
+/** Runtime capabilities; the store reports only an actual synchronous History commit. */
+export interface RestyleApplicationScope {
+  signal:AbortSignal;isCurrent:()=>boolean;onCommitted:(result:RestyleApplicationResult)=>void;
+}
 /** Sequential, cancellable orchestration shared by the batch UI; model success alone never counts as application. */
 interface RestyleBatchOptions {
   plan: RestylePlan; dryRun: RestyleOutcome; confirmedContextKey: string;
   getContextKey: () => string; resolveTarget: (target: RestyleTarget) => RestyleTarget | null;
   generate: (target: RestyleTarget,taskBudget:TaskBudget) => Promise<RestyleOutcome>;
-  apply: (outcome: RestyleOutcome) => boolean | RestyleApplicationResult | Promise<boolean | RestyleApplicationResult>;
+  apply: (outcome: RestyleOutcome,scope:RestyleApplicationScope) => boolean | RestyleApplicationResult | Promise<boolean | RestyleApplicationResult>;
   signal?: AbortSignal; onProgress?: (outcomes: RestyleOutcome[]) => void;
   taskBudget?:TaskBudget;
 }
@@ -49,12 +53,15 @@ async function runRestyleBatch(options:RestyleBatchOptions,budget:TaskBudget): P
   const outcomes: RestyleOutcome[] = [];
   const batchId = `restyle-batch-${crypto.randomUUID()}`;
   let expected = options.confirmedContextKey;
-  const stop = (beforeGeneration=false): RestyleBatchResult | undefined => options.signal?.aborted
+  const stop = (beforeGeneration=false): RestyleBatchResult | undefined => {
+    try{budget.assertActive();}catch(error){return {status:'cancelled',outcomes,remaining:plan.queue.length-outcomes.length,message:error instanceof Error?error.message:'批次已结束。'};}
+    return options.signal?.aborted
     ? {status:'cancelled',outcomes,remaining:plan.queue.length-outcomes.length,message:'批量重塑已停止，已应用的修改可通过历史撤销。'}
     : budget.signal.aborted||(beforeGeneration&&budget.snapshot().exhausted)
       ? {status:'cancelled',outcomes,remaining:plan.queue.length-outcomes.length,message:'批次预算已耗尽或超过时限，剩余项目未请求；已应用项可撤销。'}
     : options.getContextKey() !== expected
       ? {status:'stale',outcomes,remaining:plan.queue.length-outcomes.length,message:'工程或任务上下文已变化，剩余重塑已停止；请重新试跑。'} : undefined;
+  };
   const invalid = stop(); if (invalid) return invalid;
   if (!plan.queue.length || dryRun.status !== 'applied' || !dryRun.html || dryRun.target.id !== plan.queue[0].id ||
     dryRun.target.kind !== plan.queue[0].kind || dryRun.target.html !== plan.queue[0].html) {
@@ -65,7 +72,7 @@ async function runRestyleBatch(options:RestyleBatchOptions,budget:TaskBudget): P
     const target = options.resolveTarget(plan.queue[index]);
     if (!target || (index===0 && target.html !== dryRun.target.html)) return {status:'stale',outcomes,remaining:plan.queue.length-outcomes.length,message:'重塑目标已删除或试跑基线变化，请重新试跑。'};
     let outcome: RestyleOutcome;
-    try { outcome = index===0 ? dryRun : await options.generate(structuredClone(target),budget); }
+    try { outcome = index===0 ? dryRun : await budget.run(()=>options.generate(structuredClone(target),budget),options.signal); }
     catch (error) { outcome = {target,status:'failed',message:error instanceof Error ? error.message : '重塑执行失败'}; }
     const afterGeneration = stop(); if (afterGeneration) return afterGeneration;
     if (outcome.target.id !== target.id || outcome.target.kind !== target.kind || outcome.target.html !== target.html) {
@@ -73,7 +80,17 @@ async function runRestyleBatch(options:RestyleBatchOptions,budget:TaskBudget): P
     } else if (outcome.status === 'applied') {
       outcome = {...outcome,batchId};
       try {
-        const application = await options.apply(outcome);
+        let committed:RestyleApplicationResult|undefined;
+        let application:boolean|RestyleApplicationResult;
+        try{application=await budget.run(signal=>Promise.resolve(options.apply(outcome,{
+          signal,isCurrent:()=>{budget.assertActive();return !options.signal?.aborted&&options.getContextKey()===expected;},
+          onCommitted:result=>{if(result.applied)committed=structuredClone(result);}
+        })),options.signal);}
+        catch(error){
+          if(!committed?.applied)throw error;
+          // The deadline cannot undo a History commit already authorized by the store.
+          application={...committed,...(committed.delivery?{delivery:{...committed.delivery,status:'prepared',message:'重塑已应用；档案收尾尚未完成，准备记录保留，已应用项仍可撤销。'}}:{})};
+        }
         const result = typeof application === 'boolean' ? {applied:application} : application;
         if (result.validation) outcome = {...outcome,validation:result.validation};
         if (result.delivery) outcome = {...outcome,delivery:result.delivery};

@@ -1,3 +1,4 @@
+import {TaskBudget} from '../src/services/ai/taskBudget';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import {useProjectStore} from '../src/stores/useProjectStore';
 import {useHistoryStore} from '../src/stores/useHistoryStore';
@@ -126,4 +127,34 @@ for(const mode of ['present','missing','removed-during-render','replaced-during-
  expect(result.success).toBe(mode==='present');
  if(mode==='present'){const page=Object.values(useProjectStore.getState().screens)[0];expect(page.metadata?.creationEvidence?.files.map(f=>f.relPath)).toContain(importedFont);}
  else expect(useProjectStore.getState().screenOrder).toEqual([]);
+});
+
+test('parent expiry during render refuses a late creation before History commit',async()=>{
+ let now=0;const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:4,maxDurationMs:100,maxRequestDurationMs:100},()=>now);
+ budget.reserve(4).settle();const before=historyCounts();
+ PageRenderCheck.inspect=async()=>{now=100;return {status:'complete',inspected:3,findings:[]};};
+ const result=await create(html,task(),{taskBudget:budget});
+ expect(result.success).toBe(false);expect(useProjectStore.getState().screenOrder).toHaveLength(0);expect(historyCounts()).toEqual(before);
+ expect(budget.snapshot()).toMatchObject({requests:1,requestedOutputTokens:4,reservedOutputTokens:0,cancelled:true});budget.close();
+});
+
+test('exactly spent model allowance still permits a timely verified page and one History action',async()=>{
+ const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:4,maxDurationMs:10000,maxRequestDurationMs:10000});budget.reserve(4).settle();const before=historyCounts();
+ try{const result=await create(html,task(),{taskBudget:budget});expect(result.success).toBe(true);expect(useProjectStore.getState().screenOrder).toHaveLength(1);expect(historyCounts()[0]).toBe(before[0]+1);expect(budget.snapshot()).toMatchObject({exhausted:true,cancelled:false,closed:false});}
+ finally{budget.close();}
+});
+test('parent timeout exits a hung renderer and its late reply cannot create a page',async()=>{
+ let release!:()=>void,renderSignal:AbortSignal|undefined;const gate=new Promise<void>(resolve=>release=resolve),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:4,maxDurationMs:80,maxRequestDurationMs:80}),before=historyCounts();
+ PageRenderCheck.inspect=async(_request,_storage,options)=>{renderSignal=options?.signal;await gate;return {status:'complete',inspected:3,findings:[]};};
+ try{const result=await create(html,task(),{taskBudget:budget});expect(result.success).toBe(false);expect(result.error).toContain('总时限');expect(renderSignal?.aborted).toBe(true);expect(historyCounts()).toEqual(before);release();await new Promise(resolve=>setTimeout(resolve,0));expect(useProjectStore.getState().screenOrder).toHaveLength(0);expect(historyCounts()).toEqual(before);}
+ finally{release();budget.close();}
+});
+test('external cancellation stops verification and cannot leave a pending creation lock',async()=>{
+ let release!:()=>void,entered!:()=>void;const gate=new Promise<void>(resolve=>release=resolve),started=new Promise<void>(resolve=>entered=resolve),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:4,maxDurationMs:10000,maxRequestDurationMs:10000}),controller=new AbortController(),contract=task();
+ PageRenderCheck.inspect=async()=>{entered();await gate;return {status:'complete',inspected:3,findings:[]};};
+ try{
+  const pending=create(html,contract,{taskBudget:budget,signal:controller.signal});await started;controller.abort();expect((await pending).success).toBe(false);
+  PageRenderCheck.inspect=async()=>({status:'complete',inspected:3,findings:[]});expect((await create(html,contract)).success).toBe(true);
+  const before=historyCounts();release();await new Promise(resolve=>setTimeout(resolve,0));expect(useProjectStore.getState().screenOrder).toHaveLength(1);expect(historyCounts()).toEqual(before);
+ }finally{release();budget.close();}
 });

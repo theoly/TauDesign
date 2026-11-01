@@ -2,7 +2,7 @@
 """Real Chromium/WebKit DOM and screenshots; fixture-only model, no Provider traffic."""
 import argparse,asyncio,base64,json
 from pathlib import Path
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright,expect
 ROOT=Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output',default='doc/ui-design-workflow/evidence/2026-10-30-json-ui')
@@ -234,9 +234,9 @@ async def verify_protocol_guidance(page,engine,device):
     await page.get_by_role('button',name='执行区块试点',exact=True).click()
     await page.get_by_test_id('status').filter(has_text='ready').wait_for()
     await page.get_by_label('本次设计依据',exact=True).locator('summary').first.click()
-    await page.get_by_label('本次设计依据',exact=True).get_by_text('调用记录 · 1 次',exact=True).click()
+    await page.get_by_label('本次设计依据',exact=True).get_by_text('请求记录 · 1 条',exact=True).click()
     await page.get_by_label('本轮预算记录',exact=True).locator('summary').click()
-    assert '实际进入请求 1 条规则' in await page.get_by_label('本次设计依据',exact=True).inner_text()
+    assert '调用输入记录 1 条规则' in await page.get_by_label('本次设计依据',exact=True).inner_text()
     assert '4,096' in await page.get_by_label('本轮预算记录',exact=True).inner_text()
     frame=page.frame_locator('iframe[data-inspector-screen="page"]')
     await frame.locator('[data-nid="region01"]').wait_for()
@@ -326,7 +326,7 @@ async def verify_guidance_reopen(page,engine,device,kind):
     card=page.get_by_label('历史设计依据',exact=True).last
     await card.locator('summary').first.wait_for()
     await card.locator('summary').first.click()
-    await card.get_by_text('调用记录 · 1 次',exact=True).click()
+    await card.get_by_text('请求记录 · 1 条',exact=True).click()
     assert '返回完成' in await card.inner_text()
     assert '不能直接采纳或续写' in await page.locator('body').inner_text()
     after=await page.evaluate('()=>({calls:ruleControlFixture.requests.length,history:ruleControlFixture.history().past.length,pages:Object.keys(ruleControlFixture.state().screens).length})')
@@ -339,12 +339,12 @@ async def verify_guidance_reopen(page,engine,device,kind):
         await panel.locator('details').filter(has=page.locator('summary',has_text='替换原页 · 已应用')).first.locator(':scope > summary').click()
         saved=panel.get_by_label('历史设计依据',exact=True).last
         await saved.locator('summary').first.click()
-        await saved.get_by_text('调用记录 · 1 次',exact=True).click()
+        await saved.get_by_text('请求记录 · 1 条',exact=True).click()
         assert '返回完成' in await saved.inner_text()
         await panel.get_by_text('已确认的分析来源',exact=True).click()
         analysis=panel.get_by_label('历史设计依据',exact=True).first
         await analysis.locator('summary').first.click()
-        await analysis.get_by_text('调用记录 · 2 次',exact=True).click()
+        await analysis.get_by_text('请求记录 · 2 条',exact=True).click()
         assert '调用失败（由后续格式纠正替代）' in await analysis.inner_text()
     await page.screenshot(path=str(OUT/f'{engine}-rule-history-{kind}-{device}.png'),full_page=True)
     if kind=='modify': await page.evaluate('ruleControlFixture.hideDelivery()')
@@ -395,7 +395,7 @@ async def verify_rule_roots(page,engine,device):
     await page.wait_for_function('!!ruleControlFixture.state().stagedScreen')
     evidence=page.get_by_label('本次设计依据',exact=True).first
     await evidence.locator('summary').first.click()
-    await evidence.get_by_text('调用记录 · 2 次',exact=True).click()
+    await evidence.get_by_text('请求记录 · 2 条',exact=True).click()
     assert '调用失败（由后续格式纠正替代）' in await evidence.inner_text()
     reviewed=await page.evaluate('''()=>{
       const f=ruleControlFixture,s=f.state(),c=s.stagedScreen,analysis=c.workflowContract.modificationReview.analysis.workflowContract;
@@ -433,8 +433,8 @@ async def verify_rule_roots(page,engine,device):
     await page.locator('button[title*="立即停止"]').click()
     cancelled_card=page.get_by_label('本次设计依据',exact=True).first
     await cancelled_card.locator('summary').first.click()
-    await cancelled_card.get_by_text('调用记录 · 1 次',exact=True).click()
-    await page.wait_for_function('document.body.innerText.includes("已取消 · 实际进入请求")')
+    await cancelled_card.get_by_text('请求记录 · 1 条',exact=True).click()
+    await page.wait_for_function('document.body.innerText.includes("已取消 · 调用输入记录")')
     cancelled=await page.evaluate('''()=>{const f=ruleControlFixture,s=f.state();return {calls:f.requests.length,original:s.screens.page.htmlContent===f.original,candidate:!!s.stagedScreen,history:f.history().past.length-f.before};}''')
     assert cancelled=={'calls':1,'original':True,'candidate':False,'history':0},cancelled
     await page.screenshot(path=str(OUT/f'{engine}-rule-cancel-{device}.png'),full_page=True)
@@ -820,19 +820,21 @@ async def verify_variant_activity(page,engine,device):
         await page.locator('textarea[placeholder^="输入设计诉求"]').fill('给当前页面做两个方案')
         await page.locator('button[title*="发送设计诉求"]').click()
         await page.wait_for_function('multiFunctionFixture.pending.length===1')
-        assert '调用尝试 1 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
+        await expect(page.get_by_label('应用调用摘要',exact=True).last).to_contain_text('调用尝试 1 次',timeout=5000)
         await page.evaluate('multiFunctionFixture.release(0)')
         await page.get_by_role('button',name='确认计划并生成 2 个方案',exact=True).click()
         await page.wait_for_function('multiFunctionFixture.pending.length===2')
-        assert '调用尝试 1 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
+        await expect(page.get_by_label('应用调用摘要',exact=True).last).to_contain_text('调用尝试 1 次',timeout=5000)
         await page.evaluate('multiFunctionFixture.release(1)')
         await page.wait_for_function('multiFunctionFixture.pending.length===3')
-        assert '调用尝试 2 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
+        # Raw transport pending state can precede React's committed activity card.
+        await expect(page.get_by_label('应用调用摘要',exact=True).last).to_contain_text('调用尝试 2 次',timeout=5000)
         assert await page.evaluate('Object.keys(multiFunctionFixture.state().screens).length')==1
         if stop:await page.locator('button[title*="立即停止"]').click()
         await page.evaluate('multiFunctionFixture.release(2)')
         if stop:await page.get_by_text('本批次未加入方案。可调整需求后重新发送方案请求。',exact=True).wait_for()
         else:await page.wait_for_function('Object.keys(multiFunctionFixture.state().screens).length===3')
+        await expect(page.get_by_label('应用调用摘要',exact=True).last).to_contain_text('进行中 0 次',timeout=5000)
         activity=await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
         assert '进行中 0 次' in activity and '调用尝试 2 次' in activity
         result=await page.evaluate('''()=>{const f=multiFunctionFixture,p=Object.values(f.state().screens).filter(s=>s.id!=='old');return {calls:f.requests.length,pages:p.length,
@@ -847,6 +849,12 @@ async def verify_variant_activity(page,engine,device):
     return results
 
 async def verify_panel_activity(page,engine,device):
+    async def repair_source():
+        card=page.get_by_label('修复设计规则来源',exact=True).last
+        details=card.locator('xpath=ancestor::details[1]')
+        if await details.get_attribute('open') is None:await details.locator('summary').first.click()
+        await expect(card).to_be_visible(timeout=5000)
+        return card
     await page.evaluate('localStorage.clear()')
     url='http://127.0.0.1:5174/test/fixtures/panel-operation-progress.html?device='+device
     await page.goto(url,wait_until='networkidle')
@@ -935,7 +943,60 @@ async def verify_panel_activity(page,engine,device):
       history:panelOperationFixture.history().past.length-panelOperationFixture.before,maxTokens:panelOperationFixture.calls[0].maxTokens})''')
     assert result=={'calls':1,'unchanged':True,'original':True,'history':0,'maxTokens':1800},result
     assert 'PANEL_SECRET' not in await page.locator('body').inner_text()
-    return {'inspectorSelectedScope':True,'inspectorStopAndModelChange':True,'duplicateRepairAndOtherControlCancel':True,'reopenPreservesAttempt':True,'repairAdoptUndoRedo':True,'verificationCancel':result}
+    await page.goto(url+'&candidate=1&verifyHold=1',wait_until='networkidle')
+    await page.wait_for_function('panelOperationFixture.ready')
+    await page.evaluate('panelOperationFixture.startDeadline()')
+    await page.wait_for_function('panelOperationFixture.calls.length===1')
+    await page.evaluate('panelOperationFixture.release(0)')
+    await page.wait_for_function('!!panelOperationFixture.releaseVerify')
+    await page.wait_for_function('panelOperationFixture.finished',timeout=10000)
+    await expect(page.get_by_label('候选受控修复').first).to_contain_text('总时限',timeout=5000)
+    deadline=await page.evaluate('''()=>{const f=panelOperationFixture,s=f.state();return {calls:f.calls.length,outcome:f.outcome,
+      unchanged:s.stagedScreen.candidateId===f.candidateId,original:s.screens.page.htmlContent===f.original,
+      history:f.history().past.length-f.before,status:s.stagedRepairStatus,attempts:s.stagedScreen.repair.attempts,
+      cancelled:f.budget.snapshot().cancelled,reserved:f.budget.snapshot().reservedOutputTokens};}''')
+    assert deadline=={'calls':1,'outcome':False,'unchanged':True,'original':True,'history':0,'status':None,'attempts':1,'cancelled':True,'reserved':0},deadline
+    await page.evaluate('panelOperationFixture.releaseVerify()')
+    await page.wait_for_function('panelOperationFixture.verifyFinished===true')
+    assert await page.evaluate('panelOperationFixture.state().stagedScreen.candidateId===panelOperationFixture.candidateId')
+    assert await page.evaluate('panelOperationFixture.state().screens.page.htmlContent===panelOperationFixture.original')
+    assert await page.evaluate('panelOperationFixture.history().past.length===panelOperationFixture.before')
+    assert await page.evaluate('panelOperationFixture.calls.length')==1
+    deadline['lateVerificationSettled']=True
+    await page.screenshot(path=str(OUT/f'{engine}-candidate-deadline-{device}.png'))
+    await page.goto(url+'&candidate=1&guidance=1&claimHold=1',wait_until='networkidle')
+    await page.wait_for_function('panelOperationFixture.ready')
+    assert await page.evaluate('panelOperationFixture.plannedRules.length>0')
+    await page.evaluate('panelOperationFixture.startDeadline()')
+    await page.wait_for_function('panelOperationFixture.claimHeld')
+    source=await repair_source()
+    await expect(source).to_contain_text('尚无实际调用回执',timeout=5000)
+    assert '实际注入' not in await source.inner_text()
+    assert await page.evaluate('panelOperationFixture.calls.length')==0
+    await page.wait_for_function('panelOperationFixture.finished',timeout=10000)
+    await page.evaluate('panelOperationFixture.releaseClaim()')
+    await page.wait_for_function('panelOperationFixture.claimWriteFinished')
+    await page.evaluate('panelOperationFixture.reopen()')
+    source=await repair_source()
+    await expect(source).to_contain_text('尚无实际调用回执',timeout=5000)
+    assert await page.evaluate('panelOperationFixture.calls.length')==0
+    await page.screenshot(path=str(OUT/f'{engine}-repair-source-assembled-{device}.png'))
+    await page.goto(url+'&candidate=1&guidance=1',wait_until='networkidle')
+    await page.wait_for_function('panelOperationFixture.ready')
+    await page.locator('[data-control=primary]').get_by_role('button',name='修复一次并重新检查',exact=True).click()
+    await page.wait_for_function('panelOperationFixture.calls.length===1')
+    await page.evaluate('panelOperationFixture.release(0)')
+    await page.wait_for_function('panelOperationFixture.state().stagedScreen.repair?.status==="repaired"')
+    source=await repair_source()
+    await expect(source).to_contain_text('调用输入记录包含',timeout=5000)
+    await expect(source).to_contain_text('修复调用尝试 1 次',timeout=5000)
+    provenance=await page.evaluate('''()=>{const f=panelOperationFixture,r=f.state().stagedScreen.repair.guidance;return {parentIds:f.parentRequestIds,
+      repairId:r.requests[0].requestId,parent:r.parentTaskId,status:r.requests[0].status,rules:r.requests[0].injectedRuleIds,planned:f.plannedRules,calls:f.calls.length};}''')
+    assert provenance['parentIds']==[provenance['parent']+':request-1'],provenance
+    assert provenance['repairId']==provenance['parent']+':style-repair:request-1' and provenance['status']=='completed' and provenance['rules']==provenance['planned'] and provenance['calls']==1,provenance
+    assert 'PANEL_SECRET' not in await page.locator('body').inner_text()
+    await page.screenshot(path=str(OUT/f'{engine}-repair-source-called-{device}.png'))
+    return {'inspectorSelectedScope':True,'inspectorStopAndModelChange':True,'duplicateRepairAndOtherControlCancel':True,'reopenPreservesAttempt':True,'repairAdoptUndoRedo':True,'verificationCancel':result,'verificationDeadline':deadline,'repairProvenance':provenance}
 
 async def main():
     OUT.mkdir(parents=True,exist_ok=True);results=[]

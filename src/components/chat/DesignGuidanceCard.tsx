@@ -8,9 +8,12 @@ const states={assembled:'已组装',dispatched:'调用中',completed:'返回完�
 export function RepairGuidanceSource({trace}:{trace?:RepairGuidanceTrace}) {
  if(trace===undefined)return null;
  if(!isRepairGuidanceTrace(trace))return <p className="text-amber-300">修复设计规则来源不可用。</p>;
+ const attempted=trace.requests.filter(r=>r.status!=='assembled');
+ const recordedIds=[...new Set(attempted.flatMap(r=>r.injectedRuleIds))];
  return <div className="space-y-1 text-slate-500" aria-label="修复设计规则来源">
-  <p>沿用原任务 {trace.parentTaskId} 的冻结规则；实际注入 {trace.injectedRuleIds.join('、')||'0 条'}，因空间省略 {trace.omittedRuleIds.join('、')||'0 条'}。</p>
-  <p>修复调用 {trace.requests.length} 次{trace.requests.map(r=>` · ${states[r.status]}`).join('')}；不表示模型遵从或页面复验通过。</p>
+  <p>沿用原任务 {trace.parentTaskId} 的冻结规则；本次组装 {trace.injectedRuleIds.join('、')||'0 条'}，因空间省略 {trace.omittedRuleIds.join('、')||'0 条'}。</p>
+  {attempted.length?<p>调用输入记录包含 {recordedIds.join('、')||'0 条规则'}。</p>:<p>尚无实际调用回执，不能确认组装规则已进入调用。</p>}
+  <p>修复调用尝试 {attempted.length} 次{trace.requests.map(r=>` · ${states[r.status]}`).join('')}；不表示 Provider 已确认收到、模型遵从或页面复验通过。</p>
  </div>;
 }
 export function DesignGuidanceCard({contract,historical=false}:{contract?:DesignTaskContract;historical?:boolean}) {
@@ -29,8 +32,8 @@ export function DesignGuidanceCard({contract,historical=false}:{contract?:Design
       <p className="text-slate-500">匹配依据：{reason}；来源：{rule.source.title}（{rule.source.revision}）</p>
     </div>)}
     {selection.omitted.length>0&&<p className="text-slate-500">{selection.omitted.filter(s=>s.reason==='budget').length} 条因预算省略，{selection.omitted.filter(s=>s.reason==='limit').length} 条因数量上限省略。</p>}
-    <details><summary className="cursor-pointer text-slate-400">调用记录 · {packet.requests.length} 次</summary>
-      {packet.requests.length?packet.requests.map(r=><p key={r.requestId} className="mt-1 break-all text-slate-500">{r.model} · {states[r.status]}{r.supersededByRequestId?'（由后续格式纠正替代）':''} · 实际进入请求 {r.injectedRuleIds.length} 条规则</p>):<p className="mt-1 text-slate-500">尚无实际调用记录。</p>}
+    <details><summary className="cursor-pointer text-slate-400">请求记录 · {packet.requests.length} 条</summary>
+      {packet.requests.length?packet.requests.map(r=><p key={r.requestId} className="mt-1 break-all text-slate-500">{r.model} · {states[r.status]}{r.supersededByRequestId?'（由后续格式纠正替代）':''} · {r.status==='assembled'?'已组装输入':'调用输入记录'} {r.injectedRuleIds.length} 条规则</p>):<p className="mt-1 text-slate-500">尚无实际调用记录。</p>}
     </details>
     <p className="text-slate-500">记录用于追溯输入；不表示 Provider 已确认收到、模型遵从规则或页面检查通过。</p>
   </details>;

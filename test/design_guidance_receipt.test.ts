@@ -153,3 +153,9 @@ for(const kind of ['exhausted','cancelled','closed'] as const)test(`Pipeline ${k
   designSystem:techBlueTheme,deviceProfile:'mobile',frameWidth:390,baseSystemPrompt:'baseline',contextualGuidance:{},taskBudget:budget});
  expect(output.status).toBe('error');expect(calls).toBe(0);expect(output.workflowContract?.designGuidance?.requests).toEqual([]);
 });
+
+for(const invalid of ['foreign-task','skipped-index','repair-namespace'] as const)test(`ordinary packet rejects ${invalid} request identity even when parent field matches`,async()=>{
+ const {output}=await run('新建长正文说明页面'),contract=output.workflowContract!,packet=contract.designGuidance!;
+ const receipt=packet.requests[0];receipt.requestId=invalid==='foreign-task'?'other-task:request-1':invalid==='skipped-index'?`${contract.taskId}:request-2`:`${contract.taskId}:style-repair:request-1`;
+ expect(receipt.parentTaskId).toBe(contract.taskId);expect(guidancePacketIssue(contract)).toBeDefined();expect(guidancePacketIssue(contract,false,'history')).toBeDefined();
+});

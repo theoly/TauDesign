@@ -206,3 +206,19 @@ test('same-path resource replacement during archive preparation rejects the rest
   expect((await repo().list()).records[0].status).toBe('aborted');
  }finally{prepare.mockRestore();}
 });
+
+for(const phase of ['render','prepare','finish'] as const)test(`parent deadline during restyle ${phase} respects the actual History commit boundary`,async()=>{
+ const {TaskBudget}=await import('../src/services/ai/taskBudget');const store=useProjectStore.getState();store.addScreen({name:'页面乙',htmlContent:source},'b');
+ const plan=store.buildRestylePlan(),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:4,maxDurationMs:200,maxRequestDurationMs:200}),before=useHistoryStore.getState().past.length;
+ let release!:()=>void,entered=false,generated=0;const gate=new Promise<void>(resolve=>release=resolve);
+ let mock:ReturnType<typeof spyOn>|undefined;
+ if(phase==='render'){const original=render.getMockImplementation()!;render.mockImplementation(async(...args:any[])=>{entered=true;await gate;return (original as any)(...args);});}
+ else{const method=RestyleDeliveryRepository.prototype[phase];mock=spyOn(RestyleDeliveryRepository.prototype,phase).mockImplementation(async function(this:RestyleDeliveryRepository,...args:any[]){entered=true;await gate;return (method as any).apply(this,args);});}
+ try{
+  const result=await executeRestyleBatch({plan,dryRun:acceptRestyleResult(plan.dryRun!,plan.dryRun!.html.replace('p-4','p-6')),taskBudget:budget,confirmedContextKey:restyleContextKey(useProjectStore.getState()),getContextKey:()=>restyleContextKey(useProjectStore.getState()),resolveTarget:target=>({...target,html:useProjectStore.getState().screens[target.id].htmlContent}),generate:async target=>{generated++;return acceptRestyleResult(target,target.html.replace('p-4','p-6'));},apply:(value,scope)=>store.applyRestyleOutcome(value,scope.signal,scope.isCurrent,scope.onCommitted)});
+  expect(entered).toBe(true);expect(result.status).toBe('cancelled');expect(generated).toBe(0);
+  expect(useHistoryStore.getState().past).toHaveLength(before+(phase==='finish'?1:0));expect(useProjectStore.getState().screens.a.htmlContent).toContain(phase==='finish'?'p-6':'p-4');
+  if(phase==='finish'){expect(result.outcomes[0].status).toBe('applied');expect(result.outcomes[0].delivery?.status).toBe('prepared');useHistoryStore.getState().undo();expect(useProjectStore.getState().screens.a.htmlContent).toBe(source);useHistoryStore.getState().redo();expect(useProjectStore.getState().screens.a.htmlContent).toContain('p-6');}
+  release();await new Promise(resolve=>setTimeout(resolve,30));expect(useProjectStore.getState().screens.b.htmlContent).toBe(source);expect(useHistoryStore.getState().past).toHaveLength(before+(phase==='finish'?1:0));
+ }finally{release();await new Promise(resolve=>setTimeout(resolve,30));mock?.mockRestore();budget.close();}
+});

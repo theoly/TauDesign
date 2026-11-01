@@ -203,3 +203,52 @@ test('guided candidate repair persists parent provenance, rechecks it on adoptio
  expect(isCandidateValidationEvidence({...record.candidate.validationEvidence,repair:{...repaired.repair,guidance:{requests:[]}}})).toBe(false);
  useHistoryStore.getState().undo();expect(useProjectStore.getState().screens.page.htmlContent).toBe(html);useHistoryStore.getState().redo();expect(useProjectStore.getState().screens.page.htmlContent).not.toContain('font-size:0');
 });
+
+test('parent expiry during candidate verification keeps the original candidate and consumed attempt',async()=>{
+ stage();let now=0;const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1800,maxDurationMs:100,maxRequestDurationMs:100},()=>now);
+ const before=useProjectStore.getState().stagedScreen!,historyBefore=useHistoryStore.getState().past.length;
+ PageRenderCheck.inspect=async()=>{now=100;return structuredClone(good);};
+ expect(await useProjectStore.getState().repairStagedCandidate({core,provider,model:'fixture',taskBudget:budget})).toBe(false);
+ const state=useProjectStore.getState();expect(state.stagedScreen?.candidateId).toBe(before.candidateId);expect(state.stagedScreen?.newHtml).toBe(before.newHtml);
+ expect(state.screens.page.htmlContent).toBe(html);expect(useHistoryStore.getState().past).toHaveLength(historyBefore);expect(state.getStagedRepairEligibility().allowed).toBe(false);
+ expect(budget.snapshot()).toMatchObject({requests:1,requestedOutputTokens:1800,cancelled:true});budget.close();
+});
+
+test('candidate verification may finish after spending the exact single-request allowance',async()=>{
+ stage();const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1800,maxDurationMs:10000,maxRequestDurationMs:10000});
+ try{expect(await useProjectStore.getState().repairStagedCandidate({core,provider,model:'fixture',taskBudget:budget})).toBe(true);expect(budget.snapshot()).toMatchObject({requests:1,requestedOutputTokens:1800,exhausted:true,cancelled:false});expect(useProjectStore.getState().stagedScreen?.repair?.status).toBe('repaired');}
+ finally{budget.close();}
+});
+test('candidate parent timeout exits hung verification while retaining its real model receipt',async()=>{
+ stage();let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve),before=useProjectStore.getState().stagedScreen!;
+ const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1800,maxDurationMs:100,maxRequestDurationMs:100});PageRenderCheck.inspect=async()=>{await gate;return structuredClone(good);};
+ try{
+  expect(await useProjectStore.getState().repairStagedCandidate({core,provider,model:'fixture',taskBudget:budget})).toBe(false);
+  const state=useProjectStore.getState();expect(state.stagedRepairStatus).toBeNull();expect(state.stagedRepairError).toContain('总时限');expect(state.stagedScreen?.candidateId).toBe(before.candidateId);
+  expect(state.stagedScreen?.repair).toMatchObject({status:'cancelled',attempts:1,usage:{inputTokens:123,outputTokens:45},operations:[{nid:'save',type:'remove_styles',value:'font-size'}]});
+  release();await new Promise(resolve=>setTimeout(resolve,2));expect(useProjectStore.getState().stagedScreen?.candidateId).toBe(before.candidateId);expect(state.getStagedRepairEligibility().allowed).toBe(false);expect(calls).toHaveLength(1);
+ }finally{release();budget.close();}
+});
+test('parent timeout during the persisted attempt releases repair without sending a late request',async()=>{
+ stage();let release!:()=>void,saved=false;const gate=new Promise<void>(resolve=>release=resolve),realSave=CandidateRepository.saveStagedCandidate;
+ const mock=spyOn(CandidateRepository,'saveStagedCandidate').mockImplementation(async(project,folder,value)=>{await realSave(project,folder,value);if(value.repair?.message?.startsWith('已登记一次修复尝试')){saved=true;await gate;}});
+ const state=useProjectStore.getState(),before=state.stagedScreen!,budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1800,maxDurationMs:100,maxRequestDurationMs:100});
+ try{
+  expect(await state.repairStagedCandidate({core,provider,model:'fixture',taskBudget:budget})).toBe(false);expect(saved).toBe(true);expect(calls).toHaveLength(0);expect(useProjectStore.getState().stagedRepairStatus).toBeNull();
+  release();await new Promise(resolve=>setTimeout(resolve,2));expect(calls).toHaveLength(0);expect(state.getStagedRepairEligibility().allowed).toBe(false);
+  const reopened=(await loadStagedCandidate(state.id))!;expect(reopened.candidateId).toBe(before.candidateId);expect(reopened.repair?.attempts).toBe(1);expect(useProjectStore.getState().stagedScreen?.newHtml).toBe(before.newHtml);
+ }finally{release();mock.mockRestore();budget.close();}
+});
+
+test('a genuinely blocked atomic reservation write cannot overwrite a newer candidate after timeout',async()=>{
+ stage();const state=useProjectStore.getState(),{createProjectStorage}=await import('../src/services/storage/projectStorage'),storage=createProjectStorage(state.id,state.folderPath),prototype=Object.getPrototypeOf(storage),write=prototype.writeTextAtomic;
+ let release!:()=>void,entered=false;const gate=new Promise<void>(resolve=>release=resolve),mock=spyOn(prototype,'writeTextAtomic').mockImplementation(async function(this:unknown,rel:string,text:string){
+  if(rel==='candidates/current.json'&&JSON.parse(text).candidate.repair?.message?.startsWith('已登记一次修复尝试')){entered=true;await gate;}
+  return write.call(this,rel,text);
+ }),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1800,maxDurationMs:100,maxRequestDurationMs:100});
+ try{
+  expect(await state.repairStagedCandidate({core,provider,model:'fixture',taskBudget:budget})).toBe(false);expect(entered).toBe(true);expect(calls).toHaveLength(0);expect(state.getStagedRepairEligibility().allowed).toBe(false);
+  stage();const replacement=useProjectStore.getState().stagedScreen!.candidateId;release();const restored=(await loadStagedCandidate(state.id))!;
+  expect(restored.candidateId).toBe(replacement);expect(useProjectStore.getState().stagedScreen?.candidateId).toBe(replacement);expect(calls).toHaveLength(0);
+ }finally{release();await loadStagedCandidate(state.id);mock.mockRestore();budget.close();}
+});
