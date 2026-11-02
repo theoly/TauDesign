@@ -252,3 +252,19 @@ test('a genuinely blocked atomic reservation write cannot overwrite a newer cand
   expect(restored.candidateId).toBe(replacement);expect(useProjectStore.getState().stagedScreen?.candidateId).toBe(replacement);expect(calls).toHaveLength(0);
  }finally{release();await loadStagedCandidate(state.id);mock.mockRestore();budget.close();}
 });
+
+for(const corrupt of ['negative-count','fractional-count','bad-files'] as const)test(`candidate and saved delivery reject ${corrupt} initial repair evidence`,async()=>{
+ stage();expect(await run()).toBe(true);publish(good);
+ const s=useProjectStore.getState();expect(await s.adoptStagedChange()).toBe(true);
+ const storage=createProjectStorage(s.id),repo=new DeliveryRepository(storage,s.id),record=(await repo.listForScreen('page')).records[0],copy=structuredClone(record);
+ const repair=copy.candidate.repair!;
+ if(corrupt==='negative-count')repair.initialRender.inspected=-1;
+ if(corrupt==='fractional-count')repair.initialRender.inspected=0.5;
+ if(corrupt==='bad-files')repair.initialRender.resourceFiles=[{relPath:'assets/images/a.png',sha256:'invalid'}];
+ copy.candidate.validationEvidence!.repair=structuredClone(repair);
+ expect(isPageRepairRecord(repair)).toBe(false);expect(isCandidateValidationEvidence(copy.candidate.validationEvidence)).toBe(false);
+ const {contentFingerprint}=await import('../src/services/ai/designWorkflow');
+ const path=`deliveries/screen-${contentFingerprint('page')}/${copy.id}.json`;await storage.writeTextAtomic(path,JSON.stringify(copy));
+ const list=await new DeliveryRepository(storage,s.id).listForScreen('page');expect(list.records).toHaveLength(0);expect(list.invalidFiles).toBe(1);
+ expect(await repo.get('page',copy.id)).toBeNull();await expect(repo.finish(copy,'applied')).rejects.toThrow();
+});

@@ -48,6 +48,31 @@ const core=new DefaultAIEngineCore({id:'local-root-control',stream:(request,even
  return transport.stream(request,event);
 }});
 const stream=DefaultAIEngineCore.prototype.streamText;DefaultAIEngineCore.prototype.streamText=function(options){return stream.call(core,options);};
+state.seedLegacyHistory=async()=>{
+ const {buildDesignTaskContract}=await import('/src/services/ai/designWorkflow.ts');
+ const {TaskBudget}=await import('/src/services/ai/taskBudget.ts');
+ const {preparePageTaskPlan}=await import('/src/services/ai/pageTaskPlan.ts');
+ const {makeGuidancePacket,withGuidanceReceipts}=await import('/src/services/ai/designKnowledge/receipt.ts');
+ const {selectDesignRules}=await import('/src/services/ai/designKnowledge/selector.ts');
+ const {captureDesignGuidanceHistory,readDesignGuidanceHistory}=await import('/src/services/ai/designKnowledge/history.ts');
+ const {capturePageTaskHistory,readPageTaskHistory}=await import('/src/services/ai/pageTaskHistory.ts');
+ const s=state.state(),request='创建旧版长正文页面',provider=defaultProviders[0],model='fixture';
+ const c=buildDesignTaskContract({intent:'create_screen',request,deviceProfile:device,frameWidth:s.settings.frameWidth,designSystem:s.designSystem});
+ Object.assign(c.designSystem,{tokens:structuredClone(s.designSystem.tokens)});c.designSystemOrigin=structuredClone(s.designSystemOrigin);
+ const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:3072,maxDurationMs:900000,maxRequestDurationMs:900000});
+ try{c.pageTaskPlan=await preparePageTaskPlan(core,{contract:c,provider,model,budget,isCurrent:()=>true});}finally{budget.close();}
+ c.designGuidance=makeGuidancePacket(c,selectDesignRules({request,operation:'create',device,scope:'page',features:['long-copy'],maxChars:1500}),'html');
+ await withGuidanceReceipts(core,c,c.designGuidance).streamText({provider,model,messages:[{role:'system',content:c.designGuidance.selection.body}],maxTokens:8192}).textPromise;
+ const rules=captureDesignGuidanceHistory(c,request),plan=capturePageTaskHistory(c,request);if(!rules||!plan)throw Error('旧来源投影失败');
+ const conversation=s.getConversationStore();await conversation.appendTurn({turnId:'legacy-full',ts:Date.now(),user:{text:request},assistant:{text:'旧版完整主题会话',designGuidanceHistory:rules,pageTaskHistory:plan}});
+ const badRules=structuredClone(rules),badPlan=structuredClone(plan);
+ for(const record of [badRules,badPlan])record.contract.designSystem.tokens.typography.apiKey='NESTED_LEGACY_SECRET';
+ await conversation.appendTurn({turnId:'legacy-bad',ts:Date.now()+1,user:{text:request},assistant:{text:'坏来源正文仍保留',designGuidanceHistory:badRules,pageTaskHistory:badPlan}});
+ useAIConfigStore.getState().setAutoReferenceDesignRules(false);state.legacy=c;
+ state.readLegacy=async()=>{const [turn]=await conversation.loadRecent(),g=readDesignGuidanceHistory(turn.assistant.designGuidanceHistory,request),p=readPageTaskHistory(turn.assistant.pageTaskHistory,request);
+  return {themeExact:JSON.stringify(g.contract.designSystem)===JSON.stringify(c.designSystem),ruleBindingExact:g.contract.designGuidance.bindingFingerprint===c.designGuidance.bindingFingerprint,
+   receiptsExact:JSON.stringify(g.contract.designGuidance.requests)===JSON.stringify(c.designGuidance.requests),planExact:JSON.stringify(p.contract.pageTaskPlan)===JSON.stringify(c.pageTaskPlan)};};
+};
 function App(){const [settings,setSettings]=React.useState(false);return React.createElement(React.Fragment,null,React.createElement(ChatDrawer,{onOpenSettings:()=>setSettings(true)}),settings&&React.createElement('div',{'data-testid':'settings'},React.createElement(AIProviderModal,{onClose:()=>setSettings(false)})));}
 let appRoot=ReactDOM.createRoot(document.getElementById('root'));appRoot.render(React.createElement(App));
 state.reopen=()=>{appRoot.unmount();appRoot=ReactDOM.createRoot(document.getElementById('root'));appRoot.render(React.createElement(App));};

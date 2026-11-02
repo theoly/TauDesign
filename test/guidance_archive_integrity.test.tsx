@@ -1,3 +1,12 @@
+import {saveQualityDraft,loadQualityDrafts,claimDraftSuggestion} from '../src/services/storage/qualityDraftRepository';
+import {makeFailedPageDraft} from '../src/services/ai/qualityDraft';
+import {migrateProjectBundle} from '../src/services/storage/projectBundleMigration';
+import {ProjectRepository} from '../src/services/storage/projectRepository';
+import {ConversationStore} from '../src/services/storage/conversationStore';
+import {LocalStorageStorage} from '../src/services/storage/projectStorage';
+import {serializeHistory,parseHistory} from '../src/services/storage/historyRepository';
+import {readProject} from '../src/utils/projectRegistry';
+import * as storageModule from '../src/services/storage/projectStorage';
 import {captureDesignGuidanceHistory,readDesignGuidanceHistory} from '../src/services/ai/designKnowledge/history';
 import {isPageCreationEvidence} from '../src/services/ai/pageCreationValidation';
 import {CanvasToolExecutor} from '../src/services/tools/canvasToolExecutor';
@@ -34,10 +43,10 @@ beforeEach(()=>{
 afterEach(()=>{render.mockRestore();capture.mockRestore();pageCapture.mockRestore();useProjectStore.setState(prior,true);useHistoryStore.setState(history,true);});
 async function archived(kind:'single'|'restyle',legacyIdentity=false){
  const s=useProjectStore.getState(),target={kind:'screen' as const,id:'page',name:'资料',html};
- const contract=kind==='single'?buildDesignTaskContract({intent:'modify_screen',request:'调整主按钮周围间距',target:s.screens.page,deviceProfile:'mobile',frameWidth:390,designSystem:s.designSystem}):
-  buildRestyleContract({scope:'single',target,deviceProfile:'mobile',frameWidth:390,designSystem:s.designSystem});
+ const contract=kind==='single'?buildDesignTaskContract({intent:'modify_screen',request:'调整主按钮周围间距',target:s.screens.page,deviceProfile:s.settings.deviceProfile,frameWidth:s.settings.frameWidth,designSystem:s.designSystem}):
+  buildRestyleContract({scope:'single',target,deviceProfile:s.settings.deviceProfile,frameWidth:s.settings.frameWidth,designSystem:s.designSystem});
  if(legacyIdentity){Object.assign(contract.designSystem!,{tokens:structuredClone(s.designSystem.tokens)});contract.designSystemOrigin=structuredClone(s.designSystemOrigin);}
- contract.designGuidance=makeGuidancePacket(contract,selectDesignRules({request:'主按钮',operation:contract.operation,device:'mobile',scope:'page',features:['button'],maxChars:1500}),'html');
+ contract.designGuidance=makeGuidancePacket(contract,selectDesignRules({request:'主按钮',operation:contract.operation,device:s.settings.deviceProfile,scope:'page',features:['button'],maxChars:1500}),'html');
  const t=new MockTransport();t.queueResponse(after);await withGuidanceReceipts(new DefaultAIEngineCore(t),contract,contract.designGuidance).streamText({provider,model:'fixture',messages:[{role:'system',content:contract.designGuidance.selection.body}]}).textPromise;
  if(kind==='single'){
   s.stageScreenChange('page',after,'资料',contract.request,contract);s.setStagedRenderQuality(s.getStagedRenderContextKey(),{status:'complete',findings:[],inspected:2});expect(await s.adoptStagedChange()).toBe(true);
@@ -139,4 +148,56 @@ for(const status of ['assembled','dispatched','completed','failed','cancelled'] 
  const saved=captureDesignGuidanceHistory(contract,contract.request),restored=readDesignGuidanceHistory(saved,contract.request);expect(restored).toBeDefined();
  const ui=renderToStaticMarkup(<DesignGuidanceCard contract={restored!.contract} historical/>);
  expect(ui).toContain('请求记录 · 1 条');expect(ui.includes('已组装输入')).toBe(status==='assembled');expect(ui).not.toContain('实际进入请求');expect(ui).not.toContain(provider.apiKey);
+});
+
+for(const device of ['mobile','pc'] as const)for(const kind of ['single','restyle'] as const)for(const legacy of [false,true])test(`${device} ${kind} ${legacy?'full-theme legacy':'current'} project and sidecars migrate unchanged, reopen as history and require fresh candidate checks`,async()=>{
+ if(device==='pc'){const s=useProjectStore.getState();s.initNewProject({name:'PC来源归档',deviceProfile:'pc',createSpecimen:false});s.addScreen({name:'资料',htmlContent:html},'page');}
+ const {contract,record,path}=await archived(kind,legacy),s=useProjectStore.getState(),source=createProjectStorage(s.id),target=new LocalStorageStorage(`compat-copy-${crypto.randomUUID()}`);
+ const sourceHistory=captureDesignGuidanceHistory(contract,contract.request);expect(sourceHistory).toBeDefined();
+ const conversation=new ConversationStore(source);await conversation.appendTurn({turnId:'compat',ts:Date.UTC(2026,10,2),user:{text:contract.request},assistant:{text:'原始来源会话',designGuidanceHistory:sourceHistory}});
+ const createdContract=buildDesignTaskContract({intent:'create_screen',request:'创建主按钮资料页',deviceProfile:device,frameWidth:s.settings.frameWidth,designSystem:s.designSystem});
+ if(legacy){Object.assign(createdContract.designSystem!,{tokens:structuredClone(s.designSystem.tokens)});createdContract.designSystemOrigin=structuredClone(s.designSystemOrigin);}
+ createdContract.designGuidance=makeGuidancePacket(createdContract,selectDesignRules({request:createdContract.request,operation:'create',device,scope:'page',features:['button'],maxChars:1500}),'html');
+ const transport=new MockTransport();transport.queueResponse(after);
+ await withGuidanceReceipts(new DefaultAIEngineCore(transport),createdContract,createdContract.designGuidance).streamText({provider,model:'fixture',messages:[{role:'system',content:createdContract.designGuidance.selection.body}]}).textPromise;
+ const created=await CanvasToolExecutor.executeAsync({tool:'create_screen',params:{title:'迁移新页',html:after,workflowContract:createdContract}});
+ expect(created.success).toBe(true);const creation=structuredClone(useProjectStore.getState().screens[created.screenId!].metadata!.creationEvidence!);
+ expect(isPageCreationEvidence(creation)).toBe(true);
+ // A source-less old candidate remains source-less. Migration must not synthesize a task or render approval.
+ s.stageScreenChange('page',html,'旧候选');
+ for(let i=0;i<30&&!useProjectStore.getState().stagedProjectAssetAudit;i++)await new Promise(resolve=>setTimeout(resolve,0));
+ expect(useProjectStore.getState().stagedProjectAssetAudit).not.toBeNull();await loadStagedCandidate(s.id);
+ if(legacy){const raw=JSON.parse((await source.readText('candidates/current.json'))!);delete raw.candidate.candidateId;delete raw.candidate.validationEvidence;await source.writeTextAtomic('candidates/current.json',JSON.stringify(raw));}
+ const draft=makeFailedPageDraft(after.replace('保存资料',''),'compat-draft-context','compat-model-binding',{deviceProfile:device,designSystem:s.designSystem})!;
+ draft.guidanceSource=structuredClone(contract);draft.sourceTaskId=contract.taskId;
+ const savedDraft={version:1 as const,id:`draft-${crypto.randomUUID()}`,projectId:s.id,createdAt:Date.now(),draft,request:contract.request,projectContext:'compat-draft-context',status:'blocked' as const,aiAttempted:true,
+  decision:{action:'modify_screen' as const,targetScreenId:'page',styleReferenceScreenId:null,elementNid:null,referenceSource:null,reason:'历史失败草稿'}};
+ await saveQualityDraft(savedDraft);
+ const historyStore=useHistoryStore.getState(),historyRaw=serializeHistory(s.id,{past:historyStore.past,future:historyStore.future,checkpoints:historyStore.checkpoints},8*1024*1024);
+ const sourceJson=readProject(s.id)!,snapshots=new Map<string,string>();
+ for(const file of [path,`drafts/${savedDraft.id}.json`,'candidates/current.json','conversations/2026-11.jsonl','conversations/index.json'])snapshots.set(file,(await source.readText(file))!);
+ const result=await migrateProjectBundle({sourceJson,source,target,historyRaw,checkCurrent:()=>{},readHistory:()=>historyRaw});
+ expect(result.ok).toBe(true);expect(result.archiveFiles).toBeGreaterThanOrEqual(6);
+ for(const [file,raw] of snapshots){expect(await target.readText(file)).toBe(raw);expect(await source.readText(file)).toBe(raw);}
+ expect(await target.readText('history.json')).toBe(historyRaw);expect(readProject(s.id)).toBe(sourceJson);
+ const project=(await new ProjectRepository(target).load())!;expect(project.screens.page.htmlContent).toBe(s.screens.page.htmlContent);expect(project.designSystem).toEqual(s.designSystem);
+ const archivedAgain=kind==='single'?await new DeliveryRepository(target,s.id).get('page',record.id):await new RestyleDeliveryRepository(target,s.id).get(record.id);
+ expect(archivedAgain).toEqual(record);
+ const [turn]=await new ConversationStore(target).loadRecent();expect(readDesignGuidanceHistory(turn.assistant.designGuidanceHistory,turn.user.text)).toEqual(sourceHistory);
+ const restored=readDesignGuidanceHistory(turn.assistant.designGuidanceHistory,turn.user.text)!;expect(restored.contract.designGuidance!.requests).toEqual(contract.designGuidance!.requests);
+ expect(project.screens[created.screenId!].metadata).toEqual(useProjectStore.getState().screens[created.screenId!].metadata);
+ expect(isPageCreationEvidence((project.screens[created.screenId!].metadata as any).creationEvidence)).toBe(true);
+ s.loadProject(JSON.stringify(project));
+ useHistoryStore.getState().restore(parseHistory(await target.readText('history.json'),s.id));
+ useHistoryStore.getState().undo();expect(useProjectStore.getState().screens[created.screenId!]).toBeUndefined();
+ useHistoryStore.getState().redo();expect(useProjectStore.getState().screens[created.screenId!].metadata!.creationEvidence).toEqual(creation);
+ const mock=spyOn(storageModule,'createProjectStorage').mockReturnValue(target);
+ try{
+  const [restoredDraft]=await loadQualityDrafts(s.id);expect(restoredDraft).toEqual(savedDraft);expect(await claimDraftSuggestion(restoredDraft)).toBe(false);
+  const candidate=(await loadStagedCandidate(s.id))!;expect(candidate.workflowContract).toBeUndefined();expect(candidate.repair).toBeUndefined();
+  if(legacy){expect(candidate.candidateId).toBeUndefined();expect(candidate.validationEvidence).toBeUndefined();}
+  expect(s.restoreStagedCandidate(candidate,s.id)).toBe(true);expect(useProjectStore.getState().stagedRenderQuality).toBeNull();
+  expect(useProjectStore.getState().getStagedDeliveryReport().status).not.toBe('ready');const past=useHistoryStore.getState().past.length;
+  expect(await s.adoptStagedChange()).toBe(false);expect(useHistoryStore.getState().past).toHaveLength(past);expect(useProjectStore.getState().screens.page.htmlContent).toBe(project.screens.page.htmlContent);
+ }finally{mock.mockRestore();}
 });

@@ -17,6 +17,7 @@ import {inspectProjectAssetReferences,referencedProjectAssets,verifyProjectAsset
 import {PageRenderCheck} from './pageRenderCheck';
 import {knowledgeFingerprint} from './projectKnowledge';
 import {pageCreationContext} from './pageCreationValidation';
+import {candidateInputIssue} from './candidateInputBinding';
 
 export interface CandidateRepairInput {
  state:PageCreationState;candidate:StagedCandidateData;delivery:CandidateDeliveryReport;render?:RenderedQualityReport;
@@ -27,6 +28,7 @@ export function candidateRepairEligibility(input:CandidateRepairInput):{allowed:
  const fail=(message:string)=>({allowed:false,message,allowedNids:[],protectedNids:[]});
  if(Object.hasOwn(candidate,'repair'))return fail('本候选已有修复尝试记录，不能重复请求；请重新发起修改。');
  if(!task||!resolveWorkflowValidation(task,'candidate').ok||!['modify','restyle'].includes(task.operation))return fail('缺少有效的旧页修改合同，不能自动推断修复范围。');
+ const inputIssue=candidateInputIssue(candidate,state);if(inputIssue)return fail(inputIssue);
  if(candidate.projectFingerprint!==knowledgeFingerprint(state))return fail('候选对应的项目知识、Token 或手动样式已变化。');
  const baseline=state.screens[candidate.targetScreenId];
  if(!baseline||task.target?.id!==candidate.targetScreenId||task.target.baselineFingerprint!==contentFingerprint(baseline.htmlContent)||candidate.baselineFingerprint!==contentFingerprint(baseline.htmlContent))return fail('原页或任务基线已变化。');

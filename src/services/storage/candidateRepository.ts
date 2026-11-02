@@ -18,6 +18,8 @@ export interface StagedCandidateData {
   screenName: string;
   baselineFingerprint?: string;
   projectFingerprint?: string;
+  /** Complete generation input scope; absent on legacy files and never backfilled by restore/recheck. */
+  inputContextFingerprint?:string;
   designOriginFingerprint?: string;
   /** Frozen input/authorization identity for newly staged contracts; absent on older candidates. */
   taskBindingFingerprint?:string;

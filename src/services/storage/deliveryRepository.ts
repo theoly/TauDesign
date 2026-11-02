@@ -11,6 +11,7 @@ import {repairGuidanceIssue} from '../ai/designKnowledge/repairTrace';
 import {draftExecutionIssue} from '../ai/draftExecutionSource';
 import type {RuleEvidencePurpose} from '../ai/designKnowledge/safety';
 import {guidancePacketIssue} from '../ai/designKnowledge/receipt';
+import {isCandidateInputFingerprint} from '../ai/candidateInputBinding';
 
 export type DeliveryMode = 'replace' | 'force-replace' | 'keep-both' | 'confirm-structure-keep-both' | 'confirm-structure-replace';
 type PageSnapshot = Pick<Screen, 'id' | 'name' | 'htmlContent' | 'scopedCss' | 'metadata'>;
@@ -52,6 +53,7 @@ function validRecord(value: unknown, projectId: string, screenId: string, purpos
     ['replace', 'force-replace', 'keep-both', 'confirm-structure-keep-both', 'confirm-structure-replace'].includes(r.mode) && page(r.before) && page(r.after) && r.after.id === screenId &&
     r.resultFingerprint === contentFingerprint(r.after.htmlContent) &&
     r.candidate && typeof r.candidate.newHtml === 'string' && typeof r.candidate.screenName === 'string' &&
+    (r.candidate.inputContextFingerprint===undefined||isCandidateInputFingerprint(r.candidate.inputContextFingerprint))&&
     (r.candidate.modificationRequest === undefined || typeof r.candidate.modificationRequest === 'string') &&
     isCandidateValidationEvidence(r.candidate.validationEvidence) &&
     r.candidate.validationEvidence.candidateFingerprint === contentFingerprint(r.candidate.newHtml)&&sameRecordedHtml(r.candidate.newHtml,r.after.htmlContent)&&

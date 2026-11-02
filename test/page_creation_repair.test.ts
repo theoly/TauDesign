@@ -187,3 +187,12 @@ test('cancelled guided repair keeps a cancelled receipt after an uncooperative l
  expect(result.repair?.status).toBe('cancelled');expect(result.repair?.guidance?.requests[0].status).toBe('cancelled');expect(isPageRepairRecord(result.repair)).toBe(true);
  expect(renders).toBe(1);expect(contract.designGuidance!.requests[0].status).toBe('completed');
 });
+
+for(const corrupt of ['negative-count','fractional-count','bad-files'] as const)test(`repair evidence rejects ${corrupt} in the original render instead of claiming a valid repaired page`,async()=>{
+ const result=await run();expect(result.status).toBe('ready');if(result.status!=='ready')return;
+ const evidence=structuredClone(result.evidence),initial=evidence.repair!.initialRender;
+ if(corrupt==='negative-count')initial.inspected=-1;
+ if(corrupt==='fractional-count')initial.inspected=1.5;
+ if(corrupt==='bad-files')initial.resourceFiles=[{relPath:'assets/images/source.png',fingerprint:'not-a-sha256',size:1}] as any;
+ expect(isPageRepairRecord(evidence.repair)).toBe(false);expect(isPageCreationEvidence(evidence)).toBe(false);
+});

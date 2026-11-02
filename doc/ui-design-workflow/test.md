@@ -1109,3 +1109,87 @@ M3-02按原范围关闭；顶层现在16完成/11待完成，M3-03全部协议�
 - 两份 README 各 15 个本地 Markdown 链接全部存在；`git diff --check` 通过。
 - 716 文件与 provenance/source.sha256 指纹一致，因此保留同一源码的 Chromium/WebKit 两档位完整浏览器及 12 项重塑时限验收记录，本次未重复浏览器/原生/真实 Provider/打包/发布。
 - 本轮命令日志在 `/private/tmp/taudesign-readme-push-{tests,types,build}.log`；原始日志按工程规范不提交 Git。提交和推送结果以 Git 引用及最终执行回执为准。
+
+## 2026-11-01 M3-03 子请求与内容合同完整审计
+
+原M3-03涵盖的分区、自动/手动续写、格式纠正、有限修改与分组补丁、自动/显式修复和传输错误，已按child-execution-audit.md逐路径核对生产调用方、账本所有者、冻结输入与最终写前守卫。本轮没有生产行为变更，补齐原先独立协议测试之间的组合链路。
+
+新增page_task_pipeline.test.ts的6项组合回归，两设备各3项：事实规划先调用一次，自动续写保留同一功能/信息/操作与规则；分区计划/失败/恢复保持已完成内容和精确账本；缺失或改变规划、替换账本均不发请求/不预留额度/不消耗合法检查点，之后仍可合法完成。首次该文件12/0、221断言；没有失败后弱化验收。明确每次实际出站消息、冻结合同、独立子ID和预算计数，不将规划伪装成视觉规则请求。
+
+| 检查 | 当前结果 |
+| --- | --- |
+| 19文件协议/预算/分区/续写/修复专项 | 376 pass / 0 fail / 2266 assertions / 10.27秒 |
+| 原生代理模拟专项 | 8 pass / 0 fail / 19 assertions / 177毫秒 |
+| bun test | 2785 pass / 0 fail / 18009 assertions / 245 files / 62.65秒 |
+| bun run type-check | exit0 |
+| bun run build | exit0，Vite2.63秒 |
+| git diff --check | 通过 |
+| 当前应用源码与已有浏览器记录 | src/src-tauri/scripts及构建输入无改动；366个非测试文件SHA256与provenance清单一致 |
+
+保留相同源码的完整Chromium/WebKit、mobile390/PC1440结果和12项重塑真实iframe/档案窗口，本轮未重复浏览器。原日志 `/private/tmp/taudesign-child-*.log` 与当前716文件SHA256归档 `evidence/2026-11-01-child-execution/`，按规则Git忽略。现有React act/预期错误日志仍保留，不称零警告。没有真实Provider/人评、新原生实机/打包/发布或自动Git提交。
+
+M3-03按原范围关闭，27项顶层17完成/10待完成。M3-04/05、M4其它门禁及M5仍按原范围验收；Core申请额度不是HTTP计数或费用，业务输入继承不是模型已遵从。场景规则默认关闭。
+
+## 2026-11-01 M3-04 根结构与坏会话来源修复
+
+继上节CE验收后开展RC审计。发现taskContractShape对operation/strategy/device/source-kind/origin-kind使用String强转，数组可被误作枚举；直接guidancePacketIssue也缺根结构校验，可接受重算绑定后的非字符串taskId。新建runtime-compatibility-audit.md、task/check后添加10负例；首轮19通过/10失败，含真实ConversationStore月分片保存重开坏kind的复现。
+
+修复仅涉及两个生产文件：枚举先判断字符串类型，直接规则校验先检查根结构。未改变TaskContract字段或迁移/补造回执，坏来源会话正文保持。五文件来源/档案/聊天根/安全专项125/0、626断言通过。首次全量2794/1，失败来自旧restyle_progress测试以空对象伪造合法成功合同；更换真实buildRestyleContract夹具，保留原断言，2文件35/0、134断言通过。
+
+| 最终检查 | 当前结果 |
+| --- | --- |
+| bun test | 2795 pass / 0 fail / 18044 assertions / 245 files / 66.76秒 |
+| bun run type-check | exit0 |
+| bun run build | exit0，Vite2.50秒 |
+| git diff --check | 通过 |
+| 完整浏览器消费者 | Chromium/WebKit、mobile390/PC1440通过；每引擎pageErrors0/externalRequests0 |
+
+浏览器在生产修复后重新执行，含现有历史/来源、规划与功能修改、参考输入、候选、资源、恢复/分区/续写、多页/多方案和面板修复/采纳/撤销重开矩阵；受控响应不替代真实模型或原生平台验收。完整结果 `evidence/2026-11-01-runtime-shape-ui/result.json`，首次负例/全量失败及最终日志和716文件源码清单在 `evidence/2026-11-01-runtime-shape/`，均按规则Git忽略。现有React act/预期错误日志未隐藏。无新真实Provider/人评、原生、打包、发布或Git操作。
+
+本轮总新增16测试（CE6、RC10）；根结构修复完成。M3-03关闭，M3-04全部仓储/schema/旧工程迁移仍开放，顶层17/27完成、10待完成，规则默认关闭。没有将所有旧数据兼容、完整失效/采纳矩阵或最终模型质量视为已证实。
+
+## 2026-11-02 M3-04 兼容性修复与全消费者审计（浏览器收口前）
+
+继续原范围，新增runtime-compatibility-audit.md中的LC逐消费者矩阵。实际修复：规则与业务规划历史共用已声明字段投影；合法旧完整Token/主题updatedAt保留原结构/顺序/绑定，不升级或重新哈希；未知嵌套字段与内联base64不进入会话。修复回执initialRender改用共享渲染schema，拒绝非法计数/资源摘要。只读历史不恢复模型/采纳/续写权限。
+
+本轮新增33项测试：规则/主题来源13（旧Token/时间、未知字段、渐变与颜色角色、早期阴影、错误类型和内联图片）、新页修复报告3、候选交付报告3、实际聊天历史1、规划历史5、两设备普通/重塑×新/旧来源迁移8。迁移组合逐字比较工程/普通及重塑档案/会话/候选/草稿/History，实际新页创建证据经文件重开及undo/redo保持；旧候选缺可选字段仍缺失，草稿已用资格再次claim=false，旧验收不能直接采纳。
+
+失败记录完整保留：首次84/6复现旧来源投影与渲染schema；业务规划新增负例3/4暴露嵌套凭证和外部字段；内联图片41/1；迁移首轮41/4是夹具在资产审计追加保存前过早冻结，改为等实际审计结束并冲刷队列，原严格字节断言保留。类型检查TS2739为选择包投影返回Data不够精确，已声明已校验返回类型，无运行时字段改写。
+
+| 已完成检查 | 结果 |
+| --- | --- |
+| 最新16文件关联仓储/会话/迁移/修复/历史专项 | 387/0、2347断言（补齐新页metadata/草稿/History组合前中间记录） |
+| 最终8组合所在档案套件 | 49/0、551断言 |
+| 源码类型补正后bun test | 2828/0、18449断言、245文件、65.99秒 |
+| bun run type-check | exit0 |
+| bun run build | exit0、Vite2.64秒 |
+| 新历史UI聚焦 | Chromium/WebKit各mobile/pc通过；2次受控建源调用，重开不增调用/页面/History，主题/规则绑定/回执/功能规划完全相同；坏来源保留正文但不展示为有效来源 |
+
+已查看WebKit移动端完整截图，规则和功能规划详情展开、旧来源只读提示与坏来源正文/诊断均可见。聚焦证据evidence/2026-11-02-legacy-history-focused/result.json。
+
+第一次完整浏览器运行在类型注解补正时被开发服务器热更新打断：Vite明确记录09:13:04 page reload history.ts，webkit-failed.png时间相同，错误为页面重载后multiFunctionFixture不存在；保留失败日志/截图，不称通过。在测试/类型/构建全部通过后冻结718文件源码指纹，再运行完整浏览器；最终结果单独记录，不把此中断当有效产品回归结果。
+
+### 2026-11-02 M3-04 最终冻结验收结果
+
+最终完整浏览器已经terminal exit0，两个引擎均通过全部既有场景和新增旧主题/规划来源两档位场景，每引擎pageErrors0/externalRequests0。运行前后718文件SHA256完全相同，期间未再改变源码、测试或脚本。最终结果 `evidence/2026-11-02-compatibility-frozen-ui/result.json`，前后清单及全部中间/失败/最终日志在 `evidence/2026-11-02-compatibility/`；原始证据按规则不提交Git。
+
+最终前端命令以typed-full/types/build日志为准：2828/0、18449断言、245文件、65.99秒；类型exit0；构建exit0/Vite2.64秒。先前final-full的2828/65.45秒为返回类型补正前中间记录；legacy-compat-ui是被热更新打断的首次浏览器，不冒充通过。新聚焦UI及最终完整UI均验证旧来源完全一致、坏来源保留正文、重挂载无新模型调用或页面/History修改。
+
+M3-04/AC-21按完整消费者与兼容矩阵收口，顶层18/27完成、9待完成。清单entry沿用manifest_entry_consistency中旧副本纠正、缺正文不回读原页及保存重开的真实断言；本轮组合又验证新页metadata及History迁移。AC-25更新当前前端证据，Rust/原生/真实Provider/人评/打包/发布未重跑，不以历史平台结果替代M5。默认规则关闭，未执行Git操作。
+
+
+## 2026-11-02 README 同步与提交前回归
+
+按用户“update readme, commit & push”请求，同步中英文能力说明、子流程/兼容审计链接及18/27完成状态。保留较早2828测试冻结浏览器基线的日期与范围，不将它作为最新候选输入修改的浏览器证据。
+
+当前M3-05切片冻结pageCreationContext完整输入：AI归纳内容/启停/删除/来源新鲜度及导航metadata变化后拒绝旧候选，重新渲染不能更新授权；旧缺失/坏快照不回填，修复资格同样检查。基础knowledgeFingerprint仍排除AI归纳自身，避免循环过期。首轮有效负例8通过/5失败，修复后候选/持久化/修复/资源/档案5文件93通过/0失败、618断言。IM-MATRIX及M3-05仍开放，未将该切片视为完整消费者验收。
+
+| 提交前检查 | 结果 |
+| --- | --- |
+| bun test | 2833 pass / 0 fail / 18497 assertions / 245 files / 65.07秒 |
+| bun run type-check | exit0 |
+| bun run build | exit0，Vite2.69秒 |
+| README本地链接与资源引用 | 两种语言均通过 |
+| git diff --check | 通过 |
+
+原日志位于/private/tmp/taudesign-readme-commit-{test,types,build}.log。既有React act及预期错误日志未隐藏；没有真实Provider、人评、浏览器重跑、原生实机、打包或发布。本次按明确请求提交并推送当前工作，整体重构尚未完成。

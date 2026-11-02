@@ -13,6 +13,7 @@ import {inspectDesignEntities,designEntitySummary} from '../services/ai/designEn
 import {consumeMultiPageBatch,type ReadyMultiPageBatch} from '../services/ai/multiPageService';
 import {assertLibraryEditable,buildLibraryReferenceSnapshot,isLibraryReference,libraryMemberLocked,libraryReferenceIssue,verifyLibraryReferenceFiles} from '../services/ai/designLibraryReference';
 import {pageCreationContext,prepareNewPage} from '../services/ai/pageCreationValidation';
+import {candidateInputIssue} from '../services/ai/candidateInputBinding';
 import {persistImportResources,type PreparedImportResources} from '../services/import/importResources';
 import type {HtmlImportPreviewReceipt} from '../types/htmlImport';
 import { defaultReferenceDevice, REFERENCE_DEVICES, resolveProjectViewport, validReferenceDevice, normalizeReferenceSettings } from '../utils/referenceDevice';
@@ -539,6 +540,7 @@ const initialScreen2: Screen = {
 function isStagedTaskCurrent(state: ProjectState): boolean {
   const staged = state.stagedScreen;
   const contract = staged?.workflowContract;
+  if(staged&&candidateInputIssue(staged,state))return false;
   if(staged&&Object.hasOwn(staged,'taskBindingFingerprint')&&(!isTaskContractShape(contract)||typeof staged.taskBindingFingerprint!=='string'||staged.taskBindingFingerprint!==taskInputBinding(contract)))return false;
   if(draftExecutionIssue(staged?.executionRecord,staged?.newHtml))return false;
   if(staged?.repair&&(!isPageRepairRecord(staged.repair)||(staged.repair.guidance&&(!contract||repairGuidanceIssue(staged.repair.guidance,contract,staged.repair.status==='repaired')))))return false;
@@ -601,7 +603,7 @@ function stagedDeliveryReport(state: ProjectState): StagedDeliveryReport {
   if(referenceIssue)return {status:'blocked',checks:[{id:'task',status:'blocked',message:referenceIssue}]};
   const taskCurrent = isStagedTaskCurrent(state);
   const taskPlan=resolveWorkflowValidation(staged.workflowContract,'candidate');
-  checks.push({ id: 'task', status: taskCurrent ? 'passed' : 'blocked', message: !taskPlan.ok?taskPlan.message:taskCurrent ? '任务基线与项目上下文仍有效。' : '原页面、设计来源、设备、Token 或项目资料已变化。' });
+  checks.push({ id: 'task', status: taskCurrent ? 'passed' : 'blocked', message: !taskPlan.ok?taskPlan.message:taskCurrent ? '任务基线与项目上下文仍有效。' : candidateInputIssue(staged,state)??'原页面、设计来源、设备、Token 或项目资料已变化。' });
   const options = { deviceProfile: state.settings.deviceProfile, useCustomNavigation: state.settings.useCustomNavigation, designSystem: state.designSystem };
   const safety = checkGenerationSourceSafety(staged.newHtml, options);
   checks.push({ id: 'source', status: safety.passed ? 'passed' : 'blocked', message: safety.passed ? 'HTML 源安全检查通过。' : safety.findings.find(item => item.severity === 'error')?.message ?? 'HTML 源不安全。' });
@@ -2291,7 +2293,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (!staged) return '';
     const target = state.screens[staged.targetScreenId];
     const renderSubject = [staged.targetScreenId, staged.newHtml, staged.navigationTitle, staged.modificationRequest];
-    return JSON.stringify([state.id, state.stagedRenderRevision, renderSubject, state.settings,renderEvidenceIdentity(state.settings.deviceProfile),
+    return JSON.stringify([state.id, state.stagedRenderRevision, renderSubject, state.settings,renderEvidenceIdentity(state.settings.deviceProfile),pageCreationContext(state),
       isTaskContractShape(staged.workflowContract)?taskInputBinding(staged.workflowContract):staged.workflowContract===undefined?'legacy':'invalid-task',
       state.designSystem.tokens, state.overrides, target?.htmlContent, target?.scopedCss, target?.metadata,
       Object.values(state.assets).map(asset => [asset.id, asset.relPath]).sort(([a], [b]) => a.localeCompare(b))]);
@@ -2488,6 +2490,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const candidate: StagedCandidateData = { ...(repair?{repair:structuredClone(repair)}:{}), candidateId: `candidate-${crypto.randomUUID()}`, targetScreenId, newHtml: normalized.html, screenName,
       baselineFingerprint: contentFingerprint(state.screens[targetScreenId]?.htmlContent ?? ''),
       projectFingerprint: knowledgeFingerprint(state),
+      inputContextFingerprint:pageCreationContext(state),
       designOriginFingerprint: contentFingerprint(JSON.stringify([state.designSystemOrigin?.kind, state.designSystemOrigin?.sourceId,
         state.designSystemOrigin?.sourceFingerprint, state.designSystemOrigin?.tokenVersion, state.designSystemOrigin?.tokenFingerprint])),
       modificationRequest, navigationTitle: normalized.title, workflowContract: taskSnapshot,

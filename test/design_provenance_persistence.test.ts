@@ -1,6 +1,7 @@
 import {beforeEach,expect,test} from 'bun:test';
+import {neutralModernTheme} from '../src/utils/themePresets';
 import {buildDesignTaskContract,buildRestyleContract,buildHtmlImportContract} from '../src/services/ai/designWorkflow';
-import {makeGuidancePacket,withGuidanceReceipts} from '../src/services/ai/designKnowledge/receipt';
+import {makeGuidancePacket,withGuidanceReceipts,guidancePacketIssue} from '../src/services/ai/designKnowledge/receipt';
 import {selectDesignRules} from '../src/services/ai/designKnowledge/selector';
 import {captureDesignGuidanceHistory,readDesignGuidanceHistory} from '../src/services/ai/designKnowledge/history';
 import {isTaskContractShape} from '../src/services/ai/taskContractShape';
@@ -68,4 +69,81 @@ test('archive page binding tolerates only newly injected IDs, never replacement 
  expect(sameRecordedHtml('<main><p>正文</p></main>','<main data-nid="root"><p data-nid="copy">正文</p></main>')).toBe(true);
  expect(sameRecordedHtml('<main data-nid="keep"><p>正文</p></main>','<main data-nid="other"><p>正文</p></main>')).toBe(false);
  expect(sameRecordedHtml('<main><p>正文</p></main>','<main><p>另一正文</p></main>')).toBe(false);
+});
+
+function rebindCorruptRoot(c:any){
+ const previous=c.designGuidance;
+ c.designGuidance=makeGuidancePacket(c,previous.selection,previous.protocol);
+ c.designGuidance.requests=previous.requests.map((r:any,index:number)=>({...r,parentTaskId:c.taskId,requestId:`${c.taskId}:request-${index+1}`}));
+ return c;
+}
+for(const field of ['operation','strategy','device','source','origin'] as const)test(`runtime task enum ${field} cannot accept a JSON array through string coercion`,async()=>{
+ const c:any=await guided();
+ if(field==='operation')c.operation=['create'];
+ if(field==='strategy')c.strategy=['new-page'];
+ if(field==='device')c.device.profile=['mobile'];
+ if(field==='source')c.knowledgeSources=[{kind:['document'],id:'doc',fingerprint:'12345678'}];
+ if(field==='origin')c.designSystemOrigin={kind:['project']};
+ rebindCorruptRoot(c);
+ expect(isTaskContractShape(c)).toBe(false);
+ expect(taskProvenanceIssue(c,false)).toBeDefined();expect(guidancePacketIssue(c,false,'history')).toBeDefined();
+ expect(captureDesignGuidanceHistory(c,c.request)).toBeUndefined();
+});
+for(const taskId of [7,{value:'design'},['design'],null])test(`direct source validation rejects malformed taskId ${JSON.stringify(taskId)} even with matching recalculated child identities`,async()=>{
+ const c:any=await guided();c.taskId=taskId;rebindCorruptRoot(c);
+ expect(guidancePacketIssue(c,false,'history')).toBeDefined();expect(guidancePacketIssue(c)).toBeDefined();
+ expect(captureDesignGuidanceHistory(c,c.request)).toBeUndefined();
+});
+test('malformed enum source stored in real monthly conversation data cannot restore guidance while its text survives',async()=>{
+ const c:any=await guided();c.knowledgeSources=[{kind:['document'],id:'doc',fingerprint:'12345678'}];rebindCorruptRoot(c);
+ const storage=new LocalStorageStorage(`bad-enum-${crypto.randomUUID()}`),store=new ConversationStore(storage);
+ await store.appendTurn({turnId:'bad-enum',ts:Date.UTC(2026,10,1),user:{text:c.request},assistant:{text:'保留历史设计正文',designGuidanceHistory:{version:1,contract:c}}});
+ const [turn]=await new ConversationStore(storage).loadRecent();
+ expect(turn.assistant.text).toBe('保留历史设计正文');expect(turn.assistant.designGuidanceHistory).toBeDefined();
+ expect(readDesignGuidanceHistory(turn.assistant.designGuidanceHistory,turn.user.text)).toBeUndefined();
+});
+
+for(const extra of ['tokens','origin-time','both'] as const)test(`legacy frozen ${extra} history survives projection without rewriting its binding`,async()=>{
+ const c=await guided();
+ if(extra!=='origin-time')Object.assign(c.designSystem??=( {id:neutralModernTheme.id,name:neutralModernTheme.name}),{tokens:structuredClone(neutralModernTheme.tokens)});
+ if(extra!=='tokens')Object.assign(c,{designSystemOrigin:{kind:'project',sourceId:'legacy-theme',updatedAt:123}});
+ rebindCorruptRoot(c);
+ const before=structuredClone(c),record=captureDesignGuidanceHistory(c,c.request);
+ expect(record).toBeDefined();expect(record!.contract.designSystem).toEqual(c.designSystem);expect(record!.contract.designSystemOrigin).toEqual(c.designSystemOrigin);
+ expect(record!.contract.designGuidance).toEqual(c.designGuidance);expect(c).toEqual(before);
+ const storage=new LocalStorageStorage(`legacy-theme-${crypto.randomUUID()}`),store=new ConversationStore(storage);
+ await store.appendTurn({turnId:'legacy-theme',ts:Date.UTC(2026,10,2),user:{text:c.request},assistant:{text:'原始会话正文',designGuidanceHistory:record}});
+ const [turn]=await new ConversationStore(storage).loadRecent(),restored=readDesignGuidanceHistory(turn.assistant.designGuidanceHistory,turn.user.text);
+ expect(restored).toEqual(record);expect(restored!.contract.designGuidance!.requests[0].status).toBe('completed');
+ expect(guidancePacketIssue(restored!.contract,false,'history')).toBeUndefined();
+});
+for(const location of ['theme','tokens','origin'] as const)test(`legacy ${location} projection refuses undeclared nested credentials rather than rewriting a frozen binding`,async()=>{
+ const c:any=await guided();c.designSystem={id:neutralModernTheme.id,name:neutralModernTheme.name,tokens:structuredClone(neutralModernTheme.tokens)};c.designSystemOrigin={kind:'project',updatedAt:1};
+ if(location==='theme')c.designSystem.apiKey='LEGACY_PRIVATE_CREDENTIAL';
+ if(location==='tokens')c.designSystem.tokens.typography.apiKey='LEGACY_PRIVATE_CREDENTIAL';
+ if(location==='origin')c.designSystemOrigin.apiKey='LEGACY_PRIVATE_CREDENTIAL';
+ rebindCorruptRoot(c);expect(captureDesignGuidanceHistory(c,c.request)).toBeUndefined();
+});
+
+test('legacy theme backgrounds and semantic color aliases remain exact read-only data',async()=>{
+ const c:any=await guided(),tokens=structuredClone(neutralModernTheme.tokens);
+ tokens.backgrounds={page:{light:{kind:'gradient',layers:[{kind:'linear',geometry:'90deg',stops:[{color:'#fff',position:0},{color:'#fff7ed',position:100}]}],fallback:'#fff',source:{kind:'html-import',name:'旧导入页',selector:'body',fingerprint:'12345678'}}}};
+ tokens.colorRoles={light:{primary:{source:'custom',value:'#ee6600'},onPrimary:{source:'alias',role:'inverseText'}}};
+ c.designSystem={id:'legacy',name:'渐变主题',tokens};rebindCorruptRoot(c);
+ const record=captureDesignGuidanceHistory(c,c.request);expect(record).toBeDefined();expect(record!.contract.designSystem).toEqual(c.designSystem);expect(record!.contract.designGuidance).toEqual(c.designGuidance);
+});
+test('pre-A2 full-theme history does not migrate shadows or insert missing style defaults into a frozen binding',async()=>{
+ const c:any=await guided(),tokens:any=structuredClone(neutralModernTheme.tokens);
+ tokens.shadows={sm:'0 1px 2px #0001',md:'0 4px 6px #0001',lg:'0 8px 12px #0001'};delete tokens.blur;delete tokens.personality;
+ c.designSystem={id:'legacy',name:'早期主题',tokens};rebindCorruptRoot(c);
+ const record=captureDesignGuidanceHistory(c,c.request);expect(record).toBeDefined();expect(record!.contract.designSystem).toEqual(c.designSystem);expect(record!.contract.designGuidance!.bindingFingerprint).toBe(c.designGuidance.bindingFingerprint);
+});
+for(const bad of ['numeric-map','background-source','color-binding','time-type','inline-image'] as const)test(`legacy theme ${bad} is not silently converted to a valid historical source`,async()=>{
+ const c:any=await guided(),tokens:any=structuredClone(neutralModernTheme.tokens);c.designSystem={id:'legacy',name:'旧主题',tokens};
+ if(bad==='numeric-map')tokens.typography.sizes={body:'not-a-number'};
+ if(bad==='background-source')tokens.backgrounds={page:{light:{kind:'solid',color:'#fff',source:{kind:'page',name:'a',selector:'body',fingerprint:'12345678',apiKey:'UNKNOWN_SECRET'}}}};
+ if(bad==='color-binding')tokens.colorRoles={light:{primary:{source:'custom',value:'#ee6600',apiKey:'UNKNOWN_SECRET'}}};
+ if(bad==='time-type')c.designSystemOrigin={kind:'project',updatedAt:'123'};
+ if(bad==='inline-image')tokens.colors.primary['500']='data:image/png;base64,PRIVATE_IMAGE_BYTES';
+ rebindCorruptRoot(c);expect(captureDesignGuidanceHistory(c,c.request)).toBeUndefined();
 });

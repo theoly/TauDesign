@@ -113,3 +113,23 @@ test('corrupt conversation rules display a diagnostic while legacy and corrupt t
  const bad=engine.messages.find(m=>m.text==='损坏来源的会话正文')!,legacy=engine.messages.find(m=>m.text==='旧回复没有规则卡')!;
  expect(bad.historicalGuidance).toBeUndefined();expect(bad.historicalGuidanceNotice).toContain('损坏');expect(legacy.historicalGuidance).toBeUndefined();expect(legacy.historicalGuidanceNotice).toBeUndefined();expect(requests).toHaveLength(count);
 });
+
+test('a full-theme legacy conversation restores read-only evidence without new model calls or execution authority',async()=>{
+ const {buildDesignTaskContract}=await import('../src/services/ai/designWorkflow');
+ const {makeGuidancePacket,withGuidanceReceipts}=await import('../src/services/ai/designKnowledge/receipt');
+ const {selectDesignRules}=await import('../src/services/ai/designKnowledge/selector');
+ const {captureDesignGuidanceHistory}=await import('../src/services/ai/designKnowledge/history');
+ const state=useProjectStore.getState(),request='旧版长正文页面';
+ const c=buildDesignTaskContract({intent:'create_screen',request,deviceProfile:'pc',frameWidth:1440,designSystem:state.designSystem});
+ Object.assign(c.designSystem!,{tokens:structuredClone(state.designSystem.tokens)});Object.assign(c,{designSystemOrigin:structuredClone(state.designSystemOrigin)});
+ c.designGuidance=makeGuidancePacket(c,selectDesignRules({request,operation:'create',device:'pc',scope:'page',features:['long-copy'],maxChars:1500}),'html');
+ const transport=new MockTransport();transport.queueResponse('<main>历史长正文</main>');const core=new DefaultAIEngineCore(transport);
+ await withGuidanceReceipts({...core,streamText:o=>realStream.call(core,o),generateObject:core.generateObject.bind(core)},c,c.designGuidance).streamText({provider:defaultProviders[0],model:'fixture',messages:[{role:'system',content:c.designGuidance.selection.body}]}).textPromise;
+ const source=captureDesignGuidanceHistory(c,request);expect(source).toBeDefined();
+ await state.getConversationStore().appendTurn({turnId:'legacy-full-theme',ts:Date.now(),user:{text:request},assistant:{text:'历史长正文',designGuidanceHistory:source}});
+ const count=requests.length,past=useHistoryStore.getState().past.length;useAIConfigStore.getState().setAutoReferenceDesignRules(false);
+ await act(async()=>{root.unmount();root=createRoot(host);root.render(<Harness/>);await new Promise(r=>setTimeout(r,30));});
+ const restored=engine.messages.find(m=>m.text==='历史长正文')!;expect(restored.historicalGuidance).toEqual(source);
+ expect(restored.workflowContract).toBeUndefined();expect(restored.originalDecision).toBeUndefined();expect(restored.continuationAvailable).toBeUndefined();
+ expect(requests).toHaveLength(count);expect(useHistoryStore.getState().past).toHaveLength(past);expect(useProjectStore.getState().screens.page.htmlContent).toBe(original);
+});

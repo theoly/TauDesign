@@ -1,5 +1,6 @@
 import type {AIEngineCore,StreamTextOptions} from '../engine/core/types';
 import type {DesignTaskContract} from '../designWorkflow';
+import {isTaskContractShape} from '../taskContractShape';
 import {ruleFingerprint,renderRule} from './selector';
 import type {RuleSelection} from './types';
 import {validateRuleCatalog} from './validation';
@@ -82,6 +83,7 @@ export function withGuidanceReceipts(core:AIEngineCore,contract:DesignTaskContra
 
 /** Restored evidence uses the frozen snapshot, not the current catalog. */
 export function guidancePacketIssue(contract:DesignTaskContract,requireCompleted=true,purpose:RuleEvidencePurpose='execute'):string|undefined {
+  if(!isTaskContractShape(contract))return '设计规则的任务来源结构损坏。';
   const packet=contract.designGuidance;
   if(packet===undefined)return purpose==='execute'?taskRuleSafetyIssue(contract):undefined;
   const hash=(v:unknown)=>typeof v==='string'&&/^[a-f0-9]{8}$/.test(v);

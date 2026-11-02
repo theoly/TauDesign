@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test';
+import {buildRestyleContract} from '../src/services/ai/designWorkflow';
 import { executeRestyleTarget, type RestyleProgress } from '../src/services/ai/restyleExecutor';
 import type { AIEngineCore } from '../src/services/ai/engine/core/types';
 const never = new Promise<any>(()=>{});
 const target = {kind:'screen' as const,id:'s',name:'Page',html:'<div data-nid="aaaaaaaa">Hello</div>'};
 const request = {provider:{id:'p',name:'Provider',protocol:'openai_compatible',baseUrl:'https://example.com',apiKey:'SECRET'},model:'model',messages:[]} as any;
-const contract = {} as any;
+const contract = buildRestyleContract({scope:'single',target,deviceProfile:'pc',frameWidth:1440});
 test('idle timeout releases hanging metadata and aborts transport',async()=>{
  let aborted=false; const events:RestyleProgress[]=[];
  const core={streamText:()=>({textStream:(async function*(){yield 'abc';})(),reasoningStream:(async function*(){yield 'private reasoning';})(),textPromise:Promise.resolve('abc'),reasoningPromise:never,usagePromise:never,abort:()=>{aborted=true;}})} as unknown as AIEngineCore;

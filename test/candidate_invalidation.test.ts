@@ -5,6 +5,7 @@ import {buildDesignTaskContract} from '../src/services/ai/designWorkflow';
 import {RenderEvidenceAuthority,taskInputBinding} from '../src/services/ai/evidenceIdentity';
 import {loadStagedCandidate} from '../src/services/storage/candidateRepository';
 import {neutralModernTheme} from '../src/utils/themePresets';
+import {knowledgeFingerprint,buildProjectKnowledgeBundle} from '../src/services/ai/projectKnowledge';
 
 const baseline='<main data-nid="root0001"><button data-nid="button01">旧文案</button></main>';
 const candidate='<main data-nid="root0001"><button data-nid="button01">新文案</button></main>';
@@ -23,12 +24,12 @@ describe('candidate input and checker invalidation',()=>{
   const store=useProjectStore.getState();store.discardStagedChange();await loadStagedCandidate(store.id);
   useProjectStore.setState(priorProject,true);useHistoryStore.setState(priorHistory,true);
  });
- function stage(){
+ function stage(newHtml=candidate){
   const store=useProjectStore.getState();
   const contract=buildDesignTaskContract({intent:'modify_screen',request:'修改文案',
-   target:{id:'target',name:'页面',htmlContent:baseline},deviceProfile:'pc',frameWidth:1440,designSystem:neutralModernTheme});
+   target:{id:'target',name:'页面',htmlContent:baseline},deviceProfile:store.settings.deviceProfile,frameWidth:store.settings.frameWidth,designSystem:neutralModernTheme});
   expect(contract.designGuidance).toBeUndefined();
-  store.stageScreenChange('target',candidate,'新版','修改文案',contract);
+  store.stageScreenChange('target',newHtml,'新版','修改文案',contract);
   expect(store.isStagedTaskCurrent()).toBe(true);
   return contract;
  }
@@ -90,4 +91,28 @@ describe('candidate input and checker invalidation',()=>{
    expect(store.stagedScreen!.taskBindingFingerprint).toBe(binding);
   }finally{revision.mockRestore();}
  });
+ for(const change of ['content','disabled','removed','source'] as const)test(`AI summary ${change} invalidates a candidate even though the nonrecursive knowledge base stays unchanged`,async()=>{
+  const store=useProjectStore.getState(),initialBase=knowledgeFingerprint(store);
+  const doc={id:'project-analysis',title:'AI项目归纳',content:'旧需求：确认后保存',source:'ai' as const,enabled:true,createdAt:1,updatedAt:1,sourceFingerprint:initialBase};
+  store.upsertProjectDocument(doc);stage();const before=knowledgeFingerprint(useProjectStore.getState()),context=buildProjectKnowledgeBundle(useProjectStore.getState(),'修改文案','target').content;
+  if(change==='removed')store.removeProjectDocument(doc.id);
+  else store.upsertProjectDocument({...doc,...(change==='content'?{content:'新需求：确认后必须审批'}:change==='disabled'?{enabled:false}:{sourceFingerprint:'stale-source'}),updatedAt:2});
+  expect(knowledgeFingerprint(useProjectStore.getState())).toBe(before);expect(before).toBe(initialBase);
+  expect(buildProjectKnowledgeBundle(useProjectStore.getState(),'修改文案','target').content).not.toBe(context);
+  const history=useHistoryStore.getState().past.length;store.refreshStagedRender();store.setStagedRenderQuality(store.getStagedRenderContextKey(),clean);
+  expect(store.isStagedTaskCurrent()).toBe(false);expect(store.getStagedDeliveryReport().status).toBe('blocked');
+  expect(await store.adoptStagedChange()).toBe(false);expect(useHistoryStore.getState().past).toHaveLength(history);expect(useProjectStore.getState().screens.target.htmlContent).toBe(baseline);
+ });
+ test('a fresh mobile render cannot let an old candidate overwrite a manually changed navigation title',async()=>{
+  const store=useProjectStore.getState();store.initNewProject({name:'导航失效',deviceProfile:'mobile',designSystem:neutralModernTheme,createSpecimen:false});
+  store.addScreen({name:'页面',htmlContent:baseline,metadata:{navigationTitle:'原导航'},position:{x:0,y:0}},'target');
+  stage('<header class="appbar"><span class="appbar-title">候选旧导航</span></header>'+candidate);
+  expect(useProjectStore.getState().stagedScreen!.navigationTitle).toBe('候选旧导航');const before=knowledgeFingerprint(useProjectStore.getState());
+  store.updateScreen('target',{metadata:{...useProjectStore.getState().screens.target.metadata,navigationTitle:'人工新导航'}});
+  expect(knowledgeFingerprint(useProjectStore.getState())).toBe(before);const history=useHistoryStore.getState().past.length;
+  store.setStagedRenderQuality(store.getStagedRenderContextKey(),clean);expect(store.isStagedTaskCurrent()).toBe(false);
+  expect(await store.adoptStagedChange()).toBe(false);expect(useProjectStore.getState().screens.target.metadata!.navigationTitle).toBe('人工新导航');
+  expect(useHistoryStore.getState().past).toHaveLength(history);
+ });
+
 });

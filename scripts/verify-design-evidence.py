@@ -10,6 +10,7 @@ parser.add_argument('--independent-only',action='store_true',help='Run only the 
 parser.add_argument('--recovery-only',action='store_true',help='Run only recovery activity checks for focused debugging.')
 parser.add_argument('--variants-only',action='store_true',help='Run only page-variant activity checks for focused debugging.')
 parser.add_argument('--panels-only',action='store_true',help='Run only inspector and candidate-repair activity checks.')
+parser.add_argument('--legacy-history-only',action='store_true',help='Run only frozen full-theme history compatibility checks.')
 ARGS=parser.parse_args()
 OUT=(ROOT/ARGS.output).resolve()
 async def verify_history(page,engine,kind):
@@ -479,6 +480,40 @@ async def verify_guided_repair(page,engine,device):
     assert history=={'undone':True,'redone':True},history
     result.pop('html')
     return {**result,**history}
+
+async def verify_legacy_history(page,engine,device):
+    await page.goto('http://127.0.0.1:5174/test/fixtures/rule-control.html?device='+device,wait_until='networkidle')
+    await page.wait_for_function('!!ruleControlFixture.seedLegacyHistory')
+    await page.evaluate('ruleControlFixture.seedLegacyHistory()')
+    before=await page.evaluate('()=>({calls:ruleControlFixture.requests.length,history:ruleControlFixture.history().past.length-ruleControlFixture.before,pages:Object.keys(ruleControlFixture.state().screens).length})')
+    assert before=={'calls':2,'history':0,'pages':1},before
+    await page.evaluate('ruleControlFixture.reopen()')
+    await page.get_by_text('旧版完整主题会话',exact=True).wait_for()
+    await page.get_by_text('坏来源正文仍保留',exact=True).wait_for()
+    evidence=page.get_by_label('历史设计依据',exact=True)
+    assert await evidence.count()==1
+    await evidence.locator('summary').first.click()
+    await evidence.get_by_text('请求记录 · 1 条',exact=True).click()
+    await expect(evidence).to_contain_text('返回完成')
+    await expect(evidence).to_contain_text('调用输入记录 1 条规则')
+    plan=page.get_by_label('功能与交互规划',exact=True)
+    assert await plan.count()==1
+    await plan.locator('summary').first.click()
+    await expect(plan).to_contain_text('需要展示')
+    body=await page.locator('body').inner_text()
+    for secret in ['NESTED_LEGACY_SECRET','FIXTURE_SECRET']:assert secret not in body
+    assert '历史设计依据损坏或与本轮请求不匹配' in body
+    assert '历史功能规划记录无效或与本轮请求不匹配' in body
+    assert '不能直接采纳或续写' in body
+    identity=await page.evaluate('ruleControlFixture.readLegacy()')
+    assert identity=={'themeExact':True,'ruleBindingExact':True,'receiptsExact':True,'planExact':True},identity
+    await page.screenshot(path=str(OUT/f'{engine}-legacy-history-{device}.png'),full_page=True)
+    await page.evaluate('ruleControlFixture.reopen()')
+    await page.get_by_label('历史设计依据',exact=True).wait_for()
+    after=await page.evaluate('()=>({calls:ruleControlFixture.requests.length,history:ruleControlFixture.history().past.length-ruleControlFixture.before,pages:Object.keys(ruleControlFixture.state().screens).length})')
+    assert before==after,(before,after)
+    assert await page.evaluate('ruleControlFixture.state().screens.page.htmlContent===ruleControlFixture.original')
+    return {'device':device,**after,**identity,'badSourcesIsolated':True,'reopenNoModelOrMutation':True}
 
 async def verify_runtime_recovery(page,engine,device):
     await page.set_viewport_size({'width':1280,'height':1000})
@@ -1011,6 +1046,14 @@ async def main():
                 else:external.append(request.request.url);await request.abort()
             await page.route('**/*',route)
             try:
+                if ARGS.legacy_history_only:
+                    mobile=await verify_legacy_history(page,engine,'mobile')
+                    pc=await verify_legacy_history(page,engine,'pc')
+                    assert not errors,errors
+                    assert not external,external
+                    results.append({'engine':engine,'status':'passed','legacyHistoryMobile':mobile,'legacyHistoryPc':pc,'pageErrors':errors,'externalRequests':external})
+                    print(json.dumps(results[-1],ensure_ascii=False),flush=True)
+                    continue
                 if ARGS.recovery_only:
                     mobile=await verify_guided_repair(page,engine,'mobile')
                     pc=await verify_guided_repair(page,engine,'pc')
@@ -1195,6 +1238,8 @@ async def main():
                 rule_pc=await verify_rule_roots(page,engine,'pc')
                 repair_mobile=await verify_guided_repair(page,engine,'mobile')
                 repair_pc=await verify_guided_repair(page,engine,'pc')
+                legacy_mobile=await verify_legacy_history(page,engine,'mobile')
+                legacy_pc=await verify_legacy_history(page,engine,'pc')
                 runtime_mobile=await verify_runtime_recovery(page,engine,'mobile')
                 runtime_pc=await verify_runtime_recovery(page,engine,'pc')
                 draft_mobile=await verify_local_draft_source(page,engine,'mobile')
@@ -1226,6 +1271,7 @@ async def main():
                 results[-1].update(variantsMobile=variants_mobile,variantsPc=variants_pc)
                 results[-1].update(recoveryActivityMobile=recovery_mobile,recoveryActivityPc=recovery_pc)
                 results[-1].update(panelsMobile=panels_mobile,panelsPc=panels_pc)
+                results[-1].update(legacyHistoryMobile=legacy_mobile,legacyHistoryPc=legacy_pc)
                 print(json.dumps(results[-1],ensure_ascii=False),flush=True)
             except Exception:
                 await page.screenshot(path=str(OUT/f'{engine}-failed.png'),full_page=True)
