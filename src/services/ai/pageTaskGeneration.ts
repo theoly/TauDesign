@@ -15,7 +15,7 @@ import type {TaskBudget} from './taskBudget';
 import {mergeRedesignBody} from './pageRedesignSource';
 
 /** Feature groups become <=3 code-owned patch regions; the model cannot invent slots/head. */
-export function compileTraeSectionPlan(plan:PageTaskPlan,device:'pc'|'mobile',title:string,arrangement?:PageComposition):SectionPlan{
+export function compileSectionPlan(plan:PageTaskPlan,device:'pc'|'mobile',title:string,arrangement?:PageComposition):SectionPlan{
  const composition=parsePageComposition(arrangement??defaultPageComposition(plan),plan,device);
  const sections=composition.regions.map(region=>{
   const group=region.featureIds.map(id=>plan.features.find(f=>f.id===id)!);
@@ -26,7 +26,7 @@ export function compileTraeSectionPlan(plan:PageTaskPlan,device:'pc'|'mobile',ti
  return parseSectionPlan({version:2,composition,title:title.slice(0,100)||'新页面',shellHtml:buildCompositionShell(composition,device),sections});
 }
 const escapeAttribute=(text:string)=>text.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
-export async function generateTraePage(core:AIEngineCore,options:StreamTextOptions,input:{strategy:PageWriteStrategy;plan:PageTaskPlan;device:'pc'|'mobile';title:string;contextKey:string;budget:TaskBudget;baselineHtml?:string;isCurrent?:()=>boolean;onProgress?:(message:string)=>void;onRequest?:(messages:EngineMessage[])=>void;composition?:PageComposition;request?:string;onCheckpoint?:(plan:SectionPlan,completed:Array<{id:string;html:string}>)=>Promise<void>;recovered?:{plan:SectionPlan;completed:Array<{id:string;html:string}>}}):Promise<SectionedResult>{
+export async function generateTaskPage(core:AIEngineCore,options:StreamTextOptions,input:{strategy:PageWriteStrategy;plan:PageTaskPlan;device:'pc'|'mobile';title:string;contextKey:string;budget:TaskBudget;baselineHtml?:string;isCurrent?:()=>boolean;onProgress?:(message:string)=>void;onRequest?:(messages:EngineMessage[])=>void;composition?:PageComposition;request?:string;onCheckpoint?:(plan:SectionPlan,completed:Array<{id:string;html:string}>)=>Promise<void>;recovered?:{plan:SectionPlan;completed:Array<{id:string;html:string}>}}):Promise<SectionedResult>{
  const {strategy,budget}=input;
  const guard=()=>{budget.assertActive();if(options.signal?.aborted)throw new DOMException('页面写入已取消','AbortError');if(input.isCurrent?.()===false)throw Error('页面写入来源已变化，未发送请求。');};
  guard();
@@ -60,7 +60,7 @@ export async function generateTraePage(core:AIEngineCore,options:StreamTextOptio
     composition=defaultPageComposition(input.plan);
    }
   }
-  const compiled=compileTraeSectionPlan(input.plan,input.device,input.recovered?.plan.title??input.title,composition),s=budget.snapshot(),remaining=s.limits.maxRequestedOutputTokens-s.requestedOutputTokens;
+  const compiled=compileSectionPlan(input.plan,input.device,input.recovered?.plan.title??input.title,composition),s=budget.snapshot(),remaining=s.limits.maxRequestedOutputTokens-s.requestedOutputTokens;
   if(input.recovered&&!sameSectionPlanScope(compiled,parseSectionPlan(input.recovered.plan)))throw Error('旧区域职责或程序布局与当前功能合同不匹配，未复用旧片段。');
   const plan=input.recovered?parseSectionPlan(input.recovered.plan):compiled;
   const pending=plan.sections.slice(input.recovered?.completed.length??0);

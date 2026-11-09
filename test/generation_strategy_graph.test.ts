@@ -3,7 +3,7 @@ import {choosePageWriteStrategy,SECTIONED_HTML_BYTES,allocateOutputSteps} from '
 import {executeGenerationTree,validateGenerationTree,type GenerationNode,type GenerationTree} from '../src/services/ai/generationGraph';
 import {TaskBudget} from '../src/services/ai/taskBudget';
 import {contentFingerprint} from '../src/services/ai/designWorkflow';
-test('TRAE routes resolve 4–6/7+, exact byte limit, state base and derived priority',()=>{
+test('Strategy routes resolve 4–6/7+, exact byte limit, state base and derived priority',()=>{
  const route=(n:number,bytes=100)=>choosePageWriteStrategy({majorSections:n,estimatedHtmlBytes:bytes});
  expect(route(3).mode).toBe('SkeletonMainAtomic');for(const n of [4,6])expect(route(n).mode).toBe('SectionPlanThenWrite');expect(route(7).mode).toBe('SectionedPatch');
  expect(route(3,SECTIONED_HTML_BYTES).mode).toBe('SkeletonMainAtomic');expect(route(3,SECTIONED_HTML_BYTES+1).mode).toBe('SectionedPatch');

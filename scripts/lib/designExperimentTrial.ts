@@ -51,7 +51,7 @@ export function observeExperimentTransport(transport:AITransport,traces:Experime
 export function experimentRuntimeFacts(){
  const regular=createChatTaskBudget(true),sectioned=createChatTaskBudget(true);
  const result={themeJson:JSON.stringify(neutralModernTheme),checkerJson:JSON.stringify({mobile:renderEvidenceIdentity('mobile'),pc:renderEvidenceIdentity('pc'),userAgent:navigator.userAgent,dpr:devicePixelRatio}),
-  budgetJson:JSON.stringify({workflow:'current-trae-v2-auto',contrast:'contextual-guidance-only',legacySvgPreparation:'external-files-v1',regular:regular.snapshot().limits,sectioned:sectioned.snapshot().limits,local:{maxRequests:2,maxRequestedOutputTokens:3848,maxDurationMs:900000,maxRequestDurationMs:900000}})};
+  budgetJson:JSON.stringify({workflow:'current-pipeline-v2-auto',contrast:'contextual-guidance-only',legacySvgPreparation:'external-files-v1',regular:regular.snapshot().limits,sectioned:sectioned.snapshot().limits,local:{maxRequests:2,maxRequestedOutputTokens:3848,maxDurationMs:900000,maxRequestDurationMs:900000}})};
  regular.close();sectioned.close();return result;
 }
 const severe=(report:RenderedQualityReport|undefined)=>report?.findings.filter(f=>f.severity==='error'&&['render_action_zero_size','render_action_invisible_label','render_compressed_body'].includes(f.code)).length??0;

@@ -8,7 +8,7 @@ import {modelConfigurationFingerprint} from './modelConfiguration';
 import {referenceImageIdentity} from './workflowSources';
 import {contentFingerprint,type DesignTaskContract} from './designWorkflow';
 import {parsePageComposition} from './pageComposition';
-import {compileTraeSectionPlan} from './traePageGeneration';
+import {compileSectionPlan} from './pageTaskGeneration';
 import type {TextReference} from './textFileContext';
 import type {ImageAttachment} from '../../types/referenceImage';
 import {validReferenceRegion} from '../../types/referenceImage';
@@ -62,7 +62,7 @@ export async function prepareTaskRecovery(storage:ProjectStorage,id:string,state
  const plan=source.sectionPlan,task=source.contract.pageTaskPlan?.plan;
  if(plan?.version===2&&plan.composition&&task){
   parsePageComposition(plan.composition,task,state.settings.deviceProfile);
-  const fresh=compileTraeSectionPlan(task,state.settings.deviceProfile,plan.title,plan.composition);
+  const fresh=compileSectionPlan(task,state.settings.deviceProfile,plan.title,plan.composition);
   if(!sameSectionPlanScope(fresh,parseSectionPlan(plan)))throw Error('原分区职责或程序布局与功能合同不一致。');
   const completed=plan.sections.flatMap(section=>{const part=saved.parts.find(p=>p.stepId===section.id&&p.complete);return part?[{id:section.id,html:part.html}]:[];});
   if(completed.some((part,i)=>part.id!==plan.sections[i].id))throw Error('原完成区块不是连续前缀，不能猜测恢复位置。');

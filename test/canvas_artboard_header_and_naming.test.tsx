@@ -10,7 +10,7 @@ import { sanitizeScreenTitle, CanvasToolExecutor } from '../src/services/tools/c
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe('画框上方浮动标题（Trae 风格）、明暗可视性与 AI 命名测试', () => {
+describe('画框上方浮动标题、明暗可视性与 AI 命名测试', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -60,7 +60,7 @@ describe('画框上方浮动标题（Trae 风格）、明暗可视性与 AI 命�
     expect(container.textContent).not.toContain('L0 位图降级缩略视图');
   });
 
-  test('CHK-F-02: 画框采用 Trae 风格纯净文本标题，无内嵌黑色条与多余图标，支持折行', async () => {
+  test('CHK-F-02: 画框采用纯净文本标题，无内嵌黑色条与多余图标，支持折行', async () => {
     const mockScreen = {
       id: 'screen-header-test',
       name: '实名认证与安全信息绑定中心',
@@ -114,7 +114,7 @@ describe('画框上方浮动标题（Trae 风格）、明暗可视性与 AI 命�
       measuredHeight: 600
     };
 
-    // 1. 未激活状态：按钮完全不渲染 (Trae 极简纯净呈现)
+    // 1. 未激活状态：按钮完全不渲染 (极简纯净呈现)
     useProjectStore.setState({
       screens: { [mockScreenInactive.id]: mockScreenInactive as any },
       screenOrder: [mockScreenInactive.id],

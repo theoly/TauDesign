@@ -1,6 +1,6 @@
 import { describe, test, expect } from 'bun:test';
 import { parsePageComposition, pageCompositionSchema, buildCompositionShell, type PageComposition } from '../src/services/ai/pageComposition';
-import { generateTraePage, compileTraeSectionPlan } from '../src/services/ai/traePageGeneration';
+import { generateTaskPage, compileSectionPlan } from '../src/services/ai/pageTaskGeneration';
 import { choosePageWriteStrategy } from '../src/services/ai/generationStrategy';
 import { safeJsonParse, extractJsonPayload } from '../src/services/ai/structuredOutput';
 import { DefaultAIEngineCore } from '../src/services/ai/engine/core/aiEngineCore';
@@ -85,7 +85,7 @@ describe('Page Composition Footer Resilience Suite (BR-CFR-01 ~ BR-CFR-03)', () 
     expect(mobileSchema.properties.footer.enum).toEqual(['flow', 'cta']);
   });
 
-  test('CHK-F-05: generateTraePage 在 PC 端接收到模型的 footer: cta 响应时，平滑完成整页写入而不崩溃', async () => {
+  test('CHK-F-05: generateTaskPage 在 PC 端接收到模型的 footer: cta 响应时，平滑完成整页写入而不崩溃', async () => {
     const strategy = choosePageWriteStrategy({
       plan: mockPlan,
       estimatedHtmlBytes: 50000,
@@ -124,7 +124,7 @@ describe('Page Composition Footer Resilience Suite (BR-CFR-01 ~ BR-CFR-03)', () 
     });
 
     const provider = { id: 'test', name: 'test', protocol: 'openai_compatible' as const, baseUrl: 'http://mock', apiKey: 'test' };
-    const result = await generateTraePage(core, { provider, model: 'test', messages: [{ role: 'user', content: '设计Kmxx官网' }] }, {
+    const result = await generateTaskPage(core, { provider, model: 'test', messages: [{ role: 'user', content: '设计Kmxx官网' }] }, {
       request: '设计Kmxx官网',
       strategy,
       plan: mockPlan,
@@ -155,7 +155,7 @@ describe('Page Composition Footer Resilience Suite (BR-CFR-01 ~ BR-CFR-03)', () 
     expect(parsed2.layout).toBe('sidebar-main');
   });
 
-  test('CHK-F-07: generateTraePage 面对输出含有 Layout 前缀的大模型响应时，安全解析 JSON 并完成写入', async () => {
+  test('CHK-F-07: generateTaskPage 面对输出含有 Layout 前缀的大模型响应时，安全解析 JSON 并完成写入', async () => {
     const strategy = choosePageWriteStrategy({
       plan: mockPlan,
       estimatedHtmlBytes: 50000,
@@ -192,7 +192,7 @@ describe('Page Composition Footer Resilience Suite (BR-CFR-01 ~ BR-CFR-03)', () 
     });
 
     const provider = { id: 'test', name: 'test', protocol: 'openai_compatible' as const, baseUrl: 'http://mock', apiKey: 'test' };
-    const result = await generateTraePage(core, { provider, model: 'test', messages: [{ role: 'user', content: '设计Kmxx官网' }] }, {
+    const result = await generateTaskPage(core, { provider, model: 'test', messages: [{ role: 'user', content: '设计Kmxx官网' }] }, {
       request: '设计Kmxx官网',
       strategy,
       plan: mockPlan,

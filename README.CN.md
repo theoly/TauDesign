@@ -213,7 +213,7 @@ PACKAGE_DMG=1 PACKAGE_ZIP=1 bun run package:desktop
 ### 验证记录
 
 <!-- CURRENT_WORKFLOW_STATUS_BEGIN -->
-本批工作区源码已实现规则检索、功能/信息/静态交互规划、四协议统一编码、请求前容量预检、TRAE 四写入模式（`SkeletonMainAtomic`、`SectionPlanThenWrite`、`SectionedPatch`、`DerivedCopyMutableOnly`）、共享依赖生成树、媒体外置分离、跨实例条件发布、来源与预算、候选门禁及保存重开。自动参考设计规则继续**默认关闭**：在最新 24 对 48 任务真实模型对照（`doc/model-interaction-refactor/evidence/2026-11-07-live-experiment-01`）中，全部 48 任务记录完整且自动质量/成本门禁通过（规则组首轮 19/24 高于基线 15/24、最终 19/24 高于基线 17/24、严重布局问题 0 低于基线 1、输入中位数 10,121 低于基线 10,580、耗时中位数 12.29s 低于基线 14.28s）；因新批次尚未取得外部两名独立真人盲评（不以 Agent 自评替代），且上一轮已评批次（偏好 47.92%）原结论保留，按既定策略维持 `optional / defaultEnabled: false`。
+本批工作区源码已实现规则检索、功能/信息/静态交互规划、四协议统一编码、请求前容量预检、四种页面写入策略（`SkeletonMainAtomic`、`SectionPlanThenWrite`、`SectionedPatch`、`DerivedCopyMutableOnly`）、共享依赖生成树、媒体外置分离、跨实例条件发布、来源与预算、候选门禁及保存重开。自动参考设计规则继续**默认关闭**：在最新 24 对 48 任务真实模型对照（`doc/model-interaction-refactor/evidence/2026-11-07-live-experiment-01`）中，全部 48 任务记录完整且自动质量/成本门禁通过（规则组首轮 19/24 高于基线 15/24、最终 19/24 高于基线 17/24、严重布局问题 0 低于基线 1、输入中位数 10,121 低于基线 10,580、耗时中位数 12.29s 低于基线 14.28s）；因新批次尚未取得外部两名独立真人盲评（不以 Agent 自评替代），且上一轮已评批次（偏好 47.92%）原结论保留，按既定策略维持 `optional / defaultEnabled: false`。
 
 本批工作区源码的完整验收已通过（`doc/model-interaction-refactor/evidence/2026-11-07-final-acceptance-03` 与 `2026-11-07-entry-matrix-05`）：**3,684 项前端与集成测试（307 文件、0 失败）**、**66 项 Rust 库测试（0 失败）**，类型检查、生产构建、42/42 全入口 Chromium/WebKit 矩阵、全量双浏览器证据，以及两个真实工程只读副本（`smatch` 与 `pc01`）的 macOS 保存重开、三种采纳模式、HTML 和 4 张原生 PNG。501 份运行输入、865 份含测试输入前后不变，原工程文件哈希不变。具体证据和限制见[模型交互重构报告](./doc/model-interaction-refactor/test.md)与[早期证据索引](./doc/ui-design-workflow/completion-current.md)。Windows/Linux 实机缺口保留。
 

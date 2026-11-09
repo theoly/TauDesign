@@ -2,7 +2,7 @@ import {requestOutputCap} from '../../modelCapabilities';
 import type {TaskDraftUpdate} from '../../designTaskJournal';
 import {withTaskProvenance} from '../../taskProvenance';
 import {choosePageWriteStrategy,estimatePageHtmlBytes,validPageWriteStrategy,type PageWriteStrategy} from '../../generationStrategy';
-import {generateTraePage} from '../../traePageGeneration';
+import {generateTaskPage} from '../../pageTaskGeneration';
 import {requiresPageVariantPlan,requiresMultiPagePlan,validMultiPageScope,type MultiPageScope} from '../../multiPageContract';
 import {referenceImageIdentity,recordReferenceInput,inspectCreationSources} from '../../workflowSources';
 import type { StyleOverride, ReferenceDevice, DesignSystemOrigin,DesignLibraryBinding } from '../../../../types/project';
@@ -396,7 +396,7 @@ export class PipelineExecutor {
         recovered = {rawResponse:`<artifact type="screen" title="${title}">${html}</artifact>`,warnings:['已按用户确认文案定点修复，未重新请求整页生成。'],usage:{inputTokens:0,outputTokens:0},finishReason:'stop',continuationCount:0};
       } catch (error) { return attachContract({status:'rejected_by_quality',rawResponse:'',usage:{inputTokens:0,outputTokens:0},failedDraft:draft,qualityReport:draft.quality,errorMessage:String(error instanceof Error?error.message:error)}); }
     } else if(workflowContract.pageWriteStrategy&&workflowContract.pageTaskPlan&&!resuming){
-      try{recovered=await generateTraePage(requestCore,{provider,model,messages:enriched.messages,signal,...artifactOptions},{recovered:options.recoveryData?.regions,request:workflowContract.request,strategy:workflowContract.pageWriteStrategy,plan:workflowContract.pageTaskPlan.plan,device:deviceProfile,title:options.multiPage?.name??options.designBrief?.goal?.slice(0,20)??workflowContract.pageTaskPlan.plan.goal.slice(0,20),contextKey,budget:taskBudget!,isCurrent:options.isCurrent,onProgress:options.onSectionProgress,onRequest:messages=>{const issue=recordReferenceInput(workflowContract,messages,provider.id,model);if(issue)throw Error(issue);},onCheckpoint:options.onTaskDraft?async(plan,completed)=>{await options.onTaskDraft!({phase:'regions',contract:workflowContract,budget:taskBudget?.snapshot(),plan,completed});}:undefined});}
+      try{recovered=await generateTaskPage(requestCore,{provider,model,messages:enriched.messages,signal,...artifactOptions},{recovered:options.recoveryData?.regions,request:workflowContract.request,strategy:workflowContract.pageWriteStrategy,plan:workflowContract.pageTaskPlan.plan,device:deviceProfile,title:options.multiPage?.name??options.designBrief?.goal?.slice(0,20)??workflowContract.pageTaskPlan.plan.goal.slice(0,20),contextKey,budget:taskBudget!,isCurrent:options.isCurrent,onProgress:options.onSectionProgress,onRequest:messages=>{const issue=recordReferenceInput(workflowContract,messages,provider.id,model);if(issue)throw Error(issue);},onCheckpoint:options.onTaskDraft?async(plan,completed)=>{await options.onTaskDraft!({phase:'regions',contract:workflowContract,budget:taskBudget?.snapshot(),plan,completed});}:undefined});}
       catch(error){return attachContract({status:'error',rawResponse:'',errorMessage:error instanceof Error?error.message:String(error)});}
     } else if(options.sectioned) {
       recovered=await generateSectionedPage(requestCore,{provider,model,messages:enriched.messages,signal,...artifactOptions},contextKey,

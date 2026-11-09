@@ -7,7 +7,7 @@ import {
   buildCompositionShell,
   type PageComposition
 } from '../src/services/ai/pageComposition';
-import { generateTraePage } from '../src/services/ai/traePageGeneration';
+import { generateTaskPage } from '../src/services/ai/pageTaskGeneration';
 import { choosePageWriteStrategy } from '../src/services/ai/generationStrategy';
 import { DefaultAIEngineCore } from '../src/services/ai/engine/core/aiEngineCore';
 import { MockTransport } from '../src/services/ai/engine/transport/mockTransport';
@@ -129,7 +129,7 @@ describe('Page Composition Resilience & Auto-Repair Suite (BR-PCR-01 ~ BR-PCR-03
     expect(allAssigned.sort()).toEqual(['f1', 'f2', 'f3', 'f4', 'f5', 'f6']);
   });
 
-  test('CHK-F-06: generateTraePage 面对遗漏/重复/变体 ID 响应时，平滑完成整页写入而不抛出功能归属错误', async () => {
+  test('CHK-F-06: generateTaskPage 面对遗漏/重复/变体 ID 响应时，平滑完成整页写入而不抛出功能归属错误', async () => {
     const strategy = choosePageWriteStrategy({
       plan: mockPlan,
       estimatedHtmlBytes: 50000,
@@ -167,7 +167,7 @@ describe('Page Composition Resilience & Auto-Repair Suite (BR-PCR-01 ~ BR-PCR-03
     });
 
     const provider = { id: 'test', name: 'test', protocol: 'openai_compatible' as const, baseUrl: 'http://mock', apiKey: 'test' };
-    const result = await generateTraePage(core, { provider, model: 'test', messages: [{ role: 'user', content: '生成商品详情页' }] }, {
+    const result = await generateTaskPage(core, { provider, model: 'test', messages: [{ role: 'user', content: '生成商品详情页' }] }, {
       request: '生成商品详情页',
       strategy,
       plan: mockPlan,
@@ -183,7 +183,7 @@ describe('Page Composition Resilience & Auto-Repair Suite (BR-PCR-01 ~ BR-PCR-03
     expect(result.rawResponse).toContain('底部操作');
   });
 
-  test('CHK-F-07: generateTraePage 面对完全损坏或非 JSON 响应时，自动降级为 defaultPageComposition 不中断生成', async () => {
+  test('CHK-F-07: generateTaskPage 面对完全损坏或非 JSON 响应时，自动降级为 defaultPageComposition 不中断生成', async () => {
     const strategy = choosePageWriteStrategy({
       plan: mockPlan,
       estimatedHtmlBytes: 50000,
@@ -211,7 +211,7 @@ describe('Page Composition Resilience & Auto-Repair Suite (BR-PCR-01 ~ BR-PCR-03
     });
 
     const provider = { id: 'test', name: 'test', protocol: 'openai_compatible' as const, baseUrl: 'http://mock', apiKey: 'test' };
-    const result = await generateTraePage(core, { provider, model: 'test', messages: [{ role: 'user', content: '生成商品详情页' }] }, {
+    const result = await generateTaskPage(core, { provider, model: 'test', messages: [{ role: 'user', content: '生成商品详情页' }] }, {
       request: '生成商品详情页',
       strategy,
       plan: mockPlan,

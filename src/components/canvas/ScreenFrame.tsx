@@ -653,7 +653,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       }}
       onClick={() => setActiveScreen(screen.id)}
     >
-      {/* 浮动在画框上方的纯净标题栏 (参考 Trae 风格，取消黑条无多余图标，仅激活时展示动作按钮) */}
+      {/* 浮动在画框上方的纯净标题栏 (极简无黑条，无多余图标，仅激活时展示动作按钮) */}
       <div
         onMouseDown={handleTitleMouseDown}
         className={`min-h-[26px] mb-2 px-0.5 flex items-center justify-between text-xs select-none transition-colors ${
@@ -711,7 +711,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
           )}
         </div>
 
-        {/* 仅在激活的页面展示动作按钮 (Trae 规范) */}
+        {/* 仅在激活的页面展示动作按钮 (极简交互规范) */}
         {!isStaged && isActive && (
           <div className="flex items-center gap-0.5 flex-shrink-0">
             <button

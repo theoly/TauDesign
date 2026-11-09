@@ -15,7 +15,7 @@
 
 > 状态说明：逐项状态对应所属日期；当前以用户确认的静态设计范围审计功能实现和证据。复杂真实PC、在线模型及其它操作系统的证据缺口单独列示，不混同于功能未实现。
 
-- [x] 阅读 TRAE SOLO 报告、关联 skill / `.design` / 设计库证据并形成稳定性改造边界。
+- [x] 阅读原型评测报告、关联 skill / `.design` / 设计库证据并形成稳定性改造边界。
 - [x] 实现统一设计任务合同及路由描述。
 - [x] 将合同接入 PipelineContext、System Prompt 与所有 PipelineOutput。
 - [x] 建立从 ProjectData 当前实体派生的工程 Manifest 和一致性校验器。
