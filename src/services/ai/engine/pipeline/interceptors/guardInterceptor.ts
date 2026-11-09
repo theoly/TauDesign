@@ -29,7 +29,7 @@ export function checkStructureIntegrity(
 
   const prompt = context.input.rawPrompt;
   // 引用只授权该子树，不能让无关操作或兄弟内容消失。
-  const nid = context.input.decision?.elementNid || /\bnid=["']([^"']+)["']/.exec(prompt)?.[1];
+  const nid = context.input.decision?.elementNid || (!context.wholePageRedesign?/\bnid=["']([^"']+)["']/.exec(prompt)?.[1]:undefined);
   if (nid) {
     const original = parseHtmlCopy(context.targetScreen.htmlContent);
     const candidate = parseHtmlCopy(generatedHtml);

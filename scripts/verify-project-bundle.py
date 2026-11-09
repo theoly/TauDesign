@@ -3,17 +3,22 @@
 import argparse,asyncio,json
 from pathlib import Path
 from playwright.async_api import async_playwright
-INSTALL=r'''()=>{
+INSTALL=r'''async()=>{
+ const {fileSnapshotCommand}=await import('/test/helpers/fileSnapshotFixture.ts');
  window.__bundle={picks:0,writes:[]};
  window.__TAURI_INTERNALS__={invoke:async(cmd,params)=>{
   const f=window.__bundle,prefix='bundle-target:';
   if(cmd==='plugin:dialog|open'){
    f.picks++;const id=window.__projectStore.getState().id;
-   f.source=Object.fromEntries(Object.keys(localStorage).filter(key=>key.startsWith('aidesign:fs:'+id+':')||key==='ai_designer_history_'+id).map(key=>[key,localStorage.getItem(key)]));
+   const {createProjectStorage}=await window.__module('/src/services/storage/projectStorage.ts');
+   window.__bundleSourceStorage=createProjectStorage(id);f.source={};
+   for(const path of await window.__bundleSourceStorage.listDir('')){const value=await window.__bundleSourceStorage.readText(path);if(value!==null)f.source[path]=value;}
    return f.nextRoot||'/virtual/bundle.aidesign';
   }
   if(!['/virtual/bundle.aidesign','/virtual/failure.aidesign'].includes(params?.root))throw Error('Not a filesystem fixture: '+cmd);
-  const rel=params.rel||'',key=(params.root==='/virtual/failure.aidesign'?'bundle-failure:':prefix)+rel;
+  const targetPrefix=params.root==='/virtual/failure.aidesign'?'bundle-failure:':prefix;
+  const snapshot=await fileSnapshotCommand(cmd,params,targetPrefix);if(snapshot.handled)return snapshot.value;
+  const rel=params.rel||'',key=targetPrefix+rel;
   if(cmd==='project_read_text'||cmd==='project_read_binary')return localStorage.getItem(key);
   if(cmd==='project_exists')return localStorage.getItem(key)!==null;
   if(cmd==='project_ensure_dir')return;
@@ -50,16 +55,20 @@ async def main(args):
     const {acceptRestyleResult}=await window.__module('/src/services/ai/restyleService.ts');const s=window.__projectStore.getState();
     const outcome=acceptRestyleResult({kind:'screen',id:'page',name:'资料页',html:s.screens.page.htmlContent},s.screens.page.htmlContent.replace('p-4','p-6'),{designSystem:s.designSystem,deviceProfile:'mobile'});
     const result=await s.applyRestyleOutcome(outcome);if(!result.applied)throw Error(JSON.stringify(result));
-    window.__projectStore.getState().stageScreenChange('page',window.__projectStore.getState().screens.page.htmlContent.replace('确认提交','再次确认'),'待采纳候选','再次确认按钮');
+    s.addScreen({name:'将删除页面',htmlContent:s.screens.page.htmlContent},'removed-page');
+    window.__projectStore.getState().stageScreenChange('removed-page',s.screens.page.htmlContent.replace('确认提交','删除前确认'),'将删除页面候选','更新按钮文案');
    }''')
+   await page.wait_for_function("window.__projectStore.getState().getStagedDeliveryReport().status==='ready'")
+   await page.get_by_role('button',name='采纳新版 (替换原版)',exact=True).last.click()
+   await page.wait_for_function('window.__projectStore.getState().stagedScreen===null')
+   await page.evaluate('''()=>{const s=window.__projectStore.getState();s.removeScreen('removed-page');s.stageScreenChange('page',s.screens.page.htmlContent.replace('确认提交','再次确认'),'待采纳候选','再次确认按钮');}''')
    await page.wait_for_function("window.__projectStore.getState().stagedPreview?.report?.status==='ready'&&!window.__projectStore.getState().stagedPreview?.pending&&window.__projectStore.getState().stagedCandidateSaveStatus==='saved'")
    archives=await page.evaluate(r'''async()=>{
     const s=window.__projectStore.getState(),{createProjectStorage}=await window.__module('/src/services/storage/projectStorage.ts'),storage=createProjectStorage(s.id);
     const {DeliveryRepository}=await window.__module('/src/services/storage/deliveryRepository.ts'),{RestyleDeliveryRepository}=await window.__module('/src/services/storage/restyleDeliveryRepository.ts');
     const delivery=(await new DeliveryRepository(storage,s.id).listForScreen('page')).records[0],restyle=(await new RestyleDeliveryRepository(storage,s.id).list()).records[0];
     if(delivery.preview.status!=='ready'||restyle.pages[0].preview.status!=='ready')throw Error('Preview missing before migration');
-    const removed=structuredClone(delivery);removed.id=delivery.id+'-deleted';removed.status='prepared';removed.before.id=removed.after.id='removed-page';removed.preview.relPath=`assets/images/delivery-preview-${removed.id}.png`;
-    await storage.writeBinary(removed.preview.relPath,await storage.readBinary(delivery.preview.relPath));const repo=new DeliveryRepository(storage,s.id);await repo.prepare(removed);await repo.finish(removed,'applied');
+    const removed=(await new DeliveryRepository(storage,s.id).listForScreen('removed-page')).records[0];if(!removed||removed.status!=='applied')throw Error('Deleted page actual delivery missing');
     const {ConversationStore}=await window.__module('/src/services/storage/conversationStore.ts'),conv=new ConversationStore(storage);
     const canvas=document.createElement('canvas');canvas.width=canvas.height=16;const ctx=canvas.getContext('2d');ctx.fillStyle='#eb4466';ctx.fillRect(0,0,16,16);await storage.writeBinary('assets/images/conversation.png',canvas.toDataURL('image/png').split(',')[1]);
     for(const [month,text] of [[8,'迁移会话第一月'],[9,'迁移会话第二月']])if(!await conv.appendTurn({turnId:'turn-'+month,ts:new Date(2026,month,25).getTime(),user:{text,attachments:['assets/images/conversation.png']},assistant:{text:'该记录必须保留'}}))throw Error('Conversation seed failed');
@@ -74,14 +83,18 @@ async def main(args):
    notice=await page.get_by_text('已迁移',exact=False).inner_text();assert '损坏记录' in notice,notice
    copied=await page.evaluate(r'''async archives=>{
     const id=localStorage.getItem('bundle-id'),source=window.__bundle.source;
-    for(const [key,value] of Object.entries(source)){
-     if(localStorage.getItem(key)!==value)throw Error('Source altered: '+key);
-     const rel=key.startsWith('ai_designer_history_')?'history.json':key.slice(('aidesign:fs:'+id+':').length);
-     if(localStorage.getItem('bundle-target:'+rel)!==value)throw Error('Archive lost or changed: '+rel);
+    if(Object.keys(source).length<14||!source['project.json']||!source['history.json']||archives.previewPaths.some(path=>!source[path]))throw Error('Incomplete authoritative migration inventory: '+JSON.stringify(Object.keys(source)));
+    const omittedUnreferencedScreens=[];const active=JSON.parse(source['project.json']).screens;
+    for(const [rel,value] of Object.entries(source)){
+     if(await window.__bundleSourceStorage.readText(rel)!==value)throw Error('Source altered: '+rel);
+     if(rel.startsWith('screens/')&&!Object.keys(active).some(id=>['screens/'+id+'.html','screens/'+id+'.css','screens/'+id+'.manifest.json'].includes(rel))){omittedUnreferencedScreens.push(rel);continue;}
+     const target=localStorage.getItem('bundle-target:'+rel);
+     if(rel==='project.json'){const before=JSON.parse(value),after=JSON.parse(target);if(!Number.isFinite(after.savedAt)||after.savedAt<before.savedAt)throw Error('Invalid migration save time');delete before.savedAt;delete after.savedAt;const canonical=v=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b)).map(([k,v])=>[k,canonical(v)])):v;if(JSON.stringify(canonical(before))!==JSON.stringify(canonical(after)))throw Error('Migration changed project content');}
+     else if(target!==value)throw Error('Archive lost or changed: '+rel);
     }
     const {listProjects}=await window.__module('/src/utils/projectRegistry.ts');if(listProjects().find(p=>p.id===id).folderPath!=='/virtual/bundle.aidesign')throw Error('Location not published');
     if(JSON.stringify(JSON.parse(localStorage.getItem('bundle-target:project.json'))).includes('再次确认'))throw Error('Candidate leaked into current page');
-    return {files:Object.keys(source).length,sourceUnchanged:true,folderPublished:true,notice:'corrupt row preserved'};
+    return {files:Object.keys(source).length,omittedUnreferencedScreens,sourceUnchanged:true,folderPublished:true,notice:'corrupt row and deleted-page delivery bytes preserved'};
    }''',archives)
    await page.screenshot(path=str(args.artifacts/'migrated.png'))
    await page.reload(wait_until='networkidle');await page.wait_for_function('Boolean(window.__projectStore)');await page.evaluate(INSTALL)
@@ -90,12 +103,13 @@ async def main(args):
     const store=window.__projectStore,restore=store.getState().restoreStagedCandidate;
     store.setState({restoreStagedCandidate:(...args)=>{const result=restore(...args),s=store.getState();window.__restoration={renderCleared:s.stagedRenderQuality===null,status:s.getStagedDeliveryReport().status};return result;}});
     const {useWorkspaceStore}=await window.__module('/src/stores/useWorkspaceStore.ts');const result=await useWorkspaceStore.getState().openLocalFolder();if(!result.ok)throw Error(result.message);
+    const deadline=Date.now()+8000;while(!(store.getState().stagedPreview?.report?.status==='ready'&&!store.getState().stagedPreview?.pending&&store.getState().stagedCandidateSaveStatus==='saved')){if(Date.now()>deadline)throw Error('Current candidate preview unavailable: '+JSON.stringify(store.getState().stagedPreview));await new Promise(r=>setTimeout(r,20));}
     const s=store.getState(),{createProjectStorage}=await window.__module('/src/services/storage/projectStorage.ts'),storage=createProjectStorage(s.id,s.folderPath);
     const {DeliveryRepository}=await window.__module('/src/services/storage/deliveryRepository.ts'),{RestyleDeliveryRepository}=await window.__module('/src/services/storage/restyleDeliveryRepository.ts'),{ConversationStore}=await window.__module('/src/services/storage/conversationStore.ts'),{useHistoryStore}=await window.__module('/src/stores/useHistoryStore.ts');
     const delivery=(await new DeliveryRepository(storage,s.id).listForScreen('page')).records,deleted=(await new DeliveryRepository(storage,s.id).listForScreen('removed-page')).records,restyle=(await new RestyleDeliveryRepository(storage,s.id).list()).records,turns=await new ConversationStore(storage).loadRecent();
     if(delivery.length!==1||deleted.length!==1||restyle.length!==1||turns.length!==2||!s.stagedScreen)throw Error('Restored archive counts wrong');
-    const paths=[delivery[0].preview.relPath,deleted[0].preview.relPath,restyle[0].pages[0].preview.relPath,s.stagedScreen.preview.relPath,'assets/images/conversation.png'];
-    for(const path of paths){const image=new Image();image.src='data:image/png;base64,'+await storage.readBinary(path);await image.decode();}
+    const paths=[delivery[0].preview.relPath,deleted[0].preview.relPath,restyle[0].pages[0].preview.relPath,(s.stagedPreview?.report??s.stagedScreen.preview).relPath,'assets/images/conversation.png'];
+    for(const path of paths){const bytes=await storage.readBinary(path);const image=new Image();image.src='data:image/png;base64,'+bytes;try{await image.decode();}catch(error){throw Error('Archive image decode failed: '+path+' length='+bytes?.length+' prefix='+bytes?.slice(0,28)+' '+error);}}
     return {delivery:delivery[0].id,deleted:deleted[0].id,restyle:restyle[0].id,turns:turns.map(t=>t.user.text),candidateId:s.stagedScreen.candidateId,historyCount:useHistoryStore.getState().past.length,decodedImages:paths.length,restoration:window.__restoration};
    }''')
    assert reopened['candidateId']==archives['candidateId'] and reopened['historyCount']==archives['historyCount']
@@ -121,7 +135,7 @@ async def main(args):
      useWorkspaceStore.getState().backToManager();window.__bundle.nextRoot=kind==='conflict'?'/virtual/bundle.aidesign':'/virtual/failure.aidesign';
      const result=await useWorkspaceStore.getState().migrateProject(id);
      if(result.ok||listProjects().find(p=>p.id===id).folderPath)throw Error('Failure published location');
-     if(!readProject(id)||!(await createProjectStorage(id).readText('conversations/2026-10.jsonl')).includes('原始会话'))throw Error('Failure lost original');
+     if(!(await createProjectStorage(id).readText('project.json'))||!(await createProjectStorage(id).readText('conversations/2026-10.jsonl')).includes('原始会话'))throw Error('Failure lost original');
      if(localStorage.getItem('bundle-target:project.json')!==firstProject)throw Error('Conflict overwrote migrated project');
      if(kind==='conflict'&&!result.message.includes('目标已有'))throw Error(result.message);
      if(kind==='disk-full'&&!result.message.includes('simulated disk full'))throw Error(result.message);

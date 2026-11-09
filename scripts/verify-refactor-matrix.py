@@ -21,12 +21,10 @@ WORKFLOWS = [
 
 
 def snapshot(root):
-    paths = set()
-    for pattern in ('src/**/*', 'scripts/**/*.py', 'src-tauri/src/**/*.rs',
-                    'src-tauri/Cargo.toml', 'src-tauri/tauri.conf.json', 'vite.config.ts', 'package.json'):
-        paths.update(p for p in root.glob(pattern) if p.is_file())
-    files = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(paths)}
+    code="import {captureDesignInputs} from './scripts/lib/designEvidenceInputs.ts';process.stdout.write(JSON.stringify(await captureDesignInputs(process.cwd(),true)));"
+    files=json.loads(subprocess.check_output(['bun','-e',code],cwd=root,text=True))
     return {'fingerprint': hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest(), 'files': files}
+
 
 
 def main(args):
@@ -39,8 +37,13 @@ def main(args):
     (output / 'source.json').write_text(json.dumps(frozen, indent=2))
     report = {'codeFingerprint': frozen['fingerprint'], 'startedAt': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
               'scope': '42 deterministic browser entries; actual store/iframe/History/repository. Not native OS IO or live model proof.', 'cases': []}
-    for browser in ('chromium', 'webkit'):
-        for name in WORKFLOWS:
+    browsers=[args.browser] if args.browser else ['chromium','webkit']
+    workflows=args.workflow or WORKFLOWS
+    report['expectedCases']=len(browsers)*len(workflows)
+    report['completeEntryMatrix']=len(browsers)==2 and workflows==WORKFLOWS
+    if not report['completeEntryMatrix']:report['scope']='Incremental selected browser entries, not complete 42-entry acceptance.'
+    for browser in browsers:
+        for name in workflows:
             case = output / browser / name
             case.mkdir(parents=True)
             path = case / 'report.json'
@@ -67,6 +70,15 @@ def main(args):
                     except subprocess.TimeoutExpired:
                         os.killpg(process.pid, signal.SIGKILL)
                         code = process.wait()
+                except BaseException as error:
+                    if process.poll() is None:
+                        os.killpg(process.pid,signal.SIGTERM)
+                        try:process.wait(timeout=5)
+                        except subprocess.TimeoutExpired:
+                            os.killpg(process.pid,signal.SIGKILL);process.wait()
+                    report.update(status='interrupted',interruptedWorkflow=name,interruptedBrowser=browser,error=type(error).__name__,sourceUnchanged=snapshot(root)==frozen)
+                    (output/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
+                    raise
             try:
                 status = json.loads(path.read_text()).get('status')
             except (OSError, ValueError):
@@ -90,4 +102,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--url', default='http://127.0.0.1:5174')
     parser.add_argument('--artifacts', type=Path, required=True)
+    parser.add_argument('--workflow',action='append',choices=WORKFLOWS)
+    parser.add_argument('--browser',choices=['chromium','webkit'])
     sys.exit(main(parser.parse_args()))

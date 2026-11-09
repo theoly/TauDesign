@@ -87,10 +87,14 @@ export function compileTokensToCss(tokens: DesignSystemTokens, mode: 'light' | '
 export function extractClassWhitelist(baseCss: string): string[] {
   // 先剥离注释，避免注释中的 .foo 被误当作类名
   const stripped = baseCss.replace(/\/\*[\s\S]*?\*\//g, '');
-  const classMatches = stripped.matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*)(?=[\s,{:>+~[]|$)/g);
   const classes = new Set<string>();
-  for (const m of classMatches) {
-    classes.add(m[1]);
+  // Extract only rule headers, including nested @media rules. Declaration values
+  // (font URLs, content strings, etc.) are not class definitions. Quoted selector
+  // attribute values likewise cannot add a class to the authoritative whitelist.
+  for (const rule of stripped.matchAll(/([^{}]+)\{/g)) {
+    const selector = rule[1].replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'/g, '');
+    if (selector.trimStart().startsWith('@')) continue;
+    for (const match of selector.matchAll(/\.([a-zA-Z][a-zA-Z0-9_-]*)/g)) classes.add(match[1]);
   }
   return Array.from(classes).sort();
 }

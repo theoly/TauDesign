@@ -5,6 +5,7 @@ import { describe, test, expect, beforeEach } from 'bun:test';
 import { LocalStorageStorage, type ProjectStorage } from '../src/services/storage/projectStorage';
 import { ProjectRepository, migrateProjectToFolder } from '../src/services/storage/projectRepository';
 import { folderDisplayName, isDesktopRuntime } from '../src/services/storage/folderPicker';
+import {managedSnapshot} from '../src/services/storage/managedProjectSnapshot';
 
 const doc = (screens: Record<string, { id: string; name: string; htmlContent: string; scopedCss?: string }>) => ({
   id: 'proj_x',
@@ -28,7 +29,7 @@ let repo: ProjectRepository;
 
 beforeEach(() => {
   localStorage.clear();
-  storage = new LocalStorageStorage('folder');
+  storage = new LocalStorageStorage('folder-'+crypto.randomUUID());
   repo = new ProjectRepository(storage);
 });
 
@@ -108,6 +109,9 @@ describe('T-AE-42 · 迁移零丢失（门禁项）', () => {
     const lossy: ProjectStorage = {
       ...storage,
       kind: 'localStorage',
+      scopeKey:storage.scopeKey,
+      readManagedSnapshot:async()=>{const snapshot=await storage.readManagedSnapshot!();if(snapshot.files['screens/s2.html'])snapshot.files['screens/s2.html']='被篡改';return managedSnapshot(snapshot.files);},
+      publishManagedSnapshot:(expected,changes,resources)=>storage.publishManagedSnapshot!(expected,changes,resources),
       ensureDir: () => storage.ensureDir(''),
       exists: (r) => storage.exists(r),
       readText: (r) => storage.readText(r),

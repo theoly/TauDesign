@@ -105,14 +105,14 @@ async def main(args):
               const f=window.__entities,result=await CanvasToolExecutor.executeAsync({tool:'create_screen',params:{title:'当前组件新页面',html:f.source.replace('data-component-version="1"','data-component-version="3"')}});
               if(!result.success)throw Error(JSON.stringify(result));const s=window.__projectStore.getState(),e=s.screens[result.screenId].metadata.creationEvidence;
               if(e.render.status!=='complete'||e.workflow.checks.find(c=>c.id==='design-entities')?.status!=='passed')throw Error('Missing actual creation evidence');
-              s.setActiveScreen(result.screenId);return {screenId:result.screenId,evidence:e};
+              s.setActiveScreen(result.screenId);await s.saveProjectChecked();return {screenId:result.screenId,evidence:e};
             }''')
             await page.reload(wait_until='networkidle')
             await page.wait_for_function('Boolean(window.__projectStore)')
             reopened=await page.evaluate('''async data=>{
               const module=async path=>import(performance.getEntriesByType('resource').map(e=>e.name).find(url=>new URL(url).pathname===path)||path);
               const {useWorkspaceStore}=await module('/src/stores/useWorkspaceStore.ts');
-              if(!useWorkspaceStore.getState().openProject(data.fixture.id))throw Error('Reopen failed');
+              await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(data.fixture.id);
               const s=window.__projectStore.getState();if(s.screens.old.htmlContent!==data.adopted.expected||s.components[data.fixture.comp].version!==3)throw Error('Reopen lost versions');
               const {DeliveryRepository}=await module('/src/services/storage/deliveryRepository.ts'),{createProjectStorage}=await module('/src/services/storage/projectStorage.ts');
               const records=(await new DeliveryRepository(createProjectStorage(s.id),s.id).listForScreen('old')).records;

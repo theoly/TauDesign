@@ -92,7 +92,7 @@ export function acceptRestyleResult(target: RestyleTarget, rewritten: string | n
   }
 
   const diff = compareStructure(target.html, rewritten);
-  const qualityReport = checkGenerationQuality(rewritten, { ...options, baselineHtml: target.html, preserveNids: true, protectedNids: target.protectedNids });
+  const qualityReport = checkGenerationQuality(rewritten, { ...options,requireExternalMedia:true, baselineHtml: target.html, preserveNids: true, protectedNids: target.protectedNids });
   if (!diff.ok) return { target, status: 'skipped_structure', qualityReport, diff, message: diff.reason, workflowContract };
   if (!qualityReport.passed) return { target, status: 'failed', qualityReport, message: qualitySummary(qualityReport), workflowContract };
 

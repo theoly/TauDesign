@@ -5,6 +5,7 @@ import { createRoot, Root } from 'react-dom/client';
 import { useProjectStore } from '../src/stores/useProjectStore';
 import { passStagedRenderCheck } from './helpers/stagedQuality';
 import { useHistoryStore } from '../src/stores/useHistoryStore';
+import { buildDesignTaskContract } from '../src/services/ai/designWorkflow';
 import { CanvasToolExecutor } from '../src/services/tools/canvasToolExecutor';
 import { InfiniteCanvas } from '../src/components/canvas/InfiniteCanvas';
 import { ChatDrawer } from '../src/components/chat/ChatDrawer';
@@ -13,12 +14,16 @@ import { useAIConfigStore, defaultProviders, defaultBindings } from '../src/stor
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 let analysisMock: ReturnType<typeof mockModificationAnalysis>;
+async function awaitAdoption(){
+  const deadline=Date.now()+3000;while(useProjectStore.getState().stagedAdoptionStatus==='saving'&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,5));
+  expect(useProjectStore.getState().stagedAdoptionStatus).not.toBe('saving');
+}
 
 describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试套件', () => {
   let container: HTMLDivElement;
   let root: Root;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     analysisMock = mockModificationAnalysis();
     useAIConfigStore.setState({
       providers: defaultProviders.map((p) =>
@@ -31,8 +36,9 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
     document.body.appendChild(container);
     root = createRoot(container);
 
+    const projectId=useProjectStore.getState().initNewProject({name:'测试工程',deviceProfile:'mobile',designSystem:defaultTheme,createSpecimen:false});
     useProjectStore.setState({
-      id: 'test-project',
+      id: projectId,
       name: '测试工程',
       settings: {
         deviceProfile: 'mobile',
@@ -65,9 +71,11 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
       past: [],
       future: []
     });
+    await useProjectStore.getState().saveProjectChecked();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await awaitAdoption();
     analysisMock.mockRestore();
     act(() => {
       root.unmount();
@@ -161,24 +169,13 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
     expect(store.stagedScreen?.newHtml).toContain('认证信息新版候选');
   });
 
-  it('CHK-F-02b: modify_screen 支持 forceInPlace 直接原地更新 (用于强制放行场景)', () => {
-    const result = CanvasToolExecutor.execute({
-      tool: 'modify_screen',
-      params: {
-        screenId: 'screen-auth',
-        title: '认证信息',
-        html: '<div data-nid="root-cand"><h1>强制原地覆盖新版</h1></div>',
-        forceInPlace: true
-      }
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.status).toBe('screen_modified');
-
-    const store = useProjectStore.getState();
-    // 原画框被直接更新
-    expect(store.screens['screen-auth'].htmlContent).toContain('强制原地覆盖新版');
-    expect(store.stagedScreen).toBeNull();
+  it('CHK-F-02b: raw forceInPlace cannot bypass current candidate delivery checks', () => {
+    const before=useProjectStore.getState().screens['screen-auth'].htmlContent;
+    const past=useHistoryStore.getState().past.length;
+    const result = CanvasToolExecutor.execute({tool:'modify_screen',params:{screenId:'screen-auth',title:'认证信息',html:'<div data-nid="root-cand"><h1>强制原地覆盖新版</h1></div>',forceInPlace:true}});
+    expect(result.success).toBe(false);expect(result.status).toBe('failed');
+    expect(useProjectStore.getState().screens['screen-auth'].htmlContent).toBe(before);
+    expect(useProjectStore.getState().stagedScreen).toBeNull();expect(useHistoryStore.getState().past).toHaveLength(past);
   });
 
   it('CHK-F-04: 采纳新版 (替换原版) 闭环：备份 Checkpoint，更新原画框并清空暂存区', async () => {
@@ -270,6 +267,7 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
       PipelineExecutor.execute = (async () => {
         return {
           status: 'rejected_by_guard',
+          workflowContract: buildDesignTaskContract({intent:'modify_screen',request:'重新设计认证页面',target:useProjectStore.getState().screens['screen-auth'],deviceProfile:useProjectStore.getState().settings.deviceProfile,frameWidth:useProjectStore.getState().settings.frameWidth,designSystem:useProjectStore.getState().designSystem}),
           rawResponse: '<artifact identifier="screen_1" type="screen" title="认证信息"><main data-nid="root-new"><h1>大幅重绘的认证页面</h1></main></artifact>',
           extractedHtml: '<main data-nid="root-new"><h1>大幅重绘的认证页面</h1></main>',
           structureDiff: { ok: false, added: ['div', 'div'], removed: ['span'] },
@@ -310,6 +308,7 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
 
       // 4. 结构守卫拦截后只能走明确的强制放行；渲染检查通过后原画框才会更新。
       act(() => passStagedRenderCheck());
+      expect(useProjectStore.getState().getStagedDeliveryReport().checks.filter(c=>c.status==='blocked'&&c.id!=='structure')).toEqual([]);
       const adoptBtn = Array.from(container.querySelectorAll('button')).find((b) =>
         b.textContent?.includes('强制放行并覆盖更新原画框')
       );
@@ -318,6 +317,7 @@ describe('页面修改并排观测与比选替换 (Side-by-Side Replace) 测试�
 
       await act(async () => {
         adoptBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await awaitAdoption();
       });
 
       const afterAdoptStore = useProjectStore.getState();

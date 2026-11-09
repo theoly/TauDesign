@@ -101,7 +101,7 @@ async def main(args):
    assert await cli(offline_job,args.browser,args.artifacts/'baselines/offline.png',args.artifacts/'offline',True)!=0
    assert not(args.artifacts/'offline/result.json').exists()
    await page.reload(wait_until='networkidle');await page.wait_for_function('Boolean(window.__projectStore)')
-   await page.evaluate(r'''async id=>{const url=performance.getEntriesByType('resource').map(e=>e.name).find(url=>new URL(url).pathname==='/src/stores/useWorkspaceStore.ts');const {useWorkspaceStore}=await import(url);useWorkspaceStore.getState().openProject(id);}''',identity['id'])
+   await page.evaluate(r'''async id=>{const url=performance.getEntriesByType('resource').map(e=>e.name).find(url=>new URL(url).pathname==='/src/stores/useWorkspaceStore.ts');const {useWorkspaceStore}=await import(url);await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(id);}''',identity['id'])
    single=await show_single();await single.get_by_text('像素复核失败',exact=False).wait_for();assert await single.locator('article').count()==3
    await single.locator('article').first.get_by_text('查看基准、实际与差异图',exact=True).click();await single.locator('article').first.get_by_role('img').first.evaluate('(image)=>image.decode()')
    await page.screenshot(path=str(args.artifacts/'reopened.png'))

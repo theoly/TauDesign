@@ -44,7 +44,11 @@ export interface DesignLibrarySourceIdentity {
   mode:DesignLibraryBinding['mode'];sourceProjectId:string;sourceFingerprint:string;sourceTokenVersion:number;bindingFingerprint:string;
 }
 export interface DesignTaskContract {
+  contextManifest?:import('./engine/context/contextManifest').ContextManifest;
+  regionSubdivision?:import('./regionSubdivision').RegionSubdivision;
   pageTaskPlan?:import('./pageTaskPlan').PageTaskSnapshot;
+  pageWriteStrategy?:import('./generationStrategy').PageWriteStrategy;
+  wholePageRedesign?:{version:1;sourceFingerprint:string;inventoryFingerprint:string};
   designGuidance?: import('./designKnowledge/receipt').DesignGuidancePacket;
   generationMode?: 'sections';
   version: 1;
@@ -186,6 +190,7 @@ export function renderDesignTaskContract(contract: DesignTaskContract): string {
     '### DESIGN TASK CONTRACT (machine-routed; do not expand the authorized scope)',
     `taskId=${contract.taskId}; version=${contract.version}`,
     `workflow=${contract.workflowId}; operation=${contract.operation}; strategy=${contract.strategy}`,
+    contract.pageWriteStrategy?`pageWriteMode=${contract.pageWriteStrategy.mode}; reason=${contract.pageWriteStrategy.reason}; maxTargetPatches=3; 仅当前授权范围`:'',
     contract.generationMode?`generationMode=${contract.generationMode}; 公共骨架与区块由程序验证后合并，最终仍是同一页。`:'',
     contract.validationPlan?`validationPlan=${contract.validationPlan.fingerprint}; stages=${contract.validationPlan.stages.join(',')}`:'',
     `device=${contract.device.profile}/${contract.device.frameWidth}px${contract.device.referenceDevice ? ` (${contract.device.referenceDevice})` : ''}`,

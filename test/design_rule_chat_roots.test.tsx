@@ -1,3 +1,4 @@
+import {requestSchema} from './helpers/modelSchema';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import React,{act} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
@@ -22,7 +23,7 @@ beforeEach(async()=>{
  useProjectStore.getState().initNewProject({name:'根入口规则',deviceProfile:'pc',createSpecimen:false});useProjectStore.getState().addScreen({name:'资料页',htmlContent:original},'page');
  useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'ROOT_SYNTHETIC_SECRET'})),bindings:{...defaultBindings,vision:{role:'vision',providerId:'prov-openai',modelId:'gpt-4o'}},autoReferenceDesignRules:true});requests=[];disableAtPlan=false;analysisRegion=false;holdAnalysis=false;
  const transport=new MockTransport(),core=new DefaultAIEngineCore({id:'root-capture',stream:(request,event)=>{
-  const b=request.body!,schema=b.response_format?.json_schema?.schema,raw=b.messages.at(-1).content,text=Array.isArray(raw)?raw.find(c=>c.type==='text').text:raw,system=b.messages[0].content;
+  const b=request.body!,schema=requestSchema(b),raw=b.messages.at(-1).content,text=Array.isArray(raw)?raw.find(c=>c.type==='text').text:raw,system=b.messages[0].content;
   requests.push({schema,messages:b.messages,maxTokens:b.max_tokens});
   if(schema?.properties.features){if(disableAtPlan)useAIConfigStore.getState().setAutoReferenceDesignRules(false);transport.queueResponse(JSON.stringify({...chatPageTaskPlan,features:chatPageTaskPlan.features.map(f=>({...f,...(Array.isArray(raw)?{basis:'image',sourceIds:[`image:${contentFingerprint(attachment.dataUrl)}`]}:{})}))}));}
   else if(schema?.properties.pages)transport.queueResponse(JSON.stringify(withMultiPageTasks({summary:'两页长正文',pages:[{name:'正文一',requirements:['展示长正文'],links:[]},{name:'正文二',requirements:['展示长正文'],links:[]}]})));
@@ -77,7 +78,7 @@ for(const enabled of [false,true])test(`reviewed whole-page execution retains th
  useAIConfigStore.setState({autoReferenceDesignRules:enabled});await act(async()=>{await engine.sendMessage('修改当前页面，先分析长正文排版并列出修改建议',undefined,{referencedScreenId:'page'});});
  const m=engine.messages.find(m=>m.modificationReview?.status==='ready')!;useAIConfigStore.getState().setAutoReferenceDesignRules(!enabled);
  await act(async()=>{await engine.confirmModification(m.id,['suggestion-1'],'','page');});
- const c=useProjectStore.getState().stagedScreen!;expect(c).toBeTruthy();expect(Boolean(c.workflowContract!.designGuidance)).toBe(enabled);expect(requests).toHaveLength(2);expect(requests[1].messages[0].content.includes('[LY-04@1]')).toBe(enabled);expect(useProjectStore.getState().screens.page.htmlContent).toBe(original);
+ const c=useProjectStore.getState().stagedScreen!;expect(c).toBeTruthy();expect(Boolean(c.workflowContract!.designGuidance)).toBe(enabled);expect(requests).toHaveLength(3);expect(requestSchema(requests[1]).properties.features).toBeDefined();expect(requests[1].messages[0].content).not.toContain('[LY-04@1]');expect(requests[2].messages[0].content.includes('[LY-04@1]')).toBe(enabled);expect(useProjectStore.getState().screens.page.htmlContent).toBe(original);
 });
 test('same-page variants freeze the preference while planning stays facts-only and all copies retain their own receipts',async()=>{
  await act(async()=>{await engine.sendMessage('创建一个长正文页面的两个方案');});const m=engine.messages.find(m=>m.pagePlan?.plan)!;expect(m?.pagePlan?.plan?.kind).toBe('variants');

@@ -47,7 +47,7 @@ export function createUsageTracker(provider: AIProviderConfig, modelId: string, 
   return {
     onEvent(event: StreamEvent) {
       if (settled) return;
-      if (event.type === 'Delta') {
+      if (event.type === 'Delta'||event.type==='ReasoningDelta') {
         // AIService inserts these delimiters when normalizing reasoning chunks.
         outputChars += event.text.replace(/<\/?think>/g, '').length;
         if (!progressTimer) progressTimer = setTimeout(flush, 100);

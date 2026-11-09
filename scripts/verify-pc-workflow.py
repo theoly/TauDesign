@@ -181,7 +181,7 @@ async def main(args):
               const store=window.__projectStore,s=store.getState(),imported=Object.values(s.screens).find(screen=>screen.id!==fixture.screenId);
               if(!imported||imported.metadata.creationEvidence.workflow.status!=='ready')throw Error('Import did not pass actual gates');
               if(s.settings.deviceProfile!=='pc'||s.settings.frameWidth!==1440)throw Error('Import changed profile');
-              s.setActiveScreen(imported.id);s.saveProject();
+              s.setActiveScreen(imported.id);await s.saveProjectChecked();
               const {buildStandaloneHtml}=await __module('/src/utils/exportRenderer.ts');
               const {compileTokensToCss}=await __module('/src/utils/cssCompiler.ts');
               const {getBaseCss}=await __module('/src/styles/baseCss.ts');
@@ -208,7 +208,7 @@ async def main(args):
             await page.wait_for_function('Boolean(window.__projectStore)')
             report['reopen'] = await evaluate_task(page, '''async({fixture,importedId})=>{
               const {useWorkspaceStore}=await import(performance.getEntriesByType('resource').map(e=>e.name).find(url=>new URL(url).pathname==='/src/stores/useWorkspaceStore.ts'));
-              if(!useWorkspaceStore.getState().openProject(fixture.projectId))throw Error('Reopen failed');
+              await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(fixture.projectId);
               const s=window.__projectStore.getState();
               if(!s.screens[importedId]?.metadata.creationEvidence||!s.screens[fixture.screenId].htmlContent.includes('新增企业客户项目'))throw Error('Reopen lost content/evidence');
               s.setActiveScreen(importedId);

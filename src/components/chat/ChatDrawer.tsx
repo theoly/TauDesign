@@ -1,3 +1,7 @@
+import {DesignTaskRecords} from './DesignTaskRecords';
+import {UnfinishedDesignNotice} from './UnfinishedDesignNotice';
+import {OPEN_DESIGN_TASKS_EVENT} from '../../services/desktop/designTaskMenu';
+import {canConfirmCandidateStructure} from '../../services/ai/candidateValidation';
 import {CandidateRecheckControl} from '../canvas/CandidateRecheckControl';
 import {RequestActivityCard} from './RequestActivityCard';
 import {executionPhaseLabels} from '../../services/ai/requestActivity';
@@ -90,7 +94,9 @@ function getThinkingSteps(message:ChatMessageItem):ThinkingStep[] {
 
 export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   const [input, setInput] = useState('');
-  const [sectionedDesign,setSectionedDesign]=useState(false);
+  const [showTaskRecords,setShowTaskRecords]=useState(false);
+  const [taskRecordsRevision,setTaskRecordsRevision]=useState(0);
+  const [writeStrategy,setWriteStrategy]=useState<'auto'|'atomic'|'patch'>('auto');
   const [showMentionMenu, setShowMentionMenu] = useState(false);
   const [attachedImage, setAttachedImage] = useState<ImageAttachment | null>(null);
   const originalReference = useRef<ImageAttachment | null>(null), cropTicket=useRef(0);
@@ -194,6 +200,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   };
 
   const {
+    id:taskProjectId,folderPath:taskFolderPath,
     screens,
     settings,
     stagedScreen,
@@ -211,9 +218,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   } = useProjectStore();
   const candidateDelivery = stagedScreen ? useProjectStore.getState().getStagedDeliveryReport() : null;
   const candidateReady = candidateDelivery?.status === 'ready' && stagedAdoptionStatus !== 'saving';
-  const candidateForceReady = Boolean(stagedAdoptionStatus !== 'saving' && candidateDelivery && candidateDelivery.checks.every(check => check.id === 'quality' || check.status === 'passed'));
+  const candidateForceReady = Boolean(stagedAdoptionStatus !== 'saving' && candidateDelivery && (candidateDelivery.status==='ready'||canConfirmCandidateStructure(candidateDelivery)));
   const { providers, bindings } = useAIConfigStore();
   const engine = useAIEngineChat();
+  useEffect(()=>{const open=()=>setShowTaskRecords(true);window.addEventListener(OPEN_DESIGN_TASKS_EVENT,open);return()=>window.removeEventListener(OPEN_DESIGN_TASKS_EVENT,open);},[]);
+  useEffect(()=>setShowTaskRecords(false),[taskProjectId,taskFolderPath]);
 
   // 消息/附件异步恢复并渲染后再定位；不依赖消息条数，避免等长会话切换失效。
   useLayoutEffect(() => {
@@ -485,7 +494,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       : undefined;
 
     await engine.sendMessage(textToSend, currentAttachment, {
-      sectioned:sectionedDesign,
+      writeStrategy,
       referencedScreenId,
       // 活跃画框单独传递：仅当用户明确说「修改」时才作为落点 (BR-GT-03)
       activeScreenId,
@@ -566,10 +575,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             {bindings.code.modelId}
           </span>
         </div>
+        <button type="button" onClick={()=>setShowTaskRecords(true)} aria-label="查看设计任务记录" className="text-slate-400 hover:text-slate-200 text-[11px]">任务</button>
         <button onClick={() => onOpenSettings?.('provider')} className="text-blue-400 hover:underline text-[11px] flex-shrink-0">
           Provider 配置
         </button>
       </div>
+
+      {showTaskRecords&&<DesignTaskRecords running={engine.isGenerating} onPrepareRecovery={engine.prepareTaskRestore} onRecoverPrepared={engine.startPreparedTaskRestore} onClose={()=>{setShowTaskRecords(false);setTaskRecordsRevision(revision=>revision+1);}}/>}
+      <UnfinishedDesignNotice refreshKey={taskRecordsRevision*2+(engine.isGenerating?1:0)} onOpen={()=>setShowTaskRecords(true)}/>
 
       {/* Token Usage Stats Bar */}
       <div className="px-3 py-1.5 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
@@ -1120,7 +1133,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 </div>
               )}
 
-              {m.pagePlan&&<MultiPagePlanCard review={m.pagePlan} disabled={engine.isGenerating} onConfirm={pages=>engine.confirmPagePlan(m.id,pages)} onCancel={()=>engine.cancelPagePlan(m.id)}/>}
+              {m.pagePlan&&<MultiPagePlanCard review={m.pagePlan} disabled={engine.isGenerating} onConfirm={(pages,tree)=>engine.confirmPagePlan(m.id,pages,tree)} onCancel={()=>engine.cancelPagePlan(m.id)}/>}
 
               {m.modificationReview && <ModificationReviewCard review={m.modificationReview} disabled={engine.isGenerating}
                 onConfirm={(selected, extra, mode) => engine.confirmModification(m.id, selected, extra, mode)}
@@ -1136,7 +1149,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               <TaskBudgetCard value={m.taskBudget}/>
               <RequestActivityCard activity={m.executionActivity} running={m.isGenerating||m.qualityDraftBusy}/>
               {m.isGenerating&&m.generationProgress&&<p role="status" className="text-[11px] leading-relaxed text-sky-300/80">{m.generationProgress}</p>}
-              {m.qualityReport && <QualityReportCard report={m.qualityReport} />}
+              {m.qualityReport && <QualityReportCard report={m.qualityReport} onLocate={m.screenId && m.htmlOutput && screens[m.screenId]?.htmlContent === m.htmlOutput
+                ? nid => handleLocateAuditTarget({type:'element',screenId:m.screenId!,screenName:screens[m.screenId!]!.name,label:'检查发现',nid}) : undefined}/>}
               {m.qualityDraft && <FailedDraftCard value={m.qualityDraft} saved={m.qualityDraftSaved} busy={engine.isGenerating||m.qualityDraftBusy} notice={m.qualityDraftNotice}
                 onSuggest={()=>engine.suggestQualityTurn(m.id)} onRepair={labels=>engine.repairQualityTurn(m.id,labels)} onRegenerate={()=>engine.retryTurn(m.id)}/>}
               {m.creationRepairNotice&&<p role="status" className="rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-2 text-[11px] leading-relaxed text-emerald-300">{m.creationRepairNotice}</p>}
@@ -1910,9 +1924,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           </div>
         </div>
 
-        <label className="mb-2 flex items-center gap-1.5 text-[10px] text-slate-400" title="适合新建长页面：先建立公共骨架，按2～6块生成，通常3～7次AI调用，必要续写另计；全部检查通过后仍交付一页。">
-          <input type="checkbox" aria-label="分区生成同一页" checked={sectionedDesign} disabled={engine.isGenerating} onChange={e=>setSectionedDesign(e.target.checked)} className="accent-blue-500"/>
-          分区生成同一页 <span className="text-slate-500">（适合长页面）</span>
+        <label className="mb-2 flex items-center gap-1.5 text-[10px] text-slate-400" title="自动按功能规模和容量选择：普通主体一次写入，4–6区块先规划再一次写入，复杂页最多3个目标区域补丁；全部检查通过后仍交付同一页。">
+          <span>生成方式</span><select aria-label="生成方式" value={writeStrategy} disabled={engine.isGenerating} onChange={e=>setWriteStrategy(e.target.value as typeof writeStrategy)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5"><option value="auto">自动选择</option><option value="atomic">主体一次写入</option><option value="patch">分区补丁（最多3区域）</option></select>
         </label>
         <div className="relative flex items-center gap-1.5">
           <button

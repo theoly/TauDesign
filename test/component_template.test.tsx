@@ -73,7 +73,7 @@ test('合同与槽变动递增版本，单条History可撤销重做，坏合同�
  useHistoryStore.getState().undo();expect(useProjectStore.getState().components[id].templateContract).toBeUndefined();useHistoryStore.getState().redo();expect(useProjectStore.getState().components[id].slotDefs).toEqual(slots);
  expect(()=>s.updateComponent(id,{slotDefs:[{...slots[0],selector:'missing'}]})).toThrow();expect(useProjectStore.getState().components[id].version).toBe(2);
  s.updateComponent(id,{slotDefs:undefined});expect(useProjectStore.getState().components[id].version).toBe(3);
- const storage=createProjectStorage(s.id);const current=useProjectStore.getState();await new ProjectRepository(storage).save({id:current.id,name:current.name,schemaVersion:1,createdAt:Date.now(),updatedAt:Date.now(),settings:current.settings,designSystem:current.designSystem,screens:current.screens,screenOrder:current.screenOrder,components:current.components,overrides:current.overrides,assets:current.assets,decisions:current.decisions} as any);const loaded=await new ProjectRepository(storage).load();expect(loaded!.components![id].templateContract).toEqual({version:1});
+ await useProjectStore.getState().saveProjectChecked();const storage=createProjectStorage(s.id);const loaded=await new ProjectRepository(storage).load();expect(loaded!.components![id].templateContract).toEqual({version:1});
 });
 test('导入副本/参考保留合同和模板，指纹覆盖合同且旧指纹算法保持，坏槽源拒绝',async()=>{
  const s=useProjectStore.getState();let data={id:'source',name:'来源',settings:s.settings,designSystem:s.designSystem,components:{card:component},assets:{}};

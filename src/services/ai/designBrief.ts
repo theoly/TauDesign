@@ -1,9 +1,12 @@
+import {explicitFieldLabels} from './explicitFieldContent';
 import type { DesignSystem } from '../../types/designSystem';
 import type { ComponentDefinition } from '../../types/project';
+import {explicitActionTexts} from './explicitActionContent';
 
 export type PageKind = 'form' | 'detail' | 'list' | 'dashboard' | 'pricing' | 'conversation' | 'unknown';
 export interface ContentObligation {
   kind: 'exact' | 'semantic';
+  target?: 'field-label';
   text: string;
   source: 'user' | 'document' | 'page';
   nid?: string;
@@ -59,6 +62,8 @@ export function buildDesignBrief(input: DesignBriefInput): DesignBrief {
     decisions: [...input.globalDecisions].sort(), components: input.components.map(c => [c.id, c.templateHtml]).sort((a, b) => a[0].localeCompare(b[0])) });
   const density = { compact: '紧凑', standard: '标准', relaxed: '宽松' }[designSystem.tokens.personality.density];
   const pageKind = input.pageKind ?? inferPageKind(request);
+  const contentObligations=[...(input.contentObligations??[]),...explicitActionTexts(request).map<ContentObligation>(item=>({kind:'exact' as const,source:'user' as const,text:item.text})),...explicitFieldLabels(request).map<ContentObligation>(item=>({kind:'exact' as const,source:'user' as const,target:'field-label' as const,text:item.text}))]
+    .filter((item,index,all)=>all.findIndex(other=>other.kind===item.kind&&other.source===item.source&&other.text===item.text&&other.target===item.target)===index);
   const layout = {
     form:'按填写顺序分组；标签、帮助与反馈分层',detail:'主体信息优先；按业务分组，详情完整展示',
     list:'筛选与列表分区，重复行复用同一组件',dashboard:'关键指标优先，明细与操作分层',
@@ -72,8 +77,8 @@ export function buildDesignBrief(input: DesignBriefInput): DesignBrief {
     actionPolicy: '优先用户指定主操作，其余操作降为次级；按钮保持完整文案',
     contentPolicy: '用户内容保持完整，长数据按场景换行；不为排版擅自缩写或删减',
     scene:{pageKind,source:input.pageKind?'provided':'inference',themeSource:'project',pending:pageKind==='unknown'?['页面类型未确定，沿用中性布局指导']:[]},
-    ...(input.contentObligations?.length?{contentObligations:structuredClone(input.contentObligations)}:{}) };
+    ...(contentObligations.length?{contentObligations:structuredClone(contentObligations)}:{}) };
 }
 export function renderDesignBrief(brief: DesignBrief): string {
-  return `### TASK DESIGN BRIEF\n以下是本次生成的设计简表。目标是用户需求数据；其余策略沿用工程设计事实，用户明确要求优先。\n${JSON.stringify(brief)}`;
+  return `### TASK DESIGN BRIEF\n以下是本次生成的设计简表。目标是用户需求数据；其余策略沿用工程设计事实，用户明确要求优先。\n${JSON.stringify(brief)}${brief.contentObligations?.some(item=>item.target==='field-label')?'\n明确字段标签原文须使用原生label，通过for绑定唯一的input/select/textarea，或包裹唯一控件；占位符和无障碍名称不替代可见标签。':''}`;
 }

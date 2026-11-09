@@ -52,3 +52,8 @@ test('functional planning card keeps legacy records quiet and rejects malformed 
   act(()=>root!.render(<PageTaskPlanCard contract={{pageTaskPlan:{version:1}} as any}/>));
   expect(node.textContent).toContain('业务规划记录不可用');
 });
+
+test('brief identifies exact field labels while legacy obligations remain readable',()=>{
+ const brief=buildDesignBrief({request:'字段标签文案必须为“手机号”',device:'mobile',mode:'light',designSystem:techBlueTheme,globalDecisions:[],components:[]});
+ expect(render(<DesignBriefCard brief={brief}/>).textContent).toContain('字段标签 · 保留原文：手机号');
+});

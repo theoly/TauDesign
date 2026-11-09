@@ -23,7 +23,7 @@ export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY — these rules are
 - ICONS: 按钮、输入框、指标卡与列表行须有 Lucide/Heroicons 风格内联SVG图标，class="icon"、stroke="currentColor"；无图标页面不合格。
 - REALISTIC CONTENT: 使用真实感中文姓名、电话、日期、金额和状态徽标；禁用“占位文字”/“Lorem ipsum”/“标题1”。
 - 按钮文字默认不换行：.btn 已设 white-space: nowrap；不插入<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal 覆盖并调高按钮。
-- COMPONENT LAYOUT CONTRACT: .nowrap管flex换行，文字用.text-nowrap。标签.row.wrap.gap-2，不设.flex-1，空间不足整项换行。姓名单行、职业位于姓名下方，人物组可换行；润色不新增或移动节点。头像.avatar、装饰.icon-box，.icon的viewBox留白对称。长文本.flex-1.min-w-0，地址/URL按需.break-words。禁缩裁文案或位移补偿居中。长正文卡.col.gap-2，正文独占宽度自然撑高，操作不足换行。
+- COMPONENT LAYOUT CONTRACT: .nowrap管flex换行，文字用.text-nowrap。标签.row.wrap.gap-2，不设.flex-1，空间不足整项换行。姓名单行、职业位于姓名下方，人物组可换行；润色不新增或移动节点。头像.avatar、装饰.icon-box，.icon留白对称。长文本.flex-1.min-w-0，地址/URL按需.break-words。禁缩裁文案或位移居中。长正文卡.col.gap-2独占宽度自然撑高。角标用.relative承载加.absolute锚定，禁覆盖标题正文。
 - STATUS & FEEDBACK: 状态用.badge-soft + 语义色；通知角标遵循组件契约，右上附着不遮图标或内容。`;
 
 /** Only new pages should proactively diversify repeated controls' business states. */
@@ -52,7 +52,8 @@ const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
   * FULL-BLEED HERO BANNERS & GRADIENTS: When a screen features an immersive brand/gradient header (e.g. certification/profile/store banner), let the hero block span the full width without horizontal margins and without bottom rounded corners (0 bottom radius). List cards beneath it sit on the canvas with standard spacing or gentle overlap.
   * Bottom navigation uses .tabbar with .tabbar-item (mark active as .is-active).
   * CTA BUTTON PLACEMENT: In card forms or bottom sheet dialogs, form submit buttons belong inline within the card flow (e.g. under inputs, above social proof). Use .cta-fixed when a sticky full-screen bottom bar is explicitly requested or appropriate. When reproducing a design reference, ALWAYS match the button placement in the reference!
-  * RIBBON BADGES & STATUS STRIPS: Card corner labels need their own reserved area; never cover the title, image subject or body content. Notification badges use .notification-control with a reserved top band and an absolute top-right badge; center the icon horizontally, never overlap it or use side-by-side columns. Use .badge-dot for a subtle update and .badge-count for small counts, reserving danger color for urgent issues. Notice bars use subtle background tint (.bg-warning-light or .bg-surface-alt) with semantic icons.
+  * RIBBON BADGES & STATUS STRIPS: Card corner labels need their own reserved area; never cover the title, image subject or body content. 采用 .relative 容器配合 .absolute 精确锚定四角，与下方姓名/标题区域保留充足纵向隔离，严禁在常规流中无定位覆盖或用负 margin 导致徽标与文字重叠。Notification badges use .notification-control with a compact icon grid and reserved top band; anchor the badge to the icon’s own top-right corner, never the containing row/card corner (even when the control stretches); center the icon horizontally, never overlap it or use side-by-side columns. Use .badge-dot for a subtle update and .badge-count for small counts, reserving danger color for urgent issues. Notice bars use subtle background tint (.bg-warning-light or .bg-surface-alt) with semantic icons.
+  * ACTION BAR MULTI-BUTTON SIZING: 移动端（390px）卡片或弹窗操作行含 ≥3 个按钮时，2字辅助按钮使用 .flex-none 配合紧凑内边距（如 .px-2/.px-3），长文案（≥4字）主操作按钮使用 .flex-1.min-w-0，确保内容两端保留呼吸边距，严禁内容贴边。
   * SEMANTIC REGION DECOUPLING: Keep business Hero (.hero-section), headings, search and actions independent from optional custom navigation. Never fuse system status with a business header. Never emit invisible white-on-white text when changing backgrounds!`;
 
 export function getDeviceAestheticRules(device: DeviceProfile, useCustomNavigation = false): string {

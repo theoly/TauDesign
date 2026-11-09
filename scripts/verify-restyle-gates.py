@@ -100,7 +100,7 @@ async def main(args):
             result['archive']['reopened'] = await page.evaluate('''async fixture => {
               const moduleUrl=performance.getEntriesByType('resource').map(entry=>entry.name).find(url=>new URL(url).pathname==='/src/stores/useWorkspaceStore.ts');
               const {useWorkspaceStore}=await import(moduleUrl);
-              if(!useWorkspaceStore.getState().openProject(fixture.projectId))throw new Error('Reopening project failed');
+              await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(fixture.projectId);
               window.__projectStore.getState().setActiveScreen('a');
               const {RestyleDeliveryRepository}=await import('/src/services/storage/restyleDeliveryRepository.ts');
               const {createProjectStorage}=await import('/src/services/storage/projectStorage.ts');

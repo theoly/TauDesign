@@ -119,7 +119,7 @@ for(const id of ['create-page-from-reference','create-page-from-library','create
 
 test('来源合同和输入历史通过持久化/重开保存，UI 明示不等于视觉相似度',async()=>{
  await install();const output=await generate(true),result=await apply(output.workflowContract!,output.extractedHtml);expect(result.success).toBe(true);
- const state=useProjectStore.getState(),saved=readProject(state.id)!;state.loadProject(saved);const screen=useProjectStore.getState().screens[result.screenId!];
+ await useProjectStore.getState().saveProjectChecked();const state=useProjectStore.getState(),saved=readProject(state.id)!;await state.loadProjectById(state.id);const screen=useProjectStore.getState().screens[result.screenId!];
  expect(screen.metadata!.creationEvidence!.contract.referenceImage).toEqual(output.workflowContract!.referenceImage);expect(saved).not.toContain(image.dataUrl);
  const mismatched=structuredClone(screen.metadata!.creationEvidence!);mismatched.workflow.plan.workflowId='create-page';expect(isPageCreationEvidence(mismatched)).toBe(false);
  const previousAct=(globalThis as any).IS_REACT_ACT_ENVIRONMENT;(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;

@@ -60,7 +60,7 @@ test('custom candidate remains selectable after reroll; create saves exactly the
   expect(state.screenOrder).toHaveLength(0);
   expect(useWorkspaceStore.getState().view).toBe('workspace');
   expect(JSON.parse(readProject(state.id)!).designSystem).toEqual(selected.theme);
-  expect(useProjectStore.getState().loadProjectById(state.id)).toBe(true);
+  expect(await useProjectStore.getState().loadProjectById(state.id)).toBe(true);
   expect(useProjectStore.getState().designSystem).toEqual(selected.theme);
 });
 

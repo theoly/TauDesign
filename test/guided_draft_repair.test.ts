@@ -22,7 +22,7 @@ import {buildRestyleContract} from '../src/services/ai/designWorkflow';
 const provider={id:'pilot',name:'mock',protocol:'openai_compatible' as const,baseUrl:'http://mock',apiKey:''};
 function setup(){
   let calls=0;const transport=new MockTransport();
-  transport.queueResponse('<artifact title="正文页"><main class="container-max p-4"><h1>说明</h1><button class="btn btn-primary"><svg class="icon"><path d="M1 1L2 2"/></svg><span></span></button></main></artifact>');
+  transport.queueResponse('<artifact title="正文页"><main class="container-max p-4"><h1>说明</h1><button class="btn btn-primary"><img class="icon" src="https://example.com/fixture-icon.svg" alt=""/><span></span></button></main></artifact>');
   const original=new DefaultAIEngineCore(transport),core:AIEngineCore={generateObject:original.generateObject.bind(original),streamText:o=>{calls++;return original.streamText(o);}};
   const options={input:{rawPrompt:'新建长正文说明页',activeScreenId:null,decision:{intent:'create_screen' as const,targetScreenId:null,reason:'明确新建'}},provider,model:'test',engineCore:core,screens:{},
     deviceProfile:'pc' as const,frameWidth:1440,baseSystemPrompt:'设计页面',designSystem:techBlueTheme,contextualGuidance:{}};

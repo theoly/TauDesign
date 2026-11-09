@@ -95,15 +95,24 @@ export function extractArtifact(raw: string): ExtractedArtifact | undefined {
 
   // 4. 降级链二级: 通用代码块且包含有效标签
   const genericMatch = raw.match(/```\s*([\s\S]*?)```/);
-  if (
-    genericMatch &&
-    (genericMatch[1].includes('<div') ||
-      genericMatch[1].includes('<main') ||
-      genericMatch[1].includes('<section') ||
-      genericMatch[1].includes('<form') ||
-      genericMatch[1].includes('<!DOCTYPE') ||
-      genericMatch[1].includes('<html'))
-  ) {
+  const tagKeywords = [
+    '<div',
+    '<section',
+    '<main',
+    '<header',
+    '<footer',
+    '<nav',
+    '<aside',
+    '<article',
+    '<form',
+    '<ul',
+    '<ol',
+    '<table',
+    '<!DOCTYPE',
+    '<html'
+  ];
+
+  if (genericMatch && tagKeywords.some((k) => genericMatch[1].includes(k))) {
     return {
       type: 'screen',
       html: genericMatch[1].trim(),
@@ -113,7 +122,6 @@ export function extractArtifact(raw: string): ExtractedArtifact | undefined {
   }
 
   // 5. 降级链三级: 原生 HTML 标签探测
-  const tagKeywords = ['<div', '<section', '<main', '<form', '<!DOCTYPE', '<html'];
   const validIndices = tagKeywords
     .map((k) => raw.indexOf(k))
     .filter((idx) => idx !== -1);

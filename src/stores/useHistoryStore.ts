@@ -1,10 +1,21 @@
 import { create } from 'zustand';
 import { Checkpoint, HistoryEntry, Patch } from '../types/history';
+import {guardProjectPublicationFields} from '../services/storage/projectPublication';
+import type {HistorySnapshot} from '../services/storage/historyRepository';
+
+/** Prepare one exact Undo/Redo change without touching either live store. */
+export function prepareHistoryCommit(snapshot:HistorySnapshot,label:string,patches:Patch[],inversePatches:Patch[],backups:Array<{label:string;screenSnapshot:Checkpoint['screenSnapshot']}>=[]):HistorySnapshot{
+ const timestamp=Date.now(),entry:HistoryEntry={id:`hist_${timestamp}_${crypto.randomUUID().slice(0,8)}`,label,timestamp,patches:structuredClone(patches),inversePatches:structuredClone(inversePatches)};
+ const checkpoints=backups.map(backup=>({id:`cp_${timestamp}_${crypto.randomUUID().slice(0,8)}`,label:backup.label,timestamp,screenSnapshot:structuredClone(backup.screenSnapshot)})).reverse();
+ return {past:[...snapshot.past.slice(-199),entry],future:[],checkpoints:[...checkpoints,...snapshot.checkpoints].slice(0,50)};
+}
 
 interface HistoryState {
   past: HistoryEntry[];
   future: HistoryEntry[];
   checkpoints: Checkpoint[];
+  archiveError:string|null;
+  setArchiveError:(message:string|null)=>void;
 
   canUndo: () => boolean;
   canRedo: () => boolean;
@@ -27,10 +38,14 @@ export const setApplyPatchesHandler = (handler: (patches: Patch[]) => void) => {
   applyPatchesHandler = handler;
 };
 
-export const useHistoryStore = create<HistoryState>((set, get) => ({
+export const useHistoryStore = create<HistoryState>((rawSet, get) => {
+ const set:typeof rawSet=(partial,replace)=>{const next=typeof partial==='function'?partial(get()):partial;guardProjectPublicationFields(get(),next,replace,['past','future','checkpoints','archiveError']);rawSet(next,replace);};
+ return ({
   past: [],
   future: [],
   checkpoints: [],
+  archiveError:null,
+  setArchiveError:archiveError=>set({archiveError}),
 
   canUndo: () => get().past.length > 0,
   canRedo: () => get().future.length > 0,
@@ -82,6 +97,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 
   restore: (snapshot) =>
     set({
+      archiveError:null,
       past: snapshot?.past ?? [],
       future: snapshot?.future ?? [],
       checkpoints: snapshot?.checkpoints ?? []
@@ -102,4 +118,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
   },
 
   getCheckpoints: () => get().checkpoints
-}));
+ });
+});
+const setHistoryState=useHistoryStore.setState;
+useHistoryStore.setState=(partial,replace)=>{const next=typeof partial==='function'?partial(useHistoryStore.getState()):partial;guardProjectPublicationFields(useHistoryStore.getState(),next,replace,['past','future','checkpoints','archiveError']);setHistoryState(next,replace);};

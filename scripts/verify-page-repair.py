@@ -26,10 +26,12 @@ async def main(args):
               useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'local-fixture-secret'})),bindings:defaultBindings});
               const actual=PageRenderCheck.inspect;
               PageRenderCheck.inspect=async function(request,...args){const result=await actual.call(this,request,...args);window.__repair.checks.push({html:request.screen.htmlContent,fingerprint:contentFingerprint(request.screen.htmlContent),report:result});return result;};
+              const {chatPageTaskPlan}=await import('/test/fixtures/pageTaskPlan.ts');
+              DefaultAIEngineCore.prototype.generateObject=async(schema)=>{if(!schema.properties?.features)throw Error('Unexpected model schema');const plan=structuredClone(chatPageTaskPlan);plan.features[0].interactions[0].label='保存资料';return plan;};
               DefaultAIEngineCore.prototype.streamText=function(options){
                 const f=window.__repair,repair=Boolean(options.jsonSchema);
                 f.requests.push({repair,maxTokens:options.maxTokens,pages:window.__projectStore.getState().screenOrder.length});
-                const text=repair?JSON.stringify({operations:[{nid:'save',type:f.invalid?'set_text':'remove_styles',value:f.invalid?'替换按钮':'font-size'}]}):'<artifact identifier="screen_new" type="screen" title="会员资料"><main data-nid="root" class="col gap-4 p-4"><h1 data-nid="title" class="text-xl font-bold">会员资料</h1><p data-nid="description" class="text-secondary">编辑后保存资料</p><button data-nid="save" class="btn btn-primary" style="font-size:0px"><svg data-nid="icon" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path data-nid="path" d="M5 12l4 4L19 6"/></svg><span data-nid="label">保存资料</span></button></main></artifact>';
+                const text=repair?JSON.stringify({operations:[{nid:'save',type:f.invalid?'set_text':'remove_styles',value:f.invalid?'替换按钮':'font-size'}]}):'<artifact identifier="screen_new" type="screen" title="会员资料"><main data-nid="root" class="col gap-4 p-4"><h1 data-nid="title" class="text-xl font-bold">会员资料</h1><p data-nid="description" class="text-secondary">编辑后保存资料</p><button data-nid="save" class="btn btn-primary" style="font-size:0px"><span data-nid="icon" class="icon icon-mask" style="mask-image:url(assets/icons/repair.svg);-webkit-mask-image:url(assets/icons/repair.svg)" aria-hidden="true"></span><span data-nid="label">保存资料</span></button></main></artifact>';
                 const ready=repair&&f.hold?new Promise(resolve=>f.release=resolve):Promise.resolve();
                 return {textStream:(async function*(){await ready;yield text;})(),reasoningStream:(async function*(){})(),textPromise:ready.then(()=>{f.done++;return text;}),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(repair?{inputTokens:123,outputTokens:45}:{inputTokens:100,outputTokens:200}),finishReasonPromise:Promise.resolve('stop'),abort(){}};
               };
@@ -38,7 +40,13 @@ async def main(args):
                 const {useWorkspaceStore}=await window.__module('/src/stores/useWorkspaceStore.ts');
                 const {useHistoryStore}=await window.__module('/src/stores/useHistoryStore.ts');
                 const s=window.__projectStore,id=s.getState().initNewProject({name:'受控修复验证',deviceProfile:'mobile',designSystem:neutralModernTheme,createSpecimen:false});
+const {createProjectStorage}=await window.__module('/src/services/storage/projectStorage.ts');
+                const iconBytes=btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12l4 4L19 6"/></svg>');
+                await createProjectStorage(id).writeBinary('assets/icons/repair.svg',iconBytes);
+                s.getState().addAsset({id:'repair-icon',name:'保存图标',type:'svg_icon',mimeType:'image/svg+xml',relPath:'assets/icons/repair.svg',source:'upload',refCount:1});
+                window.__repairIconBytes=iconBytes;
                 s.getState().addScreen({name:'保留原页',htmlContent:'<main data-nid="old" class="p-4">保留原页内容</main>'},'old');
+                await (await window.__module('/src/services/ai/builtinMediaAssets.ts')).prepareBuiltinMediaAssets();
                 window.__repair={requests:[],checks:[],hold:true,invalid:false,done:0};
                 useWorkspaceStore.setState({view:'workspace',activeProjectId:id});return {id,history:useHistoryStore.getState().past.length};
               };
@@ -64,15 +72,16 @@ async def main(args):
               const e=screen.metadata.creationEvidence;
               if(f.requests.length!==2||f.requests[0].repair||!f.requests[1].repair||f.requests[1].maxTokens!==1800||f.requests.some(r=>r.pages!==1))throw Error('Repair was not bounded before commit');
               if(f.checks.length!==2||f.checks[0].report.status!=='complete'||!f.checks[0].report.findings.some(f=>f.code==='render_action_invisible_label'&&f.severity==='error')||f.checks[1].report.findings.some(f=>f.severity==='error'))throw Error('No actual before/after render evidence');
+const {createProjectStorage}=await window.__module('/src/services/storage/projectStorage.ts');if(await createProjectStorage(s.id).readBinary('assets/icons/repair.svg')!==window.__repairIconBytes)throw Error('Independent icon was changed');
               const before=new DOMParser().parseFromString(f.checks[0].html,'text/html'),after=new DOMParser().parseFromString(screen.htmlContent,'text/html');
-              for(const nid of ['title','description','icon','path','label'])if(!before.querySelector('[data-nid="'+nid+'"]').isEqualNode(after.querySelector('[data-nid="'+nid+'"]')))throw Error('Unauthorized node changed '+nid);
+              for(const nid of ['title','description','icon','label'])if(!before.querySelector('[data-nid="'+nid+'"]').isEqualNode(after.querySelector('[data-nid="'+nid+'"]')))throw Error('Unauthorized node changed '+nid);
               if(e.repair.afterHtmlFingerprint!==contentFingerprint(screen.htmlContent)||e.repair.usage.inputTokens!==123||e.repair.usage.outputTokens!==45||JSON.stringify(e).includes('local-fixture-secret'))throw Error('Wrong repair proof');
               if(useHistoryStore.getState().past.length!==fixture.history+1)throw Error('Repair caused extra History');
               const turns=await s.getConversationStore().loadRecent(1);
               if(turns[0].assistant.text.includes('font-size:0')||!turns[0].assistant.text.includes(screen.htmlContent))throw Error('Conversation restored old broken HTML');
               useHistoryStore.getState().undo();if(window.__projectStore.getState().screenOrder.length!==1)throw Error('Undo failed');
               useHistoryStore.getState().redo();if(window.__projectStore.getState().screens[screen.id].metadata.creationEvidence.repair.status!=='repaired')throw Error('Redo lost proof');
-              const {readProject}=await window.__module('/src/utils/projectRegistry.ts');s.loadProject(readProject(s.id));
+              await s.saveProjectChecked();await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(s.id);
               if(JSON.stringify(window.__projectStore.getState().screens[screen.id].metadata.creationEvidence.repair)!==JSON.stringify(e.repair))throw Error('Save/reopen lost repair proof');
               window.__projectStore.getState().setActiveScreen(screen.id);return {projectId:s.id,screenId:screen.id,evidence:e,checks:f.checks,requests:f.requests,historyDelta:1};
             }''',fixture)
@@ -103,7 +112,7 @@ async def main(args):
             await page.evaluate('''async success=>{
               const module=async path=>import(performance.getEntriesByType('resource').map(e=>e.name).find(url=>new URL(url).pathname===path)||path);
               const {useWorkspaceStore}=await module('/src/stores/useWorkspaceStore.ts');
-              if(!useWorkspaceStore.getState().openProject(success.projectId))throw Error('Cannot reopen repaired project');
+              await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(success.projectId);
               window.__projectStore.getState().setActiveScreen(success.screenId);
             }''',success)
             await page.get_by_text('此轮曾完成一次控件样式修复；历史结果不代表当前页面已复验。',exact=True).wait_for()

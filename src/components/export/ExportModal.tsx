@@ -6,7 +6,7 @@ import { compileTokensToCss } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
 import { buildStandaloneHtml, buildArtifactManifest } from '../../utils/exportRenderer';
 import { exportScreenPng, PngExportEngine } from '../../utils/pngExporter';
-import { useScreenResources } from '../../hooks/useScreenResources';
+import { useScreenResources, useStyleResources } from '../../hooks/useScreenResources';
 import {
   dataUrlToBytes,
   saveExportFile,
@@ -45,7 +45,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
   const [copied, setCopied] = useState(false);
   const referenceViewport = resolveProjectViewport(settings);
 
-  const { screen, loading: loadingResources, error: resourceError } = useScreenResources(screens[selectedScreenId]);
+  const pageResources = useScreenResources(screens[selectedScreenId],0,'export');
+  const {screen}=pageResources;
 
   // 1. Inlined Tokens (Current mode only, PRD D14)
   const tokensCss = compileTokensToCss(designSystem.tokens, settings.colorMode);
@@ -54,13 +55,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
   const baseCss = getBaseCss(settings.deviceProfile);
 
   // 3. Compile Overrides
-  const screenOverrides = Object.entries(overrides)
+  const authoredOverrides = Object.entries(overrides)
     .filter(([key]) => key.startsWith(`${selectedScreenId}:`))
     .map(([key, ov]) => {
       const decs = Object.entries(ov.declarations).map(([p, v]) => `${p}: ${v};`).join(' ');
       return `/* Override for ${ov.nid} */ [data-nid="${ov.nid}"] { ${decs} }`;
     })
     .join('\n');
+
+  // Export owns an in-memory copy: temporary preview URLs never enter offline deliverables.
+  const styleResources=useStyleResources(authoredOverrides,0,'export');
+  const screenOverrides=styleResources.css;
+  const loadingResources=pageResources.loading||styleResources.loading;
+  const resourceError=pageResources.error||styleResources.error;
 
   const standaloneHtml = screen
     ? buildStandaloneHtml(screen, { tokensCss, baseCss, screenOverrides, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation })

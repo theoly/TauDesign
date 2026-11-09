@@ -1,3 +1,5 @@
+import {consumeAssetMetadataMigration,verifyAssetMetadataFiles,claimAssetMetadataMigration,type PreparedAssetMetadataMigration} from '../services/import/assetMetadataMigration';
+import {isPassedRender,isRenderedQualityReport} from '../services/ai/evidenceSchema';
 import {draftExecutionIssue} from '../services/ai/draftExecutionSource';
 import {mergeRenderResourceFiles,renderResourceIssue} from '../services/storage/renderResourceSnapshot';
 import {taskRuleSafetyIssue} from '../services/ai/designKnowledge/safety';
@@ -10,11 +12,13 @@ import {repairGuidanceIssue} from '../services/ai/designKnowledge/repairTrace';
 import type {PageRepairModel} from '../services/ai/controlledStyleRepair';
 import type {PageRepairRecord} from '../services/ai/pageRepairRecord';
 import {inspectDesignEntities,designEntitySummary} from '../services/ai/designEntityValidation';
-import {consumeMultiPageBatch,type ReadyMultiPageBatch} from '../services/ai/multiPageService';
+import {consumeMultiPageBatch,confirmMultiPagePublication,currentMultiPagePublication,type ReadyMultiPageBatch} from '../services/ai/multiPageService';
 import {assertLibraryEditable,buildLibraryReferenceSnapshot,isLibraryReference,libraryMemberLocked,libraryReferenceIssue,verifyLibraryReferenceFiles} from '../services/ai/designLibraryReference';
 import {pageCreationContext,prepareNewPage} from '../services/ai/pageCreationValidation';
-import {candidateInputIssue} from '../services/ai/candidateInputBinding';
-import {persistImportResources,type PreparedImportResources} from '../services/import/importResources';
+import {candidateInputIssue,candidateAuthorizationBinding} from '../services/ai/candidateInputBinding';
+import {persistImportResources,importResourceAssets,type PreparedImportResources} from '../services/import/importResources';
+import {consumeMediaMigration,claimMediaMigrationPublish,type PreparedMediaMigration} from '../services/import/mediaMigration';
+import {prepareHistoryArchive,LOCAL_HISTORY_BUDGET,FOLDER_HISTORY_BUDGET} from '../services/storage/historyRepository';
 import type {HtmlImportPreviewReceipt} from '../types/htmlImport';
 import { defaultReferenceDevice, REFERENCE_DEVICES, resolveProjectViewport, validReferenceDevice, normalizeReferenceSettings } from '../utils/referenceDevice';
 import { collectNodePresentation, findScreenElement, mergeInspectorDeclarations, isEscapedInspectorValue, type InspectorSnapshot } from '../utils/inspectorStyle';
@@ -44,7 +48,12 @@ import { buildStyleSpecimenHtml } from '../utils/styleSpecimen';
 import { createProjectStorage } from '../services/storage/projectStorage';
 import { ConversationStore } from '../services/storage/conversationStore';
 import { AttachmentStore } from '../services/storage/attachmentStore';
-import { ProjectRepository } from '../services/storage/projectRepository';
+import { ProjectRepository,ProjectPublicationUnconfirmedError,type ProjectDocument } from '../services/storage/projectRepository';
+import {beginProjectPublication,endProjectPublication,installProjectPublication,getProjectPublication,guardProjectPublicationFields,assertNoProjectPublication} from '../services/storage/projectPublication';
+import type {PublicationDescriptor} from '../services/storage/projectPublicationRecord';
+import {createProjectAuthoringSession,projectAuthoringNotice,projectAuthoringHistory,suspendProjectAuthoringSession,type ProjectAuthoringSession} from '../services/storage/projectAuthoring';
+import {parseHistory} from '../services/storage/historyRepository';
+import {openBrowserProject,cacheBrowserProject,deleteBrowserProject} from '../services/storage/browserProjectRepository';
 import {
   planRestyle,
   type RestyleOutcome,
@@ -59,10 +68,10 @@ import {
   projectKey,
   readProject,
   upsertMeta,
-  writeProject
+  listProjects
 } from '../utils/projectRegistry';
-import { useHistoryStore, setApplyPatchesHandler } from './useHistoryStore';
-import { deleteHistoryArchive, scheduleHistorySave } from '../services/storage/historyPersistence';
+import { useHistoryStore, setApplyPatchesHandler,prepareHistoryCommit } from './useHistoryStore';
+import { deleteHistoryArchive, cancelScheduledHistorySave,registerProjectHistoryIO,loadHistoryForProject } from '../services/storage/historyPersistence';
 import { Patch } from '../types/history';
 import {
   calculateNewScreenPosition,
@@ -88,7 +97,9 @@ import { contentFingerprint, type DesignTaskContract } from '../services/ai/desi
 import { knowledgeFingerprint } from '../services/ai/projectKnowledge';
 import { designTokenFingerprint } from '../utils/designSystemIdentity';
 import { readProjectRenderResources, auditProjectAssets, inspectProjectAssetReferences, referencedProjectAssets, screenForAssetAudit, verifyProjectAssetFiles, type ProjectAssetAuditReport, type ProjectAssetIssue } from '../services/ai/projectAssetIntegrity';
-import type { DesignExecutionRecord } from '../services/ai/designExecutionRecord';
+import {sanitizeExecutionMedia,type DesignExecutionRecord } from '../services/ai/designExecutionRecord';
+import {assertExternalMedia,mediaReferenceIssue} from '../services/ai/externalMedia';
+import {settleDesignTaskDelivery} from '../services/storage/designTaskRepository';
 import { assertDesignLibraryCopyCompatible, type DesignLibraryCopy } from '../services/ai/designLibraryCopy';
 import { saveStagedCandidate, removeStagedCandidate, type StagedCandidateData } from '../services/storage/candidateRepository';
 import { canConfirmCandidateStructure, type CandidateDeliveryReport, type CandidateValidationEvidence } from '../services/ai/candidateValidation';
@@ -250,6 +261,10 @@ interface ProjectState {
   name: string;
   /** 工程文件夹绝对路径 (T-AE-40)。未设置时存储层回退 localStorage */
   folderPath?: string;
+  projectAuthoringSession:ProjectAuthoringSession|null;
+  projectSaveStatus:'saving'|'saved'|'failed'|'readonly'|null;
+  projectSaveError:string|null;
+  projectSaveAttempt:number;
   createdAt: number;
   settings: ProjectSettings;
   designSystem: DesignSystem;
@@ -354,13 +369,15 @@ interface ProjectState {
   clearOverridesForTheme: (keys: string[], includeEscaped?: boolean) => number;
 
   // Screen CRUD
-  applyMultiPageCreation: (batch:ReadyMultiPageBatch) => string[];
+  applyMultiPageCreation: (batch:ReadyMultiPageBatch,options?:{isCurrent?:()=>boolean}) => Promise<string[]>;
   addScreen: (
     screen: (Omit<Screen, 'id' | 'position'> & { position?: { x: number; y: number } }) | Screen,
     customId?: string,
     options?: { referencedScreenId?: string; anchorScreenId?: string; autoPan?: boolean; importSetup?: HtmlScreenImportSetup; initialOverrides?: StyleOverride[] }
   ) => ScreenId;
   importHtmlScreen: (screen: Omit<Screen, 'id' | 'position'>, setup: HtmlScreenImportSetup, application?:HtmlImportApplication) => Promise<ScreenId>;
+  applyAssetMetadataMigration:(prepared:PreparedAssetMetadataMigration,signal?:AbortSignal)=>Promise<void>;
+  applyMediaMigration:(prepared:PreparedMediaMigration,signal?:AbortSignal)=>Promise<void>;
   /** 画框是否为风格样张页（doc/aesthetic/spec.md §6.6.7） */
   isSpecimen: (id: ScreenId) => boolean;
   /** 某画框中被 L4 手动覆盖的 nid —— Polish/Restyle 不应改动它们 (T-AE-26) */
@@ -429,6 +446,7 @@ interface ProjectState {
 
   // Assets (PRD §3.4.1)
   addAsset: (asset: Asset) => void;
+  registerPreparedAssets:(assets:Asset[],projectId:string,context:string)=>void;
   replaceNodeImage: (screenId: string, nid: string, asset: Asset) => boolean;
   removeAsset: (id: AssetId) => void;
   replaceAssetGlobally: (oldAssetId: string, newAssetUrl: string) => number;
@@ -457,12 +475,12 @@ interface ProjectState {
   saveProjectChecked: () => Promise<void>;
   loadProject: (jsonString: string) => void;
   initNewProject: (opts: { name: string; deviceProfile: 'pc' | 'mobile'; designSystem: DesignSystem; initialDecisions?: string[]; folderPath?: string; createSpecimen?: boolean; referenceDeviceId?: string }) => string;
-  loadProjectById: (id: string) => boolean;
+  loadProjectById: (id: string,isCurrent?:()=>boolean) => Promise<boolean>;
   /** 从文件夹读回的工程文档载入 (T-AE-43) */
   loadProjectDocument: (doc: unknown, folderPath?: string) => boolean;
-  deleteProject: (id: string) => void;
+  deleteProject: (id: string) => Promise<void>;
   hasRecoverySession: () => boolean;
-  recoverSession: () => void;
+  recoverSession: () => Promise<boolean>;
   applyPatches: (patches: Patch[]) => void;
 }
 
@@ -541,7 +559,6 @@ function isStagedTaskCurrent(state: ProjectState): boolean {
   const staged = state.stagedScreen;
   const contract = staged?.workflowContract;
   if(staged&&candidateInputIssue(staged,state))return false;
-  if(staged&&Object.hasOwn(staged,'taskBindingFingerprint')&&(!isTaskContractShape(contract)||typeof staged.taskBindingFingerprint!=='string'||staged.taskBindingFingerprint!==taskInputBinding(contract)))return false;
   if(draftExecutionIssue(staged?.executionRecord,staged?.newHtml))return false;
   if(staged?.repair&&(!isPageRepairRecord(staged.repair)||(staged.repair.guidance&&(!contract||repairGuidanceIssue(staged.repair.guidance,contract,staged.repair.status==='repaired')))))return false;
   if (staged?.baselineFingerprint && staged.baselineFingerprint !== contentFingerprint(state.screens[staged.targetScreenId]?.htmlContent ?? '')) return false;
@@ -604,10 +621,10 @@ function stagedDeliveryReport(state: ProjectState): StagedDeliveryReport {
   const taskCurrent = isStagedTaskCurrent(state);
   const taskPlan=resolveWorkflowValidation(staged.workflowContract,'candidate');
   checks.push({ id: 'task', status: taskCurrent ? 'passed' : 'blocked', message: !taskPlan.ok?taskPlan.message:taskCurrent ? '任务基线与项目上下文仍有效。' : candidateInputIssue(staged,state)??'原页面、设计来源、设备、Token 或项目资料已变化。' });
-  const options = { deviceProfile: state.settings.deviceProfile, useCustomNavigation: state.settings.useCustomNavigation, designSystem: state.designSystem };
+  const options = { requireExternalMedia:true,mediaCss:screenForAssetAudit(target,state.overrides).scopedCss,deviceProfile: state.settings.deviceProfile, useCustomNavigation: state.settings.useCustomNavigation, designSystem: state.designSystem };
   const safety = checkGenerationSourceSafety(staged.newHtml, options);
   checks.push({ id: 'source', status: safety.passed ? 'passed' : 'blocked', message: safety.passed ? 'HTML 源安全检查通过。' : safety.findings.find(item => item.severity === 'error')?.message ?? 'HTML 源不安全。' });
-  const quality = checkGenerationQuality(staged.newHtml, { ...options, baselineHtml: target.htmlContent,
+  const quality = checkGenerationQuality(staged.newHtml, { ...options,wholePageRedesign:staged.workflowContract?.wholePageRedesign, contentTask:staged.workflowContract, baselineHtml: target.htmlContent,
     protectedNids: state.getProtectedNids(staged.targetScreenId), modificationRequest: staged.modificationRequest,formRuleRoots:formRuleScope(staged.workflowContract) });
   checks.push({ id: 'quality', status: quality.passed ? 'passed' : 'blocked', message: quality.passed ? '结构、文案与样式规则检查通过。' : quality.findings.find(item => item.severity === 'error')?.message ?? '静态质量检查未通过。' });
   if(taskPlan.ok&&taskPlan.plan.stages.includes('structure')&&staged.workflowContract){
@@ -626,8 +643,9 @@ function stagedDeliveryReport(state: ProjectState): StagedDeliveryReport {
   const rendered = state.stagedRenderQuality;
   const currentReport = rendered?.key === state.getStagedRenderContextKey() ? rendered.report : null;
   checks.push({ id: 'render', status: !currentReport || currentReport.status === 'pending' ? 'pending'
-    : currentReport.status !== 'complete' || currentReport.findings.some(item => item.severity === 'error') ? 'blocked' : 'passed',
+    : !isPassedRender(currentReport) ? 'blocked' : 'passed',
   message: !currentReport || currentReport.status === 'pending' ? '当前候选的 iframe 渲染检查尚未完成。'
+    : !isRenderedQualityReport(currentReport) ? '当前渲染报告格式不合法，必须重新检查。'
     : currentReport.status !== 'complete' ? currentReport.reason ?? '当前候选的 iframe 渲染检查无法完成。'
     : currentReport.findings.find(item => item.severity === 'error')?.message ?? '当前候选的 iframe 渲染检查通过。' });
   const proof=(id:StagedDeliveryReport['checks'][number]['id'])=>checks.find(check=>check.id===id);
@@ -639,13 +657,15 @@ function stagedDeliveryReport(state: ProjectState): StagedDeliveryReport {
 }
 
 function canAdoptStagedScreen(state: ProjectState): boolean {
+  if(projectAuthoringNotice(state.projectAuthoringSession))return false;
   return stagedDeliveryReport(state).status === 'ready';
 }
 
 /** Explicit guard override still requires a current, complete render report with no visual errors. */
 function canForceAdoptStagedScreen(state: ProjectState): boolean {
-  const workflow=stagedDeliveryReport(state).workflow;
-  if(!workflow||workflow.checks.some(check=>!['quality','structure'].includes(check.id)&&check.status!=='passed'))return false;
+  if(projectAuthoringNotice(state.projectAuthoringSession))return false;
+  const report=stagedDeliveryReport(state);
+  if(report.status!=='ready'&&!canConfirmCandidateStructure(report))return false;
   const staged = state.stagedScreen;
   if (!staged || !state.screens[staged.targetScreenId] || !isStagedTaskCurrent(state) || candidateBrokenAssetReferences(state).length > 0) return false;
   const usedAssetFiles = stagedReferencedAssetFiles(state);
@@ -659,16 +679,68 @@ function canForceAdoptStagedScreen(state: ProjectState): boolean {
   const rendered = state.stagedRenderQuality;
   return Boolean(rendered && rendered.key === state.getStagedRenderContextKey()
     && rendered.report.status === 'complete'
-    && !rendered.report.findings.some(f => f.severity === 'error'));
+    && isPassedRender(rendered.report));
 }
 
 const projectWrites=new Map<string,Promise<void>>();
 const projectWriteKey=(id:string,folderPath?:string)=>JSON.stringify([id,folderPath]);
+export async function waitForProjectSave(id:string,folderPath?:string){await projectWrites.get(projectWriteKey(id,folderPath));}
+/** Quiescence barrier for shutdown/backup callers; does not create or retry a save. */
+export async function waitForPendingProjectSaves(){await Promise.allSettled([...projectWrites.values()]);}
 
-export const useProjectStore = create<ProjectState>((set, get) => ({
+function projectDocumentFor(state:ProjectState):ProjectDocument{
+ const {id,name,createdAt,settings,designSystem,designSystemOrigin,designLibraryBinding,screens,screenOrder,overrides,decisions,components,assets,panelStates,coverImage,quickPrompts,projectDocuments}=state;
+ return {id,name,createdAt,schemaVersion:1,savedAt:Date.now(),settings,designSystem,designSystemOrigin,designLibraryBinding,screens,screenOrder,overrides,decisions,components,assets,panelStates,coverImage:coverImage||undefined,quickPrompts:quickPrompts?.length?quickPrompts:undefined,projectDocuments} as unknown as ProjectDocument;
+}
+function projectMetaFor(state:ProjectState,savedAt:number):ProjectMeta{
+ const {id,name,settings,designSystem,screens,screenOrder,folderPath,coverImage}=state,first=screenOrder[0]?screens[screenOrder[0]]:undefined;
+ return {storageVersion:'managed-v1',id,name,deviceProfile:settings.deviceProfile,frameWidth:settings.frameWidth,referenceViewportHeight:resolveProjectViewport(settings).height,createdAt:state.createdAt,updatedAt:savedAt,screenCount:Object.keys(screens).length,
+  previewHtml:first?buildScreenDocument(first,{baseCss:getBaseCss(settings.deviceProfile),tokensCss:compileTokensToCss(designSystem.tokens,settings.colorMode),screenOverrides:'',deviceProfile:settings.deviceProfile,useCustomNavigation:settings.useCustomNavigation,includeMobileChrome:true,viewportHeight:resolveProjectViewport(settings).height,viewportWidth:settings.frameWidth}):undefined,
+  previewCss:'',folderPath,coverImage:coverImage||undefined};
+}
+interface PreparedProjectMutation {
+ changes:Partial<ProjectState>;patches:Patch[];inverse:Patch[];publication:PublicationDescriptor;
+ resources?:import('../services/storage/renderResourceSnapshot').RenderResourceFile[];
+ backups?:Parameters<typeof prepareHistoryCommit>[4];
+}
+/** No live page/History changes precede the durable conditional project commit. */
+async function publishProjectMutation(get:()=>ProjectState,set:(state:Partial<ProjectState>)=>void,label:string,isCurrent:()=>boolean,prepare:(state:ProjectState)=>PreparedProjectMutation){
+ const state=get(),session=state.projectAuthoringSession;
+ if(!session)throw Error('工程缺少打开时的保存基线，请重新打开工程。');
+ if(!isCurrent())throw Error('设计提交前来源已变化或操作已取消。');
+ const token=beginProjectPublication(state.id,label),writeKey=projectWriteKey(state.id,state.folderPath),prior=projectWrites.get(writeKey),attempt=state.projectSaveAttempt+1;
+ const storage=createProjectStorage(state.id,state.folderPath);
+ cancelScheduledHistorySave(state.id,state.folderPath);
+ set({projectSaveAttempt:attempt,projectSaveStatus:'saving',projectSaveError:null});
+ const check=()=>{if(get().id!==state.id||get().folderPath!==state.folderPath||get().projectAuthoringSession!==session||!isCurrent())throw Error('设计发布前工程、作者来源或操作已变化，未提交。');};
+ const operation=(async()=>{
+  try{
+   await prior?.catch(()=>{});check();const historyState=useHistoryStore.getState();if(historyState.archiveError)throw Error(historyState.archiveError);
+   const prepared=prepare(get()),next={...get(),...prepared.changes},history=prepareHistoryCommit(historyState,label,prepared.patches,prepared.inverse,prepared.backups),document=projectDocumentFor(next);
+   const receipt=await new ProjectRepository(storage,session).save(document,{history,publication:prepared.publication,resources:prepared.resources,beforePublish:check});
+   // Cancellation after the storage handoff cannot turn an actual commit into "not applied".
+   let installed=true,notice:string|undefined;
+   try{installProjectPublication(token,()=>{useHistoryStore.getState().restore(history);set({...prepared.changes,projectSaveStatus:'saved',projectSaveError:null});});}
+   catch{
+    installed=false;notice='设计已保存，当前画布或撤销记录未能完整刷新。请重新打开工程核对已保存的设计后继续编辑。';suspendProjectAuthoringSession(storage,session,notice);
+    try{set({projectSaveStatus:'readonly',projectSaveError:notice,deliveryArchiveNotice:notice});}catch{console.warn('[project] 设计已保存，界面刷新及状态提示失败，请重新打开工程。');}
+   }
+   try{if(!state.folderPath)cacheBrowserProject(document,projectAuthoringHistory(storage,session));upsertMeta(projectMetaFor(next,document.savedAt!));}
+   catch(error){console.warn('[project] 设计已保存，工程预览列表更新失败',error);}
+   return {receipt,installed,notice,appliedContextKey:restyleContextKey(next)};
+  }catch(error){set({projectSaveStatus:projectAuthoringNotice(session)?'readonly':'failed',projectSaveError:error instanceof Error?error.message:'设计保存失败，原页面与撤销记录保留。'});throw error;}
+  finally{endProjectPublication(token);}
+ })();
+ const tracked=operation.then(()=>{});projectWrites.set(writeKey,tracked);void tracked.catch(()=>{});return operation;
+}
+
+export const useProjectStore = create<ProjectState>((rawSet, get) => {
+ const set:typeof rawSet=(partial,replace)=>{const next=typeof partial==='function'?partial(get()):partial;guardProjectPublicationFields(get(),next,replace);rawSet(next,replace);};
+ return ({
   id: 'proj_default',
   name: 'MyDesignStudio',
   createdAt: Date.now(),
+  projectAuthoringSession:null,projectSaveStatus:null,projectSaveError:null,projectSaveAttempt:0,
   settings: {
     deviceProfile: 'pc',
     frameWidth: 1440,
@@ -1005,16 +1077,17 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   applyRestyleOutcome: async (outcome, signal, isCurrent, onCommitted) => {
-    const state = get(), key = restyleContextKey(state);
+    const state = get(), key = restyleContextKey(state), renderIdentity=renderEvidenceIdentity(state.settings.deviceProfile);
     const frozenOutcome = structuredClone(outcome), storage = createProjectStorage(state.id,state.folderPath);
-    const current = () => !signal?.aborted && (!isCurrent||isCurrent()) && !taskRuleSafetyIssue(frozenOutcome.workflowContract) &&
-      !draftExecutionIssue(frozenOutcome.executionRecord,frozenOutcome.html) && restyleContextKey(get()) === key;
+    const contextFailure=(message:string)=>renderEvidenceIdentity(state.settings.deviceProfile)!==renderIdentity?'渲染检查依赖已变化，请重新检查；原任务输入未更新。':message;
+    const current = () => get().projectAuthoringSession===state.projectAuthoringSession&&get().folderPath===state.folderPath&&!signal?.aborted && (!isCurrent||isCurrent()) && !taskRuleSafetyIssue(frozenOutcome.workflowContract) &&
+      !draftExecutionIssue(frozenOutcome.executionRecord,frozenOutcome.html) && renderEvidenceIdentity(state.settings.deviceProfile)===renderIdentity && restyleContextKey(get()) === key;
     const frozen = structuredClone({id:state.id,folderPath:state.folderPath,settings:state.settings,
       screens:state.screens,overrides:state.overrides,assets:state.assets,designSystem:state.designSystem,components:state.components,
       decisions:state.decisions,projectDocuments:state.projectDocuments,designLibraryBinding:state.designLibraryBinding,designSystemOrigin:state.designSystemOrigin});
     const plan = await prepareCheckedRestyle(frozen,frozenOutcome,storage,{contextKey:key,isCurrent:current,signal});
     if (plan.validation.status !== 'passed' || !current()) {
-      const message = plan.validation.message ?? '工程已变化或重塑已取消，未应用。';
+      const message = plan.validation.message ?? contextFailure('工程已变化或重塑已取消，未应用。');
       return {applied:false,validation:{...plan.validation,status:'blocked',message},message};
     }
     const repository = new RestyleDeliveryRepository(storage,state.id);
@@ -1022,12 +1095,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       record = buildRestyleDelivery(frozen,frozenOutcome,plan);
       await captureRestylePreviews(record,storage,current);
-      if (!current()) throw new Error('保存重塑档案前工程已变化或执行已取消。');
+      if (!current()) throw new Error(contextFailure('保存重塑档案前工程已变化或执行已取消。'));
       await repository.prepare(record);prepared = true;
       const resourceScreens=[...plan.screens,...(plan.component?[{id:`template-${plan.component.id}`,name:plan.component.name,htmlContent:plan.component.templateHtml,position:{x:0,y:0}}]:[])];
       const resources=await readProjectRenderResources(storage,resourceScreens,Object.values(frozen.assets),frozen.overrides);
       const issues = [...await verifyProjectAssetFiles(storage,plan.referencedAssets),...resources.issues,...await verifyLibraryReferenceFiles(storage,frozen)];
-      if (!current()) throw new Error('保存重塑档案期间工程已变化或执行已取消。');
+      if (!current()) throw new Error(contextFailure('保存重塑档案期间工程已变化或执行已取消。'));
       if (issues.length) {plan.validation.assetIssues.push(...issues);throw new Error(issues[0].message);}
       const resourceIssue=renderResourceIssue(mergeRenderResourceFiles(plan.validation.pages.map(p=>p.render?.resourceFiles??[])),resources.resourceFiles);
       if(resourceIssue)throw Error(resourceIssue);
@@ -1058,14 +1131,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       await repository.finish(record,'aborted',message).catch(()=>{});
       return {applied:false,message,validation:{...plan.validation,status:'blocked',message}};
     }
-    for (const screen of plan.screens) {
-      const before = get().screens[screen.id];
-      useHistoryStore.getState().addCheckpoint(`风格重塑前备份: ${before.name}`,{screenId:before.id,htmlContent:before.htmlContent,scopedCss:before.scopedCss});
+    let publication:Awaited<ReturnType<typeof publishProjectMutation>>;
+    try{
+      publication=await publishProjectMutation(get,rawSet,`风格重塑（已核验）: ${frozenOutcome.target.name}`,current,live=>({
+        changes:{screens,components},patches,inverse,resources:mergeRenderResourceFiles(plan.validation.pages.map(page=>page.render?.resourceFiles??[])),publication:{id:record.id,kind:'restyle',screenIds:plan.screens.map(screen=>screen.id),componentIds:plan.component?[plan.component.id]:[]},
+        backups:plan.screens.map(screen=>{const before=live.screens[screen.id];return {label:`风格重塑前备份: ${before.name}`,screenSnapshot:{screenId:before.id,htmlContent:before.htmlContent,scopedCss:before.scopedCss}};})
+      }));
+    }catch(error){
+      const message=error instanceof Error?error.message:'重塑保存失败，原页面与撤销记录保留。';
+      if(!(error instanceof ProjectPublicationUnconfirmedError))await repository.finish(record,'aborted',message).catch(()=>{});
+      if(get().id===state.id&&get().folderPath===state.folderPath)set({deliveryArchiveRevision:get().deliveryArchiveRevision+1});
+      return {applied:false,message,validation:{...plan.validation,status:'blocked',message}};
     }
-    useHistoryStore.getState().commit(`风格重塑（已核验）: ${frozenOutcome.target.name}`,patches,inverse);
-    set({screens,components});get().saveProject();
-    const appliedContextKey = restyleContextKey(get());
-    const delivery:RestyleDeliveryReceipt = {id:record.id,status:'applied'};
+    const appliedContextKey = publication.appliedContextKey;
+    const delivery:RestyleDeliveryReceipt = {id:record.id,status:'applied',...(publication.notice?{message:publication.notice}:{})};
     try{onCommitted?.({applied:true,validation:structuredClone(plan.validation),delivery:{id:record.id,status:'prepared'},appliedContextKey});}
     catch{console.warn('[restyle] 已提交状态回报失败');}
     try {await repository.finish(record,'applied');}
@@ -1121,14 +1200,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   importHtmlScreen: async (screen, setup, application) => {
     if (!application) throw new Error('缺少当前导入预览的确认和任务合同。');
-    const state=get(),projectId=state.id,context=pageCreationContext(state);
+    const state=get(),projectId=state.id,context=pageCreationContext(state),renderIdentity=renderEvidenceIdentity(state.settings.deviceProfile);
     if(setup.designSystem)assertLibraryEditable(state);
     if(setup.projectId!==projectId)throw new Error('工程已切换，请重新导入。');
     if(pendingImports.has(projectId))throw new Error('已有导入正在核验，请等待完成。');
     const input=structuredClone({screen,setup,contract:application.contract,preview:application.preview,resources:application.resources});
     const signal=application.signal,isCurrent=application.isCurrent;
-    const current=()=>!signal?.aborted&&(isCurrent?.()??true)&&pageCreationContext(get())===context;
-    const requireCurrent=()=>{if(!current())throw new Error('导入选项或工程已变化，或操作已取消，请重新确认预览。');};
+    const current=()=>!signal?.aborted&&(isCurrent?.()??true)&&renderEvidenceIdentity(state.settings.deviceProfile)===renderIdentity&&pageCreationContext(get())===context;
+    const requireCurrent=()=>{if(!current())throw new Error(renderEvidenceIdentity(state.settings.deviceProfile)!==renderIdentity?'渲染检查依赖已变化，请重新检查并确认预览。':'导入选项或工程已变化，或操作已取消，请重新确认预览。');};
     pendingImports.add(projectId);
     try{
       requireCurrent();
@@ -1138,6 +1217,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       if((input.setup.designSystem||input.setup.colorMode)&&Object.values(state.screens).some(sc=>sc.metadata?.kind!=='specimen')){
         if(!input.setup.themeUpdate||input.setup.themeUpdate.expectedKey!==styleApplicationKey(state))throw new Error('已有页面的工程需明确确认主题更新并重新核对预览。');
         if(input.setup.colorMode&&input.setup.colorMode!==state.settings.colorMode)throw new Error('提取风格不切换已有工程明暗模式。');
+      }
+      if(input.resources){
+        const paths=new Set([...Object.values(state.assets),...(input.setup.assets??[])].map(asset=>asset.relPath));
+        input.setup.assets=[...(input.setup.assets??[]),...importResourceAssets(input.resources).filter(asset=>{if(paths.has(asset.relPath))return false;paths.add(asset.relPath);return true;})];
       }
       const snapshot=structuredClone({id:state.id,folderPath:state.folderPath,screens:state.screens,settings:{...state.settings,
         ...(input.setup.colorMode?{colorMode:input.setup.colorMode}:{}),...(input.setup.useCustomNavigation!==undefined?{useCustomNavigation:input.setup.useCustomNavigation}:{})},
@@ -1174,8 +1257,56 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }finally{pendingImports.delete(projectId);}
   },
 
-  applyMultiPageCreation: (batch) => {
+  applyAssetMetadataMigration:async(prepared,signal)=>{
+    if(useHistoryStore.getState().archiveError)throw Error('请先修复历史归档，再整理旧资源缓存。');
+    const result=await consumeAssetMetadataMigration(prepared,get,signal),source=get(),projectId=source.id,folderPath=source.folderPath,history=useHistoryStore.getState();
+    const forward:Patch[]=result.after.map(asset=>({op:'replace',path:['assets',asset.id],value:asset})),backward:Patch[]=result.before.map(asset=>({op:'replace',path:['assets',asset.id],value:asset}));
+    await prepareHistoryArchive(createProjectStorage(projectId,folderPath),projectId,{past:[...history.past,{id:'asset-cache-preflight',label:'整理旧SVG资源缓存',timestamp:Date.now(),patches:forward,inversePatches:backward}],future:[],checkpoints:history.checkpoints},folderPath?FOLDER_HISTORY_BUDGET:LOCAL_HISTORY_BUDGET);
+    await verifyAssetMetadataFiles(prepared,get,signal);
+    const currentHistory=useHistoryStore.getState();if(currentHistory.archiveError||get().id!==projectId||get().folderPath!==folderPath||history.past!==currentHistory.past||history.future!==currentHistory.future||history.checkpoints!==currentHistory.checkpoints)throw Error('准备撤销归档期间工程或历史已变化，请重新准备整理。');
+    claimAssetMetadataMigration(prepared,get(),signal);
+    const assets={...get().assets};for(const asset of result.after)assets[asset.id]=asset;
+    useHistoryStore.getState().commit('整理旧SVG资源缓存',forward,backward);set({assets});get().saveProject();
+  },
+
+  applyMediaMigration:async(prepared,signal)=>{
+    if(useHistoryStore.getState().archiveError)throw Error('请先修复当前历史归档，再转换页面媒体。');
+    const result=await consumeMediaMigration(prepared,get,signal),source=get(),projectId=source.id,folderPath=source.folderPath;
+    const inverse:Patch[]=prepared.pages.map(page=>({op:'replace',path:['screens',page.original.id],value:page.original}));
+    for(const [key,value] of Object.entries(source.overrides).filter(([key])=>prepared.pages.some(page=>key.startsWith(page.original.id+':'))))inverse.push({op:'replace',path:['overrides',key],value});
+    const history=useHistoryStore.getState();
+    // Materialize and verify rollback media before changing the first page. No manifest is published here.
+    await prepareHistoryArchive(createProjectStorage(projectId,folderPath),projectId,{past:[...history.past,{id:'media-preflight',label:'转换旧页面媒体',timestamp:Date.now(),patches:[],inversePatches:inverse}],future:[],checkpoints:history.checkpoints},folderPath?FOLDER_HISTORY_BUDGET:LOCAL_HISTORY_BUDGET);
+    if(signal?.aborted||get().id!==projectId||get().folderPath!==folderPath)throw Error('媒体转换已取消或切换工程，原页面未修改。');
+    claimMediaMigrationPublish(prepared,get());
+    const state=get(),screens={...state.screens},assets={...state.assets},overrides={...state.overrides},forward:Patch[]=[],backward:Patch[]=[];
+    for(const page of result.screens){
+      const previous=state.screens[page.id],conversion=prepared.pages.find(item=>item.original.id===page.id)!;
+      const metadata={...page.metadata,mediaConversion:{version:1 as const,convertedAt:Date.now(),sourceFingerprint:contentFingerprint(JSON.stringify([previous.htmlContent,previous.scopedCss])),files:result.assets.map(asset=>({id:asset.id,relPath:asset.relPath})),removedNids:conversion.removedNids}};
+      delete metadata.creationEvidence;
+      if(page.scopedCss!==previous.scopedCss)metadata.scopedStyleAsset=nextScopedStyleAsset(page.id,page.scopedCss??'','edited',previous.metadata?.scopedStyleAsset,previous.scopedCss);
+      const next={...page,metadata,position:previous.position};screens[page.id]=next;
+      forward.push({op:'replace',path:['screens',page.id],value:next});backward.push({op:'replace',path:['screens',page.id],value:previous});
+    }
+    for(const asset of result.assets){
+      const previous=state.assets[asset.id];if(previous)continue;
+      assets[asset.id]=asset;forward.push({op:'add',path:['assets',asset.id],value:asset});backward.push({op:'remove',path:['assets',asset.id]});
+    }
+    const selected=(key:string)=>prepared.pages.some(page=>key.startsWith(page.original.id+':'));
+    for(const key of new Set([...Object.keys(state.overrides),...Object.keys(result.overrides)])){
+      if(!selected(key))continue;const previous=state.overrides[key],next=result.overrides[key];if(JSON.stringify(previous)===JSON.stringify(next))continue;
+      if(next){overrides[key]=next;forward.push({op:previous?'replace':'add',path:['overrides',key],value:next});}else{delete overrides[key];forward.push({op:'remove',path:['overrides',key]});}
+      backward.push(previous?{op:'replace',path:['overrides',key],value:previous}:{op:'remove',path:['overrides',key]});
+    }
+    useHistoryStore.getState().commit(`外置${result.screens.length}个页面的媒体`,forward,backward);
+    set({screens,assets,overrides,selectedNid:null,selectedNode:null});get().saveProject();
+  },
+
+  applyMultiPageCreation: async (batch,options) => {
+    const origin=get(),session=origin.projectAuthoringSession;let publishedIds:string[]=[];
+    const publication=await publishProjectMutation(get,rawSet,`新增确认计划中的${batch.names.length}个页面`,()=>get().projectAuthoringSession===session&&(options?.isCurrent?.()??true)&&currentMultiPagePublication(batch,get()),()=>{
     const state=get(),pages=consumeMultiPageBatch(batch,state),screens={...state.screens},order=[...state.screenOrder];
+    publishedIds=pages.map(page=>page.id);
     for(const page of pages){
       const layout=calculateNewScreenPosition(screens,order,{frameWidth:state.settings.frameWidth,viewportGuideHeight:state.settings.viewportGuideHeight,anchorScreenId:order.at(-1),...(page.metadata?.multiPageDelivery?.kind==='variants'&&order.at(-1)?{referencedScreenId:order.at(-1)}:{})});
       for(const shift of layout.shiftedScreens)if(screens[shift.id])screens[shift.id]={...screens[shift.id],position:{...screens[shift.id].position,x:shift.newX}};
@@ -1188,9 +1319,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       inverse.push({op:'replace',path:['screens',id,'position'],value:screen.position});
     }
     forward.push({op:'replace',path:['screenOrder'],value:order});inverse.push({op:'replace',path:['screenOrder'],value:state.screenOrder});
-    useHistoryStore.getState().commit(`新增确认计划中的${pages.length}个页面`,forward,inverse);
-    set({screens,screenOrder:order,activeScreenId:pages[0]?.id??state.activeScreenId});get().saveProject();
-    if(pages[0])get().panToScreen(pages[0].id);return pages.map(p=>p.id);
+    return {changes:{screens,screenOrder:order,activeScreenId:pages[0]?.id??state.activeScreenId},patches:forward,inverse,resources:mergeRenderResourceFiles(pages.map(page=>page.metadata?.creationEvidence?.render.resourceFiles??[])),publication:{id:batch.id,kind:'batch',screenIds:publishedIds}};
+    });
+    await confirmMultiPagePublication(batch,origin.id,publication.receipt,publication.installed);if(publication.installed&&publishedIds[0])get().panToScreen(publishedIds[0]);return publishedIds;
   },
 
   addScreen: (screenData, customId, options) => {
@@ -1336,6 +1467,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   updateScreen: (id, updates, historyLabel) => {
+    if(getProjectPublication()&&Object.keys(updates).every(key=>key==='measuredHeight'))return;
     const prevScreen = get().screens[id];
     if (!prevScreen) return;
     const cssChanged = updates.scopedCss !== undefined && updates.scopedCss !== prevScreen.scopedCss;
@@ -2123,6 +2255,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     return true;
   },
 
+  registerPreparedAssets:(assets,projectId,context)=>{
+    const state=get();if(state.id!==projectId||pageCreationContext(state)!==context)throw Error('素材准备期间工程已变化。');
+    if(assets.length>48||new Set(assets.map(a=>a.id)).size!==assets.length||assets.some(a=>state.assets[a.id]||!/^assets\/icons\/[a-f0-9]{64}\.svg$/.test(a.relPath)||a.source!=='builtin'))throw Error('预置素材身份无效。');
+    if(!assets.length)return;
+    useHistoryStore.getState().commit('准备独立图标资源',assets.map(a=>({op:'add' as const,path:['assets',a.id],value:a})),assets.map(a=>({op:'remove' as const,path:['assets',a.id]})));
+    set({assets:{...state.assets,...Object.fromEntries(assets.map(a=>[a.id,a]))}});get().saveProject();
+  },
   addAsset: (asset) => {
     const curAssets = get().assets;
     const existingKey = Object.keys(curAssets).find(
@@ -2169,6 +2308,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   replaceAssetGlobally: (oldAssetId, newAssetUrl) => {
+    if(mediaReferenceIssue(newAssetUrl)||newAssetUrl.startsWith('assets/')&&!Object.values(get().assets).some(asset=>asset.relPath===newAssetUrl))throw Error('素材替换仅支持已登记的独立文件或HTTPS链接，不能嵌入data/blob媒体。');
     const { screens } = get();
     const oldRelPath = get().assets[oldAssetId]?.relPath;
     let count = 0;
@@ -2345,6 +2485,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   setStagedRenderQuality: (key, report) => {
     if (!get().stagedScreen || key !== get().getStagedRenderContextKey()) return;
+    if (!isRenderedQualityReport(report)) report = {status:'unavailable',findings:[],inspected:0,reason:'渲染报告格式不合法，必须重新检查。'};
     set({ stagedRenderQuality: { key, report: structuredClone(report) } });
     if (report.status !== 'pending') get().recordStagedValidationEvidence();
   },
@@ -2353,7 +2494,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const state = get(), candidate = state.stagedScreen;
     const target = candidate && state.screens[candidate.targetScreenId];
     if (!candidate || !target) return;
-    const options = { deviceProfile: state.settings.deviceProfile, useCustomNavigation: state.settings.useCustomNavigation, designSystem: state.designSystem };
+    const options = { requireExternalMedia:true,mediaCss:screenForAssetAudit(target,state.overrides).scopedCss,deviceProfile: state.settings.deviceProfile, useCustomNavigation: state.settings.useCustomNavigation, designSystem: state.designSystem };
     const source = checkGenerationSourceSafety(candidate.newHtml, options);
     if (!source.passed) return;
     const key = state.getStagedRenderContextKey();
@@ -2367,7 +2508,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       viewport: { profile: state.settings.deviceProfile, width: viewport.width, height: viewport.height },
       designSystem: { id: state.designSystem.id, tokenFingerprint: designTokenFingerprint(state.designSystem.tokens) },
       ...(state.designLibraryBinding ? { designLibrary: state.designLibraryBinding } : {}), source,
-      quality: checkGenerationQuality(candidate.newHtml, { ...options, baselineHtml: target.htmlContent,
+      quality: checkGenerationQuality(candidate.newHtml, { ...options,wholePageRedesign:candidate.workflowContract?.wholePageRedesign, contentTask:candidate.workflowContract, baselineHtml: target.htmlContent,
         protectedNids: state.getProtectedNids(candidate.targetScreenId), modificationRequest: candidate.modificationRequest,formRuleRoots:formRuleScope(candidate.workflowContract) }),
       delivery: stagedDeliveryReport(state), ...(render ? { render } : {}), ...(projectAssets ? { projectAssets } : {}) });
     set({ stagedValidationEvidence: evidence, stagedCandidateSaveStatus: 'pending' });
@@ -2483,6 +2624,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   stageScreenChange: (targetScreenId, newHtml, screenName, modificationRequest, workflowContract, executionRecord, repair) => {
+    const target=get().screens[targetScreenId];assertExternalMedia(newHtml,target?screenForAssetAudit(target,get().overrides).scopedCss:undefined);
     const sourceSafe = checkGenerationSourceSafety(newHtml).passed;
     const normalized = sourceSafe ? normalizeMobileNavigation(newHtml, get().settings) : { html: newHtml, title: undefined };
     const taskSnapshot = workflowContract===undefined?undefined:structuredClone(workflowContract);
@@ -2494,8 +2636,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       designOriginFingerprint: contentFingerprint(JSON.stringify([state.designSystemOrigin?.kind, state.designSystemOrigin?.sourceId,
         state.designSystemOrigin?.sourceFingerprint, state.designSystemOrigin?.tokenVersion, state.designSystemOrigin?.tokenFingerprint])),
       modificationRequest, navigationTitle: normalized.title, workflowContract: taskSnapshot,
-      ...(isTaskContractShape(taskSnapshot)?{taskBindingFingerprint:taskInputBinding(taskSnapshot)}:{}),
-      executionRecord: executionRecord ? { ...structuredClone(executionRecord),
+      taskBindingFingerprint:candidateAuthorizationBinding(taskSnapshot),
+      executionRecord: executionRecord ? { ...sanitizeExecutionMedia(structuredClone(executionRecord)),
         ...(executionRecord.completeHtml ? { completeHtml: normalized.html } : {}) } : undefined };
     set({
       stagedScreen: candidate, stagedCandidateSaveStatus: sourceSafe ? 'pending' : 'failed',
@@ -2531,6 +2673,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   commitStagedDelivery: async (mode, expectedContextKey) => {
     const state = get(), staged = state.stagedScreen;
     if (!staged || state.stagedAdoptionStatus === 'saving') return false;
+    const readonlyReason=projectAuthoringNotice(state.projectAuthoringSession);
+    if(readonlyReason){set({stagedAdoptionStatus:'failed',stagedAdoptionError:readonlyReason});return false;}
     if (expectedContextKey !== undefined && state.getStagedRenderContextKey() !== expectedContextKey) {
       set({ stagedAdoptionStatus: 'failed', stagedAdoptionError: '候选或项目上下文已变化，请重新检查并确认。' }); return false;
     }
@@ -2554,7 +2698,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const key = state.getStagedRenderContextKey();
     const contextFingerprint = projectAssetAuditFingerprint(state);
     const attempt = state.stagedAdoptionAttempt + 1;
-    const current = () => get().id === state.id && get().stagedScreen === staged && get().stagedAdoptionAttempt === attempt;
+    const current = () => get().id === state.id&&get().folderPath===state.folderPath&&get().projectAuthoringSession===state.projectAuthoringSession && get().stagedScreen === staged && get().stagedAdoptionAttempt === attempt;
     const unchanged = () => current() && get().getStagedRenderContextKey() === key &&
       projectAssetAuditFingerprint(get()) === contextFingerprint && allowed();
     const storage = createProjectStorage(state.id, state.folderPath);
@@ -2562,6 +2706,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ stagedAdoptionStatus: 'saving', stagedAdoptionError: null, stagedAdoptionAttempt: attempt });
     let record: DeliveryRecord | undefined;
     let prepared = false;
+    let installed=true;
     try {
       const resourceScreen={...target,htmlContent:staged.newHtml};
       const resources=await readProjectRenderResources(storage,[resourceScreen],Object.values(state.assets),state.overrides);
@@ -2586,11 +2731,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const evidence = get().stagedValidationEvidence!;
       const resultId = keepBoth ? `screen-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` : target.id;
       const resultName = keepBoth ? `${staged.screenName} (AI 方案)` : target.name;
-      const result = normalizeScreenNavigation({ ...target, id: resultId, name: resultName,
+      const result = normalizeScreenNavigation({ ...target, id: resultId,entry:`screens/${resultId}.html`, name: resultName,
         htmlContent: staged.newHtml.includes('data-nid=') ? staged.newHtml : NidEngine.injectNids(staged.newHtml),
-        metadata: { ...target.metadata, ...(staged.navigationTitle ? { navigationTitle: staged.navigationTitle } : {}) } }, state.settings);
+        metadata: { ...target.metadata, ...(staged.navigationTitle ? { navigationTitle: staged.navigationTitle } : {}),...(keepBoth?{basedOnScreenId:target.id,...(target.scopedCss?{scopedStyleAsset:nextScopedStyleAsset(resultId,target.scopedCss,'generated')}: {})}:{}) } }, state.settings);
       const { preview: _temporaryPreview, ...archivedCandidate } = staged;
-      record = structuredClone({ schemaVersion: 1, id: `delivery-${Date.now().toString(36)}-${crypto.randomUUID()}`,
+      const publicationId=`delivery-${Date.now().toString(36)}-${crypto.randomUUID()}`;
+      record = structuredClone({ schemaVersion: 1, id:publicationId,publicationId,
         projectId: state.id, createdAt: Date.now(), status: 'prepared', mode,
         before: { id: target.id, name: target.name, htmlContent: target.htmlContent, scopedCss: target.scopedCss, metadata: target.metadata },
         after: { id: resultId, name: resultName, htmlContent: result.htmlContent, scopedCss: result.scopedCss, metadata: result.metadata },
@@ -2612,28 +2758,36 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }
       const finalResourceIssue=renderResourceIssue(state.stagedRenderQuality?.report.resourceFiles,finalResources.resourceFiles);
       if(finalResourceIssue){get().refreshStagedRender(finalResourceIssue);throw Error(finalResourceIssue);}
-      if (keepBoth) {
-        get().addScreen({ name: resultName, htmlContent: result.htmlContent, scopedCss: result.scopedCss,
-          metadata: { ...result.metadata, basedOnScreenId: target.id } }, resultId,
-          { referencedScreenId: target.id, initialOverrides: Object.values(record.overrides) });
-      } else {
-        useHistoryStore.getState().addCheckpoint(`${mode === 'force-replace' ? '强制采纳新版前备份' : structureConfirmation ? '确认结构变更前备份' : '采纳新版前备份'}: ${target.name}`, {
-          screenId: target.id, htmlContent: target.htmlContent, scopedCss: target.scopedCss
-        });
-        get().updateScreen(target.id, { htmlContent: result.htmlContent, metadata: result.metadata },
-          `${mode === 'force-replace' ? '强制采纳' : structureConfirmation ? '确认结构变更后采纳' : '采纳'} AI 生成新版: ${staged.screenName}`);
-      }
+      const publication=await publishProjectMutation(get,rawSet,keepBoth?`新建画框: ${resultName}`:`${mode==='force-replace'?'强制采纳':structureConfirmation?'确认结构变更后采纳':'采纳'} AI 生成新版: ${staged.screenName}`,unchanged,live=>{
+        const screens={...live.screens},order=[...live.screenOrder],overrides={...live.overrides},patches:Patch[]=[],inverse:Patch[]=[];
+        if(keepBoth){
+          const layout=calculateNewScreenPosition(screens,order,{frameWidth:live.settings.frameWidth,viewportGuideHeight:live.settings.viewportGuideHeight,referencedScreenId:target.id,anchorScreenId:live.activeScreenId});
+          screens[resultId]={...result,position:layout.position};order.push(resultId);
+          patches.push({op:'add',path:['screens',resultId],value:screens[resultId]},{op:'replace',path:['screenOrder'],value:order});inverse.push({op:'remove',path:['screens',resultId]},{op:'replace',path:['screenOrder'],value:live.screenOrder});
+          for(const shift of layout.shiftedScreens)if(screens[shift.id]){const old=screens[shift.id];screens[shift.id]={...old,position:{...old.position,x:shift.newX}};patches.push({op:'replace',path:['screens',shift.id,'position'],value:screens[shift.id].position});inverse.push({op:'replace',path:['screens',shift.id,'position'],value:old.position});}
+          for(const [id,override]of Object.entries(record!.overrides)){if(overrides[id])throw Error('复制画框的手动样式 ID 冲突。');overrides[id]=structuredClone(override);patches.push({op:'add',path:['overrides',id],value:overrides[id]});inverse.push({op:'remove',path:['overrides',id]});}
+        }else{
+          screens[target.id]={...live.screens[target.id],htmlContent:result.htmlContent,metadata:result.metadata};patches.push({op:'replace',path:['screens',target.id],value:screens[target.id]});inverse.push({op:'replace',path:['screens',target.id],value:live.screens[target.id]});
+        }
+        return {changes:{screens,screenOrder:order,overrides,...(keepBoth?{activeScreenId:resultId}:{}),stagedScreen:null,stagedPreview:null,stagedCandidateSaveStatus:null,stagedRenderQuality:null,stagedAssetFiles:null,stagedProjectAssetAudit:null,stagedValidationEvidence:null,stagedRepairStatus:null,stagedRepairError:null,stagedAdoptionStatus:null,stagedAdoptionError:null},patches,inverse,resources:finalResources.resourceFiles,publication:{id:record!.id,kind:'candidate',screenIds:[resultId]},
+          backups:keepBoth?[]:[{label:`${mode==='force-replace'?'强制采纳新版前备份':structureConfirmation?'确认结构变更前备份':'采纳新版前备份'}: ${target.name}`,screenSnapshot:{screenId:target.id,htmlContent:target.htmlContent,scopedCss:target.scopedCss}}]};
+      });
+      installed=publication.installed;
     } catch (error) {
       const message = error instanceof Error ? error.message : '交付档案保存失败，原页面未修改。';
-      if (record && prepared) await repository.finish(record, 'aborted', message).catch(() => {});
+      if (record && prepared&&!(error instanceof ProjectPublicationUnconfirmedError)) await repository.finish(record, 'aborted', message).catch(() => {});
       if (!prepared && record?.preview?.status === 'ready') await storage.remove(record.preview.relPath).catch(() => {});
       if (current()) set({ stagedAdoptionStatus: 'failed', stagedAdoptionError: message });
       if (get().id === state.id) set({ deliveryArchiveRevision: get().deliveryArchiveRevision + 1 });
       return false;
     }
-    set({ stagedScreen: null, stagedPreview: null, stagedCandidateSaveStatus: null, stagedRenderQuality: null, stagedAssetFiles: null,
+    if(installed)set({ stagedScreen: null, stagedPreview: null, stagedCandidateSaveStatus: null, stagedRenderQuality: null, stagedAssetFiles: null,
       stagedProjectAssetAudit: null, stagedValidationEvidence: null, stagedRepairStatus: null, stagedRepairError: null, stagedAdoptionStatus: null, stagedAdoptionError: null });
-    try { await repository.finish(record!, 'applied'); }
+    try {
+      await repository.finish(record!, 'applied');
+      if(staged.workflowContract?.wholePageRedesign)try{await settleDesignTaskDelivery(storage,state.id,record!.after.id,record!.id);}
+      catch(error){if(get().id===state.id)set({deliveryArchiveNotice:'页面已采纳，任务完成标记未能保存：'+(error instanceof Error?error.message:String(error))});}
+    }
     catch (error) {
       console.warn('[delivery] 收尾失败', error);
       if (get().id === state.id) set({ deliveryArchiveNotice: '页面已应用，档案状态写入失败；准备记录已保留，可在交付历史中查看。' });
@@ -2652,11 +2806,13 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   saveProject: () => {
-    const { id, name, settings, designSystem, designSystemOrigin, designLibraryBinding, screens, overrides, decisions, components, assets, panelStates, coverImage, quickPrompts, projectDocuments } =
+    if(getProjectPublication())return;
+    const { id, name,createdAt, settings, designSystem, designSystemOrigin, designLibraryBinding, screens,screenOrder, overrides, decisions, components, assets, panelStates, coverImage, quickPrompts, projectDocuments } =
       get();
     const data = {
       id,
       name,
+      createdAt,
       schemaVersion: 1,
       projectDocuments,
       savedAt: Date.now(),
@@ -2665,6 +2821,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       designSystemOrigin,
       designLibraryBinding,
       screens,
+      screenOrder,
       overrides,
       decisions,
       components,
@@ -2674,24 +2831,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       quickPrompts: quickPrompts && quickPrompts.length > 0 ? quickPrompts : undefined
     };
     const { folderPath } = get();
-    if (folderPath) {
-      // 文件夹工程：画框正文外置为独立文件，project.json 原子写入 (T-AE-40)
-      // 失败不抛出——保存失败不应让编辑操作整个崩掉，由标题栏状态提示
-      const operation=new ProjectRepository(createProjectStorage(id, folderPath)).save(data as never);
-      projectWrites.set(projectWriteKey(id,folderPath),operation);
-      void operation.catch((e) => console.warn('[project] 文件夹保存失败', e));
-    } else {
-      writeProject(id, JSON.stringify(data));
-      projectWrites.set(projectWriteKey(id),Promise.resolve());
-    }
-
-    // 历史归档随工程一起落盘 (BR-HIS-06)
-    scheduleHistorySave(id, folderPath);
-
     // 同步注册表元信息，供工程管理页渲染卡片 (PRD §3.0.1)
     const firstScreenId = get().screenOrder[0];
     const firstScreen = firstScreenId ? screens[firstScreenId] : undefined;
     const meta: ProjectMeta = {
+      storageVersion:'managed-v1',
       id,
       name,
       deviceProfile: settings.deviceProfile,
@@ -2705,17 +2849,33 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       folderPath: get().folderPath,
       coverImage: coverImage || undefined
     };
-    upsertMeta(meta);
+    const attempt=get().projectSaveAttempt+1,session=get().projectAuthoringSession;
+    const {past,future,checkpoints,archiveError}=useHistoryStore.getState(),history={past,future,checkpoints};
+    cancelScheduledHistorySave(id,folderPath);
+    set({projectSaveAttempt:attempt,projectSaveStatus:projectAuthoringNotice(session)?'readonly':'saving',projectSaveError:projectAuthoringNotice(session)??null});
+    const current=()=>get().id===id&&get().folderPath===folderPath&&get().projectSaveAttempt===attempt;
+    const operation=(async()=>{
+      if(!session)throw Error('工程缺少打开时的保存基线，请保留当前修改并重新打开工程。');if(archiveError)throw Error(archiveError);
+      await new ProjectRepository(createProjectStorage(id,folderPath),session).save(data as never,{history});
+      if(!folderPath)cacheBrowserProject(data as never,projectAuthoringHistory(createProjectStorage(id),session));
+      upsertMeta(meta);
+      // A failed/stale save must not schedule its History over another author's project.
+      if(current())set({projectSaveStatus:'saved',projectSaveError:null});
+    })();
+    projectWrites.set(projectWriteKey(id,folderPath),operation);
+    void operation.catch(error=>{if(current())set({projectSaveStatus:projectAuthoringNotice(session)?'readonly':'failed',projectSaveError:error instanceof Error?error.message:'工程保存失败，当前修改仍保留在窗口。'});console.warn('[project] 保存失败',error);});
   },
 
   saveProjectChecked: async () => {
+    assertNoProjectPublication();
     const {id,folderPath}=get();get().saveProject();await projectWrites.get(projectWriteKey(id,folderPath));
   },
 
   /** 新建空白工程并切换为当前工程 (PRD §3.0.1)。默认纯净画布 (0 画框，保证工作区只有有效产物) */
   initNewProject: ({ name, deviceProfile, designSystem: ds, initialDecisions, folderPath, createSpecimen, referenceDeviceId }) => {
-    const id = `proj_${Date.now().toString(36)}`;
+    const id = `proj_${Date.now().toString(36)}_${crypto.randomUUID().slice(0,8)}`;
     const now = Date.now();
+    useHistoryStore.getState().restore(null);
     const effectiveDs = ds || defaultTheme;
     const referenceDevice = { ...(REFERENCE_DEVICES.find(device => device.id === referenceDeviceId && device.deviceProfile === deviceProfile) ?? defaultReferenceDevice(deviceProfile)) };
     const referenceHeight = Math.round(referenceDevice.height * (deviceProfile === 'mobile' ? 390 : 1440) / referenceDevice.width);
@@ -2742,6 +2902,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       id,
       name,
       folderPath,
+      projectAuthoringSession:createProjectAuthoringSession(createProjectStorage(id,folderPath)),
+      projectSaveStatus:null,projectSaveError:null,projectSaveAttempt:get().projectSaveAttempt+1,
       createdAt: now,
       settings: {
         deviceProfile,
@@ -2800,19 +2962,27 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   /** 从注册表载入指定工程 */
-  loadProjectById: (id) => {
-    const raw = readProject(id);
-    if (!raw) return false;
-    get().loadProject(raw);
-    set({folderPath:undefined}); // A local project must not inherit a previously edited source folder.
-    return true;
+  loadProjectById: async (id,isCurrent=()=>true) => {
+    await waitForProjectSave(id).catch(()=>{});
+    const loaded=await openBrowserProject(id);if(!loaded||!isCurrent())return false;
+    if(!get().loadProjectDocument(loaded))return false;
+    const session=get().projectAuthoringSession;await loadHistoryForProject(id,undefined,()=>isCurrent()&&get().projectAuthoringSession===session);return isCurrent()&&get().projectAuthoringSession===session;
   },
 
   loadProjectDocument: (doc, folderPath) => {
     try {
+      if(!doc||typeof doc!=='object'||typeof (doc as {id?:unknown}).id!=='string')throw Error('工程文档身份无效。');
+      const session=createProjectAuthoringSession(createProjectStorage((doc as {id:string}).id,folderPath),doc);
       get().loadProject(JSON.stringify(doc));
       // folderPath 决定此后会话与附件写文件夹而非 localStorage
-      set({ folderPath });
+      set({ folderPath,projectAuthoringSession:session,projectSaveStatus:projectAuthoringNotice(session)?'readonly':null,projectSaveError:projectAuthoringNotice(session)??null });
+      if(session){
+        const raw=projectAuthoringHistory(createProjectStorage((doc as {id:string}).id,folderPath),session);
+        useHistoryStore.getState().restore(raw?parseHistory(raw,(doc as {id:string}).id):null);
+        if(raw){let schema:unknown;try{schema=JSON.parse(raw).schemaVersion;}catch{/* readonly source already diagnosed */}
+          if(schema===2||schema===3)useHistoryStore.getState().setArchiveError('历史媒体正在恢复，请稍后再保存工程。');
+        }
+      }
       return true;
     } catch (e) {
       console.warn('[project] 文档载入失败', e);
@@ -2820,7 +2990,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  deleteProject: (id) => {
+  deleteProject: async (id) => {
+    await waitForProjectSave(id,get().id===id?get().folderPath:undefined).catch(()=>{});
+    const folder=(get().id===id?get().folderPath:undefined)??listProjects().find(project=>project.id===id)?.folderPath;
+    if(!folder)await deleteBrowserProject(id);
     deleteProjectData(id);
     deleteHistoryArchive(id, get().id === id ? get().folderPath : undefined);
   },
@@ -2828,10 +3001,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   loadProject: (jsonString) => {
     try {
       const data = JSON.parse(jsonString);
-      const order = data.screenOrder && data.screenOrder.length
-        ? data.screenOrder.filter((sid: string) => data.screens?.[sid])
+      const order = Array.isArray(data.screenOrder) && data.screenOrder.length
+        ? data.screenOrder.filter((sid: unknown) => typeof sid==='string'&&data.screens?.[sid])
         : Object.keys(data.screens || {});
       set({
+        folderPath:undefined,projectAuthoringSession:null,projectSaveStatus:null,projectSaveError:null,projectSaveAttempt:get().projectSaveAttempt+1,
         id: data.id || get().id,
         createdAt: data.createdAt || data.savedAt || Date.now(),
         name: data.name || 'Untitled',
@@ -2870,9 +3044,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   hasRecoverySession: () => !!readProject(get().id),
 
-  recoverSession: () => {
-    const raw = readProject(get().id);
-    if (raw) get().loadProject(raw);
+  recoverSession: async () => {
+    const state=get(),current=()=>get().id===state.id&&get().folderPath===state.folderPath&&get().projectSaveAttempt===state.projectSaveAttempt;
+    const doc=state.folderPath?await new ProjectRepository(createProjectStorage(state.id,state.folderPath)).load():await openBrowserProject(state.id);
+    if(!doc||!current()||!get().loadProjectDocument(doc,state.folderPath))return false;
+    const session=get().projectAuthoringSession;await loadHistoryForProject(state.id,state.folderPath,()=>get().projectAuthoringSession===session);return get().projectAuthoringSession===session;
   },
 
   applyPatches: (patches) => {
@@ -2982,11 +3158,29 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     });
     get().saveProject();
   }
-}));
+ });
+});
+const setProjectState=useProjectStore.setState;
+useProjectStore.setState=(partial,replace)=>{const next=typeof partial==='function'?partial(useProjectStore.getState()):partial;guardProjectPublicationFields(useProjectStore.getState(),next,replace);setProjectState(next,replace);};
 
 // Connect JSON Patch history undo/redo directly to project state (PRD §3.8.1 / D16)
 setApplyPatchesHandler((patches) => {
   useProjectStore.getState().applyPatches(patches);
+});
+
+registerProjectHistoryIO({
+  save:async(projectId,folderPath)=>{
+    const state=useProjectStore.getState();
+    if(!folderPath&&(state.id!==projectId||state.folderPath!==folderPath||!state.projectAuthoringSession))return false;
+    if(state.id!==projectId||state.folderPath!==folderPath||!state.projectAuthoringSession)throw Error('工程历史保存来源已变化，未覆盖旧目录。');
+    await state.saveProjectChecked();return true;
+  },
+  source:(projectId,folderPath)=>{
+    const state=useProjectStore.getState();
+    if(!folderPath&&(state.id!==projectId||state.folderPath!==folderPath||!state.projectAuthoringSession))return undefined;
+    if(state.id!==projectId||state.folderPath!==folderPath||!state.projectAuthoringSession)throw Error('工程历史读取来源已变化。');
+    return projectAuthoringHistory(createProjectStorage(projectId,folderPath),state.projectAuthoringSession);
+  }
 });
 
 if (typeof window !== 'undefined') {

@@ -1,0 +1,146 @@
+{
+  "version": 1,
+  "purpose": "Frozen 12-scenario real generation experiment; synthetic product data; separate from retrieval holdout",
+  "cases": [
+    {
+      "id": "conversation-copy",
+      "device": "mobile",
+      "kind": "create",
+      "request": "新建静态聊天建议页。咨询师回答包含3条完整建议，每条约60字；建议正文拥有独立阅读宽度，复制和采用操作放在不挤压正文的位置。显示今天20:18、来源和一条用户消息。主题沿用工程，全部示例数据，不引入外部图片或脚本。",
+      "features": [
+        "long-copy",
+        "conversation",
+        "button"
+      ],
+      "title": "聊天建议"
+    },
+    {
+      "id": "notification-size",
+      "device": "mobile",
+      "kind": "local",
+      "request": "只调整所选消息入口：主铃铛图标增大到28px、数字角标字号缩小到10px。保留角标右上附着与预留空间，不能改为图标和角标并排；保留消息名称、数字3、链接、SVG形状与其它区域。",
+      "features": [
+        "badge",
+        "icon"
+      ],
+      "targetNid": "notify01",
+      "baselineHtml": "<main data-nid=\"root0001\" class=\"col gap-4 p-4\"><h1 data-nid=\"title001\" class=\"text-xl\">顾问工作台</h1><a data-nid=\"notify01\" href=\"#messages\" aria-label=\"消息\" class=\"notification-control\"><svg data-nid=\"icon0001\" class=\"icon\" style=\"width:16px;height:16px\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\"><path data-nid=\"path0001\" d=\"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4\"/></svg><span data-nid=\"badge001\" class=\"badge-count text-danger\" style=\"font-size:16px\">3</span></a><p data-nid=\"keep0001\">本月有12次预约，保持此文案不变</p></main>",
+      "title": "消息入口"
+    },
+    {
+      "id": "mobile-form",
+      "device": "mobile",
+      "kind": "create",
+      "request": "设计会员注册静态表单：手机号码、验证码、昵称及同意条款，帮助文案归属到字段；展示默认表单和一个手机号错误提示。所有姓名、号码仅示例。无需真实提交或短信。\n字段标签文案必须为“手机号码”\n主按钮文案必须为“注册并继续”",
+      "features": [
+        "form",
+        "button"
+      ],
+      "title": "会员注册"
+    },
+    {
+      "id": "pc-booking-form",
+      "device": "pc",
+      "kind": "create",
+      "request": "设计PC预约管理的新增预约页：客户姓名、预约日期、时间段、门店与备注；右侧简洁预约摘要，示例为赵女士、2026-11-12 15:00、云溪门店。合理最大宽度、标签和字段分组。仅静态展示，不接服务。\n主按钮文案必须为“保存预约”",
+      "features": [
+        "form",
+        "button"
+      ],
+      "title": "新增预约"
+    },
+    {
+      "id": "person-pairs",
+      "device": "mobile",
+      "kind": "create",
+      "request": "设计配对预约卡片页，展示两组成对人物。第一组：王先生，云溪医院骨科主治医师；李女士，中学高级数学教师。第二组：陈先生，软件工程师；赵女士，国企财务主管。头像稳定不缩，姓名完整，职业次级，空间不足按人物组换行；显示待回访状态与录入反馈按钮。以上均为虚构示例。",
+      "features": [
+        "person",
+        "list",
+        "button"
+      ],
+      "title": "配对预约"
+    },
+    {
+      "id": "recharge-pricing",
+      "device": "mobile",
+      "kind": "create",
+      "request": "设计积分充值静态页。当前余额360积分；三个套餐：100积分/¥9.90，300积分/¥29.90，600积分/¥59.90；突出已选300积分。说明积分用途和条款，底部显示支付金额。价格仅此演示数据，不添加额外折扣或权益；沿用主题背景，不需要真实支付。\n主按钮文案必须为“确认充值 ¥29.90”",
+      "features": [
+        "pricing",
+        "button"
+      ],
+      "title": "积分充值"
+    },
+    {
+      "id": "pc-dashboard",
+      "device": "pc",
+      "kind": "create",
+      "request": "设计PC顾问数据工作台。提供演示KPI：会员120、已联系64、待跟进56；本周预约趋势可用内联SVG；客户列表展示姓名、状态、跟进时间和联系操作。层级清晰，最大宽度布局，不虚构实时业务或外部依赖。",
+      "features": [
+        "dashboard",
+        "list"
+      ],
+      "title": "顾问工作台"
+    },
+    {
+      "id": "pc-project-detail",
+      "device": "pc",
+      "kind": "create",
+      "request": "设计PC项目详情静态页，虚构项目“云溪会员门户”，负责人林舟，状态进行中，截止2026-12-01。显示项目摘要、三个里程碑、成员与最近记录；主要操作编辑项目，次要操作查看文档，信息区域和操作分层，不接真实系统。",
+      "features": [
+        "detail",
+        "button"
+      ],
+      "title": "项目详情"
+    },
+    {
+      "id": "long-guide",
+      "device": "pc",
+      "kind": "create",
+      "request": "设计PC会员服务指南长页面，含目录与8个章节：开户、资料、预约、见面、反馈、积分、隐私、帮助。每章至少60字并有3项步骤，内容为虚构产品使用演示；保留完整正文，不做固定高度裁切，页面自然增长，底部提供联系支持。按分区生成同一页，不拆成多个页面；不要外部脚本和图片。",
+      "features": [
+        "long-copy",
+        "typography"
+      ],
+      "sectioned": true,
+      "title": "会员指南"
+    },
+    {
+      "id": "filter-tags",
+      "device": "mobile",
+      "kind": "create",
+      "request": "设计静态会员筛选页，显示已选3项/上限6项：温柔、金融业、爱徒步。关键词、行业、兴趣各成组，每组6个标签，长标签整项自然换行；选中状态不只靠颜色，有重置和确认筛选按钮。仅展示默认已选状态，不做真正筛选。",
+      "features": [
+        "tags",
+        "form",
+        "button"
+      ],
+      "title": "会员筛选"
+    },
+    {
+      "id": "feedback-sheet",
+      "device": "mobile",
+      "kind": "create",
+      "request": "设计双向回访录入的静态底部抽屉页，抽屉独立滚动、底部操作固定且不遮住末行；显示对象赵女士、印象评分、继续交往意向、60字备注、提醒说明。主背景降低可视化，抽屉标题和关闭入口清楚，不添加独立手机顶部导航或状态栏。无需可执行交互。\n主按钮文案必须为“提交回访”",
+      "features": [
+        "fixed-region",
+        "form",
+        "button"
+      ],
+      "title": "回访录入"
+    },
+    {
+      "id": "pc-local-button",
+      "device": "pc",
+      "kind": "local",
+      "request": "仅修改所选按钮的文字与字重，保留图标、结构、链接、其它区域及主题。\n按钮文案改为“提交并保存”",
+      "features": [
+        "button"
+      ],
+      "targetNid": "action01",
+      "baselineHtml": "<main data-nid=\"root0001\" class=\"container-max col gap-4 p-6\"><h1 data-nid=\"title001\" class=\"text-xl\">资料审核</h1><p data-nid=\"keep0001\">演示记录，其他说明保持完整</p><button data-nid=\"action01\" class=\"btn btn-primary\"><svg data-nid=\"icon0001\" class=\"icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\"><path data-nid=\"path0001\" d=\"M5 12l4 4L19 6\"/></svg><span data-nid=\"label001\">保存</span></button></main>",
+      "title": "资料审核"
+    }
+  ]
+}

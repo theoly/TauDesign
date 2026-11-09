@@ -33,7 +33,7 @@ describe('项目参考设备', () => {
     state().initNewProject({ name: 'PC', deviceProfile: 'pc', designSystem: defaultTheme, referenceDeviceId: 'pc-laptop' });
     expect(resolveProjectViewport(state().settings)).toMatchObject({ width: 1440, height: 810, contentHeight: 810 });
   });
-  test('切换、撤销重做、重新打开保留设备与首屏，正文不变', () => {
+  test('切换、撤销重做、重新打开保留设备与首屏，正文不变', async () => {
     const id = state().addScreen(screen); const html = state().screens[id].htmlContent;
     useHistoryStore.getState().restore(null);
     state().setReferenceDevice('mobile-compact');
@@ -41,10 +41,10 @@ describe('项目参考设备', () => {
     expect(useHistoryStore.getState().past).toHaveLength(1);
     useHistoryStore.getState().undo(); expect(state().settings.referenceDevice?.id).toBe('mobile-standard'); expect(state().settings.viewportGuideHeight).toBe(844);
     useHistoryStore.getState().redo(); expect(state().settings.referenceDevice?.id).toBe('mobile-compact');
-    const saved = readProject(state().id)!; state().setReferenceDevice('mobile-tall'); state().loadProject(saved);
+    await state().saveProjectChecked();const savedId=state().id;state().initNewProject({name:'切换后再打开',deviceProfile:'mobile',createSpecimen:false});expect(await state().loadProjectById(savedId)).toBe(true);
     expect(resolveProjectViewport(state().settings).height).toBe(694); expect(state().screens[id].htmlContent).toBe(html);
-    expect(listProjects()[0].referenceViewportHeight).toBe(866);
-    state().saveProject(); expect(listProjects()[0].referenceViewportHeight).toBe(694);
+    expect(listProjects().find(project=>project.id===savedId)!.referenceViewportHeight).toBe(694);
+    await state().saveProjectChecked();expect(listProjects().find(project=>project.id===savedId)!.referenceViewportHeight).toBe(694);
     expect(listProjects()[0].previewHtml).toContain('min-height:602px');
   });
   test('未知/跨档预设不可修改设置、历史或D8宽度；重复选择不新增历史', () => {

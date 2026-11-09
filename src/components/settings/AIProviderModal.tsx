@@ -1,9 +1,11 @@
+import {ModelCapacitySettings} from './ModelCapacitySettings';
 import React, { useState } from 'react';
 import { useAIConfigStore, THIRD_PARTY_PRESETS } from '../../stores/useAIConfigStore';
 import { useUsageStore } from '../../stores/useUsageStore';
 import { AIProviderConfig, ProviderProtocol, ThirdPartyPreset } from '../../types/provider';
 import { AIService } from '../../services/ai/aiService';
 import { ModelDiscoveryService } from '../../services/ai/modelDiscoveryService';
+import { inferKnownModelCapability } from '../../services/ai/modelCapabilities';
 import { supportsVision, detectModelCapabilities, DiscoveredModel } from '../../services/ai/engine/core/multimodalGuard';
 import {
   BarChart3,
@@ -34,7 +36,7 @@ interface AIProviderModalProps {
 
 export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initialTab = 'provider' }) => {
   const [activeTab, setActiveTab] = useState<'provider' | 'quick_prompts' | 'project'>(initialTab);
-  const { providers, bindings, addProvider, updateProvider, deleteProvider, setRoleBinding,autoReferenceDesignRules,setAutoReferenceDesignRules } =
+  const { providers, bindings, addProvider, updateProvider, deleteProvider, setRoleBinding, setModelCapability, autoReferenceDesignRules, setAutoReferenceDesignRules } =
     useAIConfigStore();
   const { totalCalls, totalInputTokens, totalOutputTokens, totalEstimatedCostUsd, clearUsage } =
     useUsageStore();
@@ -104,6 +106,19 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
       providerId: curProvider.id,
       modelId: modelIdToSet
     });
+    try {
+      const existing = curProvider.modelCapabilities?.[modelIdToSet];
+      if (!existing || existing.mediaInput !== 'unsupported') {
+        const inferred = inferKnownModelCapability(curProvider, modelIdToSet);
+        setModelCapability(curProvider.id, modelIdToSet, {
+          ...(inferred ? { contextWindow: inferred.contextWindow, maxOutputTokens: inferred.maxOutputTokens } : {}),
+          ...existing,
+          mediaInput: 'native-part'
+        });
+      }
+    } catch {
+      // 容错处理：若 baseUrl 无效或端点错误不中断 UI 交互
+    }
   };
 
   const handleSetAsBoth = (modelIdToSet = curModelId.trim()) => {
@@ -700,6 +715,8 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                   </div>
                 </div>
 
+                <ModelCapacitySettings key={JSON.stringify([curProvider.id,curProvider.protocol,curProvider.baseUrl,curModelId])} provider={curProvider} model={curModelId}/>
+
                 {/* Protocol Selector */}
                 <div className="space-y-1.5">
                   <label className="text-slate-300 font-semibold block">接口协议规范 (Protocol)</label>
@@ -957,19 +974,17 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                               >
                                 +对话
                               </button>
-                              {hasVision && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSetAsVision(mod.id);
-                                  }}
-                                  className="px-1 py-0.2 rounded text-[8px] bg-purple-900/60 hover:bg-purple-600 text-purple-200 font-sans"
-                                  title="直接设为视觉反推模型"
-                                >
-                                  +Vision
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSetAsVision(mod.id);
+                                }}
+                                className="px-1 py-0.2 rounded text-[8px] bg-purple-900/60 hover:bg-purple-600 text-purple-200 font-sans"
+                                title="直接设为视觉反推模型 (Vision)"
+                              >
+                                +Vision
+                              </button>
                             </div>
                           </div>
                         );

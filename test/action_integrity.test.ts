@@ -1,3 +1,4 @@
+import nameCalibration from './fixtures/validation/action-name-v1.json';
 import { describe, expect, test } from 'bun:test';
 import { checkGenerationQuality } from '../src/services/ai/generationQuality';
 import { applyLocalCopyEdits } from '../src/services/ai/localCopyModification';
@@ -13,8 +14,8 @@ import { useProjectStore } from '../src/stores/useProjectStore';
 import { useHistoryStore } from '../src/stores/useHistoryStore';
 import { finalizeModelHtml } from '../src/services/ai/modelHtmlResult';
 
-const before = '<main data-nid="root"><section data-nid="sheet"><p data-nid="detail">合同核销规则</p></section><footer data-nid="footer"><button data-nid="save" class="btn">暂存</button><button data-nid="submit" class="btn btn-primary"><svg class="icon"><path d="M1 1"/></svg><span data-nid="label">提交并核销 1 次合同约见权益</span></button></footer></main>';
-const blank = '<main data-nid="root"><section data-nid="sheet"><p data-nid="detail">合同核销规则</p></section><footer data-nid="footer"><button data-nid="save" class="btn">暂存</button><button data-nid="submit" class="btn btn-primary"><svg class="icon"><path d="M1 1"/></svg><span data-nid="label"></span></button></footer></main>';
+const before = '<main data-nid="root"><section data-nid="sheet"><p data-nid="detail">合同核销规则</p></section><footer data-nid="footer"><button data-nid="save" class="btn">暂存</button><button data-nid="submit" class="btn btn-primary"><img class="icon" src="https://example.com/fixture-icon.svg" alt=""/><span data-nid="label">提交并核销 1 次合同约见权益</span></button></footer></main>';
+const blank = '<main data-nid="root"><section data-nid="sheet"><p data-nid="detail">合同核销规则</p></section><footer data-nid="footer"><button data-nid="save" class="btn">暂存</button><button data-nid="submit" class="btn btn-primary"><img class="icon" src="https://example.com/fixture-icon.svg" alt=""/><span data-nid="label"></span></button></footer></main>';
 const shortened = before.replace('提交并核销 1 次合同约见权益', '提交并核销权益');
 const context = (prompt: string): PipelineContext => ({ input: { rawPrompt: prompt, activeScreenId: 's1' }, intent: 'modify_screen', intentReason: 'test', hasExplicitStructuralChangeIntent: false,
   targetScreen: { id: 's1', name: '回访', htmlContent: before, isSkeleton: false }, referencedScreens: [], unmatchedMentions: [], activeRules: [], activeDecisions: [], assembledMessages: [], estimatedChars: 0, isContextTrimmed: false, warnings: [] });
@@ -78,6 +79,17 @@ describe('修改后的操作完整性', () => {
       expect(patch.success).toBe(false); expect(useProjectStore.getState().screens[id].htmlContent).toBe(before);
     } finally { useProjectStore.setState(prior); useHistoryStore.setState(history); }
   });
+  test('已渲染的候选不能通过结构确认按钮豁免主操作文案检查',async()=>{
+    const prior=useProjectStore.getState(),history=useHistoryStore.getState();
+    try{
+      const store=useProjectStore.getState();store.initNewProject({name:'候选主操作保护',deviceProfile:'mobile',createSpecimen:false});
+      const id=store.addScreen({name:'原页',htmlContent:before});store.stageScreenChange(id,blank,'坏候选');
+      store.setStagedRenderQuality(store.getStagedRenderContextKey(),{status:'complete',findings:[],inspected:10});
+      expect(useProjectStore.getState().getStagedDeliveryReport().checks.find(c=>c.id==='quality')?.status).toBe('blocked');
+      const past=useHistoryStore.getState().past.length;expect(await store.forceAdoptStagedChange()).toBe(false);
+      expect(useProjectStore.getState().screens[id].htmlContent).toBe(before);expect(useProjectStore.getState().stagedScreen).not.toBeNull();expect(useHistoryStore.getState().past).toHaveLength(past);
+    }finally{useProjectStore.setState(prior);useHistoryStore.setState(history);}
+  });
   test('真实工程同类截断停在主按钮开标签，未闭合artifact不能成为最终候选', async () => {
     const transport = new MockTransport();
     transport.enqueueScenario({ events: [
@@ -138,4 +150,11 @@ describe('修改后的操作完整性', () => {
     expect(result.status).toBe('staged_side_by_side');
     expect((transport.lastRequest!.body as any).max_tokens).toBe(16384);
   });
+});
+
+for(const row of nameCalibration.cases)test(`M4 source name calibration: ${row.id}`,()=>{
+ const report=checkGenerationQuality('<main>'+row.html+'</main>');
+ expect(report.passed).toBe(row.source);
+ if(!row.source)expect(report.findings.some(f=>f.code==='action_label_missing'&&f.nid==='control')).toBe(true);
+ if(row.id.startsWith('hidden-svg')||row.id.startsWith('hidden-img'))expect(report.findings.find(f=>f.code==='action_label_missing')?.actual).toContain('图标');
 });

@@ -61,7 +61,7 @@ describe('HTML 导入原子历史', () => {
     expect(useProjectStore.getState().assets[asset.id]).toEqual(asset);
   });
 
-  test('主题编辑来源随项目保存并由History撤销恢复', () => {
+  test('主题编辑来源随项目保存并由History撤销恢复', async () => {
     const store = useProjectStore.getState();
     const initialTokenVersion = store.designSystemOrigin?.tokenVersion;
     expect(store.designSystemOrigin?.kind).toBe('project');
@@ -76,6 +76,7 @@ describe('HTML 导入原子历史', () => {
     useHistoryStore.getState().redo();
     expect(useProjectStore.getState().designSystemOrigin?.kind).toBe('project_override');
     expect(useProjectStore.getState().designSystemOrigin?.tokenVersion).toBe(editedTokenVersion);
+    await useProjectStore.getState().saveProjectChecked();
     const serialized = readProject(store.id);
     expect(JSON.parse(serialized!).designSystemOrigin).toMatchObject({ kind: 'project_override', tokenVersion: editedTokenVersion });
   });

@@ -20,7 +20,7 @@ async def main(args):
     async with async_playwright() as p:
         browser = await getattr(p, args.browser).launch(headless=True)
         try:
-            for mode in ['auto', 'manual', 'stale', 'split']:
+            for mode in ['auto', 'exhausted', 'stale', 'split']:
                 context = await browser.new_context(viewport={'width': 1600, 'height': 1000}, locale='zh-CN')
                 page = await context.new_page()
                 errors = []
@@ -36,7 +36,8 @@ async def main(args):
                   const {neutralModernTheme}=await __module('/src/utils/themePresets.ts');
                   useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'local-fixture-only'})),bindings:defaultBindings});
                   window.__large={calls:[],plans:0};
-                  DefaultAIEngineCore.prototype.generateObject=async()=>{__large.plans++;return {summary:'主页拆分为两个业务页面',pages:[{name:'发现首页',requirements:['展示推荐会员'],links:['会员资料']},{name:'会员资料',requirements:['展示个人资料'],links:[]}]};};
+                  const {multiPageTask,withMultiPageTasks}=await import('/test/fixtures/multiPageTask.ts');
+                  DefaultAIEngineCore.prototype.generateObject=async(schema)=>{if(schema.properties?.features){const plan=multiPageTask('爱情魔方',['查看推荐会员']);plan.features[0].interactions[0].label='开始匹配';return plan;}__large.plans++;return withMultiPageTasks({summary:'主页拆分为两个业务页面',pages:[{name:'发现首页',requirements:['展示推荐会员'],links:['会员资料']},{name:'会员资料',requirements:['展示个人资料'],links:[]}]});};
                   DefaultAIEngineCore.prototype.streamText=function(o){
                     const f=window.__large,n=f.calls.length+1,scopeText=o.messages.find(m=>m.role==='system')?.content.match(/confirmedMultiPageScope=(.*); output exactly this page/)?.[1];
                     const marker=o.messages.at(-1)?.content.match(/TAUDESIGN_CONTINUE_[\\w-]+/)?.[0];
@@ -47,11 +48,13 @@ async def main(args):
                     else if(mode!=='auto'&&n<4){fragment='<section class="card p-4"><h2 class="text-lg">会员推荐</h2><p>认真交友，发现合适的人</p></section>';reason='length';}
                     else fragment='<button class="btn btn-primary">开始匹配</button></main></artifact>';
                     const text=(marker?marker+'\\n':'')+fragment;
-                    return {textStream:(async function*(){yield text;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(text),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve({inputTokens:100,outputTokens:200}),finishReasonPromise:Promise.resolve(reason),abort(){}};
+                    const ready=mode==='stale'&&n===3?new Promise(resolve=>f.release=resolve):Promise.resolve();
+                    return {textStream:(async function*(){await ready;yield text;})(),reasoningStream:(async function*(){})(),textPromise:ready.then(()=>text),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve({inputTokens:100,outputTokens:200}),finishReasonPromise:Promise.resolve(reason),abort(){}};
                   };
                   const store=window.__projectStore,id=store.getState().initNewProject({name:'长页面 '+mode,deviceProfile:'pc',designSystem:neutralModernTheme,createSpecimen:false});
                   store.getState().addScreen({name:'保留原页',htmlContent:'<main class="container-max p-4"><h1>原页</h1></main>'},'old');
                   useWorkspaceStore.setState({view:'workspace',activeProjectId:id});
+                  await (await __module('/src/services/ai/builtinMediaAssets.ts')).prepareBuiltinMediaAssets();
                   return {id,original:store.getState().screens.old.htmlContent,history:useHistoryStore.getState().past.length};
                 }''', mode)
                 await page.locator('textarea[placeholder^="输入设计诉求"]').fill('为爱情魔方设计一个简单大气的主页')
@@ -59,20 +62,23 @@ async def main(args):
                 if mode == 'auto':
                     await page.wait_for_function('window.__projectStore.getState().screenOrder.length===2')
                     assert await evaluate(page, 'window.__large.calls.length') == 2
+                elif mode == 'stale':
+                    await page.wait_for_function('Boolean(window.__large.release)')
+                    await evaluate(page, "window.__projectStore.getState().addDecision('新的设计约束','global')")
+                    await evaluate(page, 'window.__large.release()')
+                    await page.get_by_text('请求异常: 工程或任务已变化，未保存旧任务草稿。',exact=True).wait_for()
+                    assert await evaluate(page, 'window.__large.calls.length') == 3
+                    assert await evaluate(page, 'window.__projectStore.getState().screenOrder') == ['old']
                 else:
-                    await page.get_by_role('button', name='继续未完成设计', exact=True).wait_for()
+                    await page.get_by_role('button', name='拆分为多页设计', exact=True).wait_for()
                     assert await evaluate(page, 'window.__projectStore.getState().screenOrder') == ['old']
                     assert await evaluate(page, 'window.__large.calls.length') == 3
-                    if mode == 'manual':
-                        await page.get_by_role('button', name='继续未完成设计', exact=True).click()
-                        await page.wait_for_function('window.__projectStore.getState().screenOrder.length===2')
-                        assert await evaluate(page, 'window.__large.calls.length') == 4
-                        assert '会员推荐' in await evaluate(page, 'window.__large.calls[3].prefix')
-                    elif mode == 'stale':
-                        await evaluate(page, "window.__projectStore.getState().addDecision('新的设计约束','global')")
-                        await page.get_by_role('button', name='继续未完成设计', exact=True).click()
-                        await page.get_by_text('工程、原页或设计约束已变化，旧片段不能继续使用；请重新生成。', exact=True).wait_for()
-                        assert await evaluate(page, 'window.__large.calls.length') == 3
+                    assert await page.get_by_role('button',name='继续未完成设计',exact=True).count() == 0
+                    await page.get_by_text('原任务剩余额度或时限不足以继续；请拆分设计或明确重新生成。',exact=True).wait_for()
+                    if mode == 'exhausted':
+                        # Functional planning + three body attempts spent the original four calls.
+                        # No fresh authority or hidden fifth request may be created by a retry button.
+                        assert await evaluate(page, 'window.__large.plans') == 0
                     else:
                         await page.get_by_role('button', name='拆分为多页设计', exact=True).click()
                         plan = page.locator('[data-testid="multi-page-plan"]').last
@@ -104,6 +110,9 @@ async def main(args):
                 await context.close()
             args.report.write_text(json.dumps({'status': 'passed', 'scope': __doc__, 'browser': args.browser, 'version': browser.version, 'cases': results}, ensure_ascii=False, indent=2))
             print(json.dumps({'status': 'passed', 'browser': args.browser, 'cases': len(results)}))
+        except Exception:
+            await page.screenshot(path=str(args.report.parent/(mode+'-failure.png')))
+            print(json.dumps({'mode':mode,'pageErrors':errors,'text':(await page.locator('body').inner_text())[-6000:]},ensure_ascii=False));raise
         finally:
             await browser.close()
 

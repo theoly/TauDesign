@@ -3,7 +3,7 @@ import type { ReferenceDevice } from '../../types/project';
 import { renderDesignBrief, type DesignBrief } from './designBrief';
 import { renderComponentContracts, renderProjectComponents } from './componentContracts';
 import { DesignSystem } from '../../types/designSystem';
-import { ComponentDefinition, Decision } from '../../types/project';
+import { Asset, ComponentDefinition, Decision } from '../../types/project';
 import { compileTokensToCss, extractClassWhitelist } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
 import { GOLDEN_HIERARCHY, NEW_SCREEN_STATE_RULES, getDeviceAestheticRules } from './aestheticRules';
@@ -106,6 +106,7 @@ export interface PromptBuildOptions {
   referenceDevice?: ReferenceDevice;
   viewportGuideHeight?: number;
   components?: ComponentDefinition[];
+  mediaAssets?:ReadonlyArray<Pick<Asset,'name'|'relPath'>>;
   /**
    * 当前工程生效的明暗模式 (ISSUE-015)。Token 必须按此模式编译，
    * 否则模型看到的是另一套色值，会照着它写死颜色。
@@ -136,7 +137,7 @@ export class PromptBuilder {
     const roleContent = `### ROLE & CORE CONSTRAINTS:
 TauDesign UI/UX引擎：生成精致的语义HTML5。
 1. STYLING ARCHITECTURE: 颜色、间距、字体、圆角、阴影仅用所给白名单类与CSS变量；禁止硬编码hex/rgb和<script>。
-2. ICONS & IMAGES: SVG: class="icon", stroke="currentColor"，限尺寸；输入图标用.input-group；图片用有效URL或SVG data URL。
+2. ICONS & IMAGES: 图标尺寸使用.icon/.icon-mask；输入图标用.input-group；图片/媒体只引用资源清单中的真实独立文件或明确提供的HTTPS URL，禁止data URL/base64/内联SVG媒体。图标优先.icon-mask并用mask-image和-webkit-mask-image引用外部SVG，background-color:currentColor继承前景Token。参考图片的Provider专用输入字段与页面代码分离。
 3. TARGET DEVICE PROFILE:
    - Width: ${options.frameWidth}px (${options.deviceProfile.toUpperCase()})
    - Height: 内容自然撑高
@@ -178,7 +179,7 @@ BACKGROUND ROLES: 新页body继承--background-page，根透明；.btn-primary: 
     // 5. 完整组件范例：新建提供结构，修改仅提供行为约束。
     if (intent === 'create_screen' || intent === 'modify_screen') {
       sections.push({ id: 'component_library', content: `### COMPONENT LIBRARY (REUSABLE PROJECT COMPONENTS)
-${renderComponentContracts(intent === 'create_screen' && !options.hasAttachment, options.componentRequest)}${options.components?.length ? `
+${renderComponentContracts(intent === 'create_screen' && !options.hasAttachment, options.componentRequest, options.mediaAssets??[])}${options.components?.length ? `
 
 ${renderProjectComponents(options.components)}` : ''}` });
     }

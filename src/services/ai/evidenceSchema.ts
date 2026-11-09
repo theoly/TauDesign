@@ -1,10 +1,12 @@
 import type {QualityFinding,QualityReport} from './generationQuality';
 import type {RenderedQualityReport} from '../../utils/renderedQuality';
 import {validRenderResourceFiles} from '../storage/renderResourceSnapshot';
+import {validFindingAssessment} from './findingPolicy';
+import {validRenderCoverage} from './renderCoverage';
 
 export function isQualityFinding(value:unknown):value is QualityFinding {
  const f=value as QualityFinding|undefined;
- return Boolean(f&&typeof f.code==='string'&&['error','warning'].includes(f.severity)&&typeof f.message==='string'&&typeof f.actual==='string'&&typeof f.expected==='string'&&(f.nid===undefined||typeof f.nid==='string'));
+ return Boolean(f&&typeof f.code==='string'&&['error','warning'].includes(f.severity)&&typeof f.message==='string'&&typeof f.actual==='string'&&typeof f.expected==='string'&&(f.nid===undefined||typeof f.nid==='string')&&validFindingAssessment(f));
 }
 export function isQualityReport(value:unknown):value is QualityReport {
  const r=value as QualityReport|undefined;
@@ -14,8 +16,8 @@ export function isRenderedQualityReport(value:unknown):value is RenderedQualityR
  const r=value as RenderedQualityReport|undefined;
  return Boolean(r&&['pending','complete','incomplete','unavailable'].includes(r.status)&&Number.isSafeInteger(r.inspected)&&r.inspected>=0&&
   Array.isArray(r.findings)&&r.findings.every(isQualityFinding)&&(r.reason===undefined||typeof r.reason==='string')&&
-  (r.resourceFiles===undefined||validRenderResourceFiles(r.resourceFiles)));
+  (r.resourceFiles===undefined||validRenderResourceFiles(r.resourceFiles))&&(r.coverage===undefined||validRenderCoverage(r.coverage)));
 }
-export function isPassedRender(value:unknown):value is RenderedQualityReport {
+export function isPassedRender(value:unknown):value is RenderedQualityReport & {status:'complete'} {
  return isRenderedQualityReport(value)&&value.status==='complete'&&!value.findings.some(f=>f.severity==='error');
 }

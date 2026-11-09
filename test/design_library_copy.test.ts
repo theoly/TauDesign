@@ -65,6 +65,7 @@ describe('local project design library copy', () => {
     useProjectStore.getState().applyDesignLibraryCopy(copy);
     expect(useHistoryStore.getState().past.length).toBe(historyBefore + 1);
     expect(useProjectStore.getState().assets[importedAsset.id]).toBeDefined();
+    await useProjectStore.getState().saveProjectChecked();
     const saved = readProject(useProjectStore.getState().id)!;
     expect(saved).toContain(importedAsset.relPath);
     expect(saved).not.toContain('dGVzdC1wbmc=');
@@ -122,6 +123,7 @@ describe('local project design library copy', () => {
       screens: Object.values(active.screens), assets: Object.values(active.assets), components: Object.values(active.components),
       designSystem: active.designSystem, designSystemOrigin: active.designSystemOrigin, designLibraryBinding: active.designLibraryBinding });
     expect(renderProjectManifestContext(manifest)).toContain('设计库项目副本：设计源');
+    await useProjectStore.getState().saveProjectChecked();
     const saved = readProject(active.id);
     expect(saved).toBeTruthy();
     active.loadProject(saved!);
@@ -131,4 +133,10 @@ describe('local project design library copy', () => {
     active.loadProject(JSON.stringify(legacy));
     expect(useProjectStore.getState().designLibraryBinding).toBeUndefined();
   });
+});
+
+for(const mode of ['project_copy','pinned_reference'] as const)test(`new ${mode} library cache keeps physical bytes and source identity without duplicating legacy rawSvg`,async()=>{
+ const storage=new LocalStorageStorage('legacy-library-'+crypto.randomUUID()),svg='<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M1 1h8"/></svg>',asset={id:'icon',name:'旧图标',type:'svg_icon',mimeType:'image/svg+xml',source:'upload',relPath:'assets/icons/legacy.svg',rawSvg:svg,refCount:1};
+ const doc={...source('<article data-component-id="card"><img data-asset-id="icon" src="assets/icons/legacy.svg" alt="图标"></article>'),assets:{icon:asset}};await storage.writeTextAtomic('project.json',JSON.stringify(doc));await storage.writeBinary(asset.relPath,btoa(svg));const original=await storage.readText('project.json');
+ const copied=await readDesignLibraryCopy(storage,()=>{},mode),mapped=Object.values(copied.assets)[0];expect(mapped.rawSvg).toBeUndefined();expect(copied.assetFiles[0].base64Data).toBe(btoa(svg));expect(copied.binding.sourceFingerprint).toBe((await readDesignLibraryCopy(storage,()=>{},mode)).binding.sourceFingerprint);expect(await storage.readText('project.json')).toBe(original);expect(await storage.readBinary(asset.relPath)).toBe(btoa(svg));
 });

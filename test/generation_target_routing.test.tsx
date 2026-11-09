@@ -37,6 +37,7 @@ describe('生成落点单一裁决 (Generation Target Routing)', () => {
       expect(classifyCommand('按附件图片精准创建/修改页面').kind).toBe('dual');
       expect(classifyCommand('按附件图片精准修改页面').kind).toBe('explicit_modify');
       expect(classifyCommand('新建页面').kind).toBe('explicit_create');
+      expect(classifyCommand('根据图片附件重新设计UI').kind).toBe('explicit_create');
       expect(classifyCommand('加个底部导航栏').kind).toBe('neutral');
       expect(classifyCommand('把主色调暖一点').kind).toBe('neutral');
     });
@@ -134,6 +135,32 @@ describe('生成落点单一裁决 (Generation Target Routing)', () => {
       });
       expect(t.action).toBe('needs_reference');
       expect(t.targetScreenId).toBeNull();
+    });
+
+    test('工程尚无画框（空工程）→ 修改或重设计诉求自动作为新画框直接创建', () => {
+      const t1 = resolveGenerationTarget({
+        rawPrompt: '根据图片附件重新设计UI',
+        screens: {},
+        activeScreenId: null
+      });
+      expect(t1.action).toBe('create_screen');
+      expect(t1.targetScreenId).toBeNull();
+
+      const t2 = resolveGenerationTarget({
+        rawPrompt: '整页重设计',
+        screens: {},
+        activeScreenId: null
+      });
+      expect(t2.action).toBe('create_screen');
+      expect(t2.targetScreenId).toBeNull();
+
+      const t3 = resolveGenerationTarget({
+        rawPrompt: '按附件图片精准修改页面',
+        screens: {},
+        activeScreenId: null
+      });
+      expect(t3.action).toBe('create_screen');
+      expect(t3.targetScreenId).toBeNull();
     });
   });
 
@@ -248,6 +275,10 @@ describe('生成落点单一裁决 (Generation Target Routing)', () => {
       await act(async () => {
         sendBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       });
+      // Clicking is fire-and-forget; independent media preparation now precedes the pipeline.
+      for(let attempt=0;attempt<100&&container.querySelector('button[title*="(Stop)"]');attempt++){
+        await act(async()=>{await new Promise(resolve=>setTimeout(resolve,10));});
+      }
     };
 
     test('CHK-F-06: 未开引用开关 + 双态口令 → 新建画框，原画框内容纹丝不动', async () => {
@@ -267,7 +298,7 @@ describe('生成落点单一裁决 (Generation Target Routing)', () => {
       await send('按附件图片精准创建/修改页面');
 
       const after = useProjectStore.getState();
-      expect(Object.keys(after.screens).length).toBe(2);
+      expect(Object.keys(after.screens).length,container.textContent??'').toBe(2);
       expect(after.screens[screenId].htmlContent).toContain('原始内容');
       const chatText = container.textContent || '';
       expect(chatText).not.toContain('已更新画框');

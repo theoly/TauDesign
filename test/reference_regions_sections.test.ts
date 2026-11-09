@@ -7,12 +7,26 @@ import {buildDesignTaskContract} from '../src/services/ai/designWorkflow';
 import {PipelineExecutor} from '../src/services/ai/engine/pipeline/executor';
 import {defaultProviders} from '../src/stores/useAIConfigStore';
 import {defaultTheme} from '../src/utils/themePresets';
+import {TaskBudget,withTaskBudget} from '../src/services/ai/taskBudget';
 import type {StreamTextOptions,AIEngineCore} from '../src/services/ai/engine/core/types';
 const provider=defaultProviders[0];
 const plan=()=>({title:'会员中心',shellHtml:'<main class="container-max col gap-4 p-4"><h1 class="text-xl">会员中心</h1><section data-design-slot="section-1" class="card p-4"></section><section data-design-slot="section-2" class="card p-4"></section></main>',sections:[{id:'section-1',name:'推荐',requirements:'展示会员推荐'},{id:'section-2',name:'权益',requirements:'展示会员权益及查看按钮'}]});
 function fake(response:(o:StreamTextOptions,n:number)=>{text:string;finish?:string}){const calls:StreamTextOptions[]=[];const core:AIEngineCore={streamText(o){calls.push(o);const r=response(o,calls.length);return {textStream:(async function*(){yield r.text;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(r.text),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve({inputTokens:2,outputTokens:3}),finishReasonPromise:Promise.resolve(r.finish??'stop'),abort(){}};},async generateObject(){throw Error('unused');}};return {core,calls};}
 const options={provider,model:'fixture',messages:[{role:'user' as const,content:'设计会员中心'}]};
 const section=(text='查看权益')=>`<artifact><button class="btn btn-primary">${text}</button></artifact>`;
+
+test('six sections share the remaining parent allowance after functional format repair and retain delivery reserve',async()=>{
+ const six={title:'长指南',shellHtml:'<main>'+Array.from({length:6},(_,i)=>`<section data-design-slot="section-${i+1}"></section>`).join('')+'</main>',sections:Array.from({length:6},(_,i)=>({id:`section-${i+1}`,name:'章节'+i,requirements:'完整正文'}))};
+ const f=fake((_o,n)=>({text:n===1?JSON.stringify(six):section('完整指南')})),budget=new TaskBudget({maxRequests:14,maxRequestedOutputTokens:34568,maxDurationMs:10000,maxRequestDurationMs:10000});
+ budget.reserve(3072).settle();budget.reserve(3072).settle();
+ try{
+  const result=await generateSectionedPage(withTaskBudget(f.core,budget),options,'parent',{remainingOutputTokens:()=>34568-budget.snapshot().requestedOutputTokens,reservedOutputTokens:1800});
+  expect(result.errorMessage).toBeUndefined();expect(result.sectioned?.completed).toBe(6);expect(budget.snapshot().requestedOutputTokens).toBeLessThanOrEqual(32768);expect(f.calls).toHaveLength(7);
+  expect(f.calls.slice(1).every(c=>c.maxTokens!<=4096&&c.maxTokens!>=256)).toBe(true);
+  const reference=f.calls[1].messages.at(-1)!.content.split('公共骨架参考副本已去内部定位属性，仅作布局/风格参考，不得重新输出：\n')[1].split('\n当前区块：')[0];
+  const doc=new DOMParser().parseFromString(reference,'text/html');expect(doc.querySelector('[data-design-slot],[data-nid]')).toBeNull();expect(result.sectioned?.plan.shellHtml).toContain('data-design-slot');
+ }finally{budget.close();}
+});
 
 test('参考区域身份严格校验且合同不携带原图二进制',()=>{
  const region={sourceFingerprint:'abcdef01',sourceWidth:100,sourceHeight:80,x:10,y:20,width:40,height:30};

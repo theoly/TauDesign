@@ -1,0 +1,221 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "literal",
+      "request": "主按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\">确认提交</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "numbered",
+      "request": "1. 将提交按钮文案设置为「确认提交」。",
+      "html": "<button data-nid=\"control\"><span>确认</span><strong>提交</strong></button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "input",
+      "request": "按钮文案必须为\"确认提交\"",
+      "html": "<input data-nid=\"control\" type=\"submit\" value=\"确认提交\">",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "wrong",
+      "request": "主按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "adjacent",
+      "request": "主按钮文案改为“确认提交”",
+      "html": "<p>确认提交</p><button data-nid=\"control\">保存</button>",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "aria-only",
+      "request": "主按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\" aria-label=\"确认提交\"><svg class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M1 1h8\"/></svg></button>",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "hidden-text",
+      "request": "主按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\"><span hidden>确认提交</span><span>保存</span></button>",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "css-hidden",
+      "request": "主按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\" aria-label=\"确认提交\"><span class=\"test-hide\">确认提交</span><svg class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M1 1h8\"/></svg></button>",
+      "source": true,
+      "render": false,
+      "css": "[data-nid=\"control\"] .test-hide{display:none}"
+    },
+    {
+      "id": "transparent",
+      "request": "主按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\"><span style=\"opacity:0\">确认提交</span><span>保存</span></button>",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "zero-font",
+      "request": "主按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\" aria-label=\"确认提交\"><span style=\"font-size:0px\">确认提交</span><svg class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path d=\"M1 1h8\"/></svg></button>",
+      "source": true,
+      "render": false
+    },
+    {
+      "id": "question",
+      "request": "是否把主按钮文案改为“确认提交”？",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "negative",
+      "request": "不要把主按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "reference",
+      "request": "> 主按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "code",
+      "request": "```\n主按钮文案改为“确认提交”\n```",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "example",
+      "request": "例如：主按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "unquoted",
+      "request": "主按钮文案改为确认提交",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "scope-outside",
+      "request": "按钮文案改为“确认提交”",
+      "html": "<section data-nid=\"scope\"><button data-nid=\"control\">保存</button></section><button>确认提交</button>",
+      "source": false,
+      "render": false,
+      "elementNid": "scope"
+    },
+    {
+      "id": "scope-nested",
+      "request": "按钮文案改为“确认提交”",
+      "html": "<section data-nid=\"scope\"><button data-nid=\"control\">确认提交</button></section><button>保存</button>",
+      "source": true,
+      "render": true,
+      "elementNid": "scope"
+    },
+    {
+      "id": "literal-width",
+      "request": "按钮文案改为“提交１２”",
+      "html": "<button data-nid=\"control\">提交12</button>",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "transform",
+      "request": "按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\" style=\"transform:rotate(3deg)\">确认提交</button>",
+      "source": true,
+      "render": false,
+      "unverified": true
+    },
+    {
+      "id": "clipped",
+      "request": "按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\" style=\"width:24px;overflow-x:hidden;overflow-y:hidden;white-space:nowrap\">确认提交</button>",
+      "source": true,
+      "render": false,
+      "unverified": true
+    },
+    {
+      "id": "polite",
+      "request": "请把主按钮文案改成“确认提交”",
+      "html": "<button data-nid=\"control\">确认提交</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "cta",
+      "request": "主CTA文案缩短为“确认提交”",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "multiline-example",
+      "request": "例如：\n按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "conditional",
+      "request": "如果用户已经提交：\n按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "multiline-negative",
+      "request": "不要执行以下修改：\n按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "following-example",
+      "request": "按钮文案改为“确认提交”\n以上仅为示例",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "protect-other-content",
+      "request": "按钮文案改为“确认提交”\n不要修改其他内容",
+      "html": "<button data-nid=\"control\">确认提交</button>",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "literal-example-name",
+      "request": "按钮文案改为“仅为示例”",
+      "html": "<button data-nid=\"control\">保存</button>",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "unsupported-filter",
+      "request": "按钮文案改为“确认提交”",
+      "html": "<button data-nid=\"control\" style=\"filter:opacity(0)\">确认提交</button>",
+      "source": true,
+      "render": false,
+      "unverified": true
+    }
+  ]
+}

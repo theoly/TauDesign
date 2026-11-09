@@ -18,6 +18,7 @@ export function finalizeModelHtml(result: ContinuationResult, options: QualityOp
   signal?: AbortSignal; allowRawFragment?: boolean;
 } = {}): ModelHtmlResult {
   if (options.signal?.aborted || result.errorMessage) return { status: 'error', message: options.signal?.aborted ? '生成已取消' : result.errorMessage };
+  if(result.finishReason==='unknown')return {status:'error',message:'传输已结束，但未收到模型正常结束状态；草稿未应用，请核对后重新发起任务。'};
   const artifact = extractArtifact(result.rawResponse);
   const raw = artifact?.html ?? (options.allowRawFragment && result.rawResponse.trim().startsWith('<') && htmlIsComplete(result.rawResponse.trim())
     ? result.rawResponse.trim() : undefined);
@@ -32,10 +33,11 @@ export function finalizeModelHtml(result: ContinuationResult, options: QualityOp
       expected: '完整页面及闭合产物，不能将流式片段作为最终候选'
     }] } };
   }
-  const source = checkGenerationSourceSafety(raw, options);
+  const policy={...options,requireExternalMedia:true};
+  const source = checkGenerationSourceSafety(raw, policy);
   if (!source.passed) return { status: 'rejected_by_quality', artifact: artifact ?? undefined, qualityReport: source, message: qualitySummary(source) };
   const html = normalizeMobileNavigation(raw, options).html;
-  const qualityReport = checkGenerationQuality(html, options);
+  const qualityReport = checkGenerationQuality(html, policy);
   return { status: qualityReport.passed ? 'valid' : 'rejected_by_quality', artifact: artifact ?? undefined, html, qualityReport,
     ...(!qualityReport.passed ? { message: qualitySummary(qualityReport) } : {}) };
 }

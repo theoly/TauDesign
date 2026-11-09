@@ -111,7 +111,7 @@ async def main(args):
    await page.wait_for_function('Boolean(window.__projectStore)')
    reopened=await page.evaluate('''async fixture=>{
     const module=async path=>import(performance.getEntriesByType('resource').map(e=>e.name).find(url=>new URL(url).pathname===path)||path),{useWorkspaceStore}=await module('/src/stores/useWorkspaceStore.ts');
-    if(!useWorkspaceStore.getState().openProject(fixture.id))throw Error('Reopen');
+    await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(fixture.id);
     const s=window.__projectStore.getState();if(s.components[fixture.componentId].version!==3||s.components[fixture.componentId].templateContract?.version!==1||!s.screens.old.htmlContent.includes('新姓名'))throw Error('Contract/slots/content lost on reload');
     return {version:3,contract:s.components[fixture.componentId].templateContract,slots:s.components[fixture.componentId].slotDefs};
    }''',fixture)

@@ -1,3 +1,4 @@
+import {requestSchema} from './helpers/modelSchema';
 import {expect,test} from 'bun:test';
 import {executeStructuredEdit,type StructuredEditOptions} from '../src/services/ai/structuredEditExecutor';
 import {buildDesignTaskContract} from '../src/services/ai/designWorkflow';
@@ -17,7 +18,7 @@ function fixture(image=false){
  const request='在所引用卡片内增加邮箱输入框和保存后的校验反馈';
  const options:StructuredEditOptions={mode:'element',elementNid:'card0001',screen:{id:'page',name:'资料页',htmlContent:source},request,
   contract:buildDesignTaskContract({intent:'modify_screen',request,target:{id:'page',name:'资料页',htmlContent:source},elementNid:'card0001',deviceProfile:'mobile',frameWidth:390}),
-  settings:{deviceProfile:'mobile',frameWidth:390},designSystem:neutralModernTheme,colorMode:'light',binding:{provider:{id:'fixture',name:'fixture',protocol:'openai_compatible',baseUrl:'http://mock',apiKey:'ELEMENT_SECRET'},model:image?'fixture-vision':'fixture'},isCurrent:()=>true};
+  settings:{deviceProfile:'mobile',frameWidth:390},designSystem:neutralModernTheme,colorMode:'light',binding:{provider:{id:'fixture',name:'fixture',protocol:'openai_compatible',baseUrl:'https://api.openai.com/v1',apiKey:'ELEMENT_SECRET'},model:image?'fixture-vision':'fixture'},isCurrent:()=>true};
  if(image){options.attachment={name:'参考.png',dataUrl:'data:image/png;base64,YQ=='};options.imageUrl=options.attachment.dataUrl;}
  const response=image?{...task,features:task.features.map(f=>({...f,basis:'image',sourceIds:[`image:${referenceImageIdentity(options.attachment!).fingerprint}`]}))}:task;
  const transport=new MockTransport(),requests:any[]=[];
@@ -27,7 +28,7 @@ function fixture(image=false){
 for(const image of [false,true])test(`explicit subtree ${image?'image':'text'} modification plans then returns scoped JSON and a bound historical record`,async()=>{
  const f=fixture(image);f.transport.queueResponse(JSON.stringify(f.response));f.transport.queueResponse(JSON.stringify({nid:'card0001',html:replacement}));
  const result=await executeStructuredEdit(f.core,f.options);expect(result.status).toBe('ready');if(result.status!=='ready')throw Error(result.message);
- expect(f.requests).toHaveLength(2);expect(f.requests[0].body.response_format.json_schema.schema.properties.features).toBeDefined();expect(f.requests[1].body.response_format.json_schema.schema.properties.nid.enum).toEqual(['card0001']);
+ expect(f.requests).toHaveLength(2);expect(requestSchema(f.requests[0]).properties.features).toBeDefined();expect(requestSchema(f.requests[1]).properties.nid.enum).toEqual(['card0001']);
  expect(JSON.stringify(f.requests[0].body.messages)).not.toContain('OUTSIDE_PRIVATE');expect(f.requests[1].body.messages[0].content).toContain('PAGE TASK PLAN');
  expect(result.contract.elementNid).toBe('card0001');expect(result.contract.allowedChanges).toEqual(['element:card0001']);
  expect(result.executionRecord.localEdit).toMatchObject({mode:'element',structural:true,targetNids:['card0001']});expect(result.taskBudget).toMatchObject({requests:2,requestedOutputTokens:7168,closed:true});
@@ -42,7 +43,7 @@ for(const image of [false,true])test(`explicit subtree ${image?'image':'text'} m
 });
 test('decorative structure adds an icon using one bounded fragment request without business planning',async()=>{
  const f=fixture();f.options.request='在该卡片新增图标';f.options.contract.request=f.options.request;
- f.transport.queueResponse(JSON.stringify({nid:'card0001',html:replacement.replace('<label>邮箱<input class="input"/></label>','<svg class="icon" viewBox="0 0 24 24"><path d="M2 2L20 20"/></svg>')}));
+ f.transport.queueResponse(JSON.stringify({nid:'card0001',html:replacement.replace('<label>邮箱<input class="input"/></label>','<img class="icon" src="https://example.com/fixture-icon.svg" alt=""/>')}));
  const result=await executeStructuredEdit(f.core,f.options);expect(result.status).toBe('ready');expect(f.requests).toHaveLength(1);expect(result.contract.pageTaskPlan).toBeUndefined();expect(result.taskBudget?.requestedOutputTokens).toBe(4096);expect(result.executionRecord.localEdit?.structural).toBe(true);
 });
 test('subtree generation cannot hijack existing link, accessible name or button behavior attributes',async()=>{
@@ -65,7 +66,7 @@ test('missing, oversized and protected element roots are rejected before any pla
 test('quoted structural words in a label change retain the finite text operation protocol',async()=>{
  const f=fixture();f.options.request='把按钮文案改成“增加邮箱输入框”';f.options.contract.request=f.options.request;
  f.transport.queueResponse(JSON.stringify({requiresPageRewrite:false,reason:'仅修改文案',operations:[{nid:'save0001',type:'set_text',value:'增加邮箱输入框'}]}));
- const result=await executeStructuredEdit(f.core,f.options);expect(result.status).toBe('ready');expect(f.requests).toHaveLength(1);expect(f.requests[0].body.response_format.json_schema.schema.properties.operations).toBeDefined();expect(result.executionRecord.localEdit?.structural).toBeUndefined();expect(result.taskBudget?.requestedOutputTokens).toBe(2048);
+ const result=await executeStructuredEdit(f.core,f.options);expect(result.status).toBe('ready');expect(f.requests).toHaveLength(1);expect(requestSchema(f.requests[0]).properties.operations).toBeDefined();expect(result.executionRecord.localEdit?.structural).toBeUndefined();expect(result.taskBudget?.requestedOutputTokens).toBe(2048);
 });
 test('critical subtree questions stop before HTML and finite JSON guidance cannot be reused for a fragment protocol',async()=>{
  const f=fixture();f.transport.queueResponse(JSON.stringify({...task,questions:['邮箱是否必填？']}));

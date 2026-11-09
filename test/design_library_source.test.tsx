@@ -57,18 +57,23 @@ test('进入源库后缓存/页面不联动，源编辑及History真实存盘，
  const preview=await prepareDesignLibraryImport(source,returned,{mode:'pinned_reference',targetStorage:consumer});expect(preview.source.sourceFingerprint).not.toBe(binding!.sourceFingerprint);expect(useProjectStore.getState().designLibraryBinding).toEqual(binding);
  const applied=await applyDesignLibraryImport(preview,{getState:()=>useProjectStore.getState(),commit:copy=>useProjectStore.getState().applyDesignLibraryCopy(copy)});expect(applied.status).toBe('applied');expect(useProjectStore.getState().screens.consumer.htmlContent).toBe(original);
 });
+test('源库进出从对应工程快照恢复History，不另读可能变化的活历史文件',async()=>{
+ const raw=JSON.stringify({schemaVersion:1,projectId:doc.id,savedAt:1,past:[{id:'source-history',label:'源库历史',timestamp:1,patches:[],inversePatches:[]}],future:[],checkpoints:[]});await source.writeTextAtomic('history.json',raw);
+ const read=source.readText.bind(source);let liveHistoryReads=0;source.readText=async rel=>{if(rel==='history.json'){liveHistoryReads++;throw Error('Do not pair another live History with this page snapshot');}return read(rel);};
+ try{await enter();expect(useHistoryStore.getState().past[0].id).toBe('source-history');expect(liveHistoryReads).toBe(0);expect(await useWorkspaceStore.getState().returnFromLibrarySource()).toBe(true);}finally{source.readText=read;}
+});
 for(const timing of ['preview-source-change','consumer-change','candidate-change','abort','tamper'] as const)test(`${timing} 旧预览不得切换`,async()=>{
  const id=useProjectStore.getState().id,preview=await prepare(),controller=new AbortController();if(timing==='preview-source-change')await source.writeTextAtomic('screens/page.html','<main>外部变更</main>');if(timing==='consumer-change')useProjectStore.getState().addDecision('改变需求','global');if(timing==='candidate-change')useProjectStore.getState().stageScreenChange('consumer',useProjectStore.getState().screens.consumer.htmlContent,'新候选');if(timing==='abort')controller.abort();if(timing==='tamper')preview.sourceName='伪造';
  expect(await useWorkspaceStore.getState().enterLibrarySource(preview,controller.signal)).toBe(false);expect(useProjectStore.getState().id).toBe(id);expect(useWorkspaceStore.getState().sourceEditing).toBeNull();expect(await useWorkspaceStore.getState().enterLibrarySource(preview)).toBe(false);
 });
 for(const path of ['project.json','history.json','candidates/current.json'])test(`${path} 保存失败保留当前工程和History`,async()=>{
  const s=useProjectStore.getState(),id=s.id;s.stageScreenChange('consumer',s.screens.consumer.htmlContent,'候选');const preview=await prepare(),before=useHistoryStore.getState().past.length;
- const write=consumer.writeTextAtomic.bind(consumer);consumer.writeTextAtomic=async(rel,text)=>{if(rel===path)throw Error('disk full '+path);return write(rel,text);};
- expect(await useWorkspaceStore.getState().enterLibrarySource(preview)).toBe(false);expect(useProjectStore.getState().id).toBe(id);expect(useHistoryStore.getState().past).toHaveLength(before);expect(useWorkspaceStore.getState().sourceTransitionError).toContain('disk full');consumer.writeTextAtomic=write;
+  const write=consumer.writeTextAtomic.bind(consumer),publish=consumer.publishManagedSnapshot.bind(consumer);consumer.writeTextAtomic=async(rel,text)=>{if(rel===path)throw Error('disk full '+path);return write(rel,text);};consumer.publishManagedSnapshot=async(expected,changes,resources)=>{if(changes.some(change=>change.path===path))throw Error('disk full '+path);return publish(expected,changes,resources);};
+ expect(await useWorkspaceStore.getState().enterLibrarySource(preview)).toBe(false);expect(useProjectStore.getState().id).toBe(id);expect(useHistoryStore.getState().past).toHaveLength(before);expect(useWorkspaceStore.getState().sourceTransitionError).toContain('disk full');consumer.writeTextAtomic=write;consumer.publishManagedSnapshot=publish;
 });
 test('返回保存失败停留源工程，可修复后重试且不误写消费工程',async()=>{
- await enter();const write=source.writeTextAtomic.bind(source);source.writeTextAtomic=async(rel,text)=>{if(rel==='project.json')throw Error('source disk full');return write(rel,text);};
- expect(await useWorkspaceStore.getState().returnFromLibrarySource()).toBe(false);expect(useProjectStore.getState().id).toBe(doc.id);expect(useWorkspaceStore.getState().sourceEditing).not.toBeNull();source.writeTextAtomic=write;expect(await useWorkspaceStore.getState().returnFromLibrarySource()).toBe(true);
+ await enter();const write=source.publishManagedSnapshot.bind(source);source.publishManagedSnapshot=async()=>{throw Error('source disk full');};
+ expect(await useWorkspaceStore.getState().returnFromLibrarySource()).toBe(false);expect(useProjectStore.getState().id).toBe(doc.id);expect(useWorkspaceStore.getState().sourceEditing).not.toBeNull();source.publishManagedSnapshot=write;expect(await useWorkspaceStore.getState().returnFromLibrarySource()).toBe(true);
 });
 test('重复确认只进入一次；普通导航让迟到读取失效',async()=>{
  const preview=await prepare();let release!:()=>void,armed=true;const read=source.readText.bind(source);source.readText=async path=>{if(armed){armed=false;await new Promise<void>(r=>release=r);}return read(path);};
@@ -81,14 +86,14 @@ test('源工程自身的只读参考不被编辑入口解除',async()=>{
  const raw=JSON.parse((await source.readText('project.json'))!);raw.designLibraryBinding=structuredClone(useProjectStore.getState().designLibraryBinding);await source.writeTextAtomic('project.json',JSON.stringify(raw));const preview=await prepare();expect(preview.upstreamReadOnly).toBe(true);expect(await useWorkspaceStore.getState().enterLibrarySource(preview)).toBe(true);expect(useProjectStore.getState().designLibraryBinding?.mode).toBe('pinned_reference');expect(()=>useProjectStore.getState().setDesignSystem(neutralModernTheme)).toThrow('只读');
 });
 function mount(element:React.ReactNode){host=document.createElement('div');document.body.append(host);root=createRoot(host);act(()=>root!.render(element));}
-const click=async(text:string)=>{await act(async()=>Array.from(host.querySelectorAll('button')).find(b=>b.textContent===text)!.click());};
+const click=async(text:string)=>{await act(async()=>Array.from(host.querySelectorAll('button')).find(b=>b.textContent===text)!.click());for(let i=0;i<500&&(/正在只读核对来源工程|正在保存当前项目/.test(host.textContent??'')||useWorkspaceStore.getState().sourceTransition);i++)await act(async()=>{await new Promise(resolve=>setTimeout(resolve,1));});expect(useWorkspaceStore.getState().sourceTransition).toBeNull();expect(host.textContent).not.toMatch(/正在只读核对来源工程|正在保存当前项目/);};
 test('实际预览/取消/确认和横幅返回，未确认不进入源工程',async()=>{
  mount(<><DesignLibrarySourceEditor/><LibraryEditingBanner/></>);await click('编辑源库：选择来源工程');expect(host.textContent).toContain('1 个组件');expect(host.textContent).toContain('确认进入源库编辑');await click('取消源库编辑');expect(host.textContent).not.toContain('确认进入源库编辑');await click('编辑源库：选择来源工程');await click('确认进入源库编辑');expect(host.textContent).toContain('正在编辑源库');await click('保存并返回「消费工程」');expect(host.textContent).not.toContain('正在编辑源库');
 });
 test('取消发生在工程写入等待期间：写入结束后不切源、不污染History',async()=>{
- const id=useProjectStore.getState().id,preview=await prepare(),controller=new AbortController(),write=consumer.writeTextAtomic.bind(consumer);let release!:()=>void,held=false;
- consumer.writeTextAtomic=async(rel,text)=>{if(rel==='project.json'&&!held){held=true;await new Promise<void>(r=>release=r);}return write(rel,text);};
- const job=useWorkspaceStore.getState().enterLibrarySource(preview,controller.signal);for(let i=0;i<100&&!release;i++)await new Promise(r=>setTimeout(r,1));expect(Boolean(release)).toBe(true);controller.abort();release();expect(await job).toBe(false);expect(useProjectStore.getState().id).toBe(id);expect(useWorkspaceStore.getState().sourceEditing).toBeNull();consumer.writeTextAtomic=write;
+ const id=useProjectStore.getState().id,preview=await prepare(),controller=new AbortController(),write=consumer.publishManagedSnapshot.bind(consumer);let release!:()=>void,held=false;
+ consumer.publishManagedSnapshot=async(expected,changes,resources)=>{if(!held){held=true;await new Promise<void>(r=>release=r);}return write(expected,changes,resources);};
+ const job=useWorkspaceStore.getState().enterLibrarySource(preview,controller.signal);for(let i=0;i<100&&!release;i++)await new Promise(r=>setTimeout(r,1));expect(Boolean(release)).toBe(true);controller.abort();release();expect(await job).toBe(false);expect(useProjectStore.getState().id).toBe(id);expect(useWorkspaceStore.getState().sourceEditing).toBeNull();consumer.publishManagedSnapshot=write;
 });
 test('运行态返回路径不写入源工程或消费绑定，常规新建清除编辑上下文',async()=>{
  await enter();await useProjectStore.getState().saveProjectChecked();const raw=(await source.readText('project.json'))!;expect(raw).not.toContain(sourcePath);expect(raw).not.toContain(consumerPath);expect(raw).not.toContain('sourceEditing');
@@ -97,5 +102,5 @@ test('运行态返回路径不写入源工程或消费绑定，常规新建清�
 
 test('常规打开本地工程清除源文件夹关联，后续自动保存不误写源库',async()=>{
  const localId='local-'+crypto.randomUUID();writeProject(localId,JSON.stringify({id:localId,name:'本地工程',settings:useProjectStore.getState().settings,designSystem:neutralModernTheme,screens:{},components:{},assets:{}}));
- await enter();const before=await source.readText('project.json');expect(useWorkspaceStore.getState().openProject(localId)).toBe(true);expect(useProjectStore.getState().folderPath).toBeUndefined();useProjectStore.getState().setName('本地工程修改');await useProjectStore.getState().saveProjectChecked();expect(await source.readText('project.json')).toBe(before);expect(useWorkspaceStore.getState().sourceEditing).toBeNull();
+ await enter();const before=await source.readText('project.json');expect(useWorkspaceStore.getState().openProject(localId)).toBe(true);const deadline=Date.now()+2000;while(useProjectStore.getState().id!==localId){if(Date.now()>deadline)throw Error('Local workspace did not open');await new Promise(resolve=>setTimeout(resolve,0));}expect(useProjectStore.getState().folderPath).toBeUndefined();useProjectStore.getState().setName('本地工程修改');await useProjectStore.getState().saveProjectChecked();expect(await source.readText('project.json')).toBe(before);expect(useWorkspaceStore.getState().sourceEditing).toBeNull();
 });

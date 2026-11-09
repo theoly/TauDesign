@@ -1,3 +1,4 @@
+import {httpFailure} from '../../transportFailure';
 import { streamNativeProxy } from '../../nativeProxy';
 import { AITransport, TransportRequest, StreamEvent } from './types';
 import { SSEChunkParser } from './chunkParser';
@@ -27,6 +28,12 @@ export class TauriRustTransport implements AITransport {
         }, (payload) => {
           if (payload.type === 'Chunk' && payload.data) {
             parser.feed(payload.data);
+          } else if(payload.type==='Attempt'){
+            onEvent({type:'TransportAttempt',attemptId:'native-'+payload.data+'-'+Date.now(),at:Date.now()});
+          } else if(payload.type==='Connected'){
+            onEvent({type:'Connected',at:Date.now(),http_status:payload.data});
+          } else if(payload.type==='HttpError'){
+            onEvent(httpFailure(payload.data.status,payload.data.message,payload.data.retry_after_ms));
           } else if (payload.type === 'Error') {
             onEvent({
               type: 'Error',
@@ -35,7 +42,7 @@ export class TauriRustTransport implements AITransport {
             });
           } else if (payload.type === 'Done') {
             parser.finish();
-            onEvent({ type: 'Done', finish_reason: 'stop' });
+            onEvent({ type: 'TransportClosed', at:Date.now() });
           }
         }, controller.signal);
       } catch (err: any) {

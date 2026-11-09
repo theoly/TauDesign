@@ -1,3 +1,4 @@
+import {requestSchema} from './helpers/modelSchema';
 import {expect,test} from 'bun:test';
 import {executeStructuredEdit,type StructuredEditOptions} from '../src/services/ai/structuredEditExecutor';
 import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
@@ -18,7 +19,7 @@ function fixture(mode:'element'|'region'|'local',device:'pc'|'mobile',functional
   settings:{deviceProfile:device,frameWidth:device==='pc'?1440:390},designSystem:techBlueTheme,colorMode:'light',binding:{provider:{id:'fixture',name:'fixture',protocol:'openai_compatible',baseUrl:'http://mock',apiKey:'PROTOCOL_SECRET'},model:'fixture'},isCurrent:()=>true,
   ...(mode==='element'?{elementNid:target}:mode==='region'?{regionNids:[target]}:{local:{allowedNids:['title001'],operations:[],supplement:true}})};
  const transport=new MockTransport(),requests:any[]=[];
- const core=new DefaultAIEngineCore({id:'capture',stream:(request,event)=>{requests.push(request);const schema=request.body.response_format?.json_schema?.schema;
+ const core=new DefaultAIEngineCore({id:'capture',stream:(request,event)=>{requests.push(request);const schema=requestSchema(request);
   if(schema?.properties.features)transport.queueResponse(JSON.stringify({...chatPageTaskPlan,features:[{...chatPageTaskPlan.features[0],title:'邮箱',information:[{label:'邮箱',kind:'input'}]}]}));
   else if(mode==='local')transport.queueResponse(JSON.stringify({requiresPageRewrite:false,reason:'',operations:[{nid:'title001',type:'add_classes',value:'font-semibold'}]}));
   else transport.queueResponse(JSON.stringify({nid:target,html:region.replace('<section data-nid="region01">','<section data-nid="region01" class="col gap-4">').replace('</h2>',functional?'</h2><label>邮箱<input class="input"/></label>':mode==='element'?'</h2><p>提示</p>':'</h2>')}));

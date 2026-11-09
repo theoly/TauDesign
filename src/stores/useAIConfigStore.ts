@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { AIProviderConfig, ModelRole, ModelRoleBinding, ThirdPartyPreset } from '../types/provider';
+import {DEFAULT_DESIGN_RULES_ENABLED} from '../services/ai/designKnowledge/rollout';
+import {endpointIdentity,validModelCapability,inferKnownModelCapability,type ModelCapabilityProfile} from '../services/ai/modelCapabilities';
 
 export const THIRD_PARTY_PRESETS: ThirdPartyPreset[] = [
   {
@@ -87,6 +89,8 @@ interface AIConfigState {
   deleteProvider: (id: string) => void;
   
   setRoleBinding: (role: ModelRole, binding: ModelRoleBinding) => void;
+  setRoleOutputLimit:(role:ModelRole,limit?:number)=>void;
+  setModelCapability:(providerId:string,model:string,values?:Pick<ModelCapabilityProfile,'contextWindow'|'maxOutputTokens'|'mediaInput'|'maxConcurrency'>)=>void;
   getActiveProviderForRole: (role: ModelRole) => { provider: AIProviderConfig; modelId: string } | null;
 }
 
@@ -189,6 +193,33 @@ function loadStoredConfig(): { providers: AIProviderConfig[]; bindings: Record<M
           };
         }
       });
+      const visionRole = bindings.vision;
+      if (visionRole && visionRole.providerId && visionRole.modelId) {
+        const vProv = providers.find((p) => p.id === visionRole.providerId);
+        if (vProv && vProv.baseUrl) {
+          const cap = vProv.modelCapabilities?.[visionRole.modelId];
+          if (!cap || cap.mediaInput === undefined) {
+            try {
+              const identity = endpointIdentity(vProv);
+              const inferred = inferKnownModelCapability(vProv, visionRole.modelId);
+              vProv.modelCapabilities = {
+                ...vProv.modelCapabilities,
+                [visionRole.modelId]: {
+                  ...(inferred ? { contextWindow: inferred.contextWindow, maxOutputTokens: inferred.maxOutputTokens } : {}),
+                  ...(cap || {}),
+                  version: 1,
+                  revision: cap?.revision || 'init-vision',
+                  source: cap?.source || 'user',
+                  endpointIdentity: identity,
+                  mediaInput: 'native-part'
+                }
+              };
+            } catch {
+              // ignore invalid url
+            }
+          }
+        }
+      }
       return {
         providers,
         bindings,autoReferenceDesignRules:parsed.autoReferenceDesignRules===true
@@ -197,7 +228,7 @@ function loadStoredConfig(): { providers: AIProviderConfig[]; bindings: Record<M
   } catch (e) {
     // ignore
   }
-  return { providers: defaultProviders, bindings: defaultBindings,autoReferenceDesignRules:false };
+  return { providers: defaultProviders, bindings: defaultBindings,autoReferenceDesignRules:DEFAULT_DESIGN_RULES_ENABLED };
 }
 
 function saveConfig(providers: AIProviderConfig[], bindings: Record<ModelRole, ModelRoleBinding>,autoReferenceDesignRules:boolean) {
@@ -267,9 +298,67 @@ export const useAIConfigStore = create<AIConfigState>((set, get) => ({
   setRoleBinding: (role, binding) => {
     set((state) => {
       const bindings = { ...state.bindings, [role]: binding };
-      saveConfig(state.providers, bindings,state.autoReferenceDesignRules);
-      return { bindings };
+      let providers = state.providers;
+      if (role === 'vision' && binding.providerId && binding.modelId) {
+        const isOfficialText =
+          binding.providerId === 'prov-deepseek' ||
+          (binding.modelId.includes('deepseek') &&
+            (binding.modelId.includes('chat') ||
+             binding.modelId.includes('reasoner') ||
+             binding.modelId.includes('v3') ||
+             binding.modelId.includes('r1') ||
+             binding.modelId.includes('coder')));
+        if (!isOfficialText) {
+          providers = state.providers.map((p) => {
+            if (p.id !== binding.providerId) return p;
+            const cap = p.modelCapabilities?.[binding.modelId];
+            if (!cap || cap.mediaInput === undefined) {
+              try {
+                const identity = endpointIdentity(p);
+                const inferred = inferKnownModelCapability(p, binding.modelId);
+                return {
+                  ...p,
+                  modelCapabilities: {
+                    ...p.modelCapabilities,
+                    [binding.modelId]: {
+                      ...(inferred ? { contextWindow: inferred.contextWindow, maxOutputTokens: inferred.maxOutputTokens } : {}),
+                      ...(cap || {}),
+                      version: 1,
+                      revision: cap?.revision || 'role-vision',
+                      source: cap?.source || 'user',
+                      endpointIdentity: identity,
+                      mediaInput: 'native-part'
+                    }
+                  }
+                };
+              } catch {
+                return p;
+              }
+            }
+            return p;
+          });
+        }
+      }
+      saveConfig(providers, bindings, state.autoReferenceDesignRules);
+      return { providers, bindings };
     });
+  },
+
+  setRoleOutputLimit:(role,limit)=>{
+    if(limit!==undefined&&(!Number.isSafeInteger(limit)||limit<256||limit>32768))throw Error('角色输出上限须为256–32768的整数。');
+    const binding=get().bindings[role];if(!binding)throw Error('角色绑定不存在。');
+    const next={...binding};delete next.maxOutputTokens;if(limit!==undefined)next.maxOutputTokens=limit;
+    get().setRoleBinding(role,next);
+  },
+  setModelCapability:(providerId,model,values)=>{
+    const provider=get().providers.find(p=>p.id===providerId);if(!provider||!model.trim()||model.length>200)throw Error('模型或Provider无效。');
+    const profiles={...provider.modelCapabilities};
+    if(values){
+      const profile:ModelCapabilityProfile={...values,version:1,source:'user',revision:crypto.randomUUID(),endpointIdentity:endpointIdentity(provider)};
+      if(!validModelCapability(profile))throw Error('容量须为256–10000000的整数，输出上限须小于上下文窗口。');
+      profiles[model]=profile;
+    }else delete profiles[model];
+    get().updateProvider(providerId,{modelCapabilities:profiles});
   },
 
   getActiveProviderForRole: (role) => {
@@ -278,6 +367,8 @@ export const useAIConfigStore = create<AIConfigState>((set, get) => ({
     if (!binding) return null;
     const provider = providers.find((p) => p.id === binding.providerId && p.isEnabled);
     if (!provider) return null;
-    return { provider, modelId: sanitizeModelId(binding.modelId) };
+    const modelId=sanitizeModelId(binding.modelId),cap=binding.maxOutputTokens;
+    if(cap!==undefined&&(!Number.isSafeInteger(cap)||cap<256||cap>32768))return null;
+    return {provider:cap===undefined?provider:{...provider,requestOutputCaps:{...provider.requestOutputCaps,[modelId]:cap}},modelId};
   }
 }));

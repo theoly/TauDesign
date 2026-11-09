@@ -1,0 +1,110 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>原生工程副本验收</title><body><h1>原生工程副本验收</h1><pre id="status">正在处理隔离副本</pre><script type="module">
+import {invoke,isTauri} from '/node_modules/@tauri-apps/api/core.js';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {ProjectRepository} from '/src/services/storage/projectRepository.ts';
+import {flushHistorySaveChecked,loadHistoryForProject} from '/src/services/storage/historyPersistence.ts';
+import {PageRenderCheck} from '/src/services/ai/pageRenderCheck.ts';
+import {setTextByNid} from '/src/utils/textNode.ts';
+import {buildStandaloneHtml} from '/src/utils/exportRenderer.ts';
+import {buildExportRenderDocument,exportScreenPng} from '/src/utils/pngExporter.ts';
+import {compileTokensToCss} from '/src/utils/cssCompiler.ts';
+import {getBaseCss} from '/src/styles/baseCss.ts';
+import {resolveProjectViewport} from '/src/utils/referenceDevice.ts';
+import {resolveThemeColors} from '/src/utils/semanticColors.ts';
+import {resolveImportedResources} from '/src/services/import/importResources.ts';
+const query=new URLSearchParams(location.search),root=query.get('root'),phase=query.get('phase');
+const assert=(ok,message)=>{if(!ok)throw Error(message);};
+const safeRoot=/^\/private\/tmp\/taudesign-m5-native-[A-Za-z0-9_-]+$/;
+const results=[];
+try{
+ assert(isTauri(),'Real Tauri runtime is required; browser IPC fixtures are not accepted');
+ assert(safeRoot.test(root)&&['save','reopen'].includes(phase),'Only assigned isolated roots and phases are allowed');
+ const input=JSON.parse(await invoke('project_read_text',{root,rel:'native-input.json'}));
+ for(const item of input.projects){
+  assert(/^project-[0-9]+$/.test(item.copyName),'Invalid isolated project name');
+  const folder=root+'/'+item.copyName,storage=createProjectStorage(item.projectId,folder),repo=new ProjectRepository(storage);
+  const doc=await repo.load();assert(doc&&doc.settings.deviceProfile===item.device,'Copied project missing or wrong profile');
+  assert(useProjectStore.getState().loadProjectDocument(doc,folder),'Load failed');
+  await loadHistoryForProject(doc.id,folder);
+  const store=useProjectStore,marker='native-m5-verification',beforePageCount=store.getState().screenOrder.length;
+  if(phase==='save'){
+   assert(!store.getState().screens[marker],'Verification marker already exists');
+   const original='<main data-nid="root0001" class="'+(item.device==='pc'?'container-max ':'')+'col gap-4 p-4"><h1 data-nid="title001" class="text-xl">原生副本验收</h1><p data-nid="copy0001">只修改隔离副本中的测试页面。</p><button data-nid="action01" class="btn btn-primary">保存</button></main>';
+   store.getState().addScreen({name:'原生验收页',htmlContent:original,position:{x:0,y:2000}},marker);
+   const page=store.getState().screens[marker],updated=setTextByNid(page.htmlContent,'action01','确认保存');
+   store.getState().stageScreenChange(marker,updated,'原生验收页','按钮文案改为“确认保存”');
+   const state=store.getState(),key=state.getStagedRenderContextKey();
+   const report=await PageRenderCheck.inspect({screen:{...page,htmlContent:updated},settings:state.settings,designSystem:state.designSystem,assets:Object.values(state.assets),overrides:state.overrides},storage);
+   state.setStagedRenderQuality(key,report);
+   const until=Date.now()+30000;while(store.getState().stagedAssetFiles===null&&Date.now()<until)await new Promise(resolve=>setTimeout(resolve,25));
+   assert(store.getState().getStagedDeliveryReport().status==='ready','Candidate delivery gate failed');
+   assert(await store.getState().adoptStagedChange(),'Native candidate adoption failed: '+store.getState().stagedAdoptionError);
+   assert(store.getState().screens[marker].htmlContent.includes('确认保存'),'Adopted content missing');
+   useHistoryStore.getState().undo();assert(!store.getState().screens[marker].htmlContent.includes('确认保存'),'Undo adoption failed');
+   useHistoryStore.getState().redo();assert(store.getState().screens[marker].htmlContent.includes('确认保存'),'Redo adoption failed');
+   const adoptionModes=['replace'];
+   for(const mode of ['force-replace','keep-both']){
+    const current=store.getState(),base=current.screens[marker],next=setTextByNid(base.htmlContent,'action01','确认保存 · '+mode),beforeOrder=[...current.screenOrder],past=useHistoryStore.getState().past.length;
+    current.stageScreenChange(marker,next,'原生三方式采纳',`按钮文案改为“确认保存 · ${mode}”`);
+    const key=store.getState().getStagedRenderContextKey(),report=await PageRenderCheck.inspect({screen:{...base,htmlContent:next},settings:current.settings,designSystem:current.designSystem,assets:Object.values(current.assets),overrides:current.overrides},storage);
+    store.getState().setStagedRenderQuality(key,report);
+    const deadline=Date.now()+30000;while(store.getState().getStagedDeliveryReport().status==='pending'&&Date.now()<deadline)await new Promise(r=>setTimeout(r,20));
+    assert(store.getState().getStagedDeliveryReport().status==='ready',mode+' render/delivery failed');
+    assert(await (mode==='keep-both'?store.getState().keepBothScreens():store.getState().forceAdoptStagedChange()),mode+' failed');
+    const after=store.getState(),newId=after.screenOrder.find(id=>!beforeOrder.includes(id));
+    assert(useHistoryStore.getState().past.length===past+1,mode+' did not commit one History');
+    assert(mode==='keep-both'?Boolean(newId)&&after.screens[marker].htmlContent===base.htmlContent&&after.screens[newId].htmlContent===next:after.screens[marker].htmlContent===next,mode+' result incorrect');
+    useHistoryStore.getState().undo();assert(store.getState().screens[marker].htmlContent===base.htmlContent&&JSON.stringify(store.getState().screenOrder)===JSON.stringify(beforeOrder),mode+' Undo failed');
+    useHistoryStore.getState().redo();assert(mode==='keep-both'?store.getState().screens[newId]?.htmlContent===next:store.getState().screens[marker].htmlContent===next,mode+' Redo failed');
+    // Return to the original verification page without erasing the real historical delivery.
+    useHistoryStore.getState().undo();adoptionModes.push(mode);
+   }
+   // Keep a second candidate to verify restoration cannot reuse a stale render receipt.
+   const next=setTextByNid(store.getState().screens[marker].htmlContent,'action01','再次保存');
+   store.getState().stageScreenChange(marker,next,'待处理副本','按钮文案改为“再次保存”');
+   const deadline=Date.now()+30000;while(store.getState().stagedCandidateSaveStatus!=='saved'&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,25));
+   assert(store.getState().stagedCandidateSaveStatus==='saved','Candidate was not persisted');
+   await store.getState().saveProjectChecked();await flushHistorySaveChecked(doc.id,folder);
+   await storage.writeTextAtomic('m5-seed.json',JSON.stringify({history:useHistoryStore.getState().past.length,candidateId:store.getState().stagedScreen.candidateId,beforePageCount,adoptionModes}));
+   results.push({copyName:item.copyName,device:item.device,status:'saved',history:useHistoryStore.getState().past.length,realRender:report.status,adoptionModes});
+  }else{
+   const seed=JSON.parse(await storage.readText('m5-seed.json'));
+   assert(useHistoryStore.getState().past.length===seed.history,'History was not restored across process restart');
+   assert(store.getState().screenOrder.length===seed.beforePageCount+1&&doc.screens[marker].htmlContent.includes('确认保存'),'Saved project changed or marker missing');
+   const {loadStagedCandidate}=await import('/src/services/storage/candidateRepository.ts');
+   const candidate=await loadStagedCandidate(doc.id,folder);assert(candidate?.candidateId===seed.candidateId,'Persisted candidate missing');
+   assert(store.getState().restoreStagedCandidate(candidate,doc.id),'Candidate restoration failed');
+   assert(store.getState().stagedRenderQuality===null&&store.getState().getStagedDeliveryReport().status!=='ready','Old render evidence unlocked a restarted candidate');
+   store.getState().discardStagedChange();
+   useHistoryStore.getState().undo();assert(!store.getState().screens[marker].htmlContent.includes('确认保存'),'Reopened undo failed');
+   useHistoryStore.getState().redo();assert(store.getState().screens[marker].htmlContent.includes('确认保存'),'Reopened redo failed');
+   const state=store.getState(),viewport=resolveProjectViewport(state.settings),options={tokensCss:compileTokensToCss(state.designSystem.tokens,state.settings.colorMode),baseCss:getBaseCss(item.device),screenOverrides:'',deviceProfile:item.device,useCustomNavigation:state.settings.useCustomNavigation,viewportHeight:viewport.height,width:viewport.width,bgColor:resolveThemeColors(state.designSystem.tokens,state.settings.colorMode).values.background};
+   const exports=[];
+   for(const [label,screenId] of [['marker',marker],['existing',state.screenOrder.find(id=>id!==marker)]]){
+    assert(screenId,'Real project has no existing page');
+    const page=state.screens[screenId],registered=new Set(Object.values(state.assets).map(asset=>asset.relPath)),resolved=await resolveImportedResources(page.htmlContent,page.scopedCss,storage,registered),screen={...page,...resolved};
+    const css=Object.entries(state.overrides).filter(([key])=>key.startsWith(screenId+':')).map(([,ov])=>`[data-nid="${ov.nid}"] { ${Object.entries(ov.declarations).map(([prop,value])=>`${prop}: ${value.replace(/\s*!important\s*$/i,'')} !important;`).join(' ')} }`).join('\n');
+    const resolvedCss=await resolveImportedResources('<body></body>',css,storage,registered),exportOptions={...options,screenOverrides:resolvedCss.scopedCss??''};
+    const html=buildStandaloneHtml(screen,exportOptions),render=buildExportRenderDocument(screen,exportOptions);
+    assert(!new DOMParser().parseFromString(html,'text/html').querySelector('[data-taudesign-mobile-chrome]'),'HTML unexpectedly contains editor navigation');
+    assert(!!new DOMParser().parseFromString(render,'text/html').querySelector('[data-taudesign-mobile-chrome="header"]')===(item.device==='mobile'&&!state.settings.useCustomNavigation),'Image navigation does not match project policy');
+    await storage.writeTextAtomic('exports/m5-'+label+'.html',html);
+    await storage.writeTextAtomic('exports/m5-'+label+'-render.html',render);
+    const png=await exportScreenPng(screen,{...exportOptions,clipHeight:viewport.height,clipToHeight:true,scale:1});
+    assert(png.engine.startsWith('native-'),'Native PNG fell back to browser rendering');
+    await storage.writeBinary('exports/m5-'+label+'.png',png.dataUrl.split(',')[1]);
+    exports.push({label,screenId,engine:png.engine,width:viewport.width,height:png.cssHeight});
+   }
+   await store.getState().saveProjectChecked();await flushHistorySaveChecked(doc.id,folder);
+   results.push({copyName:item.copyName,device:item.device,status:'passed',historyRestored:true,restartedCandidateBlocked:true,adoptionUndoRedo:true,exports});
+  }
+ }
+ await invoke('project_write_text_atomic',{root,rel:'native-'+phase+'-report.json',contents:JSON.stringify({status:'passed',phase,runtime:'real-tauri',platform:navigator.userAgent,projects:results},null,2)});
+ document.getElementById('status').textContent='完成：'+phase;
+}catch(error){
+ document.getElementById('status').textContent='失败：'+error.message;
+ if(isTauri()&&safeRoot.test(root))await invoke('project_write_text_atomic',{root,rel:'native-'+phase+'-report.json',contents:JSON.stringify({status:'failed',phase,error:error.message,projects:results},null,2)});
+}
+</script></body></html>

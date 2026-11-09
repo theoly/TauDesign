@@ -174,6 +174,7 @@ for(const device of ['mobile','pc'] as const)for(const kind of ['single','restyl
   decision:{action:'modify_screen' as const,targetScreenId:'page',styleReferenceScreenId:null,elementNid:null,referenceSource:null,reason:'历史失败草稿'}};
  await saveQualityDraft(savedDraft);
  const historyStore=useHistoryStore.getState(),historyRaw=serializeHistory(s.id,{past:historyStore.past,future:historyStore.future,checkpoints:historyStore.checkpoints},8*1024*1024);
+ await useProjectStore.getState().saveProjectChecked();
  const sourceJson=readProject(s.id)!,snapshots=new Map<string,string>();
  for(const file of [path,`drafts/${savedDraft.id}.json`,'candidates/current.json','conversations/2026-11.jsonl','conversations/index.json'])snapshots.set(file,(await source.readText(file))!);
  const result=await migrateProjectBundle({sourceJson,source,target,historyRaw,checkCurrent:()=>{},readHistory:()=>historyRaw});

@@ -1,3 +1,4 @@
+import {renderEvidenceIdentity} from './evidenceIdentity';
 import {inspectDesignEntities,designEntitySummary} from './designEntityValidation';
 import {inspectMultiPageScope,validMultiPageScope} from './multiPageContract';
 import {inspectCreationSources,inspectReferenceInput,validReferenceImageIdentity,validLibrarySourceIdentity,creationSourceStages} from './workflowSources';
@@ -29,6 +30,7 @@ import {getTokenLintContext} from '../../utils/tokenLint';
 
 export type PageCreationState=KnowledgeState & {settings:ProjectSettings;assets:Record<string,Asset>;designSystemOrigin?:DesignSystemOrigin};
 export interface PageCreationEvidence {
+  recovery?:{version:1;rootTaskId:string;sourceRootTaskId:string;sourceTaskId:string;htmlFingerprint:string};
   execution?: import('./designExecutionRecord').DesignExecutionRecord;
   version:1;checkedAt:number;contextFingerprint:string;pageFingerprint:string;contract:DesignTaskContract;
   workflow:WorkflowValidationReport;source:QualityReport;quality:QualityReport;render:RenderedQualityReport;
@@ -52,8 +54,10 @@ export function importPreviewFingerprint(screen:Pick<Screen,'name'|'htmlContent'
 /** Pure preparation. Actual viewport evidence is required; this function never writes project or History state. */
 export async function prepareNewPage(state:PageCreationState,screen:Screen,contract:DesignTaskContract,storage:ProjectStorage,
   options:{isCurrent:()=>boolean;signal?:AbortSignal;purpose?:'create'|'import';preview?:HtmlImportPreviewReceipt}):Promise<PreparedNewPage> {
-  const current=()=>!options.signal?.aborted&&options.isCurrent()&&!taskRuleSafetyIssue(contract);
-  const fail=(message:string)=>({status:'blocked' as const,message:taskRuleSafetyIssue(contract)??message});
+  const renderIdentity=renderEvidenceIdentity(state.settings.deviceProfile);
+  const sameRendering=()=>renderEvidenceIdentity(state.settings.deviceProfile)===renderIdentity;
+  const current=()=>sameRendering()&&!options.signal?.aborted&&options.isCurrent()&&!taskRuleSafetyIssue(contract);
+  const fail=(message:string)=>({status:'blocked' as const,message:taskRuleSafetyIssue(contract)??(!sameRendering()?'检查器、基座样式或渲染环境已变化，请重新检查；原任务输入未更新。':message)});
   try{
     if(!current())return fail('生成上下文已变化或创建已取消，请重新生成。');
     const referenceIssue=libraryReferenceIssue(state);if(referenceIssue)return fail(referenceIssue);
@@ -78,7 +82,7 @@ export async function prepareNewPage(state:PageCreationState,screen:Screen,contr
     if(sources.issue)return fail(sources.issue);
     const unsupported=task.plan.stages.find(stage=>![ 'source-safety','quality','asset-references','asset-files','render','design-entities',...(importing?['import-preview']:['reference-input','library-binding','multi-page-scope'])].includes(stage));
     if(unsupported)return fail(`页面核验器不支持必要阶段 ${unsupported}。`);
-    const qualityOptions={deviceProfile:state.settings.deviceProfile,useCustomNavigation:state.settings.useCustomNavigation,designSystem:state.designSystem,
+    const qualityOptions={requireExternalMedia:true,mediaCss:[screen.scopedCss??'',...Object.entries(state.overrides??{}).filter(([key])=>key.startsWith(screen.id+':')).flatMap(([,entry])=>Object.values(entry.declarations))].join('\n'),contentTask:contract,deviceProfile:state.settings.deviceProfile,useCustomNavigation:state.settings.useCustomNavigation,designSystem:state.designSystem,
       tokenLintContext:importing?getTokenLintContext(screen):'project-tokens' as const};
     const source=checkGenerationSourceSafety(screen.htmlContent,qualityOptions);if(!source.passed)return fail(qualitySummary(source));
     const normalized=normalizeScreenNavigation({...screen,htmlContent:NidEngine.injectNids(screen.htmlContent)},state.settings);
@@ -97,9 +101,9 @@ export async function prepareNewPage(state:PageCreationState,screen:Screen,contr
     const issues=await checkFiles();
     if(!current())return fail('核对资源期间工程已变化或创建已取消。');
     if(issues.length)return fail(issues[0].message);
-    const render=await PageRenderCheck.inspect({screen:normalized,settings:state.settings,designSystem:state.designSystem,assets,overrides:{}},storage,{signal:options.signal});
+    const render=await PageRenderCheck.inspect({contentTask:contract,screen:normalized,settings:state.settings,designSystem:state.designSystem,assets,overrides:{}},storage,{signal:options.signal});
     if(!current())return fail('渲染期间工程已变化或创建已取消。');
-    if(render.status!=='complete'||render.findings.some(f=>f.severity==='error'))return {...fail(render.findings.find(f=>f.severity==='error')?.message??render.reason??'新页面的实际渲染检查未完整通过。'),renderFailure:{screen:normalized,render}};
+    if(!isPassedRender(render))return {...fail(render.findings.find(f=>f.severity==='error')?.message??render.reason??'新页面的实际渲染检查未完整通过。'),renderFailure:{screen:normalized,render}};
     const finalFiles=await checkFiles();
     if(!current())return fail('应用前工程已变化或创建已取消。');
     if(finalFiles.length)return fail(finalFiles[0].message);
@@ -123,6 +127,7 @@ export async function prepareNewPage(state:PageCreationState,screen:Screen,contr
 export function isPageCreationEvidence(value:unknown):value is PageCreationEvidence {
   const e=value as PageCreationEvidence|undefined;
   return Boolean(e&&e.version===1&&Number.isFinite(e.checkedAt)&&typeof e.contextFingerprint==='string'&&typeof e.pageFingerprint==='string'&&typeof e.tokenFingerprint==='string'&&
+    (e.recovery===undefined||e.recovery.version===1&&Object.keys(e.recovery).sort().join(',')==='htmlFingerprint,rootTaskId,sourceRootTaskId,sourceTaskId,version'&&[e.recovery.rootTaskId,e.recovery.sourceRootTaskId,e.recovery.sourceTaskId].every(id=>/^design-[a-z0-9-]+$/.test(id))&&e.recovery.rootTaskId!==e.recovery.sourceRootTaskId&&e.recovery.sourceTaskId===e.contract?.taskId&&/^[a-f0-9]{8}$/.test(e.recovery.htmlFingerprint))&&
     e.contract&&!taskProvenanceIssue(e.contract)&&!draftExecutionIssue(e.execution,undefined,'history')&&(!e.contract.multiPage||validMultiPageScope(e.contract.multiPage))&&(!e.contract.referenceImage||validReferenceImageIdentity(e.contract.referenceImage))&&(!e.contract.librarySource||validLibrarySourceIdentity(e.contract.librarySource))&&
     (!creationSourceStages(e.contract.workflowId).includes('reference-input')||inspectReferenceInput(e.contract).status==='passed')&&
     (!creationSourceStages(e.contract.workflowId).includes('library-binding')||validLibrarySourceIdentity(e.contract.librarySource))&&typeof e.contract.taskId==='string'&&typeof e.contract.request==='string'&&e.contract.device&&['mobile','pc'].includes(e.contract.device.profile)&&Number.isFinite(e.contract.device.frameWidth)&&isWorkflowValidationReport(e.workflow)&&e.workflow.plan.workflowId===e.contract.workflowId&&

@@ -24,6 +24,7 @@ import {createRestylePatchPlan,RESTYLE_PATCH_THRESHOLD} from '../../services/ai/
 import {TaskBudget} from '../../services/ai/taskBudget';
 import {createRestyleBudget} from '../../services/ai/taskBudgetPolicy';
 import {continuationBindingKey} from '../../services/ai/generationContinuation';
+import {screenForAssetAudit} from '../../services/ai/projectAssetIntegrity';
 
 type RestyleBinding=ReturnType<ReturnType<typeof useAIConfigStore.getState>['getActiveProviderForRole']>;
 interface RestyleOperation {controller:AbortController;projectKey:string;binding:RestyleBinding;bindingKey:string|null|undefined}
@@ -158,7 +159,8 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
     const budget=parentBudget??createRestyleBudget([target]);
     try {const outcome=await executeRestyleTarget(coreRef.current, { target, contract: workflowContract,taskBudget:budget,
       contextualGuidance,
-      quality: { designSystem, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation },
+      quality: { designSystem, deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation,
+        mediaCss:target.kind==='screen'&&useProjectStore.getState().screens[target.id]?screenForAssetAudit(useProjectStore.getState().screens[target.id],useProjectStore.getState().overrides).scopedCss:undefined },
       patchContext:[styleDirective,confirmedScope??'',projectKnowledge].join('\n'),
       colorMode:settings.colorMode,
       onProgress: value => { if(isLive(operation)&&!budget.signal.aborted)setProgress(value); },
@@ -226,7 +228,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
         const current = useProjectStore.getState();
         const candidate = await executeStructuredEdit(coreRef.current,{
           contextualGuidance,
-          mode:'local',screen:current.screens[scope],request,contract:taskContract(plan.dryRun,request),settings:current.settings,
+          mode:'local',screen:current.screens[scope],styleOverrides:current.overrides,request,contract:taskContract(plan.dryRun,request),settings:current.settings,
           designSystem:current.designSystem,colorMode:current.settings.colorMode,allowText:false,protectedNids:plan.dryRun.protectedNids,
           binding:binding ? {provider:binding.provider,model:binding.modelId} : undefined,
           local:{...local,supplement:Boolean(extra.trim())},signal:operation.controller.signal,

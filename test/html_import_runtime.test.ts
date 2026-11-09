@@ -33,19 +33,20 @@ describe('HTML导入静态运行时依赖', () => {
    await expect(prepareHtmlImportRuntime(source.replace('@theme inline', '@plugin "https://evil.test/plugin.js";@theme inline'),'unsafe.html')).rejects.toThrow();
    await expect(prepareHtmlImportRuntime(source.replace('<script>window.BAD=true</script>', '<script>tailwind.config={plugins:[bad()]}</script>'),'config.html')).rejects.toThrow();
  });
- test('真实充值页完整导入管道保留三列样式、8个图标与业务CTA，系统导航不重复', async () => {
+ test('真实充值页固化三列、图标与CTA后，进入最终转换前要求先外置SVG媒体', async () => {
    const original = await Bun.file(new URL('./fixtures/import-recharge.html', import.meta.url)).text();
    const runtime = await prepareHtmlImportRuntime(original, '充值魔方点.html');
    const resources = await prepareImportResources(runtime.html, '充值魔方点.html', []);
-   const result = convertHtmlImport(analyzeHtmlImport(resources.html,'充值魔方点.html',{expandedResources:true}),{mode:'preserve',designSystem:defaultTheme,colorMode:'light',deviceProfile:'mobile'});
-   const doc = parse(result.htmlContent);
+   const analysis=analyzeHtmlImport(resources.html,'充值魔方点.html',{expandedResources:true});
+   expect(()=>convertHtmlImport(analysis,{mode:'preserve',designSystem:defaultTheme,colorMode:'light',deviceProfile:'mobile'})).toThrow('独立文件');
+   const normalized=normalizeMobileNavigation(resources.html,{deviceProfile:'mobile'}),doc = parse(normalized.html);
    expect(doc.querySelector('.grid-cols-3')?.children.length).toBe(3);
    expect(doc.querySelector('style[data-import-compiled]')?.textContent).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))');
    expect(doc.querySelector('.balance-gradient')?.getAttribute('class')).toContain('rounded-[22px]');
    expect(doc.querySelector('.cta-btn')?.textContent).toContain('获取魔方点 · ¥6.00');
    expect(doc.querySelectorAll('svg[data-lucide]').length).toBe(7); // Source back icon is removed; history icon is retained.
    expect(doc.querySelector('[aria-label="返回"]')).toBeNull(); expect(doc.querySelector('[aria-label="充值记录"]')).not.toBeNull();
-   expect(result.metadata.navigationTitle).toBe('充值魔方点'); expect(doc.querySelector('script')).toBeNull();
+   expect(normalized.title).toBe('充值魔方点'); expect(doc.querySelector('script')).toBeNull();
  });
  test('编译的内容字符串不能闭合style标签或注入活动节点，v3运行时明确阻断', async () => {
    const html = source.replace('class="grid grid-cols-3 gap-3 px-4"', `class="grid grid-cols-3 gap-3 px-4 content-['&lt;/style&gt;&lt;script&gt;window.PWN=1&lt;/script&gt;']"`);

@@ -1,3 +1,4 @@
+import {createMediaResourceSession} from '../storage/mediaResourceSession';
 import type { DesignSystem } from '../../types/designSystem';
 import type { Asset, ProjectSettings, Screen, StyleOverride } from '../../types/project';
 import type { ProjectStorage } from '../storage/projectStorage';
@@ -8,10 +9,12 @@ import { getBaseCss } from '../../styles/baseCss';
 import { resolveProjectViewport } from '../../utils/referenceDevice';
 import { observeRenderedQuality, type RenderedQualityReport } from '../../utils/renderedQuality';
 import {createRenderResourceSnapshot,type RenderResourceFile} from '../storage/renderResourceSnapshot';
+import type {ContentTask} from './explicitActionContent';
 
 export interface PageRenderRequest {
   screen: Screen; designSystem: DesignSystem; settings: ProjectSettings;
   assets: Asset[]; overrides: Record<string, StyleOverride>;
+  contentTask?:ContentTask;
 }
 
 /** Separate same-origin srcdoc surface. It neither mounts authored DOM into the host nor alters the current candidate. */
@@ -19,6 +22,7 @@ export const PageRenderCheck = {
   async inspect(request: PageRenderRequest, storage: ProjectStorage, deps: {
     signal?: AbortSignal; timeoutMs?: number; observe?: typeof observeRenderedQuality;
   } = {}): Promise<RenderedQualityReport> {
+    const media=createMediaResourceSession();
     let iframe: HTMLIFrameElement | undefined;
     let dispose = () => {};
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -28,24 +32,24 @@ export const PageRenderCheck = {
     return new Promise<RenderedQualityReport>(resolve => {
       const finish = (report: RenderedQualityReport) => {
         if (stopped) return;stopped = true;
-        clearTimeout(timer);deps.signal?.removeEventListener('abort', abort);dispose();iframe?.remove();resolve({...report,...(resourceFiles?{resourceFiles}:{})});
+        clearTimeout(timer);deps.signal?.removeEventListener('abort', abort);dispose();iframe?.remove();void media.close().catch(()=>{});resolve({...report,...(resourceFiles?{resourceFiles}:{})});
       };
       abort = () => finish({status:'unavailable',findings:[],inspected:0,reason:'渲染检查已取消。'});
       if (deps.signal?.aborted) {abort();return;}
       deps.signal?.addEventListener('abort', abort, {once:true});
       let latest: RenderedQualityReport | undefined;
       timer = setTimeout(() => finish({status:latest?.status === 'incomplete' ? 'incomplete' : 'unavailable',
-        findings:latest?.findings ?? [],inspected:latest?.inspected ?? 0,reason:latest?.reason ?? '渲染或资源检查超时。'}), deps.timeoutMs ?? 8_000);
+        findings:latest?.findings ?? [],inspected:latest?.inspected ?? 0,...(latest?.coverage?{coverage:latest.coverage}:{}),reason:latest?.reason ?? '渲染或资源检查超时。'}), deps.timeoutMs ?? 8_000);
       void (async () => {
         try {
           if (!document.body || !document.documentElement.clientWidth) throw new Error('当前环境没有可用的实际渲染视口。');
           const allowed = new Set(request.assets.map(asset => asset.relPath));
-          const css = Object.values(request.overrides).map(ov => `[data-nid="${ov.nid}"] { ${Object.entries(ov.declarations)
+          const css = Object.entries(request.overrides).filter(([key])=>key.startsWith(request.screen.id+':')).map(([,ov]) => `[data-nid="${ov.nid}"] { ${Object.entries(ov.declarations)
             .filter(([,value]) => value !== '' && value !== null && value !== undefined)
             .map(([key,value]) => `${key}: ${value.replace(/\s*!important\s*$/i, '')} !important;`).join(' ')} }`).join('\n');
           const snapshot=createRenderResourceSnapshot(storage);
-          const resources = await resolveImportedResources(request.screen.htmlContent, request.screen.scopedCss, snapshot.storage, allowed);
-          const overrides = await resolveImportedResources('<body></body>', css, snapshot.storage, allowed);
+          const resources = await resolveImportedResources(request.screen.htmlContent, request.screen.scopedCss, snapshot.storage, allowed,{referenceUrl:media.url});
+          const overrides = await resolveImportedResources('<body></body>', css, snapshot.storage, allowed,{referenceUrl:media.url});
           resourceFiles=await snapshot.files();
           if (stopped) return;
           const viewport = resolveProjectViewport(request.settings);
@@ -71,7 +75,7 @@ export const PageRenderCheck = {
             const cleanup = (deps.observe ?? observeRenderedQuality)(iframe, report => {
               latest = report;
               if (report.status === 'complete') finish(report);
-            });
+            },{contentTask:request.contentTask});
             if (stopped) cleanup(); else dispose = cleanup;
           });
           iframe.srcdoc = '<!DOCTYPE html>\n' + doc.documentElement.outerHTML;

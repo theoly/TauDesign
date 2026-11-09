@@ -10,7 +10,7 @@ import {neutralModernTheme} from '../src/utils/themePresets';
 import {defaultProviders} from '../src/stores/useAIConfigStore';
 
 const provider={...defaultProviders[0],id:'json-pilot',protocol:'openai_compatible' as const,baseUrl:'http://mock',apiKey:'json-private-key'};
-const source='<main data-nid="root0001"><button data-nid="notify01" class="btn btn-ghost notification-control" aria-label="通知，3条未读"><svg data-nid="icon0001" class="icon" viewBox="0 0 24 24" aria-hidden="true"><path data-nid="path0001" d="M4 4h16v16H4z"/></svg><span data-nid="count001" class="badge-count" aria-hidden="true">3</span></button><p data-nid="keep0001">保留全部业务信息</p></main>';
+const source='<main data-nid="root0001"><button data-nid="notify01" class="btn btn-ghost notification-control" aria-label="通知，3条未读"><img data-nid="icon0001" class="icon" src="https://example.com/fixture-icon.svg" alt="" aria-hidden="true"/><span data-nid="count001" class="badge-count" aria-hidden="true">3</span></button><p data-nid="keep0001">保留全部业务信息</p></main>';
 const request='放大铃铛，缩小角标';
 function options():StructuredEditOptions & {contextualGuidance?:{features?:Array<'badge'>}} {
   return {mode:'element',screen:{id:'a',name:'工作台',htmlContent:source},request,
@@ -28,7 +28,7 @@ test('JSON core requests preserve the existing schema parser and record each rea
   const contract=packetFixture(),packet=contract.designGuidance!,transport=new MockTransport();
   transport.queueResponse('{"value":1}');transport.queueResponse('{"value":2}');
   const core=withGuidanceReceipts(new DefaultAIEngineCore(transport),contract,packet);
-  const messages=[{role:'system' as const,content:packet.selection.body},{role:'user' as const,content:'private document',imageUrl:'data:image/png;base64,private-image'}];
+  const messages=[{role:'system' as const,content:packet.selection.body},{role:'user' as const,content:'private document',imageUrl:'data:image/png;base64,cHJpdmF0ZS1pbWFnZQ=='}];
   expect(await core.generateObject({type:'object'},{provider,model:'mock',messages,maxTokens:2048})).toEqual({value:1});
   expect(await core.generateObject({type:'object',required:['value']},{provider,model:'mock',messages,maxTokens:2048})).toEqual({value:2});
   expect(packet.requests).toHaveLength(2);

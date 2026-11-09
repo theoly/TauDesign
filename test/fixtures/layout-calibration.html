@@ -1,0 +1,28 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>M4 布局校准</title><body style="margin:0;background:#020617;color:#e2e8f0"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {ScreenFrame} from '/src/components/canvas/ScreenFrame.tsx';
+import {RenderedQualityCard} from '/src/components/chat/RenderedQualityCard.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {neutralModernTheme} from '/src/utils/themePresets.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import calibration from '/test/fixtures/validation/layout-v1.json';
+const device=new URLSearchParams(location.search).get('device')==='pc'?'pc':'mobile';
+useProjectStore.getState().initNewProject({name:'M4布局校准',deviceProfile:device,designSystem:neutralModernTheme,createSpecimen:false});
+const fixture={device,cases:calibration.cases,report:null,current:0,requests:0};window.layoutFixture=fixture;
+for(const method of ['streamText','generateObject'])DefaultAIEngineCore.prototype[method]=()=>{fixture.requests++;throw Error('布局校准禁止模型调用');};
+function App(){
+ const [index,setIndex]=React.useState(0),[report,setReport]=React.useState(null),[capturing,setCapturing]=React.useState(false),row=calibration.cases[index];
+ fixture.select=i=>{if(i===index)return;fixture.current=i;fixture.report=null;setReport(null);setIndex(i);};
+ const receive=React.useCallback((_id,key,value)=>{if(key===`layout-${fixture.current}`){fixture.report={key,...value};if(fixture.capturing)fixture.captureEvents.push(value.status);else setReport(value);}},[]);
+ fixture.beginCapture=()=>{const {key,...live}=fixture.report??{};if(report?.status!=='complete'||JSON.stringify(report)!==JSON.stringify(live))throw Error('Capture requires displayed live evidence');fixture.capturing=true;fixture.captureEvents=[];fixture.capturedReport=structuredClone(report);setCapturing(true);};
+ fixture.finishCapture=()=>{fixture.capturing=false;setCapturing(false);const {key,...live}=fixture.report;setReport(live);return {snapshot:fixture.capturedReport,callbacks:[...fixture.captureEvents]};};
+ const screen=React.useMemo(()=>({id:'calibration',name:row.id,htmlContent:'<main data-nid="calroot1" class="p-4">'+row.html+'</main>',scopedCss:row.css,position:{x:0,y:0}}),[index]);
+ return React.createElement(React.Fragment,null,
+  React.createElement('label',{style:{display:'block',padding:16}},'布局校准样例',React.createElement('select',{'aria-label':'布局校准样例',value:index,onChange:e=>fixture.select(Number(e.target.value)),style:{marginLeft:12,color:'#0f172a'}},calibration.cases.map((r,i)=>React.createElement('option',{key:r.id,value:i},r.id)))),
+  React.createElement('div',{style:{position:'absolute',left:24,top:80,width:device==='pc'?1440:390,height:900,transform:device==='pc'?'scale(0.48)':'none',transformOrigin:'top left'}},React.createElement(ScreenFrame,{screen,isStaged:true,lodLevel:2,renderQualityKey:`layout-${index}`,onRenderQuality:receive})),
+  React.createElement('aside',{style:{position:'absolute',left:device==='pc'?750:450,top:80,width:480}},React.createElement('p',null,row.id),capturing&&React.createElement('p',{'data-testid':'capture-notice'},'截图快照：刚刚验证的已完成检查记录；检查器继续运行'),report&&React.createElement(RenderedQualityCard,{report})));
+}
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script></body></html>

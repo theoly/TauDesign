@@ -31,11 +31,11 @@ describe('设计库来源与预览确认',()=>{
     expect(JSON.stringify(preview)).not.toContain(binary);
     const result=await apply(preview);expect(result.status).toBe('applied');expect(useHistoryStore.getState().past.length).toBe(before+1);
     expect(await target.readBinary(preview.assets[0].relPath)).toBe(binary);expect(await source.readText('project.json')).toBe(sourceBefore);
-    const s=useProjectStore.getState(),saved=readProject(s.id)!;expect(saved).not.toContain(binary);expect(s.designLibraryBinding?.sourceFingerprintVersion).toBe(2);
+    const s=useProjectStore.getState();await s.saveProjectChecked();const saved=readProject(s.id)!;expect(saved).not.toContain(binary);expect(s.designLibraryBinding?.sourceFingerprintVersion).toBe(2);
     expect(s.designLibraryBinding?.importEvidence).toMatchObject({version:1,sourceFingerprint:preview.source.sourceFingerprint,previewFingerprint:preview.fingerprint,files:[{relPath:preview.assets[0].relPath,fingerprint:preview.assets[0].fingerprint}]});
     useHistoryStore.getState().undo();expect(useProjectStore.getState().designLibraryBinding).toBeUndefined();
     useHistoryStore.getState().redo();expect(useProjectStore.getState().designLibraryBinding?.importEvidence?.previewFingerprint).toBe(preview.fingerprint);
-    s.loadProject(saved);expect(useProjectStore.getState().designLibraryBinding?.importEvidence).toEqual(result.binding?.importEvidence);
+    await s.loadProjectById(s.id);expect(useProjectStore.getState().designLibraryBinding?.importEvidence).toEqual(result.binding?.importEvidence);
   });
   test('项目副本被编辑后，再导入明确展示替换定义，不重写已有页面',async()=>{
     await apply(await prepare());const s=useProjectStore.getState();s.updateComponent('lib-source-card',{description:'本地自定义',templateHtml:'<article><span>本地修改</span></article>'});

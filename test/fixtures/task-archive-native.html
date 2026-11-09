@@ -1,0 +1,61 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>原生任务迁移验收</title><body><h1>原生任务迁移验收</h1><pre id="status">仅处理独立合成工程，不调用模型</pre><script type="module">
+import {invoke,isTauri} from '/node_modules/@tauri-apps/api/core.js';
+import {LocalStorageStorage,createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {migrateProjectBundle} from '/src/services/storage/projectBundleMigration.ts';
+import {ProjectRepository} from '/src/services/storage/projectRepository.ts';
+import {saveDesignTask,readDesignTask,listDesignTaskIndex} from '/src/services/storage/designTaskRepository.ts';
+import {buildDesignTaskContract} from '/src/services/ai/designWorkflow.ts';
+import {TaskBudget} from '/src/services/ai/taskBudget.ts';
+import {neutralModernTheme} from '/src/utils/themePresets.ts';
+const query=new URLSearchParams(location.search),root=query.get('root'),phase=query.get('phase');
+const assert=(ok,message)=>{if(!ok)throw Error(message);};
+const sha=async value=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),n=>n.toString(16).padStart(2,'0')).join('');
+try{
+ assert(isTauri(),'Real Tauri IPC is required');
+ assert(/^\/private\/tmp\/taudesign-task-migration-[A-Za-z0-9_-]+$/.test(root)&&['save','reopen'].includes(phase),'Only assigned isolated roots are allowed');
+ const target=createProjectStorage('native-task-archive',root+'/target');
+ let expected;
+ if(phase==='save'){
+  const source=new LocalStorageStorage('native-task-archive-'+crypto.randomUUID()),contract=buildDesignTaskContract({intent:'create_screen',request:'新建独立验收资料页',deviceProfile:'mobile',frameWidth:390});
+  const budget=new TaskBudget({maxRequests:3,maxRequestedOutputTokens:6000,maxDurationMs:900000,maxRequestDurationMs:900000});
+  budget.reserve(2000).settle();budget.reserve(2000).settle({inputTokens:100,outputTokens:200,source:'estimated'});budget.close();
+  const task=await saveDesignTask(source,{version:1,id:contract.taskId,projectId:'native-task-archive',createdAt:1,updatedAt:2,state:'blocked',request:contract.request,contextFingerprint:'original-local-context',binding:{providerId:'controlled',model:'no-request',endpointIdentity:'isolated'},contract,budget:budget.snapshot(),inputs:{textFiles:[{name:'requirements.txt',stepId:'input-text-0'}],attachment:{name:'reference.png',relPath:'assets/images/abcdef01.png'}}},[
+   {stepId:'section-1',html:'<article>完整业务原文</article>',complete:true},
+   {stepId:'section-2',html:'<article>未完成片段',complete:false},
+   {stepId:'input-text-0',html:'仅本地合成测试输入',complete:false}
+  ]);
+  await source.writeBinary('assets/images/abcdef01.png','iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/a9sAAAAASUVORK5CYII=');
+  await source.appendLine(`tasks/${task.id}/attempts.jsonl`,'{"history":"retained","cost":"unknown"}');
+  await source.appendLine(`tasks/${task.id}/attempts.jsonl`,'{broken');
+  assert(await source.createTextExclusive(`tasks/${task.id}/recovery-claim.json`,JSON.stringify({version:1,originTaskId:task.id,newTaskId:'design-replacement',createdAt:3}),await source.taskManifestIdentity(task.id)),'Source recovery claim failed');
+  await source.importTaskArchive('design-broken',[{path:'manifest.json',contents:'\ufeff{broken manifest'},{path:'artifacts/partial.html',contents:'<main>旧未完成片段'}]);
+  await source.importTaskArchive('design-empty',[]);
+  await source.importTaskArchive('design-deleted',[],'historical deletion marker',false);
+  const html='<main class="col p-4"><h1>原生任务迁移</h1><button class="btn btn-primary">保留原文</button></main>',doc={id:'native-task-archive',name:'独立任务迁移验收',settings:{deviceProfile:'mobile',frameWidth:390,colorMode:'light',lodBudget:12},designSystem:neutralModernTheme,screens:{page:{id:'page',name:'原页',htmlContent:html,position:{x:0,y:0}}},assets:{},components:{},overrides:{}};
+  const files={};for(const path of await source.listDir('tasks'))if(path!=='design-empty')files['tasks/'+path]=await source.readText('tasks/'+path);
+  const history=JSON.stringify({schemaVersion:1,projectId:doc.id,past:[],future:[],checkpoints:[]});
+  const result=await migrateProjectBundle({sourceJson:JSON.stringify(doc),source,target,historyRaw:history,readHistory:()=>history,checkCurrent:()=>{}});
+  assert(result.ok,result.error);for(const [path,text]of Object.entries(files)){assert(await target.readText(path)===text,'Target bytes changed: '+path);assert(await source.readText(path)===text,'Source changed: '+path);}
+  expected={taskId:task.id,budget:task.budget,files:Object.fromEntries(await Promise.all(Object.entries(files).map(async([path,text])=>[path,await sha(text)]))),html,history,asset:await source.readBinary('assets/images/abcdef01.png'),warnings:result.warnings,archiveFiles:result.archiveFiles};
+  await invoke('project_write_text_atomic',{root,rel:'expected.json',contents:JSON.stringify(expected)});
+ }else expected=JSON.parse(await invoke('project_read_text',{root,rel:'expected.json'}));
+ for(const [path,hash]of Object.entries(expected.files))assert(await sha(await target.readText(path))===hash,'Reopen changed archive: '+path);
+ const saved=await readDesignTask(target,'native-task-archive',expected.taskId);
+ assert(saved&&saved.parts.length===3&&saved.recoveryClaim.newTaskId==='design-replacement','Task/parts/claim not restored');
+ assert(JSON.stringify(saved.task.budget)===JSON.stringify(expected.budget),'Historical cost changed');
+ assert(saved.task.budget.requests===2&&saved.task.budget.unreportedOutputCaps===4000,'Unknown/estimated cost lost');
+ assert((await new ProjectRepository(target).load()).screens.page.htmlContent===expected.html,'Page changed');
+ assert(await target.readText('history.json')===expected.history,'Undo history changed');
+ assert(await target.readBinary('assets/images/abcdef01.png')===expected.asset,'Independent image changed');
+ assert((await target.listDir('tasks')).includes('design-empty'),'Empty task directory lost');
+ const index=await listDesignTaskIndex(target,'native-task-archive',true),pending=await listDesignTaskIndex(target,'native-task-archive');
+ assert(index.tasks.length===1&&index.invalid.map(row=>row.id).sort().join(',')==='design-broken,design-empty','History diagnostics changed');
+ assert(pending.tasks.length===0,'Claimed history became executable pending work');
+ let revived=false;try{await target.publishTaskManifest('design-deleted',null,JSON.stringify({version:1,id:'design-deleted',projectId:'native-task-archive'}));revived=true;}catch{}
+ assert(!revived,'Deleted task revived');
+ const before=await target.readText(`tasks/${expected.taskId}/manifest.json`);let overwritten=false;try{await target.importTaskArchive(expected.taskId,[{path:'manifest.json',contents:'overwritten'}]);overwritten=true;}catch{}
+ assert(!overwritten&&await target.readText(`tasks/${expected.taskId}/manifest.json`)===before,'Existing task overwritten');
+ const report={status:'passed',runtime:'real-tauri',phase,archiveFiles:expected.archiveFiles,exactFiles:Object.keys(expected.files).length,taskParts:saved.parts.length,historyBudget:saved.task.budget,diagnostics:index.invalid.map(row=>row.id),pendingTasks:pending.tasks.length,deletedRevived:revived,existingOverwritten:overwritten,warnings:expected.warnings,providerCalls:0};
+ await invoke('project_write_text_atomic',{root,rel:`native-${phase}-report.json`,contents:JSON.stringify(report,null,2)});document.querySelector('#status').textContent=JSON.stringify(report,null,2);
+}catch(error){document.querySelector('#status').textContent=String(error);if(/^\/private\/tmp\/taudesign-task-migration-[A-Za-z0-9_-]+$/.test(root))await invoke('project_write_text_atomic',{root,rel:`native-${phase}-report.json`,contents:JSON.stringify({status:'failed',runtime:isTauri()?'real-tauri':'browser',message:String(error)})});}
+</script></body></html>

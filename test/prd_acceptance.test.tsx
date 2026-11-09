@@ -15,9 +15,9 @@ import { passStagedRenderCheck } from './helpers/stagedQuality';
 describe('PRD 全功能综合验收 (Full PRD Acceptance Suite)', () => {
   beforeEach(() => {
     localStorage.clear();
+    useProjectStore.getState().initNewProject({name:'PRD Acceptance Project',deviceProfile:'pc',createSpecimen:false});
     useHistoryStore.setState({ past: [], future: [], checkpoints: [] });
     useProjectStore.setState({
-      id: 'proj-acceptance-1',
       name: 'PRD Acceptance Project',
       screens: {
         'screen-1': {
@@ -203,7 +203,7 @@ describe('PRD 全功能综合验收 (Full PRD Acceptance Suite)', () => {
       useProjectStore.getState().stageScreenChange('screen-1', newHtml, '改版方案');
 
       passStagedRenderCheck();
-      await useProjectStore.getState().adoptStagedChange();
+      expect(await useProjectStore.getState().adoptStagedChange(),useProjectStore.getState().stagedAdoptionError??'采纳失败').toBe(true);
 
       // 原画框已更新为新版 (已注入 nid)
       expect(useProjectStore.getState().screens['screen-1'].htmlContent).toContain('采纳后的页面');
@@ -220,7 +220,7 @@ describe('PRD 全功能综合验收 (Full PRD Acceptance Suite)', () => {
       useProjectStore.getState().stageScreenChange('screen-1', newHtml, '分支新页');
 
       passStagedRenderCheck();
-      await useProjectStore.getState().keepBothScreens();
+      expect(await useProjectStore.getState().keepBothScreens(),useProjectStore.getState().stagedAdoptionError??'保留两版失败').toBe(true);
 
       expect(useProjectStore.getState().screens['screen-1'].htmlContent).toBe(originalHtml);
       expect(useProjectStore.getState().screenOrder.length).toBe(2);

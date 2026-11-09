@@ -1,10 +1,25 @@
 import {expect,test} from 'bun:test';
-import {TaskBudget,withTaskBudget} from '../src/services/ai/taskBudget';
+import {createMultiPageBudget} from '../src/services/ai/taskBudgetPolicy';
+import {TaskBudget,withTaskBudget,isTaskBudgetSnapshot} from '../src/services/ai/taskBudget';
+import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
+import {MockTransport} from '../src/services/ai/engine/transport/mockTransport';
 import {streamWithContinuation} from '../src/services/ai/boundedContinuation';
 import type {AIEngineCore,StreamTextOptions} from '../src/services/ai/engine/core/types';
 const provider={id:'budget',name:'fixture',protocol:'openai_compatible' as const,baseUrl:'http://mock',apiKey:''};
 const options={provider,model:'fixture',maxTokens:4,messages:[{role:'user' as const,content:'生成页面'}]};
 const limits={maxRequests:3,maxRequestedOutputTokens:12,maxDurationMs:10000,maxRequestDurationMs:10000};
+test('archived budgets accept actual ledger states and reject unknown snapshot/limit fields without rewriting costs',()=>{
+ const budget=new TaskBudget(limits);expect(isTaskBudgetSnapshot(budget.snapshot())).toBe(true);
+ const pending=budget.reserve(4);expect(isTaskBudgetSnapshot(budget.snapshot())).toBe(true);pending.settle();
+ budget.reserve(4).settle({inputTokens:3,outputTokens:2,source:'estimated'});budget.reserve(4).settle({inputTokens:5,outputTokens:1,source:'provider'});budget.close();
+ const snapshot=JSON.parse(JSON.stringify(budget.snapshot())),before=JSON.stringify(snapshot);expect(isTaskBudgetSnapshot(snapshot)).toBe(true);expect(snapshot).toMatchObject({requests:3,requestedOutputTokens:12,unreportedOutputCaps:8,estimatedInputTokens:3,estimatedOutputTokens:2,reportedInputTokens:5,reportedOutputTokens:1});
+ for(const invalid of [{...snapshot,apiKey:'SYNTHETIC_SECRET'},{...snapshot,metadata:{raw:'unrelated'}},{...snapshot,limits:{...snapshot.limits,apiKey:'SYNTHETIC_SECRET'}},{...snapshot,limits:{...snapshot.limits,maxRequestDurationMs:2147483648,maxDurationMs:2147483648}},Object.assign([],{...snapshot}),{...snapshot,limits:Object.assign([],{...snapshot.limits})}])expect(isTaskBudgetSnapshot(invalid)).toBe(false);
+ expect(JSON.stringify(snapshot)).toBe(before);
+});
+test('confirmed batch allowances deduct prior planning reservations and cannot refund its usage',()=>{
+ const planning=new TaskBudget({maxRequests:2,maxRequestedOutputTokens:8192,maxDurationMs:1000,maxRequestDurationMs:1000});const reserved=planning.reserve(4096);reserved.settle({inputTokens:10,outputTokens:3,source:'provider'});planning.close();
+ const budget=createMultiPageBudget(2,true,planning.snapshot());expect(budget.snapshot().limits.maxRequests).toBe(27);expect(budget.snapshot().limits.maxRequestedOutputTokens).toBe(2*34568-4096);expect(planning.snapshot().reportedOutputTokens).toBe(3);budget.close();
+});
 function fake(text=Promise.resolve('done'),reported=true){
   const calls:StreamTextOptions[]=[];
   const core:AIEngineCore={streamText(o){calls.push(o);return {textPromise:text,textStream:(async function*(){})(),reasoningStream:(async function*(){})(),
@@ -12,6 +27,14 @@ function fake(text=Promise.resolve('done'),reported=true){
     async generateObject<T>(_s,o){calls.push(o);return {ok:true} as T;}};
   return {core,calls};
 }
+test('structured JSON calls retain provider usage, including a failed parse, without inventing zero cost',async()=>{
+ const transport=new MockTransport();transport.queueResponse('{"ok":true}',0);transport.queueResponse('invalid-json',0);
+ const budget=new TaskBudget({...limits,maxRequestedOutputTokens:512}),core=withTaskBudget(new DefaultAIEngineCore(transport),budget),observed:any[]=[];
+ expect(await core.generateObject({type:'object'},{...options,maxTokens:256,onUsage:u=>observed.push(u)})).toEqual({ok:true});
+ expect(budget.snapshot()).toMatchObject({reportedInputTokens:100,reportedOutputTokens:50,unreportedOutputCaps:0});
+ await expect(core.generateObject({type:'object'},{...options,maxTokens:256})).rejects.toThrow();
+ expect(budget.snapshot()).toMatchObject({requests:2,requestedOutputTokens:512,reportedInputTokens:200,reportedOutputTokens:100,unreportedOutputCaps:0});expect(observed).toHaveLength(1);
+});
 test('parallel children reserve before dispatch and cannot spend each others output quota',async()=>{
   let finish!:(s:string)=>void;const f=fake(new Promise(resolve=>{finish=resolve;}),false),ledger=new TaskBudget({...limits,maxRequestedOutputTokens:8});
   const core=withTaskBudget(f.core,ledger),a=core.streamText(options),b=core.streamText(options);

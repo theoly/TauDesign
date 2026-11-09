@@ -15,6 +15,7 @@ import {makeGuidancePacket,guidancePacketIssue,withGuidanceReceipts} from './des
 import type {RuleFeature} from './designKnowledge/types';
 import {resolveWorkflowValidation} from './workflowValidation';
 import {pageRuleFeatures} from './designKnowledge/targetFeatures';
+import {assertExternalMedia} from './externalMedia';
 
 /** The UI assembles the task context; execution, stream failure and terminal HTML handling stay in services. */
 async function executeTarget(core: AIEngineCore, options: {
@@ -25,6 +26,7 @@ async function executeTarget(core: AIEngineCore, options: {
   taskBudget?:TaskBudget;
 }): Promise<RestyleOutcome> {
   const { target, contract: workflowContract, request, quality } = options;
+  assertExternalMedia(target.html,quality.mediaCss);
   const protocol=target.html.length>RESTYLE_PATCH_THRESHOLD?'style-patch-json':'html';
   if(options.contextualGuidance||workflowContract.designGuidance){
     const validation=resolveWorkflowValidation(workflowContract,workflowContract.workflowId==='restyle-batch'?'batch':'candidate',{preflight:true});
@@ -62,7 +64,7 @@ async function executeTarget(core: AIEngineCore, options: {
     return {...outcome,executionRecord:{source:'model',rawResponse:patched.rawResponse,continuationCount:0,warnings:[],
       ...(outcome.status==='applied'?{completeHtml:patched.html}:{errorMessage:outcome.message})}};
   }
-  const result = await streamWithContinuation(core, request, { allowContinuation: true });
+  const result = await streamWithContinuation(core, request, { allowContinuation: true,externalMediaOnly:true });
   if(!result.errorMessage)verifyGuidance();
   if(!result.errorMessage)options.onValidation?.();
   const finalized = finalizeModelHtml(result, { ...quality, baselineHtml: target.html, protectedNids: target.protectedNids,

@@ -3,8 +3,12 @@ import type {ProjectStorage} from './projectStorage';
 export interface RenderResourceFile {relPath:string;sha256:string}
 export function validRenderResourceFiles(value:unknown):value is RenderResourceFile[] {
   return Array.isArray(value)&&value.length<=4096&&value.every(f=>f&&typeof f.relPath==='string'&&
-    /^assets\/(images|icons|imports)\//.test(f.relPath)&&!f.relPath.split('/').includes('..')&&
+    /^assets\/(images|icons|imports|media)\//.test(f.relPath)&&!f.relPath.split('/').includes('..')&&
     typeof f.sha256==='string'&&/^[a-f0-9]{64}$/.test(f.sha256))&&new Set(value.map(f=>f.relPath)).size===value.length;
+}
+export const isProjectResourcePath=(path:string)=>path.startsWith('assets/')&&path.length<=2000&&!path.includes('\\')&&!path.includes('\0')&&path.split('/').every(part=>part!==''&&part!=='.'&&part!=='..'&&part.length<=240);
+export function validatePublicationResources(files:unknown):asserts files is RenderResourceFile[]{
+ if(!validRenderResourceFiles(files)||files.some(row=>Object.keys(row).sort().join(',')!=='relPath,sha256'||!isProjectResourcePath(row.relPath)))throw Error('最终交付资源依赖无效。');
 }
 export function mergeRenderResourceFiles(groups:readonly (readonly RenderResourceFile[])[]):RenderResourceFile[] {
   const merged=new Map<string,RenderResourceFile>();

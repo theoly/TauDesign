@@ -1,0 +1,56 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>原生仓储与来源会话验收</title><body><h1>原生仓储与来源会话验收</h1><pre id="status">隔离合成工程，不调用模型</pre><script type="module">
+import {invoke,isTauri} from '/node_modules/@tauri-apps/api/core.js';
+import {ProjectRepository} from '/src/services/storage/projectRepository.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {createProjectAuthoringSession} from '/src/services/storage/projectAuthoring.ts';
+import {useProjectStore,waitForProjectSave} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {suspendHistoryPersistence} from '/src/services/storage/historyPersistence.ts';
+import {neutralModernTheme} from '/src/utils/themePresets.ts';
+import {verifyPublicationAcknowledgements} from '/test/helpers/projectPublicationAck.ts';
+import {verifyNativeFinalPublication} from '/test/helpers/nativeFinalPublication.ts';
+import {readDesignTask,settleDesignTaskPublication} from '/src/services/storage/designTaskRepository.ts';
+import {loadStagedCandidate} from '/src/services/storage/candidateRepository.ts';
+import {verifyNativeResourcePublication} from '/test/helpers/nativeResourcePublication.ts';
+const query=new URLSearchParams(location.search),root=query.get('root'),phase=query.get('phase');
+const assert=(ok,message)=>{if(!ok)throw Error(message);};
+try{
+ assert(isTauri(),'Actual Tauri runtime required');assert(/^\/private\/tmp\/taudesign-project-publication-[A-Za-z0-9_-]+$/.test(root)&&['save','reopen'].includes(phase),'Only isolated assigned roots allowed');
+ const id='synthetic-authoring',folder=root+'/target',storage=createProjectStorage(id,folder),repo=new ProjectRepository(storage);let expected;
+ suspendHistoryPersistence();
+ if(phase==='save'){
+  assert(Object.keys((await storage.readManagedSnapshot()).files).length===0,'Target was not empty');
+  await repo.save({id,name:'原工程',createdAt:1,schemaVersion:1,settings:{deviceProfile:'mobile',frameWidth:390,colorMode:'light',lodBudget:12},designSystem:neutralModernTheme,screenOrder:['page'],screens:{page:{id:'page',name:'资料页',position:{x:0,y:0},htmlContent:'<main data-nid="original"><h1>完整原文</h1></main>',scopedCss:'h1{color:var(--color-primary)}'}},assets:{},components:{},overrides:{},vendorExtension:{source:'legacy',version:3}},{history:{past:[],future:[],checkpoints:[]}});
+  const loaded=await repo.load();assert(useProjectStore.getState().loadProjectDocument(loaded,folder),'Author session was not installed');
+  const oldHandle=useProjectStore.getState().projectAuthoringSession;
+  const foreign=await repo.load();foreign.name='另一作者已保存';await new ProjectRepository(storage,createProjectAuthoringSession(storage,foreign)).save(foreign);const winner=await storage.readManagedSnapshot();
+  await repo.load();useProjectStore.getState().setName('窗口保留未保存文字');let staleRejected=false;try{await waitForProjectSave(id,folder);}catch{staleRejected=true;}
+  assert(staleRejected&&useProjectStore.getState().name==='窗口保留未保存文字'&&useProjectStore.getState().projectSaveStatus==='failed','Stale autosave was hidden or local edits lost');assert(JSON.stringify(await storage.readManagedSnapshot())===JSON.stringify(winner),'Stale author changed files');
+  const fresh=await repo.load();assert(useProjectStore.getState().loadProjectDocument(fresh,folder),'Explicit reopen did not install fresh author');
+  useProjectStore.getState().setName('明确重开后已保存');await waitForProjectSave(id,folder);assert(useProjectStore.getState().projectSaveStatus==='saved','Fresh author save failed');
+  const cleared=await repo.load();delete cleared.screens.page.scopedCss;await new ProjectRepository(storage,createProjectAuthoringSession(storage,cleared)).save(cleared);assert(await storage.readText('screens/page.css')===null,'Removed scoped CSS survived');
+  assert(useProjectStore.getState().loadProjectDocument(await repo.load(),folder),'Cannot reopen cleared CSS baseline');
+  useProjectStore.getState().updateScreen('page',{htmlContent:'<main data-nid="original"><h1>完整原文，修改后</h1></main>'},'原生修改正文');await waitForProjectSave(id,folder);
+  assert(JSON.parse(await storage.readText('history.json')).past.at(-1).label==='原生修改正文','Page save lost matching History');
+  useHistoryStore.getState().undo();await waitForProjectSave(id,folder);assert((await repo.load()).screens.page.htmlContent==='<main data-nid="original"><h1>完整原文</h1></main>'&&JSON.parse(await storage.readText('history.json')).future.length===1,'Undo page/History mismatch');
+  useHistoryStore.getState().redo();await waitForProjectSave(id,folder);assert((await repo.load()).screens.page.htmlContent.includes('修改后')&&JSON.parse(await storage.readText('history.json')).future.length===0,'Redo page/History mismatch');
+  const acknowledgements=await verifyPublicationAcknowledgements(storage);
+  const finalPublication=await verifyNativeFinalPublication(storage,folder);
+  const resourcePublication=await verifyNativeResourcePublication(storage,folder);
+  expected={snapshot:await storage.readManagedSnapshot(),serializedOldHandle:JSON.parse(JSON.stringify(oldHandle)),staleRejected,cssRemoved:true,pairedHistoryUndoRedo:true,acknowledgements,finalPublication,resourcePublication};
+  await invoke('project_write_text_atomic',{root,rel:'expected.json',contents:JSON.stringify(expected)});
+ }else expected=JSON.parse(await invoke('project_read_text',{root,rel:'expected.json'}));
+ assert(JSON.stringify(await storage.readManagedSnapshot())===JSON.stringify(expected.snapshot),'Fresh process changed saved bytes');
+ const opened=await repo.load();assert(opened.name==='明确重开后已保存'&&opened.createdAt===1&&opened.screenOrder.join(',')==='page'&&opened.vendorExtension.source==='legacy'&&opened.screens.page.htmlContent.includes('完整原文')&&!opened.screens.page.scopedCss,'Reopen lost content or metadata');
+ let serializedRejected=false;try{await new ProjectRepository(storage,expected.serializedOldHandle).save(opened);}catch{serializedRejected=true;}assert(serializedRejected,'Serialized old handle acquired save authority');
+ const raw=await storage.readText('project.json');assert(!raw.includes('projectAuthoringSession')&&!raw.includes('projectSaveStatus'),'Runtime authority leaked into project');
+ if(phase==='reopen'){
+  const taskId=expected.finalPublication.taskId,path=`tasks/${taskId}/manifest.json`,raw=await storage.readText(path),task=await readDesignTask(storage,id,taskId),priorHistory=await storage.readText('history.json');
+  assert(task?.task.state==='draft'&&task.publication?.id===expected.finalPublication.publicationId,'Fresh process lost exact saved-task publication proof');assert(await loadStagedCandidate(id,folder)===null&&await storage.readText(path)===raw,'Fresh process changed a sidecar or restored a committed candidate');
+  assert(await settleDesignTaskPublication(storage,id,taskId),'Fresh process cannot explicitly settle saved delivery');assert((await readDesignTask(storage,id,taskId)).task.state==='completed'&&await storage.readText('history.json')===priorHistory,'Historical settlement changed page History');
+  assert(useProjectStore.getState().loadProjectDocument(opened,folder),'Fresh process cannot author explicitly opened project');assert(useHistoryStore.getState().past.at(-1).label==='原生修改正文','Fresh process restored a different History');useHistoryStore.getState().setArchiveError(null);useProjectStore.getState().setName('新进程继续保存');await waitForProjectSave(id,folder);assert((await repo.load()).name==='新进程继续保存','Fresh process author save failed');
+ }
+ const report={status:'passed',runtime:'real-tauri',phase,scope:'Repository/author/History, synthetic dropped responses after real IPC, checked resource publication and real-rendered candidate final publication with one durable commit and Undo; synthetic native project only, not whole final acceptance',identity:(await storage.readManagedSnapshot()).identity,staleRejected:expected.staleRejected,cssRemoved:expected.cssRemoved,pairedHistoryUndoRedo:expected.pairedHistoryUndoRedo,serializedRejected,acknowledgements:expected.acknowledgements,finalPublication:expected.finalPublication,resourcePublication:expected.resourcePublication,creationOrderAndUnknownMetadataPreserved:true,providerCalls:0};
+ await invoke('project_write_text_atomic',{root,rel:`native-${phase}-report.json`,contents:JSON.stringify(report,null,2)});document.querySelector('#status').textContent=JSON.stringify(report,null,2);
+}catch(error){document.querySelector('#status').textContent=String(error);if(/^\/private\/tmp\/taudesign-project-publication-[A-Za-z0-9_-]+$/.test(root))await invoke('project_write_text_atomic',{root,rel:`native-${phase}-report.json`,contents:JSON.stringify({status:'failed',runtime:isTauri()?'real-tauri':'browser',message:String(error)})});}
+</script></body></html>

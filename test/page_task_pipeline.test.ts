@@ -1,3 +1,4 @@
+import {requestSchema} from './helpers/modelSchema';
 import {expect,test} from 'bun:test';
 import {PipelineExecutor} from '../src/services/ai/engine/pipeline/executor';
 import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
@@ -18,7 +19,7 @@ test('functional planning runs before HTML and the same frozen snapshot is bound
  const {transport,requests,options}=fixture();transport.queueResponse(JSON.stringify(plan));transport.queueResponse('<artifact type="screen" title="预约"><main class="p-4"><label>预约时间<input/></label><button class="btn btn-primary">确认预约</button></main></artifact>');
  const result=await PipelineExecutor.execute(options);
  expect(result.status).not.toBe('error');expect(requests).toHaveLength(2);
- expect(requests[0].body.response_format.type).toBe('json_schema');expect(requests[1].body.response_format).toBeUndefined();
+ expect(requestSchema(requests[0]).properties.features).toBeDefined();expect(requests[1].body.response_format).toBeUndefined();
  expect(requests[1].body.messages[0].content).toContain('PAGE TASK PLAN');expect(requests[1].body.messages[0].content).toContain('已选择时间');
  expect(result.workflowContract?.pageTaskPlan?.plan.goal).toBe(plan.goal);expect(result.taskBudget?.requests).toBe(2);
  expect(resolveWorkflowValidation(result.workflowContract,'create').ok).toBe(true);
@@ -55,7 +56,7 @@ test('frozen planning cannot be replayed under another model or a stale executio
 test('rejected draft saves original plan and repairs it without replanning or losing provenance',async()=>{
  const {saveQualityDraft,loadQualityDrafts}=await import('../src/services/storage/qualityDraftRepository');
  const {draftRepairTargets}=await import('../src/services/ai/qualityDraft');
- const f=fixture();f.transport.queueResponse(JSON.stringify(plan));f.transport.queueResponse('<artifact title="预约"><main class="p-4"><button class="btn btn-primary"><svg class="icon"><path d="M1 1L2 2"/></svg><span></span></button></main></artifact>');
+ const f=fixture();f.transport.queueResponse(JSON.stringify(plan));f.transport.queueResponse('<artifact title="预约"><main class="p-4"><button class="btn btn-primary"><img class="icon" src="https://example.com/fixture-icon.svg" alt=""/><span></span></button></main></artifact>');
  const original=await PipelineExecutor.execute(f.options);expect(original.status).toBe('rejected_by_quality');
  const draft=original.failedDraft!;expect(draft.pageTaskSource?.pageTaskPlan).toEqual(original.workflowContract?.pageTaskPlan);
  const saved={version:1 as const,id:`draft-${crypto.randomUUID()}`,projectId:`project-${crypto.randomUUID()}`,createdAt:Date.now(),draft,request:f.options.input.rawPrompt,projectContext:'context',status:'blocked' as const,
@@ -104,7 +105,7 @@ function childFixture(device:'mobile'|'pc',sections:boolean){
  return {requests,budget,options,limit};
 }
 function assertFunctionalInputs(requests:any[],ruleBody:string){
- expect(requests[0].body.response_format.type).toBe('json_schema');
+ expect(requestSchema(requests[0]).properties.features).toBeDefined();
  expect(requests[0].body.messages[0].content).not.toContain('[LY-04@1]'); // factual planner is not a visual generation call
  for(const request of requests.slice(1)){
   const system=request.body.messages[0].content;

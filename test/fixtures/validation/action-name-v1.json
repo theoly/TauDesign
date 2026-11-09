@@ -1,0 +1,175 @@
+{
+  "version": 1,
+  "purpose": "M4 diagnostic calibration; not M5 held-out evaluation",
+  "sources": [
+    "https://w3c.github.io/aria/accname/",
+    "https://design-system.w3.org/styles/svg-icons.html"
+  ],
+  "cases": [
+    {
+      "id": "hidden-svg-title",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" ><svg aria-hidden=\"true\" class=\"icon\" viewBox=\"0 0 24 24\"><title>关闭</title><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "hidden-svg-wrapper",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" ><span aria-hidden=\"true\"><svg class=\"icon\" viewBox=\"0 0 24 24\"><title>关闭</title><path d=\"M4 4h16v16H4z\"/></svg></span></button>",
+      "css": "",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "hidden-img-alt",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" ><img aria-hidden=\"true\" class=\"icon\" width=\"24\" height=\"24\" src=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Crect width='24' height='24' fill='%232563eb'/%3E%3C/svg%3E\" alt=\"进入\"></button>",
+      "css": "",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "hidden-img-wrapper",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" ><span aria-hidden=\"true\"><img class=\"icon\" width=\"24\" height=\"24\" src=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Crect width='24' height='24' fill='%232563eb'/%3E%3C/svg%3E\" alt=\"进入\"></span></button>",
+      "css": "",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "unnamed-svg",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" ><svg class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "empty-button",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" ></button>",
+      "css": "",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "hidden-visual-named",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" aria-label=\"关闭\"><svg style=\"display:none\" class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "transparent-visual-named",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" aria-label=\"关闭\"><svg style=\"opacity:0\" class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "",
+      "source": true,
+      "render": false
+    },
+    {
+      "id": "css-hidden-visual-named",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" aria-label=\"关闭\"><svg class=\"icon test-hide\" viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "[data-nid=\"control\"] svg.test-hide{display:none}",
+      "source": true,
+      "render": false
+    },
+    {
+      "id": "empty-explicit-submit",
+      "html": "<input data-nid=\"control\" type=\"submit\" value=\"\">",
+      "css": "",
+      "source": false,
+      "render": false
+    },
+    {
+      "id": "own-aria-decorative",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" aria-label=\"关闭\"><svg aria-hidden=\"true\" class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "",
+      "source": true,
+      "render": true,
+      "accessibleName": "关闭"
+    },
+    {
+      "id": "own-title-decorative",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" title=\"关闭\"><svg aria-hidden=\"true\" class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "",
+      "source": true,
+      "render": true,
+      "accessibleName": "关闭"
+    },
+    {
+      "id": "reference-visible",
+      "html": "<span id=\"name\">关闭</span><button data-nid=\"control\" class=\"btn btn-primary\" aria-labelledby=\"name\"><svg class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "",
+      "source": true,
+      "render": true,
+      "accessibleName": "关闭"
+    },
+    {
+      "id": "reference-hidden",
+      "html": "<span id=\"name\" hidden>关闭</span><button data-nid=\"control\" class=\"btn btn-primary\" aria-labelledby=\"name\"><svg class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "",
+      "source": true,
+      "render": true,
+      "accessibleName": "关闭"
+    },
+    {
+      "id": "reference-hidden-subtree",
+      "html": "<span id=\"name\" hidden><span>关闭</span></span><button data-nid=\"control\" class=\"btn btn-primary\" aria-labelledby=\"name\"><svg class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "",
+      "source": true,
+      "render": true,
+      "accessibleName": "关闭"
+    },
+    {
+      "id": "svg-title",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" ><svg class=\"icon\" viewBox=\"0 0 24 24\"><title>关闭</title><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "",
+      "source": true,
+      "render": true,
+      "accessibleName": "关闭"
+    },
+    {
+      "id": "img-alt",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" ><img class=\"icon\" width=\"24\" height=\"24\" src=\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Crect width='24' height='24' fill='%232563eb'/%3E%3C/svg%3E\" alt=\"进入\"></button>",
+      "css": "",
+      "source": true,
+      "render": true,
+      "accessibleName": "进入"
+    },
+    {
+      "id": "visible-text",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" ><svg aria-hidden=\"true\" class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg><span>关闭</span></button>",
+      "css": "",
+      "source": true,
+      "render": true,
+      "accessibleName": "关闭"
+    },
+    {
+      "id": "named-role-button",
+      "html": "<div role=\"button\" class=\"btn btn-primary\" data-nid=\"control\" aria-label=\"关闭\"><svg aria-hidden=\"true\" class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg></div>",
+      "css": "",
+      "source": true,
+      "render": true,
+      "accessibleName": "关闭"
+    },
+    {
+      "id": "default-submit",
+      "html": "<input data-nid=\"control\" type=\"submit\">",
+      "css": "",
+      "source": true,
+      "render": true
+    },
+    {
+      "id": "svg-aria-name",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" ><svg aria-label=\"关闭\" class=\"icon\" viewBox=\"0 0 24 24\"><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "",
+      "source": true,
+      "render": true,
+      "accessibleName": "关闭"
+    },
+    {
+      "id": "svg-reference-name",
+      "html": "<button data-nid=\"control\" class=\"btn btn-primary\" ><svg aria-labelledby=\"icon-name\" class=\"icon\" viewBox=\"0 0 24 24\"><title id=\"icon-name\">关闭</title><path d=\"M4 4h16v16H4z\"/></svg></button>",
+      "css": "",
+      "source": true,
+      "render": true,
+      "accessibleName": "关闭"
+    }
+  ]
+}

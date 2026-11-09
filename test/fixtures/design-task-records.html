@@ -1,0 +1,21 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>工程任务入口验证</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {ChatDrawer} from '/src/components/chat/ChatDrawer.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {saveDesignTask,listDesignTaskIndex} from '/src/services/storage/designTaskRepository.ts';
+import {buildDesignTaskContract} from '/src/services/ai/designWorkflow.ts';
+import {openDesignTaskRecords} from '/src/services/desktop/designTaskMenu.ts';
+const device=new URLSearchParams(location.search).get('device')==='pc'?'pc':'mobile';
+const state=useProjectStore.getState();state.initNewProject({name:'只读任务入口',deviceProfile:device,createSpecimen:false});state.addScreen({name:'保留页',htmlContent:'<main data-nid="kept">保留页面</main>'},'page');useHistoryStore.getState().restore(null);
+const s=useProjectStore.getState(),storage=createProjectStorage(s.id),contract=buildDesignTaskContract({intent:'create_screen',request:'未完成的资料设计',deviceProfile:device,frameWidth:s.settings.frameWidth});
+await saveDesignTask(storage,{version:1,id:contract.taskId,projectId:s.id,createdAt:Date.now(),updatedAt:Date.now(),state:'blocked',request:contract.request,contextFingerprint:'old-read-only',binding:{providerId:'fixture',model:'m',endpointIdentity:'fixture'},contract},[{stepId:'section-1',html:'<section>只读旧草稿</section>',complete:true}]);
+localStorage.setItem(`aidesign:fs:${s.id}:tasks/design-broken/manifest.json`,'{"request":"SYNTHETIC_SECRET <svg><path d=payload');await storage.writeTextAtomic('tasks/design-broken/artifacts/unfinished.html','partial');await storage.writeBinary('assets/images/kept.png','YQ==');
+let calls=0;for(const method of ['streamText','generateObject'])DefaultAIEngineCore.prototype[method]=()=>{calls++;throw Error('Task viewing must never call a model');};
+window.taskRecordFixture={open:openDesignTaskRecords,index:()=>listDesignTaskIndex(storage,s.id,true),report:async()=>({calls,past:useHistoryStore.getState().past.length,source:useProjectStore.getState().screens.page.htmlContent,kept:await storage.readBinary('assets/images/kept.png'),broken:await storage.listDir('tasks/design-broken')})};
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(ChatDrawer));
+</script></body></html>

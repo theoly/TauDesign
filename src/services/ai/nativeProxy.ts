@@ -1,9 +1,9 @@
 import { Channel, invoke } from '@tauri-apps/api/core';
 
-export interface NativeProxyPayload {
-  type: 'Ready' | 'Chunk' | 'Error' | 'Done';
-  data?: string;
-}
+export type NativeProxyPayload =
+ | {type:'Ready'|'Chunk'|'Error'|'Done';data?:string}
+ | {type:'Connected'|'Attempt';data:number}
+ | {type:'HttpError';data:{status:number;message:string;retry_after_ms?:number}};
 
 /** Ready acknowledges registration before cancellation, including aborts during IPC setup. */
 export async function streamNativeProxy(

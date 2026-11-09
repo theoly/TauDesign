@@ -21,12 +21,13 @@ async def main(args):
     const {useHistoryStore}=await window.__module('/src/stores/useHistoryStore.ts');
     window.__history=useHistoryStore;
     useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'controlled-local-fixture'})),bindings:defaultBindings});
+    const {withMultiPageTasks,multiPageTask}=await window.__module('/test/fixtures/multiPageTask.ts');
     DefaultAIEngineCore.prototype.generateObject=async(_schema,options)=>{
-      const f=window.__variants;f.plans++;f.planning=options.messages;
-      return {summary:'同一资料页的三个信息层级方案',pages:[
+      const f=window.__variants;if(_schema.properties?.features){const task=multiPageTask('个人资料',['个人资料']);task.features[0].interactions[0].label='保存资料';return task;}f.plans++;f.planning=options.messages;
+      return withMultiPageTasks({summary:'同一资料页的三个信息层级方案',pages:[
        {name:'重点方案',requirements:['个人资料与保存','突出主要信息'],links:[]},
        {name:'分组方案',requirements:['个人资料与保存','按组组织信息'],links:[]},
-       {name:'步骤方案',requirements:['个人资料与保存','按步骤引导'],links:[]}]};
+       {name:'步骤方案',requirements:['个人资料与保存','按步骤引导'],links:[]}]});
     };
     DefaultAIEngineCore.prototype.streamText=function(options){
       const f=window.__variants,scope=JSON.parse(options.messages.find(m=>m.role==='system').content.match(/confirmedMultiPageScope=(.*); output exactly this page/)[1]);
@@ -53,9 +54,10 @@ async def main(args):
     return card
    fixture=await page.evaluate('window.__resetVariants()');card=await send()
    assert await page.evaluate('window.__variants.streams.length')==0
-   assert await card.locator('input[type=checkbox]').count()==0
+   assert await card.locator('input[type=checkbox][aria-label*=" → "]').count()==0
+   assert not await card.get_by_role('checkbox',name='使用共享生成树',exact=True).is_checked()
    await card.get_by_label('第1方案要求',exact=True).fill('保留个人资料和保存功能，强调姓名与保存按钮')
-   await card.locator('details').nth(2).locator('summary').click()
+   await card.get_by_label('第3方案名称',exact=True).locator('xpath=ancestor::details[1]').locator(':scope > summary').click()
    await card.get_by_role('button',name='移除此方案：步骤方案',exact=True).click()
    assert await card.get_by_role('button',name='移除此方案：重点方案',exact=True).is_disabled()
    await page.screenshot(path=str(args.screenshot.with_stem(args.screenshot.stem+'-plan')))
@@ -74,11 +76,13 @@ async def main(args):
     }
     if(f.streams.some(r=>!r.messages.some(m=>m.content.includes('姓名：测试用户'))))throw Error('Missing same original page input');
     if(!f.streams[0].messages.some(m=>m.content.includes('强调姓名与保存按钮')))throw Error('Missing user-edited difference');
-    const persistent=items=>items.map(({measuredHeight,...screen})=>screen),snapshot=JSON.stringify(persistent(pages));
+    const {screenDesignSnapshot,assertSavedScreenFields}=await import('/test/helpers/screenSnapshot.ts');const snapshot=screenDesignSnapshot(pages);
     window.__history.getState().undo();if(window.__projectStore.getState().screenOrder.length!==1)throw Error('Partial undo');
-    window.__history.getState().redo();if(JSON.stringify(persistent(pages.map(p=>window.__projectStore.getState().screens[p.id])))!==snapshot)throw Error('Incomplete redo');
-    const {readProject}=await window.__module('/src/utils/projectRegistry.ts');window.__projectStore.getState().loadProject(readProject(s.id));
-    if(JSON.stringify(persistent(pages.map(p=>window.__projectStore.getState().screens[p.id])))!==snapshot)throw Error('Reopen lost evidence');
+    window.__history.getState().redo();if(screenDesignSnapshot(pages.map(p=>window.__projectStore.getState().screens[p.id]))!==snapshot)throw Error('Incomplete redo');
+    await window.__projectStore.getState().saveProjectChecked();
+    const {ProjectRepository}=await window.__module('/src/services/storage/projectRepository.ts'),{createProjectStorage}=await window.__module('/src/services/storage/projectStorage.ts');const saved=await new ProjectRepository(createProjectStorage(s.id)).load(),savedPages=pages.map(page=>saved.screens[page.id]);assertSavedScreenFields(pages,savedPages);const savedSnapshot=screenDesignSnapshot(savedPages);
+    await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(s.id);
+    if(screenDesignSnapshot(pages.map(p=>window.__projectStore.getState().screens[p.id]))!==savedSnapshot)throw Error('Reopen lost evidence');
     window.__projectStore.getState().setViewportTransform({x:50,y:80,scale:0.7});
     return {screenIds:pages.map(p=>p.id),positions:pages.map(p=>p.position),historyDelta:1,delivery:pages[0].metadata.multiPageDelivery,evidence:pages.map(p=>p.metadata.creationEvidence)};
    }''',fixture)

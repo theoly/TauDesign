@@ -1,6 +1,7 @@
 dist/
 dist-desktop/
 release-assets/
+web/
 doc/*
 !doc/design-workflow-refactor/
 doc/design-workflow-refactor/*

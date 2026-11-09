@@ -2,9 +2,12 @@ mod app_menu;
 mod export_save;
 mod png_export;
 mod project_fs;
+mod task_fs;
+mod project_snapshot;
 mod ssrf_guard;
 mod utf8_stream;
 mod proxy_cancellation;
+mod media_resource;
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -17,7 +20,13 @@ pub enum StreamPayload {
     Chunk(String),
     Error(String),
     Done,
+    Connected(u16),
+    Attempt(u8),
+    HttpError(ProxyHttpError),
 }
+
+#[derive(Clone, Serialize)]
+pub struct ProxyHttpError { status:u16, message:String, retry_after_ms:Option<u64> }
 
 #[tauri::command]
 async fn proxy_stream_request(
@@ -91,6 +100,7 @@ async fn forward_stream_request(
             req = req.body(body.clone());
         }
 
+        let _ = channel.send(StreamPayload::Attempt(hop_count+1));
         let resp = match req.send().await {
             Ok(r) => r,
             Err(e) => {
@@ -131,7 +141,9 @@ async fn forward_stream_request(
     };
 
     let status = res.status();
+    let _ = channel.send(StreamPayload::Connected(status.as_u16()));
     if !status.is_success() {
+        let retry_after_ms = res.headers().get(reqwest::header::RETRY_AFTER).and_then(|v|v.to_str().ok()).and_then(|v|v.parse::<u64>().ok()).and_then(|v|v.checked_mul(1000));
         let text = res.text().await.unwrap_or_default();
         let mut msg = format!("HTTP 错误 {}: {}", status.as_u16(), text);
         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
@@ -141,7 +153,7 @@ async fn forward_stream_request(
                 msg = format!("HTTP 错误 {}: {}", status.as_u16(), m);
             }
         }
-        let _ = channel.send(StreamPayload::Error(msg));
+        let _ = channel.send(StreamPayload::HttpError(ProxyHttpError{status:status.as_u16(),message:msg,retry_after_ms}));
         return Ok(());
     }
 
@@ -199,6 +211,10 @@ pub fn run() {
                     .expect("empty response"),
             }
         })
+        .register_uri_scheme_protocol("aidesign-media", |_ctx, request| {
+            let token=request.uri().path().trim_start_matches('/');
+            media_resource::response(token,request.headers().get("Range").and_then(|h|h.to_str().ok()),request.method().as_str())
+        })
         .setup(|app| {
             app_menu::install(app)?;
             if cfg!(debug_assertions) {
@@ -213,13 +229,25 @@ pub fn run() {
         .on_menu_event(app_menu::handle_event)
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            media_resource::register_media_resource,
+            media_resource::release_media_resources,
             proxy_stream_request,
             cancel_proxy_request,
             app_menu::set_html_import_menu_enabled,
+            app_menu::set_design_tasks_menu_enabled,
             project_fs::project_ensure_dir,
             project_fs::project_exists,
             project_fs::project_open_directory,
+            project_fs::project_create_text_exclusive,
+            task_fs::project_task_manifest_identity,
+            task_fs::project_publish_task_manifest,
+            task_fs::project_delete_design_task,
+            task_fs::project_import_task_archive,
+            project_snapshot::project_managed_snapshot,
+            project_snapshot::project_publish_snapshot,
+            project_snapshot::project_publish_snapshot_checked,
             project_fs::project_read_text,
+            project_fs::project_read_text_limited,
             project_fs::read_text_context_file,
             project_fs::project_write_text_atomic,
             project_fs::project_append_line,
@@ -227,6 +255,7 @@ pub fn run() {
             project_fs::project_read_all_lines,
             project_fs::project_write_binary,
             project_fs::project_read_binary,
+            project_fs::project_read_binary_limited,
             project_fs::project_list_dir,
             project_fs::project_delete,
             png_export::export_screen_png,

@@ -1,6 +1,9 @@
+import {buildScopedPageContext} from './engine/context/scopedPageContext';
+import {choosePageWriteStrategy} from './generationStrategy';
+import {withTaskProvenance} from './taskProvenance';
 import {observeRequestActivity,type RequestActivity} from './requestActivity';
 import type { DesignSystem } from '../../types/designSystem';
-import type { ProjectSettings } from '../../types/project';
+import type { ProjectSettings,StyleOverride } from '../../types/project';
 import type { AIEngineCore, StreamTextOptions } from './engine/core/types';
 import {TaskBudget,withTaskBudget} from './taskBudget';
 import type { DesignTaskContract } from './designWorkflow';
@@ -22,16 +25,17 @@ import {compileTokensToCss} from '../../utils/cssCompiler';
 import {makeGuidancePacket,withGuidanceReceipts,guidancePacketIssue} from './designKnowledge/receipt';
 import {renderComponentContracts} from './componentContracts';
 import {requiresFunctionalPlanning,requiresElementStructure} from './functionalModification';
-import {preparePageTaskPlan,pageTaskPlanIssue} from './pageTaskPlan';
+import {preparePageTaskPlan,pageTaskPlanIssue,refinePageTaskScope} from './pageTaskPlan';
 import {validateRegionTargets} from './regionCopyModification';
 import {referenceImageIdentity} from './workflowSources';
 import {createChatTaskBudget} from './taskBudgetPolicy';
+import {regionNeedsSubdivision,planRegionSubdivision} from './regionSubdivision';
 import type {TextReference} from './textFileContext';
 import type {ImageAttachment} from '../../types/referenceImage';
 
 export interface StructuredEditOptions {
   mode:'element'|'local'|'region';
-  screen:{id:string;name:string;htmlContent:string};request:string;contract:DesignTaskContract;
+  screen:{id:string;name:string;htmlContent:string;scopedCss?:string};styleOverrides?:Record<string,StyleOverride>;request:string;contract:DesignTaskContract;
   settings:Pick<ProjectSettings,'deviceProfile'|'frameWidth'|'useCustomNavigation'>;
   designSystem:DesignSystem;colorMode:'light'|'dark';
   elementNid?:string;local?:{operations:LocalEditOperation[];allowedNids:string[];supplement?:boolean};regionNids?:string[];
@@ -59,6 +63,7 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
   const {signal,isCurrent,taskBudget,onPhase,onActivity,...data}=options;
   let budget=taskBudget,ownsBudget=false;
   const input=structuredClone(data),contract=input.contract;
+  core=core?withTaskProvenance(core,contract.taskId,'structured-edit'):undefined;
   const guard=()=>{
     if(signal?.aborted)throw new Interrupted('cancelled','局部修改已取消。');
     budget?.assertActive();
@@ -84,23 +89,44 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
     if(styleOnly && input.mode!=='local')throw new Error('纯润色仅支持受限局部样式操作。');
     const requested=input.mode==='element' ? [input.elementNid] : input.mode==='region' ? input.regionNids : input.local?.allowedNids;
     if(!requested?.length || requested.some(nid=>typeof nid!=='string'||!nid.trim()))throw new Error('缺少明确的局部授权目标。');
+    contract.pageWriteStrategy=choosePageWriteStrategy({derived:true,mutableRegions:requested as string[],estimatedHtmlBytes:new TextEncoder().encode(input.screen.htmlContent).length});
     if(input.mode==='element' ? contract.elementNid!==input.elementNid : Boolean(contract.elementNid))throw new Error('元素合同与执行模式或引用范围不匹配。');
     if(!styleOnly && !contract.allowedChanges.includes(`screen:${input.screen.id}`) &&
       requested.some(nid=>!contract.allowedChanges.includes(`element:${nid}`)))throw new Error('局部目标超出任务合同的已授权范围。');
     if(functional&&(contract.allowedChanges.length!==requested.length||contract.allowedChanges.some(scope=>!requested.some(nid=>scope===`element:${nid}`))))throw new Error('功能规划与本次完整区块范围不一致。');
-    const source=checkGenerationSourceSafety(input.screen.htmlContent,input.settings);
+    const mediaCss=[input.screen.scopedCss??'',...Object.entries(input.styleOverrides??{}).filter(([key])=>key.startsWith(input.screen.id+':')).flatMap(([,entry])=>Object.values(entry.declarations))].join('\n');
+    const mediaPolicy={...input.settings,requireExternalMedia:true,mediaCss};
+    const source=checkGenerationSourceSafety(input.screen.htmlContent,mediaPolicy);
     if(!source.passed)throw new Error(qualitySummary(source));
     const html=normalizeMobileNavigation(input.screen.htmlContent,input.settings).html;
     const nodes=Array.from(parseHtmlCopy(html).doc.body.querySelectorAll('[data-nid]'));
     if(new Set(requested).size!==requested.length || requested.some(nid=>nodes.filter(el=>el.getAttribute('data-nid')===nid).length!==1))throw new Error(`${input.mode==='element'?'引用元素':'授权节点'}不存在或标识不唯一，未请求模型。`);
     if(structural)validateRegionTargets(html,requested as string[],{device:input.settings.deviceProfile,protectedNids,allowedNids:requested as string[],modificationRequest:input.request});
     const needsModel=input.mode!=='local'||input.local?.supplement;
+    const scopedContext=needsModel?buildScopedPageContext({screenId:input.screen.id,html,targetNids:requested as string[],scopedCss:input.screen.scopedCss,overrides:input.styleOverrides}):undefined;
     if(needsModel && (!core||!input.binding))throw new Error('请先配置可用的 AI Provider 以执行结构化修改。');
     if((needsModel||functional||contract.designGuidance)&&contract.request!==input.request)throw new Error('当前指令与冻结任务合同不匹配，请重新发起修改。');
     const protocol=structural?'fragment-json':'finite-json';
     if(contract.designGuidance&&(!needsModel||(contract.designGuidance.protocol??'finite-json')!==protocol))throw new Error('设计规则快照与当前结构化输出协议不匹配。');
+    const subdivided=structural&&regionNeedsSubdivision(html,requested as string[]);
+    if(functional&&contract.pageTaskPlan){
+      const issue=pageTaskPlanIssue(contract);if(issue)throw Error(issue);
+      if(contract.pageTaskPlan.request.providerId!==input.binding!.provider.id||contract.pageTaskPlan.request.model!==input.binding!.model)throw Error('功能规划使用的模型已变化。');
+      if(contract.pageTaskPlan.plan.questions.length)throw Error(`区块功能规划有待确认的问题：${contract.pageTaskPlan.plan.questions.join('；')}`);
+    }
     if(needsModel&&!budget){const count=structural?requested.length:1;const perRequest=structural?4096:input.mode==='element'?2048:1800;
-      budget=functional?createChatTaskBudget():new TaskBudget({maxRequests:count,maxRequestedOutputTokens:count*perRequest,maxDurationMs:count*900000,maxRequestDurationMs:900000});ownsBudget=true;}
+      budget=subdivided?createChatTaskBudget(true):functional?createChatTaskBudget():new TaskBudget({maxRequests:count,maxRequestedOutputTokens:count*perRequest,maxDurationMs:count*900000,maxRequestDurationMs:900000});ownsBudget=true;}
+    if(subdivided){
+      if(contract.regionSubdivision)throw Error('不能直接恢复磁盘中的旧细分权限，请按当前原页重新发起任务。');
+      guard();onPhase?.('planning');
+      contract.regionSubdivision=await planRegionSubdivision(core!,{taskId:contract.taskId,html,roots:requested as string[],request:input.request,provider:input.binding!.provider,model:input.binding!.model,device:input.settings.deviceProfile,mode:input.colorMode,designSystem:input.designSystem,budget:budget!,sourceContext:scopedContext,signal,isCurrent,imageUrl:input.attachment?.dataUrl??input.imageUrl});
+      // Validate finite ancestor operations before paying for functional or HTML generation.
+      const parsed=parseHtmlCopy(html);for(const root of requested as string[]){const parent=Array.from(parsed.doc.querySelectorAll('[data-nid]')).find(el=>el.getAttribute('data-nid')===root)!;
+        const operations=contract.regionSubdivision.shellOperations.filter(op=>Array.from(parent.querySelectorAll('[data-nid]')).some(el=>el.getAttribute('data-nid')===op.nid)||op.nid===root);
+        if(operations.length)applyLocalCopyEdits(html,operations,{device:input.settings.deviceProfile,useCustomNavigation:input.settings.useCustomNavigation,allowedNids:operations.map(op=>op.nid),scopeNid:root,protectedNids,allowText:false});
+      }
+      if(functional&&contract.pageTaskPlan)contract.pageTaskPlan=refinePageTaskScope(contract,contract.pageTaskPlan);
+    }else if(contract.regionSubdivision)throw Error('当前修改不适用旧内部细分计划。');
     if(functional){
       if(input.imageUrl&&!input.attachment)throw new Error('参考图功能修改缺少实际附件身份，请重新附图。');
       if(contract.referenceImage&&!input.attachment)throw new Error('冻结功能规划缺少原参考图片，请重新附图。');
@@ -135,10 +161,10 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
       }
     };
     const common={...input.binding!,signal,html,request:input.request,device:input.settings.deviceProfile,useCustomNavigation:input.settings.useCustomNavigation,
-      designSystem:input.designSystem,mode:input.colorMode,protectedNids,imageUrl:input.attachment?.dataUrl??input.imageUrl,projectKnowledge:input.projectKnowledge,pageTaskPlan:contract.pageTaskPlan,guidanceSelection:contract.designGuidance?.selection};
+      designSystem:input.designSystem,mode:input.colorMode,protectedNids,imageUrl:input.attachment?.dataUrl??input.imageUrl,projectKnowledge:input.projectKnowledge,sourceContext:scopedContext,pageTaskPlan:contract.pageTaskPlan,guidanceSelection:contract.designGuidance?.selection,...(contract.regionSubdivision?{subdivision:contract.regionSubdivision,taskBudget:budget}:{})};
     let candidate:{html:string;qualityReport:QualityReport;targetNids:string[];operations?:LocalEditOperation[]};
     if(elementStructure)candidate=await generateRegionCopyEdits(guardedCore,{...common,targetNids:[input.elementNid!],allowedNids:[input.elementNid!],preserveInteractionAttributes:true,modificationRequest:input.request});
-    else if(input.mode==='element')candidate=await generateElementCopyEdits(guardedCore,{...common,targetNid:input.elementNid!,context:input.context,guidanceSelection:contract.designGuidance?.selection});
+    else if(input.mode==='element')candidate=await generateElementCopyEdits(guardedCore,{...common,targetNid:input.elementNid!,context:JSON.stringify({sourceContext:scopedContext,additionalContext:input.context}),guidanceSelection:contract.designGuidance?.selection});
     else if(input.mode==='region')candidate=await generateRegionCopyEdits(guardedCore,{...common,targetNids:input.regionNids!,allowedNids:input.regionNids!,modificationRequest:input.request});
     else {
       let operations=input.local!.operations;
@@ -150,8 +176,8 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
     guard();
     const guidanceIssue=guidancePacketIssue(contract);
     if(guidanceIssue)throw new Error(guidanceIssue);
-    const safe=checkGenerationSourceSafety(candidate.html,input.settings);
-    const qualityReport=checkGenerationQuality(candidate.html,{deviceProfile:input.settings.deviceProfile,useCustomNavigation:input.settings.useCustomNavigation,
+    const safe=checkGenerationSourceSafety(candidate.html,mediaPolicy);
+    const qualityReport=checkGenerationQuality(candidate.html,{...mediaPolicy,deviceProfile:input.settings.deviceProfile,useCustomNavigation:input.settings.useCustomNavigation,
       designSystem:input.designSystem,baselineHtml:html,protectedNids,preserveNids:!structural,modificationRequest:input.request,formRuleRoots:requested as string[]});
     // Region validation treats even removed secondary operations as errors; do not downgrade its findings.
     for(const finding of candidate.qualityReport.findings)if(finding.severity==='error')qualityReport.findings.push(finding);

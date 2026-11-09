@@ -1,0 +1,22 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>独立图标资源验证</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {AssetModal} from '/src/components/assets/AssetModal.tsx';
+import {InfiniteCanvas} from '/src/components/canvas/InfiniteCanvas.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {useAIConfigStore,defaultProviders,defaultBindings} from '/src/stores/useAIConfigStore.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {MockTransport} from '/src/services/ai/engine/transport/mockTransport.ts';
+import {inspectExternalMedia} from '/src/services/ai/externalMedia.ts';
+const device=new URLSearchParams(location.search).get('device')==='pc'?'pc':'mobile';
+useProjectStore.getState().initNewProject({name:'独立图标UI验证',deviceProfile:device,createSpecimen:false});useHistoryStore.getState().restore(null);
+useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'FIXTURE_SECRET'})),bindings:defaultBindings});
+const transport=new MockTransport();transport.queueResponse('<circle cx="12" cy="12" r="8"/><path d="M8 12L12 16L16 8"/>',15);
+let calls=0;const core=new DefaultAIEngineCore({id:'local',stream(request,event){calls++;return transport.stream(request,event);}}),stream=DefaultAIEngineCore.prototype.streamText;DefaultAIEngineCore.prototype.streamText=function(options){return stream.call(core,options);};
+const state={copies:[],state:()=>useProjectStore.getState(),modelCalls:()=>calls};window.iconAssetFixture=state;
+Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>state.copies.push(text)}});
+let root=ReactDOM.createRoot(document.getElementById('root'));root.render(React.createElement(AssetModal,{onClose(){}}));
+state.showPage=()=>{const s=useProjectStore.getState();s.addScreen({name:'独立图标',htmlContent:`<main class="p-6 col gap-4"><h1 class="text-xl">独立图标</h1><div class="row gap-4 text-primary">${state.copies.join('')}</div><p>图标只引用文件，保持主题颜色。</p></main>`,position:{x:0,y:0}},'page');s.setActiveScreen('page');s.setViewportTransform({x:40,y:100,scale:device==='pc'?0.7:1});root.unmount();root=ReactDOM.createRoot(document.getElementById('root'));root.render(React.createElement(InfiniteCanvas));return {copies:state.copies,violations:state.copies.flatMap(code=>inspectExternalMedia(code).violations),assets:Object.values(useProjectStore.getState().assets),calls};};
+</script></body></html>

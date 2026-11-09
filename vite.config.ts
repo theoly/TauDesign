@@ -84,7 +84,7 @@ function aiDevProxyPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [react(), aiDevProxyPlugin()],
-  build: { chunkSizeWarningLimit: 1600, },
+  build: { chunkSizeWarningLimit: 3000, },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src')

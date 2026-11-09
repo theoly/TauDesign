@@ -8,6 +8,7 @@ import { isCandidatePreview } from './candidatePreview';
 import type { PagePreview } from './pagePreview';
 
 import type {PageRepairRecord} from '../ai/pageRepairRecord';
+import {DeliveryRepository} from './deliveryRepository';
 
 export interface StagedCandidateData {
   /** Presence also prevents retry if an externally edited receipt is malformed. */
@@ -21,7 +22,7 @@ export interface StagedCandidateData {
   /** Complete generation input scope; absent on legacy files and never backfilled by restore/recheck. */
   inputContextFingerprint?:string;
   designOriginFingerprint?: string;
-  /** Frozen input/authorization identity for newly staged contracts; absent on older candidates. */
+  /** Frozen authorization, including explicit absence of a contract; missing legacy values grant no live permission. */
   taskBindingFingerprint?:string;
   /** Runtime marker; restored candidates require fresh project-context checks. */
   restoredFromDisk?: boolean;
@@ -89,8 +90,17 @@ async function removePreview(storage: ProjectStorage, path: string): Promise<voi
 }
 
 function sameCandidate(a: StagedCandidateData, b: StagedCandidateData): boolean {
-  return a.candidateId || b.candidateId ? a.candidateId === b.candidateId :
-    a.targetScreenId === b.targetScreenId && a.newHtml === b.newHtml && a.baselineFingerprint === b.baselineFingerprint;
+  if (a.candidateId || b.candidateId) {
+    if (a.candidateId && b.candidateId) return a.candidateId === b.candidateId;
+    // Restore may assign a runtime ID to an old file. Never match a newer disk ID.
+    if (a.candidateId || !b.restoredFromDisk) return false;
+  }
+  const identity = (candidate: StagedCandidateData) => {
+    const {candidateId, restoredFromDisk, validationEvidence, preview, ...frozen} = candidate;
+    // Diagnostics can refresh without changing the original candidate/request identity.
+    return JSON.stringify(frozen);
+  };
+  return identity(a) === identity(b);
 }
 
 export function removeStagedCandidate(projectId: string, folderPath?: string, expectedCandidate?: StagedCandidateData): Promise<void> {
@@ -123,6 +133,9 @@ export async function loadStagedCandidate(projectId: string, folderPath?: string
       status: 'failed', scope: 'first-screen', capturedAt: Number.isFinite(file.savedAt) ? file.savedAt : Date.now(),
       candidateFingerprint: contentFingerprint(candidate.newHtml), contextFingerprint: '', reason: '候选预览记录损坏或与页面不匹配。'
     };
+    // A crash may leave this sidecar after the page and History were committed.
+    // Retain its bytes, but never restore a second adoption of that exact result.
+    if(await new DeliveryRepository(createProjectStorage(projectId,folderPath),projectId).committedCandidate(candidate))return null;
     return structuredClone(candidate);
   } catch { return null; }
 }

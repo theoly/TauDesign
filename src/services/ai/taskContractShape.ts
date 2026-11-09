@@ -1,3 +1,6 @@
+import {validPageWriteStrategy} from './generationStrategy';
+import {validContextManifest} from './engine/context/contextManifest';
+import {validRegionSubdivision} from './regionSubdivision';
 import type {DesignTaskContract} from './designWorkflow';
 
 const object=(v:unknown):v is Record<string,unknown>=>Boolean(v&&typeof v==='object'&&!Array.isArray(v));
@@ -21,7 +24,8 @@ export function isTaskContractShape(value:unknown):value is DesignTaskContract {
    optional(c.designSystemOrigin,v=>object(v)&&member(v.kind,['project','html_import','project_override'])&&
     ['sourceId','sourceName','sourceFingerprint','tokenFingerprint'].every(k=>optional(v[k],text))&&optional(v.tokenVersion,n=>typeof n==='number'&&Number.isFinite(n)))&&
    ['sourceName','referencePageId','elementNid','knowledgeFingerprint'].every(k=>optional(c[k],text))&&
-   optional(c.generationMode,v=>v==='sections')&&optional(c.projectPages,strings)&&optional(c.projectPageCount,v=>typeof v==='number'&&Number.isFinite(v)&&v>=0)&&
+   optional(c.wholePageRedesign,v=>object(v)&&Object.keys(v).length===3&&v.version===1&&text(v.sourceFingerprint)&&text(v.inventoryFingerprint))&&
+   optional(c.regionSubdivision,validRegionSubdivision)&&optional(c.contextManifest,validContextManifest)&&optional(c.pageWriteStrategy,validPageWriteStrategy)&&optional(c.generationMode,v=>v==='sections')&&optional(c.projectPages,strings)&&optional(c.projectPageCount,v=>typeof v==='number'&&Number.isFinite(v)&&v>=0)&&
    ['referenceImage','librarySource','multiPage','pageTaskPlan','designGuidance','modificationReview'].every(k=>optional(c[k],object))&&
    optional(c.validationPlan,v=>object(v)&&v.version===1&&text(v.workflowId)&&text(v.fingerprint)&&strings(v.stages));
  }catch{return false;}

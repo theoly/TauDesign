@@ -36,6 +36,7 @@ export interface PipelineContext {
   intent: PipelineIntent;
   intentReason: string;
   hasExplicitStructuralChangeIntent: boolean; // 用户是否明确要求“增删”元素
+  wholePageRedesign?:boolean;
 
   targetScreen?: {
     id: string;
@@ -74,6 +75,7 @@ export interface PipelineOutput {
     | 'aborted'
     | 'error';
   rawResponse: string;
+  omittedResponseChars?:number;
   reasoningText?: string;
   extractedHtml?: string;
   structureDiff?: StructureDiff;

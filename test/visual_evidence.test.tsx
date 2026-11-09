@@ -16,6 +16,7 @@ import {png} from './helpers/previewPng';
 import {migrateProjectBundle} from '../src/services/storage/projectBundleMigration';
 import {LocalStorageStorage} from '../src/services/storage/projectStorage';
 import {readProject} from '../src/utils/projectRegistry';
+import {stageResourceReport} from './helpers/renderResourceProof';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
 let prior:ReturnType<typeof useProjectStore.getState>,history:ReturnType<typeof useHistoryStore.getState>,render:ReturnType<typeof spyOn>,capture:ReturnType<typeof spyOn>,owner:VisualOwner,root:Root|undefined,host:HTMLDivElement;
 const source='<main data-nid="root" class="col p-4 gap-4"><h1 data-nid="title">视觉验收</h1><button data-nid="action" class="btn btn-primary">提交</button></main>';
@@ -42,7 +43,8 @@ test('单页任务从真实档案输出设备/Token/L4/CSP和稳定SHA，不修�
 test('重塑任务选择真实对应页面；错误页或未应用事件拒绝',async()=>{
  const s=useProjectStore.getState(),html=s.screens.page.htmlContent;expect((await s.applyRestyleOutcome(acceptRestyleResult({kind:'screen',id:'page',name:'资料页',html},html.replace('p-4','p-6')))).applied).toBe(true);
  const record=(await new RestyleDeliveryRepository(storage(),owner.projectId).list()).records[0],restyle={...owner,kind:'restyle' as const,eventId:record.id};expect((await createVisualTask(storage(),restyle)).document).toContain('p-6');await expect(createVisualTask(storage(),{...restyle,screenId:'missing'})).rejects.toThrow();
- await new RestyleDeliveryRepository(storage(),owner.projectId).finish(record,'aborted');await expect(createVisualTask(storage(),restyle)).rejects.toThrow('尚未应用');
+ const repository=new RestyleDeliveryRepository(storage(),owner.projectId);await expect(repository.finish(record,'aborted')).rejects.toThrow('提交事实');
+ const id='restyle-unpublished-'+crypto.randomUUID();await repository.prepare({...record,id,publicationId:id,status:'prepared',pages:record.pages.map(page=>({...page,preview:undefined}))});await expect(createVisualTask(storage(),{...restyle,eventId:id})).rejects.toThrow('尚未应用');
 });
 test('仅初始化、通过、失败分别存档，重复不写图，原代码/History不变',async()=>{
  const b=await bundle(),before=useProjectStore.getState().screens.page.htmlContent,count=useHistoryStore.getState().past.length;
@@ -100,9 +102,13 @@ test('同事件并发导入只接受一次，取消后可重试',async()=>{
  expect((await importVisualEvidence(storage(),owner,JSON.stringify(b.report),b.files,options)).duplicate).toBe(false);
 });
 test('历史资源缺失拒绝任务，文件字节改变使旧任务报告失效',async()=>{
- const repository=new DeliveryRepository(storage(),owner.projectId),record=(await repository.get('page',owner.eventId))!;
- record.after.htmlContent=record.after.htmlContent.replace('</main>','<img src="assets/images/historical.png" alt="历史图"></main>');
- const {contentFingerprint}=await import('../src/services/ai/designWorkflow');record.resultFingerprint=contentFingerprint(record.after.htmlContent);record.candidate.newHtml=record.after.htmlContent;record.candidate.validationEvidence!.candidateFingerprint=record.resultFingerprint;record.assets=[{id:'image',name:'历史图',type:'image',mimeType:'image/png',source:'upload',relPath:'assets/images/historical.png',refCount:1}];await repository.finish(record,'applied');
+ const state=useProjectStore.getState(),path='assets/images/historical.png';await storage().writeBinary(path,png(1,1));state.addAsset({id:'image',name:'历史图',type:'image',mimeType:'image/png',source:'upload',relPath:path,refCount:1});
+ const copy=new DOMParser().parseFromString(state.screens.page.htmlContent,'text/html'),image=copy.createElement('img');image.setAttribute('src',path);image.setAttribute('alt','历史图');copy.querySelector('main')!.append(image);
+ state.stageScreenChange('page',copy.body.innerHTML,'带历史图版本','添加历史图');await stageResourceReport();
+ const auditDeadline=Date.now()+3000;while(!useProjectStore.getState().stagedAssetFiles&&Date.now()<auditDeadline)await new Promise(resolve=>setTimeout(resolve,1));
+ expect(useProjectStore.getState().stagedAssetFiles?.status).toBe('passed');
+ const adopted=await state.commitStagedDelivery('confirm-structure-replace',state.getStagedRenderContextKey());expect(adopted,useProjectStore.getState().stagedAdoptionError??'历史图确认采纳失败').toBe(true);
+ const repository=new DeliveryRepository(storage(),owner.projectId),record=(await repository.listForScreen('page')).records.find(row=>row.candidate.modificationRequest==='添加历史图')!;owner={...owner,eventId:record.id};await storage().remove(path);
  await expect(createVisualTask(storage(),owner)).rejects.toThrow('缺失');await storage().writeBinary('assets/images/historical.png',png(1,1));const task=await createVisualTask(storage(),owner);expect(task.document).toContain('data:image/png;base64,');
  const b=await bundle();await storage().writeBinary('assets/images/historical.png',png(2,2));await expect(importVisualEvidence(storage(),owner,JSON.stringify(b.report),b.files,options)).rejects.toThrow('不匹配');
 });

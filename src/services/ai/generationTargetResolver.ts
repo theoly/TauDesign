@@ -1,6 +1,7 @@
 import { resolveScreenReferences } from './screenReferenceResolver';
 import { requiresPageVariantPlan } from './multiPageContract';
 import { classifyIntent } from './intentClassifier';
+import { explicitlyRequestsPageRedesign } from './pageRedesignIntent';
 
 /**
  * 生成目标单一裁决点 (doc/feature/generation-target-routing/spec.md)
@@ -92,6 +93,14 @@ export function classifyCommand(rawPrompt: string): { kind: CommandKind; hit?: s
 
   const create = EXPLICIT_CREATE_KEYWORDS.find((kw) => t.includes(kw));
   if (create) return { kind: 'explicit_create', hit: create };
+
+  // A redesign is an explicit modification, before the generic “设计…页” create matcher.
+  if (explicitlyRequestsPageRedesign(t)) {
+    if (/(?:根据|参考|依据|基于|按)(?:图片|附件|截图|参考图|样张|设计图|附图)/.test(t)) {
+      return { kind: 'explicit_create', hit: '根据图片附件重新设计' };
+    }
+    return { kind: 'explicit_modify', hit: '整页重设计' };
+  }
 
   const createPage=t.match(/(?:创建|新建|生成|新增|设计|做)(?:一个|一张|个|张)?(?:新的?)?[^，。！？；\n]{0,24}?(?:页面|画框|页)(?!面?的?(?:标题|字号|颜色|按钮))/);
   if(createPage&&!/重新生成|生成当前|生成原页/.test(t))return {kind:'explicit_create',hit:createPage[0]};
@@ -249,6 +258,13 @@ export function resolveGenerationTarget(input: GenerationTargetInput): Generatio
         targetScreenId: screenIds[0],
         referenceSource: 'active_screen',
         reason: `未引用画框，但明确要求修改（"${command.hit}"），工程仅有一个画框「${screens[screenIds[0]].name}」`
+      };
+    }
+    if (screenIds.length === 0) {
+      return {
+        ...base,
+        action: 'create_screen',
+        reason: `工程尚无画框，将（"${command.hit}"）诉求作为新画框直接创建`
       };
     }
     return {

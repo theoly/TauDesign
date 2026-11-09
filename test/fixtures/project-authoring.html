@@ -1,0 +1,43 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>工程作者会话验收</title><body style="margin:0;background:#020617"><div id="header"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {ProjectRepository} from '/src/services/storage/projectRepository.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {useProjectStore,waitForProjectSave} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {suspendHistoryPersistence,resumeHistoryPersistence,flushHistorySaveChecked,loadHistoryForProject} from '/src/services/storage/historyPersistence.ts';
+import {neutralModernTheme} from '/src/utils/themePresets.ts';
+import {Header} from '/src/components/layout/Header.tsx';
+import {managedSnapshot} from '/src/services/storage/managedProjectSnapshot.ts';
+import {browserProjectSnapshotStore,readBrowserProject,publishBrowserProject} from '/src/services/storage/browserProjectSnapshot.ts';
+import {projectKey,projectCacheKey,writeProject} from '/src/utils/projectRegistry.ts';
+import {historyKey} from '/src/services/storage/historyRepository.ts';
+const query=new URLSearchParams(location.search),group=query.get('group'),primary=query.get('primary')==='1';if(!group)throw Error('Independent test group required');const id='author-browser-'+group,folder=primary?undefined:'/synthetic/'+id,storage=createProjectStorage(id),root=ReactDOM.createRoot(document.querySelector('#header'));
+const doc=()=>({id,name:'原工程',createdAt:1,schemaVersion:1,settings:{deviceProfile:'pc',frameWidth:1440,colorMode:'light',lodBudget:12},designSystem:neutralModernTheme,screenOrder:['page'],screens:{page:{id:'page',name:'资料页',position:{x:0,y:0},htmlContent:'<main data-nid="root" class="container-max"><h1>原文</h1></main>',scopedCss:'h1{color:var(--color-primary)}'}},assets:{},components:{},overrides:{},vendorExtension:{version:3,source:'legacy'}});
+window.projectAuthoringFixture={
+ seed:async()=>{if(primary){writeProject(id,JSON.stringify(doc()));localStorage.setItem(historyKey(id),JSON.stringify({schemaVersion:1,projectId:id,savedAt:1,past:[],future:[],checkpoints:[]}));}else await new ProjectRepository(storage).save(doc(),{history:{past:[],future:[],checkpoints:[]}});},
+ open:async()=>{if(primary){if(!await useProjectStore.getState().loadProjectById(id))throw Error('Primary browser project failed to open');}else{const loaded=await new ProjectRepository(storage).load();if(!loaded||!useProjectStore.getState().loadProjectDocument(loaded,folder))throw Error('Source session not installed');await loadHistoryForProject(id,folder);}suspendHistoryPersistence();root.render(React.createElement(Header,{onOpenSettings(){},onOpenExport(){}}));return {id,name:useProjectStore.getState().name};},
+ audit:async()=>{const loaded=await new ProjectRepository(storage).load();return {name:loaded.name};},
+ edit:async name=>{useProjectStore.getState().setName(name);try{await waitForProjectSave(id,folder);return {ok:true,name:useProjectStore.getState().name,status:useProjectStore.getState().projectSaveStatus};}catch(error){return {ok:false,name:useProjectStore.getState().name,status:useProjectStore.getState().projectSaveStatus,message:error.message};}},
+ read:async()=>({snapshot:await storage.readManagedSnapshot(),document:await new ProjectRepository(storage).load()}),
+ editPage:async()=>{useProjectStore.getState().updateScreen('page',{htmlContent:'<main data-nid="root" class="container-max"><h1>新的正文</h1></main>'},'修改正文');await waitForProjectSave(id,folder);},
+ undo:async()=>{useHistoryStore.getState().undo();await waitForProjectSave(id,folder);},
+ redo:async()=>{useHistoryStore.getState().redo();await waitForProjectSave(id,folder);},
+ flush:async()=>{resumeHistoryPersistence();try{await flushHistorySaveChecked(id,folder);return {ok:true};}catch(error){return {ok:false,message:error.message};}finally{suspendHistoryPersistence();}},
+ state:()=>({name:useProjectStore.getState().name,status:useProjectStore.getState().projectSaveStatus,error:useProjectStore.getState().projectSaveError,history:useHistoryStore.getState().past.length}),
+ originalKeys:()=>({project:localStorage.getItem(projectKey(id)),history:localStorage.getItem(historyKey(id))}),
+ create:async()=>{const created=useProjectStore.getState().initNewProject({name:'真实浏览器新建工程',deviceProfile:'pc',createSpecimen:false});useProjectStore.getState().addScreen({name:'新建资料页',htmlContent:'<main data-nid="root">新建完整正文</main>'},'created');await waitForProjectSave(created);return {id:created,status:useProjectStore.getState().projectSaveStatus,author:Boolean(useProjectStore.getState().projectAuthoringSession),originalKey:localStorage.getItem(projectKey(created)),snapshot:await createProjectStorage(created).readManagedSnapshot()};},
+ openSaved:async saved=>{if(!await useProjectStore.getState().loadProjectById(saved))throw Error('Saved primary project missing');return {name:useProjectStore.getState().name,page:useProjectStore.getState().screens.created.htmlContent,history:useHistoryStore.getState().past.map(row=>row.label),snapshot:await createProjectStorage(saved).readManagedSnapshot()};},
+ poisonCache:saved=>localStorage.setItem(projectCacheKey(saved),JSON.stringify({id:saved,name:'过期缓存不应重开',screens:{}})),
+ deleteSaved:async saved=>{await useProjectStore.getState().deleteProject(saved);writeProject(saved,JSON.stringify({id:saved,name:'旧备份不得复活',screens:{}}));return {reopened:await useProjectStore.getState().loadProjectById(saved),snapshot:await createProjectStorage(saved).readManagedSnapshot()};},
+ upgradeHistoryScope:async()=>{
+  const scope='upgrade-history:'+group,old=await managedSnapshot({'project.json':'database authority','screens/page.html':'database page'}),backup={'project.json':'stale backup','history.json':'old separate history'};
+  if(!await browserProjectSnapshotStore.compareExchange(scope,null,old))throw Error('Upgrade test scope already occupied');
+  const [a,b]=await Promise.all([readBrowserProject(scope,()=>backup),readBrowserProject(scope,()=>backup)]);
+  if(a.identity!==b.identity||a.files['project.json']!=='database authority'||a.files['history.json']!=='old separate history')throw Error('Concurrent scope upgrade lost source content');
+  await publishBrowserProject(scope,()=>backup,a.identity,[{path:'history.json',contents:null}]);
+  const after=await readBrowserProject(scope,()=>{throw Error('Legacy backup read again');});if(after.files['history.json']!==undefined)throw Error('Deleted History revived');return {concurrentUpgrade:true,authorityPreserved:true,backupPreserved:backup['history.json']==='old separate history',deletedHistoryNotRevived:true};
+ },
+};
+</script></body></html>

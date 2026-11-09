@@ -1,0 +1,25 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>原生工程事务基础验收</title><body><h1>原生工程事务基础验收</h1><pre id="status">独立合成文件，不调用模型</pre><script type="module">
+import {invoke,isTauri} from '/node_modules/@tauri-apps/api/core.js';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+const query=new URLSearchParams(location.search),root=query.get('root'),phase=query.get('phase');
+const assert=(ok,message)=>{if(!ok)throw Error(message);};
+try{
+ assert(isTauri(),'Actual Tauri runtime required');assert(/^\/private\/tmp\/taudesign-project-publication-[A-Za-z0-9_-]+$/.test(root)&&['save','reopen'].includes(phase),'Only isolated assigned roots allowed');
+ const storage=createProjectStorage('synthetic-publication',root+'/target');let expected;
+ if(phase==='save'){
+  const empty=await storage.readManagedSnapshot();assert(Object.keys(empty.files).length===0,'Target was not empty');
+  await storage.publishManagedSnapshot(empty.identity,[{path:'project.json',contents:'{"id":"old"}'},{path:'screens/page.html',contents:'\ufeff<main>原文</main>\r\n'},{path:'screens/page.css',contents:'old CSS'}]);
+  const before=await storage.readManagedSnapshot(),changes=label=>[{path:'project.json',contents:JSON.stringify({id:label})},{path:'screens/page.html',contents:`<main>${label}</main>`},{path:'screens/page.css',contents:null},{path:'documents/brief.md',contents:label+' requirements'}];
+  const result=await Promise.allSettled(['one','two'].map(label=>storage.publishManagedSnapshot(before.identity,changes(label))));assert(result.filter(row=>row.status==='fulfilled').length===1,'Concurrent publications did not have exactly one winner');
+  const winner=result[0].status==='fulfilled'?'one':'two',saved=await storage.readManagedSnapshot();assert(saved.files['screens/page.html']===`<main>${winner}</main>`&&saved.files['project.json']===JSON.stringify({id:winner})&&saved.files['documents/brief.md']===winner+' requirements'&&saved.files['screens/page.css']===undefined,'Mixed publication');
+  await storage.writeTextAtomic('base.css','external managed CSS');let overwritten=false;try{await storage.publishManagedSnapshot(saved.identity,changes('stale'));overwritten=true;}catch{}
+  assert(!overwritten,'Normal file edits did not invalidate expected identity');const final=await storage.readManagedSnapshot();assert(final.files['screens/page.html']===saved.files['screens/page.html'],'Stale write changed page');
+  expected={snapshot:final,winner,publicationResults:result.map(row=>({ok:row.status==='fulfilled'})),ordinaryEditInvalidated:!overwritten};
+  await invoke('project_write_text_atomic',{root,rel:'expected.json',contents:JSON.stringify(expected)});
+ }else expected=JSON.parse(await invoke('project_read_text',{root,rel:'expected.json'}));
+ const actual=await storage.readManagedSnapshot();assert(JSON.stringify(actual)===JSON.stringify(expected.snapshot),'Fresh process changed snapshot bytes/identity');
+ let privateRead=false;try{await storage.readText('.project-state/pending.json');privateRead=true;}catch{}assert(!privateRead,'Generic IO exposed private recovery data');
+ const report={status:'passed',runtime:'real-tauri',phase,scope:'managed-file transaction APIs, not candidate/History integration',winner:expected.winner,identity:actual.identity,files:Object.keys(actual.files),publications:expected.publicationResults,ordinaryEditInvalidated:expected.ordinaryEditInvalidated,privateReadAllowed:privateRead,providerCalls:0};
+ await invoke('project_write_text_atomic',{root,rel:`native-${phase}-report.json`,contents:JSON.stringify(report,null,2)});document.querySelector('#status').textContent=JSON.stringify(report,null,2);
+}catch(error){document.querySelector('#status').textContent=String(error);if(/^\/private\/tmp\/taudesign-project-publication-[A-Za-z0-9_-]+$/.test(root))await invoke('project_write_text_atomic',{root,rel:`native-${phase}-report.json`,contents:JSON.stringify({status:'failed',runtime:isTauri()?'real-tauri':'browser',message:String(error)})});}
+</script></body></html>

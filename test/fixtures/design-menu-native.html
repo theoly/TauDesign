@@ -1,0 +1,43 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>原生菜单隔离验收</title><body style="margin:0"><div id="probe" style="position:fixed;z-index:500;right:12px;bottom:12px;padding:12px;background:#fff;color:#111;border:1px solid #888"><button id="prepare">载入隔离测试工程</button><span id="status">先检查 File 菜单未完成设计为禁用</span></div><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {App} from '/src/App.tsx';
+import {invoke,isTauri} from '/node_modules/@tauri-apps/api/core.js';
+import {listen} from '/node_modules/@tauri-apps/api/event.js';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {useWorkspaceStore} from '/src/stores/useWorkspaceStore.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {ProjectRepository} from '/src/services/storage/projectRepository.ts';
+import {neutralModernTheme} from '/src/utils/themePresets.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+const query=new URLSearchParams(location.search),root=query.get('root'),assert=(ok,message)=>{if(!ok)throw Error(message);};
+assert(isTauri()&&/^\/private\/tmp\/taudesign-menu-[A-Za-z0-9_-]+$/.test(root),'Only isolated native roots allowed');
+const status=document.getElementById('status'),events=[];let calls=0,baseline,finished=false;
+const forbidden=()=>{calls++;throw Error('Menu must never call a model');};
+DefaultAIEngineCore.prototype.streamText=forbidden;DefaultAIEngineCore.prototype.generateObject=forbidden;
+await listen('menu:design-tasks',()=>events.push({type:'native-menu',at:Date.now()}));
+window.addEventListener('taudesign:open-design-tasks',()=>events.push({type:'app-open',at:Date.now()}));
+useWorkspaceStore.setState({view:'manager',activeProjectId:null});
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+async function prepareProject(){try{
+ const id='native-menu-synthetic',folder=root+'/project.aidesign',storage=createProjectStorage(id,folder),repo=new ProjectRepository(storage);
+ const html='<main data-nid="menu-root" class="p-4"><h1 data-nid="menu-title">隔离菜单验收</h1><p data-nid="menu-copy">合成页面，不含用户工程内容。</p></main>';
+ await repo.save({id,name:'原生菜单隔离工程',schemaVersion:1,settings:{deviceProfile:'mobile',frameWidth:390,colorMode:'light',lodBudget:12},designSystem:neutralModernTheme,screens:{page:{id:'page',name:'合成页面',htmlContent:html,position:{x:0,y:0}}},screenOrder:['page'],assets:{},components:{},overrides:{}},{history:{past:[],future:[],checkpoints:[]}});
+ assert(useProjectStore.getState().loadProjectDocument(await repo.load(),folder),'Author source did not install');
+ useWorkspaceStore.setState({view:'workspace',activeProjectId:id});baseline={html,history:useHistoryStore.getState().past.length};
+ document.getElementById('prepare').disabled=true;status.textContent='请从实际 File 菜单打开未完成设计…';
+}catch(error){status.textContent=String(error);await invoke('project_write_text_atomic',{root,rel:'menu-report.json',contents:JSON.stringify({status:'failed',error:String(error)})});}}
+document.getElementById('prepare').onclick=prepareProject;
+new MutationObserver(async()=>{
+ if(finished||!baseline||!events.some(e=>e.type==='native-menu'))return;
+ const dialog=document.querySelector('[role="dialog"][aria-label="设计任务记录"]');if(!dialog)return;finished=true;
+ const s=useProjectStore.getState();const report={status:calls===0&&s.screens.page.htmlContent===baseline.html&&useHistoryStore.getState().past.length===baseline.history?'passed':'failed',runtime:'real-tauri',scope:'actual native File menu event through App to ChatDrawer task dialog on synthetic folder',events,dialog:dialog.getAttribute('aria-label'),pageUnchanged:s.screens.page.htmlContent===baseline.html,baselineHtml:baseline.html,observedHtml:s.screens.page.htmlContent,historyUnchanged:useHistoryStore.getState().past.length===baseline.history,modelCalls:calls};
+ status.textContent=report.status==='passed'?'真实菜单已打开任务面板，零模型/零页面改动':'菜单检查失败';
+ await invoke('project_write_text_atomic',{root,rel:'menu-report.json',contents:JSON.stringify(report,null,2)});
+}).observe(document.getElementById('root'),{subtree:true,childList:true});
+if(query.has('autoPrepare'))await prepareProject();
+await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+await invoke('project_write_text_atomic',{root,rel:'ready.json',contents:JSON.stringify({status:'ready',runtime:'real-tauri',window:'TauDesign · Native Menu Verification',nativeListenerInstalled:true,modelCalls:calls})});
+</script></body></html>

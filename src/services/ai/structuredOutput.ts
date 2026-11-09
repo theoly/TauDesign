@@ -1,3 +1,52 @@
+/**
+ * 健壮提取模型响应中的 JSON 文本，剥离外层解释性文字、Markdown 标记及换行符 (BR-CFR-04)
+ */
+export function extractJsonPayload(raw: string): string {
+  if (typeof raw !== 'string') return '';
+  const trimmed = raw.trim();
+
+  // 1. 如果包含 Markdown 代码块 ```json ... ``` 或 ``` ... ```，提取代码块内部内容
+  const codeBlockMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (codeBlockMatch) {
+    const candidate = codeBlockMatch[1].trim();
+    const start = candidate.indexOf('{');
+    const end = candidate.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      return candidate.slice(start, end + 1);
+    }
+    const arrStart = candidate.indexOf('[');
+    const arrEnd = candidate.lastIndexOf(']');
+    if (arrStart >= 0 && arrEnd > arrStart) {
+      return candidate.slice(arrStart, arrEnd + 1);
+    }
+    return candidate;
+  }
+
+  // 2. 无代码块但外层有说明文字（如 "Layout:\n{...}" 或 "这是布局计划：\n{...}"）
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    return trimmed.slice(start, end + 1);
+  }
+
+  // 3. 数组形式 JSON
+  const arrStart = trimmed.indexOf('[');
+  const arrEnd = trimmed.lastIndexOf(']');
+  if (arrStart >= 0 && arrEnd > arrStart) {
+    return trimmed.slice(arrStart, arrEnd + 1);
+  }
+
+  return trimmed;
+}
+
+/**
+ * 带有 JSON 提取容灾的安全解析函数
+ */
+export function safeJsonParse<T = unknown>(raw: string): T {
+  const payload = extractJsonPayload(raw);
+  return JSON.parse(payload) as T;
+}
+
 /** A closed JSON object can still be a truncated subset of the intended operations. */
 export function structuredOutputIssue(finishReason?: string, recoveredStreamError?: string): string | undefined {
   if (recoveredStreamError) return '结构化输出期间连接中断，未使用恢复出的部分结果，请重新发起请求。';

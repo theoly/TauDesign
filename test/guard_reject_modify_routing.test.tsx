@@ -1,3 +1,4 @@
+import {waitForPublicationIdle} from './helpers/publication';
 import { mockModificationAnalysis, confirmLatestModification } from './modification_review_helpers';
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import React, { act } from 'react';
@@ -11,6 +12,7 @@ import { resolveApplyToolCall } from '../src/services/tools/applyTargetResolver'
 import { PipelineContext } from '../src/services/ai/engine/pipeline/types';
 import { PipelineExecutor } from '../src/services/ai/engine/pipeline/executor';
 import { AIService } from '../src/services/ai/aiService';
+import {buildDesignTaskContract} from '../src/services/ai/designWorkflow';
 import { passStagedRenderCheck } from './helpers/stagedQuality';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -196,7 +198,7 @@ describe('引用画框修改落点路由 (Guard Reject Modify Routing)', () => {
       root = createRoot(container);
     });
 
-    afterEach(() => {
+    afterEach(async () => {
     analysisMock.mockRestore();
       PipelineExecutor.execute = originalExecute;
       AIService.stream = originalStream;
@@ -204,11 +206,13 @@ describe('引用画框修改落点路由 (Guard Reject Modify Routing)', () => {
         root.unmount();
       });
       container.remove();
+      await waitForPublicationIdle();
     });
 
     test('守卫拦截后不出现“一键挂载至画板”，点击强制放行覆盖原画框且不新建页面', async () => {
       PipelineExecutor.execute = (async () => ({
         status: 'rejected_by_guard',
+        workflowContract:buildDesignTaskContract({intent:'modify_screen',request:'按附件图片精准修改页面',target:Object.values(useProjectStore.getState().screens)[0],deviceProfile:useProjectStore.getState().settings.deviceProfile,frameWidth:useProjectStore.getState().settings.frameWidth,designSystem:useProjectStore.getState().designSystem}),
         rawResponse: '<artifact identifier="screen_1" type="screen" title="充值魔方点"></artifact>',
         extractedHtml: REWRITTEN_HTML,
         structureDiff: { ok: false, added: ['bal1'], removed: ['pk1'], changed: [] },
@@ -254,6 +258,7 @@ describe('引用画框修改落点路由 (Guard Reject Modify Routing)', () => {
 
       await act(async () => {
         forceBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await waitForPublicationIdle();
       });
 
       // 3. 原画框被原地覆盖，画布无新增画框

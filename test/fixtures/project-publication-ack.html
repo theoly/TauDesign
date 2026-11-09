@@ -1,0 +1,11 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>发布确认故障验证</title><body><pre id="status">独立合成工程；不调用模型</pre><script type="module">
+import {verifyPublicationAcknowledgements} from '/test/helpers/projectPublicationAck.ts';
+import {ProjectRepository} from '/src/services/storage/projectRepository.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {neutralModernTheme} from '/src/utils/themePresets.ts';
+window.checkPublicationAck=async()=>{
+ const id='ack-browser-'+crypto.randomUUID(),storage=createProjectStorage(id);
+ await new ProjectRepository(storage).save({id,name:'独立确认夹具',settings:{deviceProfile:'pc',frameWidth:1440,colorMode:'light'},designSystem:neutralModernTheme,screens:{page:{id:'page',name:'资料',htmlContent:'<main>完整原文</main>',position:{x:0,y:0}}},screenOrder:['page']},{history:{past:[],future:[],checkpoints:[]}});
+ const result=await verifyPublicationAcknowledgements(storage);document.querySelector('#status').textContent=JSON.stringify(result,null,2);return result;
+};
+</script></body></html>

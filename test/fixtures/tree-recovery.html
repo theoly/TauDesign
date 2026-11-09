@@ -1,0 +1,29 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>完整共享树恢复受控验证</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><script type="module">
+import {requestSchema} from '/test/helpers/modelSchema.ts';
+import React from '/node_modules/.vite/deps/react.js';import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';import '/src/styles/index.css';
+import {ChatDrawer} from '/src/components/chat/ChatDrawer.tsx';import {InfiniteCanvas} from '/src/components/canvas/InfiniteCanvas.tsx';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';import {MockTransport} from '/src/services/ai/engine/transport/mockTransport.ts';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {useAIConfigStore,defaultProviders,defaultBindings} from '/src/stores/useAIConfigStore.ts';import {neutralModernTheme} from '/src/utils/themePresets.ts';
+import {withMultiPageTasks} from '/test/fixtures/multiPageTask.ts';import {listDesignTasks} from '/src/services/storage/designTaskRepository.ts';import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+const query=new URLSearchParams(location.search),device=query.get('device')==='pc'?'pc':'mobile',store=useProjectStore.getState(),original='<main data-nid="old00001" class="p-4"><h1>保留原页</h1></main>';
+store.initNewProject({name:'树恢复受控验证',deviceProfile:device,designSystem:structuredClone(neutralModernTheme),createSpecimen:false});store.addScreen({name:'原页',htmlContent:original,position:{x:0,y:0}},'old');store.setViewportTransform({x:32,y:300,scale:device==='pc'?0.35:0.7});useHistoryStore.getState().restore(null);
+useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'FIXTURE_SECRET'})),bindings:{...defaultBindings,code:{role:'code',providerId:'prov-openai',modelId:'gpt-4o'}}});
+const state={requests:[],original,state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),undo:()=>useHistoryStore.getState().undo(),redo:()=>useHistoryStore.getState().redo()};window.treeRecoveryFixture=state;
+state.records=async()=>{const s=state.state();return (await listDesignTasks(createProjectStorage(s.id,s.folderPath),s.id,true)).map(t=>({id:t.id,state:t.state,budget:t.budget,recovery:t.recovery,pages:t.treeCheckpoint?.delivery.pages.map(p=>({id:p.id,screenId:p.screenId,name:p.name})),leafSources:t.treeCheckpoint?.leafSources.map(p=>({nodeId:p.nodeId,taskId:p.contract.taskId})),textFiles:t.inputs?.textFiles.length}));};
+const transport=new MockTransport();let leafCalls=0;
+const core=new DefaultAIEngineCore({id:'tree-local',stream(request,event){
+ const schema=requestSchema(request),last=request.body.messages.at(-1).content;let stage,text;
+ if(schema?.properties.pages){stage='batch-plan';text=JSON.stringify(withMultiPageTasks({summary:'登录和注册',pages:[{name:'登录页',requirements:['手机号登录'],links:['注册页']},{name:'注册页',requirements:['注册资料'],links:['登录页']}]}));}
+ else if(schema?.properties.rootRequirements){stage='tree-plan';const pages=JSON.parse(last.slice(last.lastIndexOf('\n')+1));text=JSON.stringify({version:1,rootRequirements:'公共服务',groups:[{id:'branch-form',parentId:'root',requirements:'表单公共结构'},{id:'branch-inner',parentId:'branch-form',requirements:'内层说明'}],leaves:pages.map(page=>({pageId:page.id,parentId:'branch-inner'}))});}
+ else if(last.includes('[共享结构写入阶段，覆盖整页输出格式]')){const node=JSON.parse(last.slice(last.lastIndexOf('\n')+1));stage=node.nodeId;text=`<artifact><main class="col gap-2"><p class="px-4 text-muted">${node.nodeId==='root'?'账户服务':node.nodeId==='branch-form'?'安全便捷':'请填写资料'}</p><div data-generation-slot="content-${node.nodeId}"></div></main></artifact>`;}
+ else {stage='leaf';const scope=JSON.parse(request.body.messages[0].content.match(/confirmedMultiPageScope=(.*); output exactly this page/)[1]);leafCalls++;
+  state.requests.push({stage,index:scope.index,failed:leafCalls===2});
+  if(leafCalls===2){transport.enqueueScenario({events:[{type:'Error',kind:'network_error',message:'fixture second leaf interrupted'}],delayMs:0});return transport.stream(request,event);}
+  text=`<artifact type="screen" title="${scope.name}"><main class="${device==='pc'?'container-max ':''}p-4 col gap-4"><h1 class="text-xl">${scope.name}</h1><p>${scope.index===0?'手机号登录':'注册资料'}</p><label>邮箱<input class="input"/></label><button class="btn btn-primary">提交</button>${scope.requiredTargetIds.map(id=>`<button class="btn" data-target-screen-id="${id}">打开关联页</button>`).join('')}</main></artifact>`;
+ }
+ if(stage!=='leaf')state.requests.push({stage});transport.queueResponse(text,10);return transport.stream(request,event);
+}});
+const stream=DefaultAIEngineCore.prototype.streamText;DefaultAIEngineCore.prototype.streamText=function(options){return stream.call(core,options);};
+const root=ReactDOM.createRoot(document.getElementById('root'));const render=key=>root.render(React.createElement('div',{style:{display:'flex',height:'100vh'}},React.createElement('div',{style:{width:390,flexShrink:0}},React.createElement(ChatDrawer,{key})),React.createElement('div',{style:{flex:1,minWidth:0,position:'relative'}},React.createElement(InfiniteCanvas))));state.remount=()=>render('restored');render('initial');
+</script></body></html>

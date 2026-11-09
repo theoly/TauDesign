@@ -23,19 +23,21 @@ async def main(args):
               const {DefaultAIEngineCore}=await window.__module('/src/services/ai/engine/core/index.ts');
               useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'controlled-local-fixture'})),bindings:defaultBindings});
               window.__multi={plans:0,streams:[],holdIndex:0,failIndex:0,done:0};
-              DefaultAIEngineCore.prototype.generateObject=async()=>{
+              const {withMultiPageTasks,multiPageTask}=await window.__module('/test/fixtures/multiPageTask.ts');
+              DefaultAIEngineCore.prototype.generateObject=async(schema)=>{
+                if(schema.properties?.features){const task=multiPageTask('会员资料',['会员资料']);task.features[0].interactions[0].label='保存资料';return task;}
                 window.__multi.plans++;
-                return {summary:'会员三页静态设计，保留已有页面',pages:[
+                return withMultiPageTasks({summary:'会员三页静态设计，保留已有页面',pages:[
                   {name:'会员首页',requirements:['会员信息与清晰主按钮'],links:['会员列表']},
                   {name:'会员列表',requirements:['会员列表与详情入口'],links:['会员详情']},
-                  {name:'会员详情',requirements:['资料卡片和保存按钮'],links:[]}]};
+                  {name:'会员详情',requirements:['资料卡片和保存按钮'],links:[]}]});
               };
               DefaultAIEngineCore.prototype.streamText=function(options){
                 const f=window.__multi,scope=JSON.parse(options.messages.find(m=>m.role==='system').content.match(/confirmedMultiPageScope=(.*); output exactly this page/)[1]);
                 const index=f.streams.length+1;
                 f.streams.push({scope,pagesAtRequest:window.__projectStore.getState().screenOrder.length,request:options.messages.at(-1).content});
                 const links=scope.requiredTargetIds.map((id,i)=>'<button class="btn" data-target-screen-id="'+id+'">查看关联 '+(i+1)+'</button>').join('');
-                const answer=f.failIndex===index?'模型未返回有效页面':'<artifact identifier="screen_new" type="screen" title="'+scope.name+'"><main class="col gap-4 p-4"><h1 class="text-xl font-bold">'+scope.name+'</h1><section class="card p-4"><h2 class="text-lg font-bold">会员资料</h2><p class="text-muted">当前页面静态设计</p></section><button class="btn btn-primary">保存资料</button>'+links+'</main></artifact>';
+                const answer=f.failIndex===index?'模型未返回有效页面':'<artifact identifier="screen_new" type="screen" title="'+scope.name+'"><main class="col gap-4 p-4"><h1 class="text-xl font-bold">'+scope.name+'</h1><section class="card p-4"><h2 class="text-lg font-bold">会员资料</h2><p class="text-muted">查看会员信息并保存资料</p></section><button class="btn btn-primary">保存资料</button>'+links+'</main></artifact>';
                 const ready=f.holdIndex===index?new Promise(resolve=>f.release=resolve):Promise.resolve();
                 return {textStream:(async function*(){await ready;yield answer;})(),reasoningStream:(async function*(){})(),textPromise:ready.then(()=>{f.done++;return answer;}),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve({inputTokens:100,outputTokens:200}),finishReasonPromise:Promise.resolve('stop'),abort(){}};
               };
@@ -64,9 +66,9 @@ async def main(args):
             card = page.locator('[data-testid="multi-page-plan"]').last
             await card.get_by_label('第1页名称', exact=True).fill('会员工作台')
             await card.get_by_label('第1页要求', exact=True).fill('展示会员概况，提供清晰的查看列表入口')
-            await card.locator('details').nth(2).locator('summary').click()
+            await card.get_by_label('第3页名称',exact=True).locator('xpath=ancestor::details[1]').locator(':scope > summary').click()
             await card.get_by_role('button', name='移除此页：会员详情', exact=True).click()
-            await card.locator('details').nth(1).locator('summary').click()
+            await card.get_by_label('第2页名称',exact=True).locator('xpath=ancestor::details[1]').locator(':scope > summary').click()
             await card.get_by_label('会员列表 → 会员工作台', exact=True).check()
             await card.get_by_role('button', name='确认计划并生成 2 页', exact=True).click()
             await card.get_by_text('已按确认计划新增 2 页', exact=False).wait_for(timeout=30000)
@@ -84,15 +86,17 @@ async def main(args):
               }
               if(!f.streams[0].request.includes('展示会员概况'))throw Error('User edits did not reach model');
               // Canvas measurement is recalculated asynchronously after remount; compare all persistent design fields.
-              const designPages=items=>items.map(({measuredHeight,...screen})=>screen);
-              const snapshot=JSON.stringify(designPages(pages));
+              const {screenDesignSnapshot,assertSavedScreenFields}=await import('/test/helpers/screenSnapshot.ts');
+              const snapshot=screenDesignSnapshot(pages);
               useHistoryStore.getState().undo();
               if(JSON.stringify(window.__projectStore.getState().screenOrder)!=='["old"]'||Object.keys(window.__projectStore.getState().screens).length!==1)throw Error('Undo left partial batch');
               useHistoryStore.getState().redo();
-              if(JSON.stringify(designPages(pages.map(p=>window.__projectStore.getState().screens[p.id])))!==snapshot)throw Error('Redo lost batch metadata');
-              const {readProject}=await window.__module('/src/utils/projectRegistry.ts');
-              const saved=readProject(s.id);window.__projectStore.getState().loadProject(saved);
-              if(JSON.stringify(designPages(pages.map(p=>window.__projectStore.getState().screens[p.id])))!==snapshot)throw Error('Reopen lost batch metadata');
+              if(screenDesignSnapshot(pages.map(p=>window.__projectStore.getState().screens[p.id]))!==snapshot)throw Error('Redo lost batch metadata');
+              await window.__projectStore.getState().saveProjectChecked();
+              const {ProjectRepository}=await window.__module('/src/services/storage/projectRepository.ts'),{createProjectStorage}=await window.__module('/src/services/storage/projectStorage.ts');
+              const saved=await new ProjectRepository(createProjectStorage(s.id)).load(),savedPages=pages.map(page=>saved.screens[page.id]);assertSavedScreenFields(pages,savedPages);const savedSnapshot=screenDesignSnapshot(savedPages);
+              await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(s.id);
+              if(screenDesignSnapshot(pages.map(p=>window.__projectStore.getState().screens[p.id]))!==savedSnapshot)throw Error('Reopen lost batch metadata');
               window.__projectStore.getState().setActiveScreen(pages[0].id);
               return {projectId:s.id,screenIds:pages.map(p=>p.id),names:pages.map(p=>p.name),historyDelta:1,streams:f.streams.map(r=>({scope:r.scope,pagesAtRequest:r.pagesAtRequest})),evidence:pages.map(p=>p.metadata.creationEvidence),delivery:pages[0].metadata.multiPageDelivery};
             }''', fixture)

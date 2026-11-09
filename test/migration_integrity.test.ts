@@ -7,13 +7,14 @@ import * as folder from '../src/services/storage/folderPicker';
 import {useWorkspaceStore} from '../src/stores/useWorkspaceStore';
 import {writeProject,upsertMeta,listProjects} from '../src/utils/projectRegistry';
 import {historyKey,serializeHistory} from '../src/services/storage/historyRepository';
+import {managedSnapshot} from '../src/services/storage/managedProjectSnapshot';
 const storage=()=>new storageModule.LocalStorageStorage('migration-'+crypto.randomUUID());
 const project=():ProjectDocument=>({id:'migration-'+crypto.randomUUID(),name:'旧工程',schemaVersion:1,
  settings:{deviceProfile:'mobile',frameWidth:390,viewportGuideHeight:844},designSystem:structuredClone(neutralModernTheme) as any,
  screens:{page:{id:'page',name:'资料',position:{x:40,y:60},htmlContent:'<main data-nid="root"><button>保存资料</button></main>',scopedCss:'button{border-radius:12px}',metadata:{navigationTitle:'资料',designRole:{kind:'page',group:'会员'}}}},
  overrides:{'page:root':{nid:'root',declarations:{padding:'16px'}}},components:{card:{id:'card',version:1,templateHtml:'<p>资料卡</p>'}},assets:{},decisions:{one:{content:'保留按钮'}},designLibraryBinding:{mode:'project-copy',sourceProjectId:'brand'} as any});
 function intercept(target:ProjectStorage,read:(path:string,value:string|null)=>string|null|Promise<string|null>):ProjectStorage {
- return new Proxy(target,{get(object,key){if(key==='readText')return async(path:string)=>read(path,await object.readText(path));const value=Reflect.get(object,key);return typeof value==='function'?value.bind(object):value;}});
+ return new Proxy(target,{get(object,key){if(key==='readText')return async(path:string)=>read(path,await object.readText(path));if(key==='readManagedSnapshot')return async()=>{const snapshot=await object.readManagedSnapshot!(),files:Record<string,string>={};for(const[path,text]of Object.entries(snapshot.files)){const value=await read(path,text);if(value!==null)files[path]=value;}return managedSnapshot(files);};const value=Reflect.get(object,key);return typeof value==='function'?value.bind(object):value;}});
 }
 for(const field of ['settings','designSystem','overrides','components','assets','decisions','designLibraryBinding'])test(`HTML完好但${field}丢失时迁移失败并保留备份`,async()=>{
  const target=storage(),source=JSON.stringify(project()),broken=intercept(target,(path,value)=>{if(path==='project.json'&&value){const doc=JSON.parse(value);delete doc[field];return JSON.stringify(doc);}return value;});
@@ -28,7 +29,7 @@ test('文档正文静默缺失阻断迁移且源未改变',async()=>{
  const source=JSON.stringify(doc),result=await migrateProjectToFolder(source,intercept(storage(),(path,value)=>path.startsWith('documents/')?null:value));expect(result.ok).toBe(false);expect(result.error).toContain('项目文档');expect(result.backup).toBe(source);
 });
 test('读回抛出异常返回失败，保留可恢复源',async()=>{
- const target=storage(),read=target.readText.bind(target);let written=false;const write=target.writeTextAtomic.bind(target);target.writeTextAtomic=async(path,text)=>{await write(path,text);if(path==='project.json')written=true;};target.readText=async path=>{if(written&&path==='project.json')throw Error('disk disconnected');return read(path);};
+ const target=storage(),read=target.readManagedSnapshot.bind(target);let written=false;const write=target.publishManagedSnapshot.bind(target);target.publishManagedSnapshot=async(expected,changes,resources)=>{const identity=await write(expected,changes,resources);written=true;return identity;};target.readManagedSnapshot=async()=>{if(written)throw Error('disk disconnected');return read();};
  const source=JSON.stringify(project()),result=await migrateProjectToFolder(source,target);expect(result.ok).toBe(false);expect(result.error).toContain('disk disconnected');expect(result.backup).toBe(source);
 });
 test('注册资源实际复制，索引/原始字节/CSS/文档/旧缺省字段均保留',async()=>{
@@ -39,13 +40,13 @@ test('注册资源实际复制，索引/原始字节/CSS/文档/旧缺省字段�
 });
 for(const kind of ['missing','empty','corrupted','unsafe'] as const)test(`资源${kind}不伪报迁移完成`,async()=>{
  const doc=project(),source=storage(),target=storage(),path=kind==='unsafe'?'assets/images/../secrets.png':'assets/images/logo.png';doc.assets={logo:{id:'logo',relPath:path}};
- if(kind!=='missing')await source.writeBinary(path,kind==='empty'?'':'aW1hZ2U=');if(kind==='corrupted')target.writeBinary=async(path)=>storageModule.LocalStorageStorage.prototype.writeBinary.call(target,path,'bG9zcw==');
+ if(kind==='unsafe')localStorage.setItem(source.scopeKey.slice('localStorage:'.length)+':'+path,'aW1hZ2U=');else if(kind!=='missing')await source.writeBinary(path,kind==='empty'?'':'aW1hZ2U=');if(kind==='corrupted')target.writeBinary=async(path)=>storageModule.LocalStorageStorage.prototype.writeBinary.call(target,path,'bG9zcw==');
  const original=JSON.stringify(doc),result=await migrateProjectToFolder(original,target,source);expect(result.ok).toBe(false);expect(result.backup).toBe(original);expect(await target.readText('project.json')).toBeNull();
 });
 const restores:(()=>void)[]=[];afterEach(()=>{while(restores.length)restores.pop()!();});
 test('History保存失败不发布迁移成功或改注册表路径',async()=>{
- const doc=project(),id=doc.id,source=JSON.stringify(doc),target=storage();writeProject(id,source);localStorage.setItem(historyKey(id),serializeHistory(id,{past:[],future:[],checkpoints:[]},1024*1024));upsertMeta({id,name:doc.name,deviceProfile:'mobile',createdAt:1,updatedAt:1,screenCount:1});
- for(const mock of [spyOn(folder,'isDesktopRuntime').mockReturnValue(true),spyOn(folder,'pickProjectFolder').mockResolvedValue('/virtual/migration.aidesign'),spyOn(storageModule,'createProjectStorage').mockReturnValue(target)])restores.push(()=>mock.mockRestore());
+ const doc=project(),id=doc.id,source=JSON.stringify(doc),target=storage(),sourceStorage=storage();writeProject(id,source);localStorage.setItem(historyKey(id),serializeHistory(id,{past:[],future:[],checkpoints:[]},1024*1024));upsertMeta({id,name:doc.name,deviceProfile:'mobile',createdAt:1,updatedAt:1,screenCount:1});
+ for(const mock of [spyOn(folder,'isDesktopRuntime').mockReturnValue(true),spyOn(folder,'pickProjectFolder').mockResolvedValue('/virtual/migration.aidesign'),spyOn(storageModule,'createProjectStorage').mockImplementation((_id,path)=>path?target:sourceStorage)])restores.push(()=>mock.mockRestore());
  const write=target.writeTextAtomic.bind(target);target.writeTextAtomic=async(path,text)=>{if(path==='history.json')throw Error('history disk full');return write(path,text);};
  const result=await useWorkspaceStore.getState().migrateProject(id);expect(result.ok).toBe(false);expect(result.message).toContain('history disk full');expect(listProjects().find(meta=>meta.id===id)?.folderPath).toBeUndefined();
 });

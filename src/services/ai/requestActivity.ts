@@ -1,6 +1,7 @@
 import type {AIEngineCore,StreamTextOptions} from './engine/core/types';
 
 export interface RequestActivity {
+  networkAttempts?:number;lastFinishReason?:string;httpStatus?:number;
   startedAt:number;lastActivityAt?:number;requests:number;active:number;textChars:number;reasoningChars:number;jsonChars:number;
   status:'idle'|'waiting'|'receiving'|'returned'|'failed'|'cancelled';providerId?:string;model?:string;
 }
@@ -8,7 +9,7 @@ export const initialRequestActivity=():RequestActivity=>({startedAt:Date.now(),r
 /** Application core observations, not HTTP counts or Provider acknowledgements. Never consumes a second stream. */
 export function observeRequestActivity(core:AIEngineCore,onActivity:(snapshot:RequestActivity)=>void,isCurrent=()=>true,initial?:Readonly<RequestActivity>){
   let closed=false,lastPublished=0;
-  const cleanups=new Set<()=>void>();
+  const cleanups=new Set<()=>void>();const attemptIds=new Set<string>();
   if(initial?.active)throw Error('只能接续已经结算的应用调用观察。');
   const state=initial?{...initial}:initialRequestActivity();
   const publish=(force=false)=>{
@@ -32,7 +33,7 @@ export function observeRequestActivity(core:AIEngineCore,onActivity:(snapshot:Re
     };
     const abort=()=>finish('cancelled'),cleanup=()=>options.signal?.removeEventListener('abort',abort);
     cleanups.add(cleanup);options.signal?.addEventListener('abort',abort,{once:true});
-    return {finish,chunk(text:string,reasoning:boolean){
+    return {finish,transport(receipt:import('./engine/core/types').TransportReceipt){if(done||closed)return;for(const id of receipt.attemptIds)attemptIds.add(id);state.networkAttempts=(initial?.networkAttempts??0)+attemptIds.size;state.lastFinishReason=receipt.finishReason;state.httpStatus=receipt.httpStatus;publish(true);},chunk(text:string,reasoning:boolean){
       if(reasoning)reasoningObserved+=text.length;else textObserved+=text.length;
       count(textObserved,reasoningObserved);
     },result(text:string,reasoning?:string){count(Math.max(textObserved,text.length),Math.max(reasoningObserved,reasoning?.length??0));},
@@ -42,13 +43,13 @@ export function observeRequestActivity(core:AIEngineCore,onActivity:(snapshot:Re
   const monitored:AIEngineCore={
     async generateObject<T>(schema:Record<string,unknown>,options:Omit<StreamTextOptions,'jsonSchema'>){
       const request=begin(options);
-      try{const result=await core.generateObject<T>(schema,options);request.json(result);request.finish(options.signal?.aborted?'cancelled':'returned');return result;}
+      try{const result=await core.generateObject<T>(schema,{...options,onTransportEvidence:r=>{request.transport(r);options.onTransportEvidence?.(r);}});request.json(result);request.finish(options.signal?.aborted?'cancelled':'returned');return result;}
       catch(error){request.finish(options.signal?.aborted?'cancelled':'failed');throw error;}
     },
     streamText(options){
       const request=begin(options);
       try{
-        const stream=core.streamText(options);
+        const stream=core.streamText({...options,onTransportEvidence:r=>{request.transport(r);options.onTransportEvidence?.(r);}});
         const observe=async function*(source:AsyncIterable<string>,reasoning:boolean){for await(const chunk of source){request.chunk(chunk,reasoning);yield chunk;}};
         const completed=Promise.all([stream.textPromise,stream.reasoningPromise,stream.usagePromise,stream.recoveryPromise,stream.finishReasonPromise]);
         return {...stream,textStream:observe(stream.textStream,false),reasoningStream:observe(stream.reasoningStream,true),

@@ -1,3 +1,4 @@
+import {waitForChatIdle} from './modification_review_helpers';
 import {chatPageTaskPlan} from './fixtures/pageTaskPlan';
 import {stubPageCreationRender} from './helpers/pageCreation';
 stubPageCreationRender();
@@ -26,7 +27,7 @@ test('chat name-reference passes current source styles and creates a separate pa
  const host=document.createElement('div');document.body.append(host);const root=createRoot(host);
  try{act(()=>root.render(<ChatDrawer/>));const textarea=host.querySelector('textarea')!;act(()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(textarea,'参考订单管理，创建一个订单详情页');textarea.dispatchEvent(new Event('input',{bubbles:true}));});
  await act(async()=>{(host.querySelector('button[title*="发送设计诉求"]') as HTMLButtonElement).click();});
- expect(calls).toHaveLength(1);const actual=calls[0].messages.map(m=>m.content).join('\n');expect(actual).toContain('31px');expect(actual).toContain('.source-only');expect(actual).toContain('保存订单');
+ await waitForChatIdle(host);expect(calls).toHaveLength(1);const actual=calls[0].messages.map(m=>m.content).join('\n');expect(actual).toContain('31px');expect(actual).toContain('.source-only');expect(actual).toContain('保存订单');
  expect(Object.keys(useProjectStore.getState().screens)).toHaveLength(2);expect(JSON.stringify({screen:useProjectStore.getState().screens.original,override:useProjectStore.getState().overrides['original:submit']})).toBe(before);expect(host.textContent).toContain('引用画框:');expect(host.textContent).toContain('@订单管理');
  }finally{PipelineExecutor.execute=execute;act(()=>root.unmount());host.remove();}
 });

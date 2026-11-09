@@ -1,0 +1,24 @@
+import {mkdir,readFile,writeFile,readdir} from 'node:fs/promises';
+import {resolve,dirname} from 'node:path';
+import {createHash} from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+import {evaluateOffline,OFFLINE_TARGETS} from '../src/services/ai/designKnowledge/offlineEvaluation';
+import type {RelevanceCase} from '../src/services/ai/designKnowledge/evaluation';
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),args=process.argv.slice(2);
+if(args.length&&(args.length!==2||args[0]!=='--output'))throw Error('Usage: bun scripts/evaluate-design-offline.ts [--output directory]');
+const out=resolve(root,args[1]??'doc/ui-design-workflow/evidence/2026-11-03-m5-offline');
+await mkdir(out,{recursive:true});
+// Exclusive manifest creation reserves the first evaluation, even if scoring later fails.
+const fixture='test/fixtures/design-knowledge/relevance-v1.json';
+const paths=[fixture,'scripts/evaluate-design-offline.ts','package.json','bun.lock',...(await readdir(resolve(root,'src/services/ai/designKnowledge'))).filter(p=>p.endsWith('.ts')).map(p=>'src/services/ai/designKnowledge/'+p)].sort();
+const snapshot=async()=>Object.fromEntries(await Promise.all(paths.map(async path=>[path,createHash('sha256').update(await readFile(resolve(root,path))).digest('hex')])));
+const before=await snapshot(),manifest={version:1,createdAt:new Date().toISOString(),targets:OFFLINE_TARGETS,sourceSha256:before,runtime:{bun:process.versions.bun,platform:process.platform,arch:process.arch},policy:'First held-out evaluation; no tuning or sample removal after scoring.'};
+await writeFile(resolve(out,'input-manifest.json'),JSON.stringify(manifest,null,2)+'\n',{flag:'wx'});
+const data=JSON.parse(await readFile(resolve(root,fixture),'utf8'));
+if(data.version!==1)throw Error('未知评估数据版本。');
+const result=evaluateOffline(data.cases as RelevanceCase[]),after=await snapshot();
+if(JSON.stringify(before)!==JSON.stringify(after))throw Error('评估期间输入发生变化，不能发布结果。');
+const report={...result,generatedAt:new Date().toISOString(),runtime:manifest.runtime,sourceSha256:before,inputsUnchanged:true};
+await writeFile(resolve(out,'report.json'),JSON.stringify(report,null,2)+'\n',{flag:'wx'});
+console.log(JSON.stringify({out,passed:report.passed,calibration:{positive:report.calibration.contextual.positive,negative:report.calibration.contextual.negative},heldOut:{positive:report.heldOut.contextual.positive,negative:report.heldOut.contextual.negative,baselinePositive:report.heldOut.baseline.positive},gates:report.gates}));
+if(!report.passed)process.exitCode=1;

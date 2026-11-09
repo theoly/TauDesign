@@ -286,6 +286,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
           return (
             <ScreenFrame
               key="staged-screen"
+              contentTask={stagedScreen.workflowContract??(stagedScreen.modificationRequest?{request:stagedScreen.modificationRequest}:undefined)}
               screen={{
                 id: 'staged-screen-preview',
                 name: stagedScreen.screenName,

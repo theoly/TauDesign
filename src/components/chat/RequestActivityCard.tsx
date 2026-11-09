@@ -10,6 +10,7 @@ export function RequestActivityCard({activity,running}:{activity?:RequestActivit
   const end=ticking?now:activity.lastActivityAt??activity.startedAt,seconds=(at:number)=>Math.max(0,Math.floor((end-at)/1000));
   return <section aria-label="应用调用摘要" className="space-y-1 rounded-lg border border-slate-800 bg-slate-950/60 p-2 text-[11px] text-slate-400">
     <p className="text-slate-300">{labels[activity.status]} · 调用尝试 {activity.requests} 次 · 进行中 {activity.active} 次</p>
+    {activity.networkAttempts!==undefined&&<p>网络发送尝试 {activity.networkAttempts} 次{activity.httpStatus!==undefined?` · HTTP ${activity.httpStatus}`:''}{activity.lastFinishReason?` · 结束：${activity.lastFinishReason==='unknown'?'连接结束，模型完成状态未知':activity.lastFinishReason}`:''}</p>}
     {activity.model&&<p className="break-all">最近调用：{activity.providerId} / {activity.model}</p>}
     <p>已观察正文 {activity.textChars.toLocaleString()} 字符 · 推理 {activity.reasoningChars.toLocaleString()} 字符 · JSON 结果 {activity.jsonChars.toLocaleString()} 字符</p>
     <p>调用观察耗时 {seconds(activity.startedAt)} 秒{ticking&&activity.lastActivityAt!==undefined?` · 最近应用活动 ${seconds(activity.lastActivityAt)} 秒前`:''}</p>

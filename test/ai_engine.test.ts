@@ -249,7 +249,7 @@ describe('AI Engine & Pipeline Suite (Layer 1 ~ Layer 4)', () => {
       engineCore,
       mockProvider,
       'mock-model-chat',
-      'data:image/png;base64,mockImageData'
+      'data:image/png;base64,bW9ja0ltYWdlRGF0YQ=='
     );
 
     expect(extracted).not.toBeNull();

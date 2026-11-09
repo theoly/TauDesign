@@ -1,4 +1,5 @@
 import type { StyleOverride } from '../../../../types/project';
+import {projectReferenceMedia} from './referenceMediaProjection';
 
 export interface PageReferenceSnapshot {
   id:string;
@@ -19,6 +20,7 @@ export function buildPageReferenceSnapshot(screen:PageReferenceSource,overrides:
     if(attribute.name.startsWith('on'))el.removeAttribute(attribute.name);
     if(attribute.value.startsWith('data:'))el.setAttribute(attribute.name,'[binary asset omitted]');
   }});
+  const media=projectReferenceMedia(doc);
   const texts=(selector:string)=>[...new Set(Array.from(doc.querySelectorAll(selector)).map(el=>(el.textContent??'').trim().replace(/\s+/g,' ').slice(0,240)).filter(Boolean))].slice(0,24);
   const analysis=JSON.stringify({headings:texts('h1,h2,h3,legend'),actions:texts('button,[role="button"]'),
     fields:Array.from(doc.querySelectorAll('input,select,textarea')).slice(0,32).map(el=>({tag:el.tagName.toLowerCase(),type:el.getAttribute('type')??'',name:el.getAttribute('name')??'',label:el.getAttribute('aria-label')??el.getAttribute('placeholder')??'',required:el.hasAttribute('required'),disabled:el.hasAttribute('disabled')})),
@@ -29,7 +31,7 @@ export function buildPageReferenceSnapshot(screen:PageReferenceSource,overrides:
     return `[data-nid="${selector}"] { ${Object.entries(ov.declarations).filter(([,v])=>v).map(([p,v])=>`${p}: ${v} !important;`).join(' ')} }`;
   }).join('\n');
   return {id:screen.id,name:screen.name,skeletonHtml:doc.documentElement.outerHTML,
-    styles:`/* 页面级 CSS */\n${screen.scopedCss??''}\n/* L4 用户当前覆盖，优先于页面基线 */\n${overrideCss}`,analysis,format:'full'};
+    styles:media.css(`/* 页面级 CSS */\n${screen.scopedCss??''}\n/* L4 用户当前覆盖，优先于页面基线 */\n${overrideCss}`),analysis:analysis+(media.omitted?`\n[媒体分离]来源中${media.omitted}处内嵌图形/编码仅保留位置与身份，不随自然语言传输；需要视觉参考时使用专用图片字段。`:''),format:'full'};
 }
 
 /** Explicit bounded fallback, preserving valid markup, source styles and business evidence. */

@@ -29,7 +29,8 @@ describe('derived project manifest', () => {
     const manifest = buildDesignProjectManifest({ projectId: 'p1', projectName: 'Assets', deviceProfile: 'mobile',
       screens: [page('home', '<img data-asset-id="missing" src="assets/images/unregistered.png"><style>@font-face{src:url(assets/imports/fonts/face.woff2)}.hero{background:url(assets/images/registered.png)}</style>')],
       assets: [{ id: 'registered', name: '背景', type: 'image', mimeType: 'image/png', source: 'upload', relPath: 'assets/images/registered.png', refCount: 1 }] });
-    expect(manifest.issues.map(issue => issue.code)).toEqual(['unresolved_asset_id', 'unregistered_asset_reference']);
+    expect(manifest.issues.map(issue => issue.code)).toEqual(['unresolved_asset_id', 'unregistered_asset_reference','unregistered_asset_reference']);
+    expect(manifest.issues.filter(issue=>issue.code==='unregistered_asset_reference').map(issue=>issue.message).join(' ')).toContain('face.woff2');
   });
 
   it('checks the physical project storage before treating registered files as available', async () => {

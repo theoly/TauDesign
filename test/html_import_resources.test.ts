@@ -7,6 +7,14 @@ const file = (path: string, content: string, type = '') => ({ path, file: new Fi
 const parse = (html: string) => new DOMParser().parseFromString(html, 'text/html');
 
 describe('HTML import resource preparation', () => {
+  test('quoted image-set candidates, media, posters, subtitles and fonts are independent files in preview',async()=>{
+    const html='<style>.hero{background-image:image-set("data:image/png;base64,eA==" 1x, "data:image/png;base64,eQ==" 2x);--literal:"url(not-an-asset)"}@font-face{font-family:Demo;src:url(data:font/woff2;base64,Zg==)}</style><video src="movie.mp4" poster="data:image/png;base64,eA==" controls><track src="captions.vtt" kind="captions"></video><audio src="audio.mp3" controls></audio>';
+    const prepared=await prepareImportResources(html,'index.html',[file('movie.mp4','movie'),file('captions.vtt','WEBVTT\n'),file('audio.mp3','audio')]);
+    expect(prepared.html).not.toContain('data:');expect(prepared.binaries.filter(b=>b.relPath.startsWith('assets/media/'))).toHaveLength(3);expect(prepared.html).toContain('url(not-an-asset)');
+    const storage=new LocalStorageStorage('media-import:'+crypto.randomUUID());await persistImportResources(prepared,storage);
+    const calls:string[]=[];const resolved=await resolveImportedResources(prepared.html,undefined,storage,new Set(),{async referenceUrl(path){calls.push(path);return 'https://preview.example.test/'+path;}});
+    expect(new Set(calls).size).toBe(6);expect(calls).toHaveLength(7);expect(resolved.htmlContent).not.toContain('data:');expect(resolved.htmlContent).toContain('https://preview.example.test/assets/media/');expect(prepared.html).not.toContain('https://preview.example.test/');
+  });
   test('inlines nested stylesheets in source order and resolves each stylesheet relative URLs', async () => {
     const result = await prepareImportResources('<html><head><style>.x{color:red}</style><link rel="stylesheet" href="css/main.css" media="screen"><style>.x{color:blue}</style></head><body><img src="img/photo.png"></body></html>', 'site/index.html', [
       file('site/css/main.css', '@import "nested/card.css" print; .x{background:url(../img/photo.png)}'),
@@ -130,7 +138,7 @@ describe('HTML import resource preparation', () => {
   });
 
   test('rejects unsupported embedded media and data URL locations instead of persisting bodies', async () => {
-    await expect(prepareImportResources('<video src="data:video/mp4;base64,eA=="></video>', 'index.html', [])).rejects.toThrow(/不支持/);
+    await expect(prepareImportResources('<video src="data:video/unknown-format;base64,eA=="></video>', 'index.html', [])).rejects.toThrow(/不支持/);
     await expect(prepareImportResources('<p cite="data:image/png;base64,eA==">x</p>', 'index.html', [])).rejects.toThrow(/不支持/);
   });
 });

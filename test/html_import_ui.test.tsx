@@ -1,5 +1,7 @@
 import {stubPageCreationRender} from './helpers/pageCreation';
+import {stubIndependentMediaTransport} from './helpers/independentMedia';
 stubPageCreationRender();
+stubIndependentMediaTransport();
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';

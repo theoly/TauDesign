@@ -1,3 +1,4 @@
+import {renderEvidenceIdentity} from '../ai/evidenceIdentity';
 import {prepareNewPageWithRepair,type PageRepairModel} from '../ai/pageCreationRepair';
 import type {PageRepairRecord} from '../ai/pageRepairRecord';
 import { useProjectStore } from '../../stores/useProjectStore';
@@ -33,6 +34,7 @@ export type CanvasToolCall =
         screenId: string;
         title?: string;
         html: string;
+        /** Deprecated: use the validated staged-candidate adoption pipeline. */
         forceInPlace?: boolean;
         modificationRequest?: string;
         workflowContract?: DesignTaskContract;
@@ -108,11 +110,11 @@ export class CanvasToolExecutor {
     const localSourceIssue=draftExecutionIssue(params.executionRecord,params.html);
     if(!task.ok||localSourceIssue)return {success:false,tool:'create_screen',status:'failed',error:!task.ok?task.message:localSourceIssue};
     if(contract.multiPage)return {success:false,tool:'create_screen',status:'failed',error:'计划内页面必须经完整批次验收后统一交付，不能单独加入画布。'};
-    const key=`${state.id}:${contract.taskId}`,context=pageCreationContext(state);
+    const key=`${state.id}:${contract.taskId}`,context=pageCreationContext(state),renderIdentity=renderEvidenceIdentity(state.settings.deviceProfile);
     const failed=(error:string):CanvasToolExecutionResult=>({success:false,tool:'create_screen',status:'failed',error});
     if(pendingCreations.has(key)||Object.values(state.screens).some(screen=>screen.metadata?.creationEvidence?.contract?.taskId===contract.taskId))return failed('同一新建任务正在处理或已经应用。');
     const current=()=>{options.taskBudget?.assertActive();return !options.signal?.aborted&&(options.isCurrent?.()??true)&&!draftExecutionIssue(params.executionRecord,params.html)&&
-      resolveWorkflowValidation(contract,'create').ok&&pageCreationContext(useProjectStore.getState())===context;};
+      resolveWorkflowValidation(contract,'create').ok&&renderEvidenceIdentity(state.settings.deviceProfile)===renderIdentity&&pageCreationContext(useProjectStore.getState())===context;};
     pendingCreations.add(key);
     try {
       const snapshot=structuredClone({id:state.id,folderPath:state.folderPath,screens:state.screens,settings:state.settings,assets:state.assets,
@@ -124,7 +126,7 @@ export class CanvasToolExecutor {
         createProjectStorage(state.id,state.folderPath),{isCurrent:current,signal,repair:options.repair});
       const prepared=options.taskBudget?await options.taskBudget.run(prepare,options.signal):await prepare(options.signal);
       if(prepared.status!=='ready')return {...failed(prepared.message),repair:prepared.repair};
-      if(!current())return failed('应用前工程已变化或创建已取消。');
+      if(!current())return failed(renderEvidenceIdentity(state.settings.deviceProfile)!==renderIdentity?'渲染检查依赖已变化，请重新检查后挂载。':'应用前工程已变化或创建已取消。');
       const {position:_position,...screen}=prepared.screen;
       const creationEvidence={...prepared.evidence,...(params.executionRecord?.sectioned||params.executionRecord?.draftRepair?{execution:{...structuredClone(params.executionRecord),completeHtml:prepared.screen.htmlContent}}:{})};
       const newId=useProjectStore.getState().addScreen({...screen,metadata:{...screen.metadata,creationEvidence}},id,{referencedScreenId:params.referencedScreenId});
@@ -160,15 +162,10 @@ export class CanvasToolExecutor {
           }
 
           const formattedHtml = NidEngine.injectNids(html);
-          const quality = checkGenerationQuality(html, { deviceProfile: store.settings.deviceProfile, designSystem: store.designSystem,
+          const quality = checkGenerationQuality(html, { contentTask:workflowContract,deviceProfile: store.settings.deviceProfile, designSystem: store.designSystem,
             baselineHtml: target.htmlContent, protectedNids: store.getProtectedNids(screenId), modificationRequest });
           if (!quality.passed) return { success: false, tool: 'modify_screen', status: 'failed', error: qualitySummary(quality) };
-          if (forceInPlace && store.stagedScreen?.targetScreenId === screenId && store.stagedScreen.newHtml === formattedHtml && store.stagedRenderQuality) {
-            const rendered = store.stagedRenderQuality;
-            if (rendered.key !== store.getStagedRenderContextKey() || rendered.report.status === 'pending' || rendered.report.findings.some(f => f.severity === 'error')) {
-              return { success: false, tool: 'modify_screen', status: 'failed', error: '候选页面渲染检查未完成或存在严重问题，不能强制覆盖原页。' };
-            }
-          }
+          if (forceInPlace) return {success:false,tool:'modify_screen',status:'failed',error:'直接覆盖入口已停用；请对当前候选完成交付检查后确认结构差异，或重新发起修改。'};
           const isGenericTitle =
             !title ||
             ['画框', '新页面', '新设计页', '未命名', '新画框'].includes(title.trim()) ||
@@ -180,26 +177,6 @@ export class CanvasToolExecutor {
             screenId: target.id,
             htmlContent: target.htmlContent
           });
-
-          if (forceInPlace) {
-            store.updateScreenHtml(target.id, formattedHtml, `AI 修改页面: ${finalTitle}`);
-            if (title && title !== target.name && !isGenericTitle) {
-              store.renameScreen(target.id, title);
-            }
-            if (store.stagedScreen) {
-              store.discardStagedChange();
-            }
-            store.panToScreen(target.id);
-
-            return {
-              success: true,
-              tool: 'modify_screen',
-              status: 'screen_modified',
-              screenId: target.id,
-              screenName: finalTitle,
-              checkpointId
-            };
-          }
 
           // D17 & BR-SSR-01: 页面修改统一在原画框右侧暂存候选新页面，供用户直观观测与比选替换
           store.stageScreenChange(target.id, formattedHtml, `${finalTitle} (AI 调整候选)`, modificationRequest, workflowContract, executionRecord);

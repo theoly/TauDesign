@@ -6,7 +6,7 @@ import {MockTransport} from '../src/services/ai/engine/transport/mockTransport';
 import {TaskBudget} from '../src/services/ai/taskBudget';
 import {defaultProviders} from '../src/stores/useAIConfigStore';
 
-const provider={...defaultProviders[0],id:'plan-provider',protocol:'openai_compatible' as const,baseUrl:'http://mock',apiKey:'PLAN_SECRET'};
+const provider={...defaultProviders[0],id:'plan-provider',protocol:'openai_compatible' as const,baseUrl:'https://api.openai.com/v1',apiKey:'PLAN_SECRET'};
 const raw=()=>({goal:'用户选择预约时间并确认预约',actor:'预约用户',completion:['显示预约确认结果'],features:[{id:'f1',title:'预约时间选择',change:'add',basis:'user',sourceIds:['user:request'],
   information:[{label:'预约时间',kind:'input'}],interactions:[{label:'确认预约',precondition:'已选择时间',outcome:'展示预约确认结果',targetScreenId:''}],
   states:[{name:'未选时间',condition:'尚未选择',feedback:'提示选择预约时间'}]}],questions:[]});

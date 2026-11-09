@@ -458,7 +458,7 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
 };
 
 export const ProjectManager: React.FC = () => {
-  const { projects, missingIds, refresh, openProject, renameProject, removeFromList, deleteProject, openLocalFolder, migrateProject } =
+  const { projects, missingIds, refresh, openProject, renameProject, removeFromList, deleteProject, openLocalFolder, migrateProject,sourceTransitionError } =
     useWorkspaceStore();
   const [search, setSearch] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
@@ -566,10 +566,10 @@ export const ProjectManager: React.FC = () => {
           </div>
         )}
 
-        {notice && (
+        {(notice||sourceTransitionError) && (
           <div className="mb-4 px-3 py-2 bg-amber-950/40 border border-amber-800/50 rounded-lg text-[11px] text-amber-200 flex items-center justify-between gap-3">
-            <span className="leading-relaxed">{notice}</span>
-            <button onClick={() => setNotice(null)} className="text-amber-400 hover:text-amber-200 shrink-0">
+            <span className="leading-relaxed">{notice??sourceTransitionError}</span>
+            <button onClick={() => {setNotice(null);useWorkspaceStore.setState({sourceTransitionError:null});}} className="text-amber-400 hover:text-amber-200 shrink-0">
               知道了
             </button>
           </div>
@@ -673,7 +673,7 @@ export const ProjectManager: React.FC = () => {
                       <button
                         onClick={() => {
                           const next = window.prompt('重命名工程', p.name);
-                          if (next && next.trim()) renameProject(p.id, next.trim());
+                          if (next && next.trim())void renameProject(p.id,next.trim()).catch(error=>setNotice(error instanceof Error?error.message:'重命名失败，原数据保留。'));
                           setMenuFor(null);
                         }}
                         className="w-full text-left px-3 py-1.5 hover:bg-slate-700 text-slate-200"
@@ -739,9 +739,9 @@ export const ProjectManager: React.FC = () => {
                 取消
               </button>
               <button
-                onClick={() => {
-                  deleteProject(confirmDelete.id);
-                  setConfirmDelete(null);
+                onClick={async () => {
+                  try{await deleteProject(confirmDelete.id);setConfirmDelete(null);}
+                  catch(error){setNotice(error instanceof Error?error.message:'删除失败，原数据保留。');}
                 }}
                 className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-medium rounded-lg"
               >

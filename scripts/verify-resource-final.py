@@ -17,13 +17,14 @@ async def main(args):
     const {PageRenderCheck}=await mod('/src/services/ai/pageRenderCheck.ts'),{createProjectStorage}=await mod('/src/services/storage/projectStorage.ts'),{DeliveryRepository}=await mod('/src/services/storage/deliveryRepository.ts');
     const imagePath='assets/images/render-resource.svg',imageBytes=btoa('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="#cbd5e1"/></svg>');
     const actualPrepare=DeliveryRepository.prototype.prepare,checks=[];
-    const until=async predicate=>{for(let i=0;i<300;i++){if(predicate())return;await new Promise(r=>setTimeout(r,10));}throw Error('Audit did not settle');};
+    const until=async predicate=>{for(let i=0;i<300;i++){if(predicate())return;await new Promise(r=>setTimeout(r,10));}throw Error('Audit did not settle: '+JSON.stringify({delivery:window.__projectStore.getState().getStagedDeliveryReport(),assets:window.__projectStore.getState().stagedAssetFiles,render:window.__projectStore.getState().stagedRenderQuality}));};
     for(const kind of ['image','font'])for(const mode of ['replace','force-replace','keep-both']){
      const store=window.__projectStore,id=store.getState().initNewProject({name:'提交资源复核 '+kind+'/'+mode,deviceProfile:'mobile',designSystem:neutralModernTheme,createSpecimen:false});
      const storage=createProjectStorage(id),scopedCss=`@font-face{font-family:AuditFont;src:url('${font.path}')}h1{font-family:AuditFont,sans-serif}`;
      const original='<main data-nid="root" class="col p-4 gap-4"><h1 data-nid="title" class="text-xl font-bold">资源检查</h1><button data-nid="action" class="btn btn-primary">保存资料</button></main>';
      await storage.writeBinary(imagePath,imageBytes);await storage.writeBinary(font.path,font.bytes);
      store.getState().addAsset({id:'image',name:'页面图片',type:'image',mimeType:'image/svg+xml',relPath:imagePath,source:'upload',refCount:1});
+     store.getState().addAsset({id:'font',name:'验证字体',type:'font',mimeType:'font/ttf',relPath:font.path,source:'upload',refCount:1});
      store.getState().addScreen({name:'原页面',htmlContent:original,scopedCss},'target');useWorkspaceStore.setState({view:'workspace',activeProjectId:id});
      const candidate=original.replace('col p-4','col p-6').replace('</main>','<img data-nid="photo" src="'+imagePath+'" alt="示例图片" width="64" height="64"></main>');
      store.getState().stageScreenChange('target',candidate,'资源候选','增加图片并调整内边距');
@@ -31,7 +32,7 @@ async def main(args):
       const s=store.getState(),key=s.getStagedRenderContextKey(),screen={...s.screens.target,htmlContent:s.stagedScreen.newHtml};
       const report=await PageRenderCheck.inspect({screen,settings:s.settings,designSystem:s.designSystem,assets:Object.values(s.assets),overrides:{}},storage);
       if(report.status!=='complete'||report.findings.some(f=>f.severity==='error'))throw Error('Real iframe did not pass: '+JSON.stringify(report));
-      s.recheckStagedAssetFiles();await until(()=>store.getState().getStagedDeliveryReport().status==='ready'&&!store.getState().stagedPreview?.pending);return report;
+      s.setStagedRenderQuality(key,report);s.recheckStagedAssetFiles();await until(()=>store.getState().getStagedDeliveryReport().status==='ready'&&!store.getState().stagedPreview?.pending);return report;
      };
      const render=await inspect(),history=useHistoryStore.getState().past.length,checkpoint=useHistoryStore.getState().checkpoints.length;
      let failedRecord;const deletedPath=kind==='image'?imagePath:font.path;

@@ -23,13 +23,14 @@ export function PageCreationEvidencePanel({screen}:{screen:Screen}) {
     <div className="mt-3 space-y-2 break-words text-slate-400">
       <DesignGuidanceCard contract={raw.contract} historical/>
       <HistoricalDraftSource execution={raw.execution}/>
+      {raw.recovery&&<p className="break-all">复用历史完成页面，并在新恢复任务 {raw.recovery.rootTaskId} 中重新执行交付检查；本次未重新生成此页。原页面任务：{raw.recovery.sourceTaskId}，原根任务：{raw.recovery.sourceRootTaskId}。</p>}
       <p>仅记录创建时的检查，不代表当前页面已重新验收。{changed?' 页面内容已变化。':''}</p>
       <p>{new Date(raw.checkedAt).toLocaleString()} · {raw.contract.device?.profile} / {raw.contract.device?.frameWidth}px</p>
       <p>{delivery?.request??raw.contract.request}</p>
       <PageTaskPlanCard contract={raw.contract}/>
       {!changed&&<PageTaskCoverageCard contract={raw.contract} html={screen.htmlContent}/>}
       {delivery&&<><p>本页：{historicalPage!.name} · 第 {delivery.pages.findIndex(p=>p.screenId===scope?.screenId)+1} / {delivery.pages.length} {unit}</p>
-        <details><summary className="cursor-pointer">本次生成请求（技术记录）</summary><p className="mt-2 whitespace-pre-wrap">{raw.contract.request}</p></details></>}
+        <details><summary className="cursor-pointer">{raw.recovery?'原页面生成请求（历史来源）':'本次生成请求（技术记录）'}</summary><p className="mt-2 whitespace-pre-wrap">{raw.contract.request}</p></details></>}
       {raw.contract.referenceImage&&<p>参考图片：{raw.contract.referenceImage.name} · {raw.contract.referenceImage.fingerprint}。仅记录输入身份，不代表已通过图片视觉相似度检查。</p>}
       {raw.contract.librarySource&&<p>设计库：{raw.contract.librarySource.sourceProjectId} · {raw.contract.librarySource.mode==='pinned_reference'?'固定版本只读参考':'项目副本'} · Token v{raw.contract.librarySource.sourceTokenVersion} · {raw.contract.librarySource.sourceFingerprint}</p>}
       <p className="break-all">{raw.workflow.plan.workflowId} · {raw.workflow.plan.fingerprint}</p>

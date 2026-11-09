@@ -79,6 +79,7 @@ export interface Screen {
     /** Static design taxonomy only; no runtime role or state transitions are implied. */
     pageGroup?: string; stateLabel?: string; audienceRole?: string; basedOnScreenId?: ScreenId;
     multiPageDelivery?:import('../services/ai/multiPageContract').MultiPageDelivery;
+    mediaConversion?:{version:1;convertedAt:number;sourceFingerprint:string;files:Array<{id:string;relPath:string}>;removedNids:string[]};
     creationEvidence?: import('../services/ai/pageCreationValidation').PageCreationEvidence };
 }
 
@@ -114,10 +115,11 @@ export interface StyleOverride {
 export interface Asset {
   id: AssetId;
   name: string;
-  type: 'image' | 'svg_icon';
+  type: 'image' | 'svg_icon' | 'font' | 'media';
   mimeType: string;
   source: 'upload' | 'ai_generated' | 'builtin';
   relPath: string;
+  /** Legacy read/undo compatibility only; new assets keep drawing bytes in the independent file. */
   rawSvg?: string;
   dimensions?: { width: number; height: number };
   refCount: number;

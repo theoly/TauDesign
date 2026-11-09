@@ -10,12 +10,17 @@ async def main(args):
  async with async_playwright() as p:
   browser=await getattr(p,args.browser).launch(headless=True)
   page=await browser.new_page(viewport={'width':1600,'height':1050},locale='zh-CN')
-  errors=[];navigations=[]
+  errors=[];navigations=[];external=[]
   page.on('pageerror',lambda error:errors.append(str(error)))
   page.on('framenavigated',lambda frame:navigations.append({'url':frame.url,'main':frame==page.main_frame}))
   args.screenshot.parent.mkdir(parents=True,exist_ok=True)
   try:
+   async def restrict(route):
+    if route.request.url.startswith(('http://127.0.0.1:5174/','data:','blob:')):await route.continue_()
+    else:external.append(route.request.url);await route.abort()
+   await page.route('**/*',restrict)
    await page.goto(args.url,wait_until='networkidle')
+   await page.evaluate('(options)=>{window.__repairExplicit=options.explicit;window.__repairDevice=options.device;}',{'explicit':args.explicit_text,'device':args.device})
    await page.wait_for_function('Boolean(window.__projectStore)')
    await page.evaluate('''async()=>{
     window.__module=async path=>import(performance.getEntriesByType('resource').map(e=>e.name).find(url=>new URL(url).pathname===path)||path);
@@ -25,6 +30,7 @@ async def main(args):
     useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'local-fixture-secret'})),bindings:defaultBindings});
     const inspect=PageRenderCheck.inspect;
     PageRenderCheck.inspect=async function(request,...args){const report=await inspect.call(this,request,...args);window.__repair.checks.push({html:request.screen.htmlContent,overrides:request.overrides,report});return report;};
+    DefaultAIEngineCore.prototype.generateObject=()=>{throw Error('Unexpected object generation in repair verification');};
     DefaultAIEngineCore.prototype.streamText=function(options){
      const f=window.__repair;f.requests.push({maxTokens:options.maxTokens,jsonSchema:Boolean(options.jsonSchema)});
      const text=JSON.stringify({operations:[{nid:'save',type:f.invalid?'set_text':'remove_styles',value:f.invalid?'删除按钮':'font-size'}]});
@@ -36,15 +42,22 @@ async def main(args):
     const {useHistoryStore}=await window.__module('/src/stores/useHistoryStore.ts');
     const {buildDesignTaskContract}=await window.__module('/src/services/ai/designWorkflow.ts');
     // Resolve fixture imports before replacing the workspace and its child frames.
-    window.__reset=(options={})=>{
-     const s=window.__projectStore,id=s.getState().initNewProject({name:'候选修复验证',deviceProfile:'mobile',designSystem:neutralModernTheme,createSpecimen:false});
-     const html='<main data-nid="root" class="col gap-4 p-4"><h1 data-nid="title" class="text-xl font-bold">会员资料</h1><p data-nid="description" class="text-secondary">编辑后保存资料</p><section data-nid="region"><button data-nid="save" class="btn btn-primary"><svg data-nid="icon" class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path data-nid="path" d="M5 12l4 4L19 6"/></svg><span data-nid="label">保存资料</span></button></section><button data-nid="other" class="btn">暂存</button></main>';
+    window.__reset=async(options={})=>{
+     const s=window.__projectStore,id=s.getState().initNewProject({name:'候选修复验证',deviceProfile:window.__repairDevice,designSystem:neutralModernTheme,createSpecimen:false});
+const {createProjectStorage}=await window.__module('/src/services/storage/projectStorage.ts');
+                const iconBytes=btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 12l4 4L19 6"/></svg>');
+                await createProjectStorage(id).writeBinary('assets/icons/repair.svg',iconBytes);
+                s.getState().addAsset({id:'repair-icon',name:'保存图标',type:'svg_icon',mimeType:'image/svg+xml',relPath:'assets/icons/repair.svg',source:'upload',refCount:1});
+                window.__repairIconBytes=iconBytes;
+     const html='<main data-nid="root" class="col gap-4 p-4"><h1 data-nid="title" class="text-xl font-bold">会员资料</h1><p data-nid="description" class="text-secondary">编辑后保存资料</p><section data-nid="region"><button data-nid="save" class="btn btn-primary"><span data-nid="icon" class="icon icon-mask" style="mask-image:url(assets/icons/repair.svg);-webkit-mask-image:url(assets/icons/repair.svg)" aria-hidden="true"></span><span data-nid="label">保存资料</span></button></section><button data-nid="other" class="btn">暂存</button></main>';
      s.getState().addScreen({name:'会员资料',htmlContent:html},'page');
      if(options.protected)s.setState({overrides:{'page:region':{nid:'region',declarations:{'border-radius':'8px'}}}});
      else s.setState({overrides:{'page:other':{nid:'other',declarations:{'border-radius':'8px'}}}});
-     const contract=buildDesignTaskContract({intent:'modify_screen',request:'调整保存按钮的尺寸与字号',target:s.getState().screens.page,elementNid:options.outside?'other':'region',deviceProfile:'mobile',frameWidth:390,designSystem:s.getState().designSystem});
+     const request=window.__repairExplicit?'按钮文案改为“保存资料”':'调整保存按钮的尺寸与字号';
+     const contract=buildDesignTaskContract({intent:'modify_screen',request,target:s.getState().screens.page,elementNid:options.outside?'other':'region',deviceProfile:window.__repairDevice,frameWidth:window.__repairDevice==='pc'?1440:390,designSystem:s.getState().designSystem});
      window.__repair={requests:[],checks:[],invalid:Boolean(options.invalid)};
-     s.getState().stageScreenChange('page',html.replace('data-nid="save"','style="font-size:0px" data-nid="save"'),'会员资料','调整保存按钮的尺寸与字号',contract,{source:'local-edit',rawResponse:'',completeHtml:html,continuationCount:0,warnings:[],localEdit:{mode:'element',targetNids:options.outside?['other']:['save'],operationCount:1}});
+     const broken=html.replace('data-nid="save"','style="font-size:0px" data-nid="save"');
+     s.getState().stageScreenChange('page',broken,'会员资料',request,contract,{source:'local-edit',rawResponse:'',completeHtml:broken,continuationCount:0,warnings:[],localEdit:{mode:'element',targetNids:options.outside?['other']:['save'],operationCount:1}});
      useWorkspaceStore.setState({view:'workspace',activeProjectId:id});
      return {id,html,history:useHistoryStore.getState().past.length};
     };
@@ -79,8 +92,9 @@ async def main(args):
     if(f.requests.length!==1||!f.requests[0].jsonSchema||f.requests[0].maxTokens!==1800)throw Error('Wrong model bounds');
     if(f.checks.length!==1||f.checks[0].report.status!=='complete'||f.checks[0].report.findings.some(f=>f.severity==='error'))throw Error('No independent render proof');
     if(!f.checks[0].overrides['page:other'])throw Error('Exact L4 omitted');
+const {createProjectStorage}=await window.__module('/src/services/storage/projectStorage.ts');if(await createProjectStorage(s.id).readBinary('assets/icons/repair.svg')!==window.__repairIconBytes)throw Error('Independent icon was changed');
     const before=new DOMParser().parseFromString(fixture.html,'text/html'),after=new DOMParser().parseFromString(s.stagedScreen.newHtml,'text/html');
-    for(const nid of ['title','description','icon','path','label','other'])if(!before.querySelector('[data-nid="'+nid+'"]').isEqualNode(after.querySelector('[data-nid="'+nid+'"]')))throw Error('Unauthorized mutation '+nid);
+    for(const nid of ['title','description','icon','label','other'])if(!before.querySelector('[data-nid="'+nid+'"]').isEqualNode(after.querySelector('[data-nid="'+nid+'"]')))throw Error('Unauthorized mutation '+nid);
     if(s.getStagedRepairEligibility().allowed)throw Error('Second request available');
     return {projectId:s.id,candidate:s.stagedScreen,checks:f.checks,requests:f.requests,current:s.stagedRenderQuality.report,historyDelta:0};
    }''',fixture)
@@ -125,7 +139,7 @@ async def main(args):
    await page.wait_for_function('Boolean(window.__projectStore)')
    await page.evaluate('''async id=>{
     const module=async path=>import(performance.getEntriesByType('resource').map(e=>e.name).find(url=>new URL(url).pathname===path)||path);
-    const {useWorkspaceStore}=await module('/src/stores/useWorkspaceStore.ts');if(!useWorkspaceStore.getState().openProject(id))throw Error('Reopen');
+    const {useWorkspaceStore}=await module('/src/stores/useWorkspaceStore.ts');await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(id);
    }''',fixture['id'])
    await page.frame_locator('iframe[title="会员资料"]').get_by_role('button',name='保存资料',exact=True).wait_for()
    # A real reload has no model fixture patch; restore it by navigating back through the same setup.
@@ -137,7 +151,8 @@ async def main(args):
    }''')
    await page.screenshot(path=str(args.screenshot.with_stem(args.screenshot.stem+'-reopened')))
    assert not errors,errors
-   report={'status':'passed','browser':args.browser,'version':browser.version,'model':'controlled local model stream; actual candidate and independent iframe; no online Provider calls','busy':busy,'success':success,'adopted':adopted,'reopened':reopened,'rejected':rejected,'pageErrors':errors}
+   assert not external,external
+   report={'status':'passed','browser':args.browser,'device':args.device,'explicitText':args.explicit_text,'version':browser.version,'model':'controlled local model stream; actual candidate and independent iframe; no online Provider calls','busy':busy,'success':success,'adopted':adopted,'reopened':reopened,'rejected':rejected,'pageErrors':errors,'externalRequests':external}
    args.report.parent.mkdir(parents=True,exist_ok=True);args.report.write_text(json.dumps(report,ensure_ascii=False,indent=2))
    print(json.dumps({'status':'passed','browser':args.browser,'requests':len(success['requests']),'renderChecks':len(success['checks']),'historyDelta':adopted['historyDelta'],'pageErrors':errors},ensure_ascii=False))
   except Exception:
@@ -146,6 +161,8 @@ async def main(args):
   finally:await browser.close()
 if __name__=='__main__':
  parser=argparse.ArgumentParser(description=__doc__)
+ parser.add_argument('--explicit-text',action='store_true')
+ parser.add_argument('--device',choices=['mobile','pc'],default='mobile')
  parser.add_argument('--url',default='http://127.0.0.1:5174')
  parser.add_argument('--browser',choices=['chromium','webkit'],default='chromium')
  parser.add_argument('--screenshot',type=Path,default=Path('/tmp/candidate-repair.png'))

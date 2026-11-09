@@ -71,7 +71,7 @@ async def main(args):
                       liveRenderCleared:s.stagedRenderQuality===null,delivery:s.getStagedDeliveryReport().status};
                     return result;
                   }});
-                  useWorkspaceStore.getState().openProject(id);
+                  await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(id);
                 }''', project_id)
                 await page.wait_for_function('Boolean(window.__previewRestoration)')
                 restoration = await page.evaluate('window.__previewRestoration')
@@ -126,7 +126,7 @@ async def main(args):
                 .find(url=>new URL(url).pathname==='/src/stores/useWorkspaceStore.ts');
               if(!workspaceUrl) throw new Error('The application workspace module has not loaded');
               const {useWorkspaceStore} = await import(workspaceUrl);
-              useWorkspaceStore.getState().openProject(id);
+              await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(id);
             }''', project_id)
             if await inspector.get_attribute('aria-pressed') != 'true':
                 await inspector.click()

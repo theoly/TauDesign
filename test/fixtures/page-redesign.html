@@ -1,0 +1,38 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>整页重设计受控验证</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><script type="module">
+import {requestSchema} from '/test/helpers/modelSchema.ts';
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {ChatDrawer} from '/src/components/chat/ChatDrawer.tsx';
+import {InfiniteCanvas} from '/src/components/canvas/InfiniteCanvas.tsx';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {MockTransport} from '/src/services/ai/engine/transport/mockTransport.ts';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {useAIConfigStore,defaultProviders,defaultBindings} from '/src/stores/useAIConfigStore.ts';
+import {neutralModernTheme} from '/src/utils/themePresets.ts';
+import {listDesignTasks} from '/src/services/storage/designTaskRepository.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+const params=new URLSearchParams(location.search),device=params.get('device')==='pc'?'pc':'mobile',invalid=params.has('invalid');
+const feature=i=>`<section class="card p-4 col gap-2" data-nid="feature${i}"><h2 class="text-lg">功能${i}</h2><p>业务信息${i}</p></section>`;
+const controls='<label for="email">邮箱</label><input class="input" data-nid="email" id="email" type="email" name="email" required><button data-nid="save" class="btn btn-primary">保存资料</button>';
+const original=`<!doctype html><html lang="zh-CN"><head><meta name="source-identity" content="keep"><style>.original{border-radius:var(--radius-md)}</style><title>原资料页</title></head><body class="original" data-source="baseline"><main class="p-4 col gap-4" data-nid="root"><h1 class="text-xl">资料管理</h1><div class="${'legacy-layout-'.repeat(3600)}"></div>${Array.from({length:7},(_,i)=>feature(i+1)).join('')}${controls}</main></body></html>`;
+const store=useProjectStore.getState();store.initNewProject({name:'重设计独立验证',deviceProfile:device,designSystem:structuredClone(neutralModernTheme),createSpecimen:false});store.addScreen({name:'资料页',htmlContent:original,position:{x:0,y:0}},'source');store.setActiveScreen('source');store.setViewportTransform({x:32,y:300,scale:device==='pc'?0.4:0.85});useHistoryStore.getState().restore(null);
+useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'FIXTURE_SECRET'})),bindings:{...defaultBindings,code:{role:'code',providerId:'prov-openai',modelId:'gpt-4o'}}});
+const plan={goal:'保留全部业务信息并重设计资料页',actor:'用户',completion:['阅读资料并保存'],questions:[],features:Array.from({length:7},(_,i)=>({id:`f${i+1}`,title:`功能${i+1}`,change:'retain',basis:'user',sourceIds:['user:request'],information:[{label:`业务信息${i+1}`,kind:'display'}],interactions:[],states:[]}))};
+const composition={version:1,layout:'flow',footer:'flow',regions:[{id:'section-1',role:'flow',featureIds:['f1','f2','f3']},{id:'section-2',role:'flow',featureIds:['f4','f5']},{id:'section-3',role:'flow',featureIds:['f6','f7']}]};
+const pieces=['<section class="p-4 col gap-4"><h1 class="text-xl">资料管理</h1>'+[1,2,3].map(feature).join('')+'</section>','<section class="p-4 col gap-4">'+[4,5].map(feature).join('')+'</section>','<section class="p-4 col gap-4">'+[6,7].map(feature).join('')+controls+(invalid?'<svg viewBox="0 0 24 24"><path d="M0 0L24 24"/></svg>':'')+'</section>'];
+const state={requests:[],original,state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),undo:()=>useHistoryStore.getState().undo(),redo:()=>useHistoryStore.getState().redo()};window.redesignFixture=state;
+state.tasks=async()=>{const s=useProjectStore.getState();return (await listDesignTasks(createProjectStorage(s.id,s.folderPath),s.id,true)).map(t=>({id:t.id,state:t.state,delivery:t.delivery}));};
+const transport=new MockTransport();let part=0,resumed=false;
+state.remount=()=>{resumed=true;render('restored');};
+const core=new DefaultAIEngineCore({id:'local',stream(request,event){
+ const schema=requestSchema(request),stage=schema?.properties.goal?'function-plan':schema?.properties.regions?'composition':'region';
+ const sent=JSON.stringify(request.body);state.requests.push({stage,hasRawLayout:sent.includes('legacy-layout-legacy-layout'),hasBusiness:sent.includes('业务信息7')});
+ if(params.has('recovery')&&!resumed&&stage==='region'&&part===1){transport.enqueueScenario({events:[{type:'Error',kind:'network_error',message:'fixture interrupted before second region'}],delayMs:0});return transport.stream(request,event);}
+ const text=stage==='function-plan'?JSON.stringify(plan):stage==='composition'?JSON.stringify(composition):`<artifact type="screen" title="资料管理">${pieces[part++]}</artifact>`;
+ if(part>3)throw Error('Unexpected extra model call');transport.queueResponse(text,15);return transport.stream(request,event);
+}});
+const stream=DefaultAIEngineCore.prototype.streamText;DefaultAIEngineCore.prototype.streamText=function(options){return stream.call(core,options);};
+const root=ReactDOM.createRoot(document.getElementById('root'));const render=key=>root.render(React.createElement('div',{style:{display:'flex',height:'100vh'}},React.createElement('div',{style:{width:360,flexShrink:0}},React.createElement(ChatDrawer,{key})),React.createElement('div',{style:{flex:1,minWidth:0,position:'relative'}},React.createElement(InfiniteCanvas))));render('initial');
+</script></body></html>

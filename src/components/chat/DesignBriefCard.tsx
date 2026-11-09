@@ -13,7 +13,7 @@ export function DesignBriefCard({ brief }: { brief: DesignBrief }) {
       <div><dt className="text-slate-400">视觉</dt><dd><span style={{ backgroundColor: brief.primaryColor }} className="mr-1 inline-block h-2 w-2 rounded-full" />沿用工程主色、字体与间距</dd></div>
       <div><dt className="text-slate-400">操作</dt><dd>{brief.actionPolicy}</dd></div>
       <div><dt className="text-slate-400">内容</dt><dd>{brief.contentPolicy}</dd></div>
-      {Array.isArray(brief.contentObligations)&&brief.contentObligations.length>0&&<div><dt className="text-slate-400">内容要求</dt><dd>{brief.contentObligations.filter(o=>o&&typeof o.text==='string').slice(0,20).map((o,i)=><p key={i}>{o.kind==='exact'?'保留原文':'保留语义'}：{o.text}</p>)}</dd></div>}
+      {Array.isArray(brief.contentObligations)&&brief.contentObligations.length>0&&<div><dt className="text-slate-400">内容要求</dt><dd>{brief.contentObligations.filter(o=>o&&typeof o.text==='string').slice(0,20).map((o,i)=><p key={i}>{o.target==='field-label'?'字段标签 · ':''}{o.kind==='exact'?'保留原文':'保留语义'}：{o.text}</p>)}</dd></div>}
     </dl>
     <p className="mt-2 text-slate-500">自动沿用当前工程规范；可在后续对话中补充或调整方向。</p>
   </details>;

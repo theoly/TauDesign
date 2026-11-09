@@ -5,10 +5,12 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 
 ROOT=Path(__file__).resolve().parents[1]
-OUT=ROOT/'doc/candidate-action-feedback/evidence'
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--project',type=Path,help='Optional existing project, copied to a temporary directory before testing')
-SOURCE=parser.parse_args().project
+parser.add_argument('--output',type=Path,default=Path('doc/candidate-action-feedback/evidence'))
+parser.add_argument('--actions',nargs='+',choices=['discard','replace','keep','stale'],default=['discard','replace','keep','stale'])
+parser.add_argument('--devices',nargs='+',choices=['mobile','pc'],default=['mobile','pc'])
+ARGS=parser.parse_args();SOURCE=ARGS.project;OUT=(ROOT/ARGS.output).resolve();OUT.mkdir(parents=True,exist_ok=True)
 URL='http://127.0.0.1:5174/test/fixtures/candidate-actions.html'
 
 def hashes(folder):
@@ -21,9 +23,9 @@ async def run():
       for engine in ['chromium','webkit']:
         browser=await getattr(pw,engine).launch(headless=True)
         try:
-          cases=[('synthetic','discard'),('synthetic','replace'),('synthetic','keep'),('synthetic','stale')]
-          if SOURCE:cases.append(('real','stale-project'))
-          for mode,action in cases:
+          cases=[('synthetic',action,device) for device in ARGS.devices for action in ARGS.actions]
+          if SOURCE:cases.append(('real','stale-project','project'))
+          for mode,action,device in cases:
             with tempfile.TemporaryDirectory(prefix='candidate-action-') as tmp:
               clone=Path(tmp)/'project'
               if mode=='real':shutil.copytree(SOURCE,clone)
@@ -40,6 +42,11 @@ async def run():
                 export function updateStyle(id,css){let el=styles.get(id);if(!el){el=document.createElement('style');styles.set(id,el);document.head.append(el);}el.textContent=css;}
                 export function removeStyle(id){styles.get(id)?.remove();styles.delete(id);}
               '''))
+              external=[]
+              async def restrict(route):
+                if route.request.url.startswith(('http://127.0.0.1:5174/','data:','blob:')):await route.fallback()
+                else:external.append(route.request.url);await route.abort()
+              await context.route('**/*',restrict)
               page=await context.new_page();errors=[]
               page.on('pageerror',lambda e:errors.append(str(e)))
               def io(payload):
@@ -72,20 +79,30 @@ async def run():
                 await page.expose_function('fixtureIO',io)
                 await page.add_init_script("window.__TAURI_INTERNALS__={invoke:(cmd,args)=>window.fixtureIO({op:'invoke',cmd,args})};window.__TAURI__={core:{invoke:window.__TAURI_INTERNALS__.invoke}};")
               try:
-                await page.goto(URL+'?mode='+mode,wait_until='networkidle')
+                await page.goto(URL+'?mode='+mode+'&device='+device,wait_until='networkidle')
                 await page.wait_for_function("window.fixture && fixture.report().checks.find(c=>c.id==='render').status==='passed' && fixture.report().checks.find(c=>c.id==='structure').status==='blocked'",timeout=30000)
+                if mode=='synthetic':await page.evaluate("fixture.state().setViewportTransform({x:40,y:220,scale:fixture.device==='pc'?0.45:0.85})")
                 toolbar=page.get_by_test_id('candidate-actions-toolbar')
                 replace=toolbar.get_by_role('button',name='采纳新版 (替换原版)',exact=True)
                 keep=toolbar.get_by_role('button',name='两版都留',exact=True)
                 ack=toolbar.get_by_role('checkbox',name='我已检查并接受这次结构变化',exact=True)
                 assert await replace.is_disabled() and await keep.is_disabled()
+                layers=await page.evaluate('''()=>{const mask=document.querySelector('[data-testid="comparison-backdrop"]'),target=document.getElementById('screen-frame-'+fixture.target),candidate=document.getElementById('screen-frame-staged-screen-preview'),other=document.getElementById('screen-frame-other'),toolbar=document.querySelector('[data-testid="candidate-actions-toolbar"]');if(!mask||!target||!candidate)throw Error('Comparison layers missing');return {mask:Number(getComputedStyle(mask).zIndex),target:Number(getComputedStyle(target).zIndex),candidate:Number(getComputedStyle(candidate).zIndex),toolbar:Number(getComputedStyle(toolbar).zIndex),other:other?Number(getComputedStyle(other).zIndex):null};}''')
+                assert layers['toolbar']>layers['target']>layers['mask'] and layers['candidate']>layers['mask'],layers
+                if mode=='synthetic':
+                  assert layers['other']<layers['mask'],layers
+                  hit=await page.evaluate('''()=>{const other=document.getElementById('screen-frame-other'),r=other.getBoundingClientRect(),x=Math.max(1,r.left+Math.min(30,r.width/2)),y=Math.min(innerHeight-5,r.top+15),top=document.elementFromPoint(x,y);return {within:y>=r.top&&y<=r.bottom,mask:top?.getAttribute('data-testid')==='comparison-backdrop',x,y};}''')
+                  assert hit['within'] and hit['mask'],hit
+                  await page.mouse.click(hit['x'],hit['y'])
+                  assert await page.evaluate('fixture.state().activeScreenId===fixture.target && !!fixture.state().stagedScreen')
+
                 assert '结构守卫' in await page.get_by_test_id('candidate-delivery-blockers').inner_text()
                 if mode=='real':
                   # The saved user's candidate is now stale against the saved project.
                   # Preserve that block, rather than rewriting its contract to obtain a pass.
                   assert await page.evaluate("fixture.report().checks.find(c=>c.id==='task').status==='blocked'")
                   assert await ack.count()==0
-                  await page.screenshot(path=str(OUT/f'{engine}-{mode}-{action}-before.png'))
+                  await page.screenshot(path=str(OUT/f'{engine}-{device}-{mode}-{action}-before.png'))
                 else:
                   assert await page.evaluate("fixture.report().checks.filter(c=>c.status!=='passed').length===1")
                 if action in ['discard','stale-project']:
@@ -103,7 +120,7 @@ async def run():
                     assert not await ack.is_checked() and await replace.is_disabled()
                   else:
                     count=await page.evaluate('Object.keys(fixture.state().screens).length')
-                    await page.screenshot(path=str(OUT/f'{engine}-{mode}-{action}-before.png'))
+                    await page.screenshot(path=str(OUT/f'{engine}-{device}-{mode}-{action}-before.png'))
                     await (replace if action=='replace' else keep).click()
                     await page.wait_for_function('fixture.state().stagedScreen===null',timeout=30000)
                     archive=await page.evaluate('''async action=>{
@@ -120,13 +137,21 @@ async def run():
                     assert await page.evaluate('fixture.state().screens[fixture.target].htmlContent===fixture.original')
                     await page.evaluate('fixture.redo()')
                     assert await page.evaluate('Object.keys(fixture.state().screens).length')==count+(action=='keep')
+                if mode=='synthetic' and action in ['replace','keep']:
+                  saved=await page.evaluate('''async()=>{const s=fixture.state(),{flushHistorySaveChecked}=await import('/src/services/storage/historyPersistence.ts');await flushHistorySaveChecked(s.id,s.folderPath);await s.saveProjectChecked();return {id:s.id,pages:Object.fromEntries(Object.entries(fixture.state().screens).map(([id,page])=>[id,page.htmlContent])),resultId:s.activeScreenId};}''')
+                  await page.goto(URL+'?mode=synthetic&device='+device+'&resume='+saved['id'],wait_until='networkidle')
+                  await page.wait_for_function('!!window.fixture?.resumed')
+                  reopened=await page.evaluate('''async saved=>{const s=fixture.state(),pages=Object.fromEntries(Object.entries(s.screens).map(([id,page])=>[id,page.htmlContent]));if(JSON.stringify(pages)!==JSON.stringify(saved.pages))throw Error('Reopen changed source pages');const records=await fixture.archives(saved.resultId);if(records.length!==1||records[0].status!=='applied')throw Error('Delivery archive not restored');const before=JSON.stringify(pages);fixture.undo();if(JSON.stringify(fixture.state().screens)===JSON.stringify(s.screens))throw Error('Reopened History could not undo');fixture.redo();if(JSON.stringify(Object.fromEntries(Object.entries(fixture.state().screens).map(([id,page])=>[id,page.htmlContent])))!==before)throw Error('Reopened History redo mismatch');return {sourcePreserved:true,archive:records[0].status,undoRedo:true};}''',saved)
+                  assert reopened=={'sourcePreserved':True,'archive':'applied','undoRedo':True},reopened
                 assert not errors,errors
-                await page.screenshot(path=str(OUT/f'{engine}-{mode}-{action}.png'))
-                results.append({'browser':engine,'mode':mode,'action':action,'status':'passed','pageErrors':errors})
+                assert not external,external
+                assert await page.evaluate('fixture.models()')==0
+                await page.screenshot(path=str(OUT/f'{engine}-{device}-{mode}-{action}.png'))
+                results.append({'browser':engine,'mode':mode,'device':device,'action':action,'status':'passed','pageErrors':errors,'externalRequests':external,'layers':layers,'reopenVerified':mode=='synthetic' and action in ['replace','keep']})
                 print(json.dumps(results[-1]),flush=True)
               except Exception:
-                print({'pageErrors':errors,'state':await page.evaluate('({report:window.fixture?.report(),error:window.fixture?.state().stagedAdoptionError})')},flush=True)
-                await page.screenshot(path=str(OUT/f'{engine}-{mode}-{action}-failure.png'))
+                print({'pageErrors':errors,'state':await page.evaluate('''async()=>{const {useHistoryStore}=await import('/src/stores/useHistoryStore.ts');return {report:window.fixture?.report(),error:window.fixture?.state().stagedAdoptionError,pages:Object.keys(window.fixture?.state().screens??{}),history:useHistoryStore.getState()};}''')},flush=True)
+                await page.screenshot(path=str(OUT/f'{engine}-{device}-{mode}-{action}-failure.png'))
                 raise
               finally:await context.close()
         finally:await browser.close()

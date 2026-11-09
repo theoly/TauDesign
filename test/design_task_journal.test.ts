@@ -1,0 +1,46 @@
+import {test,expect} from 'bun:test';
+import {DesignTaskJournal} from '../src/services/ai/designTaskJournal';
+import {LocalStorageStorage} from '../src/services/storage/projectStorage';
+import {readDesignTask,listDesignTasks,readDesignTaskTraces} from '../src/services/storage/designTaskRepository';
+import {PipelineExecutor} from '../src/services/ai/engine/pipeline/executor';
+import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
+import {MockTransport} from '../src/services/ai/engine/transport/mockTransport';
+import {TaskBudget} from '../src/services/ai/taskBudget';
+import {defaultPageComposition} from '../src/services/ai/pageComposition';
+import {buildDesignTaskContract} from '../src/services/ai/designWorkflow';
+import {techBlueTheme} from '../src/utils/themePresets';
+const provider={id:'journal',name:'test',protocol:'openai_compatible' as const,baseUrl:'https://example.test/v1',apiKey:'SYNTHETIC_JOURNAL_KEY',isEnabled:true};
+const plan={goal:'工作台',actor:'用户',completion:['查看全部信息'],questions:[],features:Array.from({length:7},(_,i)=>({id:`f${i+1}`,title:`功能${i+1}`,change:'add' as const,basis:'user' as const,sourceIds:['user:request'],information:[{label:`完整内容${i+1}`,kind:'display' as const}],interactions:[],states:[]}))};
+test('late settlement and completion cannot bypass budget validation, while damaged historical rows stay diagnostic',async()=>{
+ const id='journal-'+crypto.randomUUID(),storage=new LocalStorageStorage(id),contract=buildDesignTaskContract({intent:'create_screen',request:'独立预算校验',deviceProfile:'mobile',frameWidth:390}),budget=new TaskBudget({maxRequests:2,maxRequestedOutputTokens:4000,maxDurationMs:10000,maxRequestDurationMs:10000});budget.reserve(2000).settle();budget.close();
+ const make=()=>new DesignTaskJournal({storage,projectId:id,contextFingerprint:'source',provider,model:'m',isCurrent:()=>true}),bad={...budget.snapshot(),apiKey:provider.apiKey} as any;
+ await expect(make().update({phase:'started',contract,budget:bad})).rejects.toThrow('预算记录无效');expect(await storage.listDir('tasks')).toEqual([]);
+ const journal=make();await journal.update({phase:'started',contract,budget:budget.snapshot()});
+ await expect(journal.markDelivered(bad)).rejects.toThrow('预算记录无效');expect((await readDesignTask(storage,id,contract.taskId))?.task.state).toBe('draft');
+ await storage.createTextExclusive(`tasks/${contract.taskId}/recovery-claim.json`,JSON.stringify({version:1,originTaskId:contract.taskId,newTaskId:'design-new-owner',createdAt:1}),await storage.taskManifestIdentity(contract.taskId));
+ await expect(journal.update({phase:'result',contract,budget:bad})).rejects.toThrow('预算记录无效');expect(await storage.readText(`tasks/${contract.taskId}/attempts.jsonl`)).toBeNull();
+ const row={version:1,at:1,kind:'superseded-settlement',budget:budget.snapshot()};for(const invalid of [{...row,apiKey:provider.apiKey},{...row,at:-1},{...row,budget:bad}])await storage.appendLine(`tasks/${contract.taskId}/attempts.jsonl`,JSON.stringify(invalid));await storage.appendLine(`tasks/${contract.taskId}/attempts.jsonl`,JSON.stringify(row));
+ const traces=await readDesignTaskTraces(storage,id,contract.taskId);expect(traces.ignoredRows).toBe(3);expect(traces.lateBudget).toEqual(budget.snapshot());expect(JSON.stringify(traces)).not.toContain(provider.apiKey);
+});
+test('real pipeline checkpoints a completed region before the next failing call, preserving cost and separate attachment',async()=>{
+ const id='journal-'+crypto.randomUUID(),storage=new LocalStorageStorage(id),transport=new MockTransport();
+ transport.queueResponse(JSON.stringify(plan),0);transport.queueResponse(JSON.stringify(defaultPageComposition(plan)),0);transport.queueResponse('<artifact><article><p>完整内容1</p><p>完整内容2</p><p>完整内容3</p></article></artifact>',0);
+ transport.enqueueScenario({events:[{type:'Error',kind:'network_error',message:'fixture failure'}],delayMs:0});
+ let calls=0;const engine=new DefaultAIEngineCore({id:'capture',stream(request,event){calls++;return transport.stream(request,event);}});
+ const journal=new DesignTaskJournal({storage,projectId:id,contextFingerprint:'frozen-source',provider,model:'vision-test',attachment:{name:'ref.png',dataUrl:'data:image/png;base64,YQ=='},textReferences:[{name:'brief.md',source:'upload',content:'保留各项功能原文。'}],isCurrent:()=>true});
+ const budget=new TaskBudget({maxRequests:14,maxRequestedOutputTokens:34568,maxDurationMs:10000,maxRequestDurationMs:10000});
+ const output=await PipelineExecutor.execute({input:{rawPrompt:'新建七项功能的工作台',activeScreenId:null,attachment:{name:'ref.png',dataUrl:'data:image/png;base64,YQ=='},textReferences:[{name:'brief.md',source:'upload',content:'保留各项功能原文。'}]},screens:{},provider,model:'vision-test',engineCore:engine,taskBudget:budget,pageTaskPlanning:{},writeStrategy:'auto',deviceProfile:'mobile',frameWidth:390,baseSystemPrompt:'按项目Token设计。',designSystem:techBlueTheme,onTaskDraft:update=>journal.update(update)});
+ expect(calls).toBe(4);expect(output.errorMessage).toContain('fixture failure');expect(journal.taskId).toBe(output.workflowContract?.taskId);
+ const reopened=await readDesignTask(storage,id,journal.taskId!);expect(reopened?.task.state).toBe('blocked');expect(reopened?.parts.find(p=>p.stepId==='section-1')?.html).toContain('完整内容3');expect(reopened?.task.budget?.requests).toBe(4);
+ expect(reopened?.task.budget?.reportedOutputTokens).toBeGreaterThan(0);expect(reopened?.task.inputs?.attachment?.relPath).toMatch(/^assets\/images\//);expect(reopened?.parts.find(p=>p.stepId==='input-text-1')?.html).toBe('保留各项功能原文。');
+ expect(JSON.stringify(reopened?.task)).not.toContain('data:image');expect(JSON.stringify(reopened?.task)).not.toContain(provider.apiKey);budget.close();
+});
+test('draft storage failure blocks before a model request; a successful source archive becomes complete only when the owner reports delivery',async()=>{
+ const id='journal-'+crypto.randomUUID(),storage=new LocalStorageStorage(id),contract=buildDesignTaskContract({intent:'create_screen',request:'新建资料页',deviceProfile:'mobile',frameWidth:390});
+ const journal=new DesignTaskJournal({storage,projectId:id,contextFingerprint:'source',provider,model:'m',isCurrent:()=>true});
+ await journal.update({phase:'started',contract});await journal.update({phase:'result',contract,result:{html:'<main><h1>资料页</h1></main>'}});
+ expect((await listDesignTasks(storage,id)).map(t=>t.id)).toContain(contract.taskId);await journal.markDelivered();expect(await listDesignTasks(storage,id)).toEqual([]);expect((await listDesignTasks(storage,id,true))[0].state).toBe('completed');
+ const bad=Object.create(storage) as LocalStorageStorage;bad.writeTextAtomic=async()=>{throw Error('disk full');};bad.publishTaskManifest=async()=>{throw Error('disk full');};let calls=0;
+ const failed=new DesignTaskJournal({storage:bad,projectId:id,contextFingerprint:'source',provider,model:'m',isCurrent:()=>true});
+ await expect(PipelineExecutor.execute({input:{rawPrompt:'新建资料页',activeScreenId:null},screens:{},provider,model:'m',engineCore:{streamText(){calls++;throw Error('must not call');},async generateObject(){calls++;throw Error('must not call');}},writeStrategy:'auto',pageTaskPlanning:{},deviceProfile:'mobile',frameWidth:390,baseSystemPrompt:'test',onTaskDraft:u=>failed.update(u)})).rejects.toThrow('disk full');expect(calls).toBe(0);
+});

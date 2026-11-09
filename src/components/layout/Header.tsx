@@ -42,6 +42,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
     designSystem,
     arrangeScreens
   } = useProjectStore();
+  const saveStatus=useProjectStore(state=>state.projectSaveStatus),saveError=useProjectStore(state=>state.projectSaveError);
 
   const { canUndo, canRedo, undo, redo } = useHistoryStore();
   const { backToManager } = useWorkspaceStore();
@@ -96,6 +97,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
           )}
           <span className="font-medium">{settings.frameWidth}</span>
         </span>
+        {(saveStatus==='failed'||saveStatus==='readonly')&&<details className="relative text-amber-300">
+          <summary className="cursor-pointer rounded border border-amber-700/60 px-2 py-1" aria-label="查看工程保存问题">{saveStatus==='readonly'?'只读恢复':'保存未确认'}</summary>
+          <div role="alert" className="absolute left-0 top-full z-50 mt-2 w-80 rounded-lg border border-amber-800 bg-slate-950 p-3 text-xs leading-relaxed shadow-xl">
+            <p>{saveError}</p><p className="mt-2 text-slate-400">当前设计仍保留在窗口。请先导出需要保留的页面，再重新打开工程。</p>
+          </div>
+        </details>}
+        {saveStatus==='saving'&&<span role="status" className="text-slate-500">正在保存…</span>}
       </div>
 
       {/* Middle: 视图开关 / 撤销重做 / 缩放 */}

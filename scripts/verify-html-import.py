@@ -62,7 +62,7 @@ async def main(args):
                   const {useHistoryStore}=await import(loaded);useHistoryStore.getState().undo();
                   if(s.id!==window.__projectStore.getState().id||Object.keys(window.__projectStore.getState().screens).length!==0)throw new Error('Undo failed');
                   if(JSON.stringify(window.__projectStore.getState().designSystem.tokens)!==fixture.beforeTheme)throw new Error('Theme undo failed');
-                  useHistoryStore.getState().redo();window.__projectStore.getState().saveProject();
+                  useHistoryStore.getState().redo();await window.__projectStore.getState().saveProjectChecked();
                   return {projectId:s.id,screenId:screen.id,name:screen.name,workflow:e.workflow,render:e.render,files:e.files,diagnostics:e.quality.findings};
                 }''',fixture)
                 frame=page.frame_locator('iframe[title="导入卡片"]')
@@ -73,7 +73,7 @@ async def main(args):
                     assert actual=={'radius':'19px','background':'rgb(255, 255, 255)','padding':'18px'},actual
                 assert await frame.locator('.status-bar').count()==0
                 # Undo/redo remounts the frame before its local asset URLs are resolved.
-                await page.wait_for_function("""()=>{const frame=document.querySelector('iframe[title="导入卡片"]');const img=frame?.contentDocument?.querySelector('img');return img?.complete&&img.naturalWidth>0&&img.getAttribute('src')?.startsWith('data:image/');}""")
+                await page.wait_for_function("""()=>{const frame=document.querySelector('iframe[title="导入卡片"]');const img=frame?.contentDocument?.querySelector('img');return img?.complete&&img.naturalWidth>0&&img.getAttribute('src')?.includes('/__aidesign_media/')&&new URL(img.src).origin===location.origin;}""")
                 await frame.locator('img').evaluate('(img)=>img.decode()')
                 pixel=await frame.locator('img').evaluate('(img)=>{const c=document.createElement("canvas");c.width=c.height=1;const x=c.getContext("2d");x.drawImage(img,0,0,1,1);return Array.from(x.getImageData(0,0,1,1).data)}')
                 assert pixel==[255,0,0,255],{'mode':mode,'pixel':pixel}
@@ -106,13 +106,13 @@ async def main(args):
               const loaded=performance.getEntriesByType('resource').map(entry=>entry.name).find(url=>new URL(url).pathname==='/src/stores/useWorkspaceStore.ts');
               const {useWorkspaceStore}=await import(loaded);const result=[];
               for(const check of checks){
-                if(!useWorkspaceStore.getState().openProject(check.projectId))throw new Error('Reopen failed');
+                await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(check.projectId);
                 const screen=window.__projectStore.getState().screens[check.screenId];
                 if(screen.metadata.creationEvidence.workflow.status!=='ready')throw new Error('Evidence lost');
                 window.__projectStore.getState().setActiveScreen(screen.id);result.push(check.mode);
               }return result;
             }''',checks)
-            await page.wait_for_function("""()=>{const frame=document.querySelector('iframe[title="导入卡片"]');const img=frame?.contentDocument?.querySelector('img');return img?.complete&&img.naturalWidth>0&&img.getAttribute('src')?.startsWith('data:image/');}""")
+            await page.wait_for_function("""()=>{const frame=document.querySelector('iframe[title="导入卡片"]');const img=frame?.contentDocument?.querySelector('img');return img?.complete&&img.naturalWidth>0&&img.getAttribute('src')?.includes('/__aidesign_media/')&&new URL(img.src).origin===location.origin;}""")
             await page.frame_locator('iframe[title="导入卡片"]').locator('img').evaluate('(img)=>img.decode()')
             inspector=page.get_by_role('button',name='元素属性',exact=True)
             if await inspector.get_attribute('aria-pressed')!='true':

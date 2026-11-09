@@ -4,6 +4,7 @@ import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
 import '/src/styles/index.css';
 import {PipelineExecutor} from '/src/services/ai/engine/pipeline/executor.ts';
 import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {requestSchema} from '/test/helpers/modelSchema.ts';
 import {MockTransport} from '/src/services/ai/engine/transport/mockTransport.ts';
 import {techBlueTheme} from '/src/utils/themePresets.ts';
 import {PageTaskPlanCard} from '/src/components/chat/PageTaskPlanCard.tsx';
@@ -13,7 +14,7 @@ const plan={goal:'选择时间并完成预约',actor:'预约用户',completion:[
 function App(){const [phase,setPhase]=React.useState('待运行'),[output,setOutput]=React.useState(null);
  async function run(){setPhase('正在梳理功能、信息与交互');const transport=new MockTransport();transport.queueResponse(JSON.stringify(plan),20);
  transport.queueResponse('<artifact type="screen" title="预约"><main class="p-4"><label>预约时间<input/></label><button class="btn btn-primary">确认预约</button></main></artifact>',20);
- const core=new DefaultAIEngineCore({id:'local',stream:(request,event)=>{state.requests.push({json:!!request.body.response_format,containsPlan:JSON.stringify(request.body.messages).includes('PAGE TASK PLAN')});return transport.stream(request,event);}});
+ const core=new DefaultAIEngineCore({id:'local',stream:(request,event)=>{state.requests.push({json:Boolean(requestSchema(request)),containsPlan:JSON.stringify(request.body.messages).includes('PAGE TASK PLAN')});return transport.stream(request,event);}});
  const result=await PipelineExecutor.execute({input:{rawPrompt:'创建预约页面，选择预约时间并确认预约',activeScreenId:null},provider:{id:'fixture',protocol:'openai_compatible',baseUrl:'http://mock',apiKey:'FIXTURE_SECRET'},model:'fixture',engineCore:core,
  screens:{old:{id:'old',name:'保留页',htmlContent:state.original}},deviceProfile:'mobile',frameWidth:390,baseSystemPrompt:'baseline',designSystem:techBlueTheme,pageTaskPlanning:{},
  onTaskPlan:()=>setPhase('业务规划完成，正在生成页面')});state.output=result;setOutput(result);setPhase(result.status==='error'?result.errorMessage:'受控验证完成');}

@@ -34,7 +34,8 @@ test('图标旁补文字保留子树；未知节点、空白、超长、保护�
  for(const html of ['<main><button>','<script>alert(1)</script>','<a href="javascript:alert(1)">X</a>'])expect(makeFailedPageDraft(html,'c','b',{})).toBeUndefined();
 });
 test('完整失败HTML与断流区分；Pipeline文本修复不调用整页模型且保持全量检查',async()=>{
- const f=core(()=>`<artifact title="会员中心">${bad}</artifact>`);
+ const external='<main class="container-max relative"><h1>会员中心</h1><button class="btn btn-primary absolute"><img class="icon" src="https://example.test/icon.svg" alt="" aria-hidden="true"><span></span></button></main>';
+ const f=core(()=>`<artifact title="会员中心">${external}</artifact>`);
  const options={input:{rawPrompt:'新建一个会员中心页面',activeScreenId:null,decision:{intent:'create_screen' as const,targetScreenId:null,reason:'test'}},provider:defaultProviders[0],model:'test',engineCore:f.value,screens:{},deviceProfile:'pc' as const,frameWidth:1440,baseSystemPrompt:'设计页面',designSystem:defaultTheme};
  const first=await PipelineExecutor.execute(options);expect(first.status).toBe('rejected_by_quality');expect(first.failedDraft).toBeDefined();expect(first.extractedHtml).toBeUndefined();
  const target=draftRepairTargets(first.failedDraft!)[0],labels=[{nid:target.nid,text:'查看权益'}];

@@ -2,7 +2,7 @@ import { compactPageReference, type PageReferenceSnapshot } from './pageReferenc
 export const CONTEXT_BUDGET = {
   /** 软阈值：超过此值时，@引用画框强制降级为骨架，禁用样张 Few-Shot */
   SOFT_LIMIT_CHARS: 24_000,
-  /** 硬阈值 (对齐 PRD §3.2.6): 超过此值时目标待修改画框亦降级为骨架 */
+  /** Reference context ceiling. Required target text must never be skeletonized to satisfy it. */
   HARD_LIMIT_CHARS: 30_000
 };
 
@@ -18,27 +18,28 @@ export function enforceBudgetGuard(params: {
   targetHtml?: string;
   targetId?: string;
   targetName?: string;
+  targetIsBusinessInventory?: boolean;
   referencedScreens: PageReferenceSnapshot[];
   skeletonizeFn: (html: string) => string;
 }): BudgetGuardResult {
-  const { targetHtml = '', skeletonizeFn } = params;
+  const { targetHtml = '' } = params;
   const referencedScreens=params.referencedScreens.map(ref=>({...ref}));
   const warnings: string[] = [];
   let isContextTrimmed = false;
 
-  let currentTargetHtml = targetHtml;
-  let targetIsSkeleton = false;
+  const currentTargetHtml = targetHtml;
+  const targetIsSkeleton = false;
 
   const size=(ref:PageReferenceSnapshot)=>ref.skeletonHtml.length+(ref.styles?.length??0)+(ref.analysis?.length??0);
-  // Preserve the established modification-target guard. References never alter the target.
+  // Required original text remains authoritative. Final provider capacity preflight may reject it;
+  // a stripped skeleton is never a source from which a model may reconstruct the full page.
   if(currentTargetHtml.length>CONTEXT_BUDGET.HARD_LIMIT_CHARS){
-    isContextTrimmed=true;targetIsSkeleton=true;currentTargetHtml=skeletonizeFn(currentTargetHtml);
-    warnings.push('目标画框超过 30k 字符硬限制，已降级为结构骨架注入。');
+    warnings.push(params.targetIsBusinessInventory?'目标业务清单超过参考上下文额度，业务文本、控件和样式仍完整保留；旧布局仅在本地保存。发送前仍需通过模型容量检查。':'目标画框超过参考上下文额度，已保留完整原文；发送前仍需通过模型容量检查，不得从删字骨架重建页面。明确小改应使用授权子树修改。');
   }
   const total=currentTargetHtml.length+referencedScreens.reduce((sum,ref)=>sum+size(ref),0);
   if(total>CONTEXT_BUDGET.SOFT_LIMIT_CHARS){
     isContextTrimmed=true;
-    warnings.push('上下文体积超出 24k 字符软限制，参考页面已压缩，保留CSS、L4与业务结构摘要；未包含的细节不应臆测。');
+    warnings.push(referencedScreens.length?'上下文体积超出 24k 字符软限制，参考页面按剩余额度压缩或省略；未包含的细节不应臆测。':'必需上下文超过 24k 字符软阈值，内容未裁减，发送前仍需通过模型容量检查。');
     let available=Math.max(0,CONTEXT_BUDGET.HARD_LIMIT_CHARS-currentTargetHtml.length);
     const omitted:string[]=[];
     const count=referencedScreens.length;

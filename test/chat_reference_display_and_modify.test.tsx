@@ -1,3 +1,4 @@
+import {waitForPublicationIdle} from './helpers/publication';
 import {stubPageCreationRender} from './helpers/pageCreation';
 stubPageCreationRender();
 import { mockModificationAnalysis, confirmLatestModification } from './modification_review_helpers';
@@ -56,7 +57,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
     root = createRoot(container);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     analysisMock.mockRestore();
     PipelineExecutor.execute = originalExecute;
     AIService.stream = originalStream;
@@ -64,6 +65,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       root.unmount();
     });
     container.remove();
+    await waitForPublicationIdle();
   });
 
   describe('CHK-F-01: 显式修改意图判定与工具解析单画框回退', () => {
@@ -301,6 +303,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
 
       await act(async () => {
         adoptBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await waitForPublicationIdle();
       });
 
       const finalState = useProjectStore.getState();
@@ -384,6 +387,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
       expect(adoptBtn).toBeDefined();
       await act(async () => {
         adoptBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await waitForPublicationIdle();
       });
 
       expect(useProjectStore.getState().screens[screenId].htmlContent).toContain('Run 1');

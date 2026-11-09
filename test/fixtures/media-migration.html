@@ -1,0 +1,32 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>媒体转换验证</title><body style="margin:0;background:#0f172a;color:#e2e8f0;font-family:system-ui"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import {ProjectSettingsPanel} from '/src/components/settings/ProjectSettingsPanel.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {neutralModernTheme} from '/src/utils/themePresets.ts';
+import {HistoryRepository} from '/src/services/storage/historyRepository.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {screensWithEmbeddedMedia} from '/src/services/import/mediaMigration.ts';
+const root=ReactDOM.createRoot(document.getElementById('root'));
+const source=`<style>body{margin:0;background:white}.sample{display:flex;align-items:center;gap:24px;padding:32px}.bell{width:64px;height:64px;color:rgb(223,63,78)}.bell path{stroke:currentColor;stroke-width:2;fill:none}.multi{width:80px;height:64px}.warm{fill:rgb(245,90,31)}.cool{fill:rgb(30,115,200)}.sample p{color:#283444;font:16px/1.6 system-ui}</style><main class="sample" data-nid="page"><svg class="bell" data-nid="bell" viewBox="0 0 24 24" style="opacity:0.6"><path data-nid="triangle" d="M12 3L21 20H3Z"/></svg><svg class="multi" data-nid="multi" viewBox="10 10 40 30"><rect class="warm" x="10" y="10" width="20" height="30"/><rect class="cool" x="30" y="10" width="20" height="30"/></svg><p data-nid="text">保留完整文案</p></main>`;
+let original,originalOverrides;
+window.mediaMigrationHarness={
+ setup(device){
+  useProjectStore.getState().initNewProject({name:'独立媒体测试',deviceProfile:device,designSystem:structuredClone(neutralModernTheme),createSpecimen:false});
+  original={id:'legacy',name:'媒体样张',htmlContent:source,position:{x:0,y:0},metadata:{importedHtml:{version:1,fileName:'legacy.html',mode:'preserve',categories:[],changes:[],retained:[]}}};
+  originalOverrides={'legacy:triangle':{nid:'triangle',declarations:{stroke:'rgb(16,130,180)'}}};
+  useProjectStore.setState({screens:{legacy:original},screenOrder:['legacy'],overrides:originalOverrides});useHistoryStore.getState().restore(null);
+  root.render(React.createElement(ProjectSettingsPanel));return {source};
+ },
+ async saveReopenUndo(){
+  const state=useProjectStore.getState(),storage=createProjectStorage(state.id),repo=new HistoryRepository(storage,state.id),converted=state.screens.legacy;
+  state.saveProject();await repo.save(useHistoryStore.getState());const raw=await storage.readText('history.json');
+  const {readProject}=await import('/src/utils/projectRegistry.ts');const projectRaw=readProject(state.id);if(!projectRaw)throw Error('Project was not saved');
+  useHistoryStore.getState().restore(null);useProjectStore.getState().loadProject(projectRaw);useHistoryStore.getState().restore(await repo.load());
+  useHistoryStore.getState().undo();const undoExact=useProjectStore.getState().screens.legacy.htmlContent===source&&JSON.stringify(useProjectStore.getState().overrides)===JSON.stringify(originalOverrides);
+  useHistoryStore.getState().redo();return {undoExact,redoExact:JSON.stringify(useProjectStore.getState().screens.legacy)===JSON.stringify(converted),historyHasDrawing:/<path|<rect/.test(raw),mediaCount:screensWithEmbeddedMedia(useProjectStore.getState()).length,past:useHistoryStore.getState().past.length,assetCount:Object.keys(useProjectStore.getState().assets).length};
+ },
+ dispose(){root.unmount();}
+};
+</script></body></html>

@@ -23,7 +23,7 @@ export function validateIconSvg(raw:string):string {
     if(node===doc.documentElement)continue;
     for(const attr of [...node.attributes]){
       const name=attr.name,value=attr.value;
-      const safe=geometry.has(name)?/^[-+]?\d*\.?\d+(?:e[-+]?\d+)?$/i.test(value)
+      const safe=name==='xmlns'?value==='http://www.w3.org/2000/svg':geometry.has(name)?/^[-+]?\d*\.?\d+(?:e[-+]?\d+)?$/i.test(value)
         : name==='d'?/^[MmZzLlHhVvCcSsQqTtAa0-9\s.,+eE-]+$/.test(value)
         : name==='points'?/^[0-9\s.,+eE-]+$/.test(value)
         : ['fill','stroke'].includes(name)?['none','currentColor'].includes(value)

@@ -1,4 +1,5 @@
 import type { ProjectStorage } from '../storage/projectStorage';
+import type {Asset} from '../../types/project';
 import { cssUrls, decodeCss, transformDeclarations, transformStyleSheet, unsafeCss } from './htmlImportCss';
 
 export interface ImportResourceFile { path: string; file: File }
@@ -11,14 +12,23 @@ export interface PreparedImportResources {
   binaries: ImportBinary[];
   warnings: string[];
 }
+/** Registry metadata contains file identities only, never upload payloads. */
+export function importResourceAssets(result:Pick<PreparedImportResources,'binaries'>):Asset[]{
+ return result.binaries.map(binary=>{
+  if(!importAssetPath(binary.relPath)||MIME_BY_EXT[extension(binary.relPath)]!==binary.mimeType)throw Error('导入资产路径与媒体类型不一致。');
+  return {id:`import_${binary.relPath.split('/').pop()!.split('.')[0]}`,name:binary.name,relPath:binary.relPath,type:binary.mimeType.startsWith('font/')?'font':binary.mimeType.startsWith('image/')?'image':'media',mimeType:binary.mimeType,source:'upload',refCount:1};
+ });
+}
 
 const MiB = 1024 * 1024;
 const MIME_BY_EXT: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp',
   avif: 'image/avif', svg: 'image/svg+xml', ico: 'image/x-icon', bmp: 'image/bmp',
   woff: 'font/woff', woff2: 'font/woff2', ttf: 'font/ttf', otf: 'font/otf',
+  mp3:'audio/mpeg',ogg:'audio/ogg',wav:'audio/wav',mp4:'video/mp4',webm:'video/webm',vtt:'text/vtt',
 };
 const FONT_EXT = new Set(['woff', 'woff2', 'ttf', 'otf']);
+const MEDIA_EXT = new Set(['mp3','ogg','wav','mp4','webm','vtt']);
 const EXT_BY_MIME = Object.fromEntries(Object.entries(MIME_BY_EXT).map(([ext, mime]) => [mime, ext]));
 EXT_BY_MIME['image/jpeg'] = 'jpg';
 const utf8 = new TextEncoder();
@@ -114,6 +124,22 @@ function sanitizeSvg(bytes: Uint8Array): Uint8Array {
   return utf8.encode(new XMLSerializer().serializeToString(doc.documentElement));
 }
 
+/** Validate existing SVG bytes without rewriting them. Legacy cache cleanup must not change artwork. */
+export function assertPassiveSvgResource(text:string):void {
+  if(/<!DOCTYPE|<!ENTITY|<\?(?!xml(?:\s|\?>))/i.test(text))throw Error('SVG资源含外部实体或文档类型，不能按静态资源整理。');
+  const doc=new DOMParser().parseFromString(text,'image/svg+xml');
+  if(doc.querySelector('parsererror')||doc.documentElement.localName!=='svg'||Array.from(doc.childNodes).some(node=>node.nodeType===7))throw Error('SVG资源不是完整的独立静态文档。');
+  for(const node of Array.from(doc.querySelectorAll('*'))){
+    if(node.namespaceURI!=='http://www.w3.org/2000/svg'||['script','foreignobject','iframe','object','embed','animate','animatetransform','animatemotion','set'].includes(node.localName.toLowerCase()))throw Error('SVG资源含活动内容或外来命名空间。');
+    if(node.localName==='style'&&(unsafeCss(node.textContent??'')||cssReferences(node.textContent??'').some(ref=>ref.kind==='import'||!ref.url.trim().startsWith('#'))))throw Error('SVG样式含外部依赖或不安全内容。');
+    for(const attr of Array.from(node.attributes)){
+      const name=attr.name.toLowerCase(),value=cssUnescape(attr.value);
+      if(name.startsWith('on')||['xml:base','src','srcdoc'].includes(name)||((name==='href'||name.endsWith(':href'))&&!attr.value.trim().startsWith('#'))||
+        /(?:javascript|vbscript|data|https?|file):|\/\//i.test(value)&&name!=='xmlns'&&!name.startsWith('xmlns:')||unsafeCss(value)||cssReferences(value).some(ref=>ref.kind==='import'||!ref.url.trim().startsWith('#')))throw Error('SVG属性含活动内容或外部依赖。');
+    }
+  }
+}
+
 interface CssReference { start: number; end: number; url: string; kind: 'url' | 'import'; media?: string }
 
 function cssUnescape(text: string): string {
@@ -158,9 +184,16 @@ function urlToken(css: string, start: number): { end: number; url: string } | nu
 /** Scan CSS tokens, skipping comments and strings so textual url(...) is not rewritten. */
 function cssReferences(css: string): CssReference[] {
   const refs: CssReference[] = [];
+  const functions:string[]=[];
   for (let i = 0; i < css.length;) {
     if (css.startsWith('/*', i)) { const end = css.indexOf('*/', i + 2); i = end < 0 ? css.length : end + 2; continue; }
-    if (css[i] === '"' || css[i] === "'") { i = stringEnd(css, i); continue; }
+    if (css[i] === '"' || css[i] === "'") {
+      const end=stringEnd(css,i),parent=functions.at(-1);
+      if(['image-set','-webkit-image-set','image'].includes(parent??''))refs.push({start:i,end,url:cssUnescape(css.slice(i+1,end-1)),kind:'url'});
+      i=end;continue;
+    }
+    if(css[i]==='('){let end=i;while(end>0&&/\s/.test(css[end-1]))end--;let start=end;while(start>0&&/[\w-]/.test(css[start-1]))start--;functions.push(css.slice(start,end).toLowerCase());i++;continue;}
+    if(css[i]===')'){functions.pop();i++;continue;}
     if (/^@import\b/i.test(css.slice(i))) {
       const start = i;
       i += 7;
@@ -310,7 +343,7 @@ export async function prepareImportResources(html: string, htmlFilePath: string,
     if (bytes.byteLength > 10 * MiB) throw new Error(`资源 ${name} 超过 10 MiB 限制`);
     if (mimeType === 'image/svg+xml') bytes = sanitizeSvg(bytes);
     const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(bytes).buffer))].map((b) => b.toString(16).padStart(2, '0')).join('');
-    const relPath = `${FONT_EXT.has(ext) ? 'assets/imports/fonts' : 'assets/images'}/${hash}.${ext}`;
+    const relPath = `${FONT_EXT.has(ext) ? 'assets/imports/fonts' : MEDIA_EXT.has(ext)?'assets/media':'assets/images'}/${hash}.${ext}`;
     if (!binaryCache.has(relPath)) { result.binaries.push({ relPath, base64: toBase64(bytes), mimeType, name }); binaryCache.set(relPath, relPath); }
     return relPath;
   }
@@ -405,11 +438,11 @@ export async function persistImportResources(result: PreparedImportResources, st
 }
 
 function importAssetPath(url: string): boolean {
-  return /^assets\/(?:images|imports\/fonts)\/[a-f0-9]{64}\.(?:png|jpe?g|gif|webp|avif|svg|ico|bmp|woff2?|ttf|otf)$/.test(url);
+  return /^assets\/(?:images|imports\/fonts|media)\/[a-f0-9]{64}\.(?:png|jpe?g|gif|webp|avif|svg|ico|bmp|woff2?|ttf|otf|mp3|ogg|wav|mp4|webm|vtt)$/.test(url);
 }
 
 /** Materialize only parsed URL locations. Stored HTML/CSS and user text stay relative. */
-export async function resolveImportedResources(html: string, scopedCss: string | undefined, storage: ProjectStorage, registeredPaths: ReadonlySet<string> = new Set()): Promise<{ htmlContent: string; scopedCss?: string }> {
+export async function resolveImportedResources(html: string, scopedCss: string | undefined, storage: ProjectStorage, registeredPaths: ReadonlySet<string> = new Set(),options?:{referenceUrl:(path:string,base64:string,mime:string)=>Promise<string>}): Promise<{ htmlContent: string; scopedCss?: string }> {
   const cache = new Map<string, Promise<string | null>>();
   async function resolve(url: string): Promise<string> {
     const { path: rawPath, suffix } = splitSuffix(url);
@@ -425,7 +458,8 @@ export async function resolveImportedResources(html: string, scopedCss: string |
     }
     const base64 = await pending;
     if (base64 === null) throw new Error(`导入资源缺失: ${path}`);
-    return `data:${MIME_BY_EXT[extension(path)]};base64,${base64}${suffix.startsWith('#') ? suffix : ''}`;
+    const resolved=options?await options.referenceUrl(path,base64,MIME_BY_EXT[extension(path)]):`data:${MIME_BY_EXT[extension(path)]};base64,${base64}`;
+    return resolved+(suffix.startsWith('#')?suffix:'');
   }
   const css = (text: string) => rewriteCss(text, async (ref) => ref.kind === 'url' ? `url(${cssQuote(await resolve(ref.url))})` : text.slice(ref.start, ref.end));
   const doc = new DOMParser().parseFromString(html, 'text/html');

@@ -73,7 +73,7 @@ async def main(args):
               useHistoryStore.getState().undo();if(window.__projectStore.getState().designLibraryBinding)throw new Error('Undo lost atomicity');
               useHistoryStore.getState().redo();if(!window.__projectStore.getState().components['lib-source-card'])throw new Error('Redo lost component');
               window.__projectStore.getState().insertComponent('page','lib-source-card');
-              window.__projectStore.getState().saveProject();
+              await window.__projectStore.getState().saveProjectChecked();
               return {binding,sourceWrites:window.__libraryFixture.sourceWrites,pickerCalls:window.__libraryFixture.pickerCalls};
             }''')
             assert applied['sourceWrites']==0
@@ -100,7 +100,7 @@ async def main(args):
             await page.wait_for_function('Boolean(window.__projectStore)')
             reopened=await page.evaluate('''async fixture=>{
               const url=performance.getEntriesByType('resource').map(e=>e.name).find(url=>new URL(url).pathname==='/src/stores/useWorkspaceStore.ts');
-              const {useWorkspaceStore}=await import(url);if(!useWorkspaceStore.getState().openProject(fixture.id))throw new Error('Reopen failed');
+              const {useWorkspaceStore}=await import(url);await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(fixture.id);
               const s=window.__projectStore.getState();s.setActiveScreen('page');
               const saved=localStorage.getItem('aidesign:project:'+fixture.id);
               if(JSON.stringify(s.designLibraryBinding).includes('/virtual/')||JSON.stringify(s.designLibraryBinding).includes('base64'))throw new Error('Receipt leaked source path or payload');

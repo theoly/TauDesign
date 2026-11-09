@@ -12,7 +12,7 @@ let storage: LocalStorageStorage;
 let repo: ProjectRepository;
 beforeEach(() => {
   localStorage.clear();
-  storage = new LocalStorageStorage('knowledge-test');
+  storage = new LocalStorageStorage('knowledge-test-'+crypto.randomUUID());
   repo = new ProjectRepository(storage);
   useProjectStore.getState().initNewProject({ name: 'test', deviceProfile: 'pc', designSystem: defaultTheme });
   useHistoryStore.getState().clear();
@@ -42,14 +42,13 @@ describe('项目文档存储', () => {
     await storage.remove(meta.contentFile || 'documents/requirements.md');
     const loaded = (await repo.load())!;
     expect(loaded.projectDocuments?.requirements).toMatchObject({ missing: true, enabled: false });
-    await repo.save(loaded);
+    await expect(repo.save(loaded)).rejects.toThrow(/缺失|变化/);
     expect(await storage.readText(meta.contentFile || 'documents/requirements.md')).toBeNull();
     expect((await repo.load())?.projectDocuments?.requirements.missing).toBe(true);
   });
   test('失败的元信息提交不会使之前的文档正文变成新版本', async () => {
     await repo.save(project());
-    const write = storage.writeTextAtomic.bind(storage);
-    storage.writeTextAtomic = async (rel, text) => { if (rel === 'project.json') throw new Error('disk full'); await write(rel, text); };
+    storage.publishManagedSnapshot = async () => { throw new Error('disk full'); };
     const next = project(); next.projectDocuments!.requirements.content = '修改后的需求';
     await expect(repo.save(next)).rejects.toThrow('disk full');
     expect((await repo.load())?.projectDocuments?.requirements.content).toBe('登录与订单');
@@ -58,8 +57,8 @@ describe('项目文档存储', () => {
     await repo.save(project());
     const beforeFiles = await storage.listDir('documents');
     const writes: string[] = [];
-    const write = storage.writeTextAtomic.bind(storage);
-    storage.writeTextAtomic = async (rel, text) => { writes.push(rel); await write(rel, text); };
+    const write = storage.publishManagedSnapshot.bind(storage);
+    storage.publishManagedSnapshot = async (expected,changes,resources) => { writes.push(...changes.map(change=>change.path));return write(expected,changes,resources); };
     const next = project(); next.name = '仅修改工程名称';
     await repo.save(next);
     expect(await storage.listDir('documents')).toEqual(beforeFiles);
@@ -74,7 +73,7 @@ describe('项目文档存储', () => {
     second.projectDocuments!.requirements.content = '最后一次编辑';
     const firstSave = repo.save(first);
     first.projectDocuments!.requirements.content = '调用后的外部变更';
-    const secondSave = new ProjectRepository(storage).save(second);
+    const secondSave = new ProjectRepository(storage,repo.getAuthoringSession()).save(second);
     await Promise.all([firstSave, secondSave]);
     expect((await repo.load())?.projectDocuments?.requirements.content).toBe('最后一次编辑');
   });
@@ -98,7 +97,7 @@ describe('项目文档存储', () => {
 });
 
 describe('项目文档历史动作', () => {
-  test('新增、编辑、启停、删除均支持Undo/Redo，原文保持不变', () => {
+  test('新增、编辑、启停、删除均支持Undo/Redo，原文保持不变', async () => {
     const store = useProjectStore.getState();
     store.upsertProjectDocument(entry());
     store.upsertProjectDocument({ ...entry(), content: '新正文', originalContent: '篡改', enabled: false });
@@ -111,6 +110,7 @@ describe('项目文档历史动作', () => {
     expect(useProjectStore.getState().projectDocuments).toEqual({});
     useHistoryStore.getState().undo();
     expect(useProjectStore.getState().projectDocuments.requirements.content).toBe('新正文');
+    await useProjectStore.getState().saveProjectChecked();
     const saved = readProject(useProjectStore.getState().id);
     expect(JSON.parse(saved!).projectDocuments.requirements.content).toBe('新正文');
   });

@@ -8,19 +8,20 @@ import {
   listProjects,
   migrateLegacyProject,
   projectExists,
-  projectKey,
-  readProject,
   removeMeta,
   upsertMeta
 } from '../utils/projectRegistry';
 import { createProjectStorage } from '../services/storage/projectStorage';
 import { ProjectRepository } from '../services/storage/projectRepository';
 import {migrateProjectBundle} from '../services/storage/projectBundleMigration';
+import {openBrowserProject,cacheBrowserProject} from '../services/storage/browserProjectRepository';
+import {projectAuthoringNotice,projectDocumentHistory,createProjectAuthoringSession,projectAuthor} from '../services/storage/projectAuthoring';
+import {guardProjectPublicationFields,assertNoProjectPublication} from '../services/storage/projectPublication';
 import { loadStagedCandidate } from '../services/storage/candidateRepository';
 import { folderDisplayName, isDesktopRuntime, pickProjectFolder } from '../services/storage/folderPicker';
-import { useProjectStore } from './useProjectStore';
+import { useProjectStore,waitForProjectSave } from './useProjectStore';
 import { useHistoryStore } from './useHistoryStore';
-import { HistoryRepository, readHistoryLocal,historyKey } from '../services/storage/historyRepository';
+import { readHistoryArchive } from '../services/storage/historyRepository';
 import {
   flushHistorySave,flushHistorySaveChecked,
   loadHistoryForProject,
@@ -31,6 +32,7 @@ import {
 /** 应用视图路由 (PRD §3.0 / D21)：启动先进工程管理页，选定工程后才进工作空间 */
 export type AppView = 'manager' | 'workspace';
 let migrationBusy=false;
+let refreshRevision=0;
 
 /**
  * 撤销栈与 checkpoint 都是工程作用域的。切换工程时必须一并清空，
@@ -70,9 +72,9 @@ interface WorkspaceState {
   createProject: (name: string, deviceProfile: 'pc' | 'mobile', designSystem: DesignSystem, initialDecisions?: string[], folderPath?: string, referenceDeviceId?: string) => void;
   openProject: (id: string) => boolean;
   backToManager: () => void;
-  renameProject: (id: string, name: string) => void;
+  renameProject: (id: string, name: string) => Promise<void>;
   removeFromList: (id: string) => void;
-  deleteProject: (id: string) => void;
+  deleteProject: (id: string) => Promise<void>;
 
   /** 打开任意本地 *.aidesign 工程文件夹 (T-AE-43 / PRD §3.0.1) */
   openLocalFolder: () => Promise<OpenLocalFolderResult>;
@@ -92,11 +94,12 @@ async function saveWorkspaceChecked(check:()=>void):Promise<void>{
  check();
 }
 async function readLocation(location:ProjectLocation,check:()=>void):Promise<ProjectDocument>{
- check();const doc=location.folderPath?await readCompleteProject(createProjectStorage(location.id,location.folderPath),check):JSON.parse(readProject(location.id)??'null');check();
+ check();const doc=location.folderPath?await readCompleteProject(createProjectStorage(location.id,location.folderPath),check):await openBrowserProject(location.id);check();
  if(!doc||doc.id!==location.id||!doc.settings||!doc.designSystem||!doc.screens)throw Error('返回工程缺失或身份不匹配，未切换。');return doc;
 }
-async function prepareWorkspaceOpen(location:ProjectLocation,check:()=>void){
- const history=location.folderPath?await new HistoryRepository(createProjectStorage(location.id,location.folderPath),location.id).load():readHistoryLocal(location.id);check();
+async function prepareWorkspaceOpen(location:ProjectLocation,check:()=>void,doc:ProjectDocument){
+ const storage=createProjectStorage(location.id,location.folderPath);
+ const history=await readHistoryArchive(storage,location.id,projectDocumentHistory(storage,doc));check();
  const candidate=await loadStagedCandidate(location.id,location.folderPath);check();return {history,candidate};
 }
 function installWorkspaceDocument(doc:ProjectDocument,location:ProjectLocation,loaded:Awaited<ReturnType<typeof prepareWorkspaceOpen>>){
@@ -109,7 +112,9 @@ function installWorkspaceDocument(doc:ProjectDocument,location:ProjectLocation,l
  }catch(error){useProjectStore.setState(before,true);useHistoryStore.setState(history,true);resumeHistoryPersistence();throw error;}
 }
 
-export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
+export const useWorkspaceStore = create<WorkspaceState>((rawSet, get) => {
+ const set:typeof rawSet=(partial,replace)=>{const next=typeof partial==='function'?partial(get()):partial;guardProjectPublicationFields(get(),next,replace,['view','activeProjectId','navigationRevision','sourceEditing']);rawSet(next,replace);};
+ return ({
   navigationRevision:0,sourceEditing:null,sourceTransition:null,sourceTransitionError:null,
   view: 'manager',
   projects: [],
@@ -128,11 +133,10 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       const claimed=claimLibrarySourceEdit(preview,origin);check();
       await claimed.read(check);await saveWorkspaceChecked(check);
       const doc=await claimed.read(check),source={id:doc.id,name:doc.name,folderPath:claimed.folderPath},returnTo={id:origin.id,name:origin.name,folderPath:origin.folderPath};
-      const loaded=await prepareWorkspaceOpen(source,check);
       repo=new ProjectRepository(claimed.storage);const uncleanAt=await repo.detectUncleanShutdown();check();
       await repo.acquireLock();acquired=true;check();
       // Final read after all asynchronous preparation. No awaits between guard and installation.
-      const finalDoc=await claimed.read(check);check();installWorkspaceDocument(finalDoc,source,loaded);
+      const finalDoc=await claimed.read(check),loaded=await prepareWorkspaceOpen(source,check,finalDoc);check();installWorkspaceDocument(finalDoc,source,loaded);
       set({sourceEditing:{source,returnTo},sourceTransition:null,activeProjectId:source.id,view:'workspace',uncleanShutdownAt:uncleanAt});committed=true;
       try{upsertMeta({id:doc.id,name:doc.name,deviceProfile:doc.settings.deviceProfile as 'pc'|'mobile',frameWidth:Number(doc.settings.frameWidth)||390,
         createdAt:doc.createdAt??Date.now(),updatedAt:doc.savedAt??Date.now(),screenCount:Object.keys(doc.screens).length,folderPath:claimed.folderPath});get().refresh();}catch(error){console.warn('[library-source] 已进入源库，工程列表更新失败',error);}
@@ -153,9 +157,9 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({navigationRevision:revision,sourceTransition:'returning',sourceTransitionError:null});
     try{
       await readLocation(session.returnTo,check);await saveWorkspaceChecked(check);
-      const doc=await readLocation(session.returnTo,check),loaded=await prepareWorkspaceOpen(session.returnTo,check);
+      const doc=await readLocation(session.returnTo,check);
       if(session.returnTo.folderPath){repo=new ProjectRepository(createProjectStorage(session.returnTo.id,session.returnTo.folderPath));await repo.acquireLock();acquired=true;check();}
-      const finalDoc=await readLocation(session.returnTo,check);if(JSON.stringify(finalDoc)!==JSON.stringify(doc))throw Error('读取期间原工程已变化，请重试返回。');check();
+      const finalDoc=await readLocation(session.returnTo,check);if(JSON.stringify(finalDoc)!==JSON.stringify(doc))throw Error('读取期间原工程已变化，请重试返回。');const loaded=await prepareWorkspaceOpen(session.returnTo,check,finalDoc);check();
       installWorkspaceDocument(finalDoc,session.returnTo,loaded);
       set({sourceEditing:null,sourceTransition:null,activeProjectId:session.returnTo.id,view:'workspace',uncleanShutdownAt:null});committed=true;try{get().refresh();}catch(error){console.warn('[library-source] 已返回，工程列表更新失败',error);}
       if(session.source.folderPath)void new ProjectRepository(createProjectStorage(session.source.id,session.source.folderPath)).releaseLock().catch(()=>{});
@@ -247,17 +251,22 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
         if(state.stagedRepairStatus==='repairing'||state.stagedRepairStatus==='verifying'||state.stagedAdoptionStatus==='saving')throw Error('候选仍在处理，请完成后迁移。');
         await saveWorkspaceChecked(current);
       }else await loadStagedCandidate(id); // Wait for pending candidate saves/discards.
-      current();const sourceJson=readProject(id);if(!sourceJson)throw Error('找不到该工程的数据。');
-      const check=()=>{current();if(readProject(id)!==sourceJson)throw Error('源工程已变化，迁移未发布。');};
+      current();const sourceStorage=createProjectStorage(id),sourceDoc=await openBrowserProject(id);if(!sourceDoc)throw Error('找不到该工程的数据。');current();
+      const sourceSnapshot=await sourceStorage.readManagedSnapshot!(),sourceJson=JSON.stringify(sourceDoc),historyRaw=projectDocumentHistory(sourceStorage,sourceDoc);
+      // Re-read identity paired with the document rather than trusting a possibly stale cache.
+      const sourceAuthor=createProjectAuthoringSession(sourceStorage,sourceDoc),sourceIdentity=projectAuthor(sourceStorage,sourceAuthor).identity;
+      if(sourceSnapshot.identity!==sourceIdentity)throw Error('源工程已变化，迁移未发布。');
+      const activeAttempt=state.id===id&&!state.folderPath?useProjectStore.getState().projectSaveAttempt:undefined;
+      const check=()=>{current();if(activeAttempt!==undefined&&useProjectStore.getState().projectSaveAttempt!==activeAttempt)throw Error('源工程已变化，迁移未发布。');};
+      const verifySource=async()=>{if((await sourceStorage.readManagedSnapshot!()).identity!==sourceIdentity)throw Error('源工程或历史已变化，迁移未发布。');check();};
       const folderPath=await pickProjectFolder('选择工程的存放位置');check();if(!folderPath)return {ok:false,message:'已取消'};
-      const historyRaw=localStorage.getItem(historyKey(id));
-      const result=await migrateProjectBundle({sourceJson,source:createProjectStorage(id),target:createProjectStorage(id,folderPath),historyRaw,
-        readHistory:()=>localStorage.getItem(historyKey(id)),checkCurrent:check});check();
+      await verifySource();const result=await migrateProjectBundle({sourceJson,source:sourceStorage,target:createProjectStorage(id,folderPath),historyRaw,
+        readHistory:()=>historyRaw,checkCurrent:check,verifySource});check();
       if(!result.ok)throw Error(result.error??'未知错误');
       const meta=listProjects().find(project=>project.id===id);if(!meta)throw Error('源工程已从列表移除，迁移未发布。');
       upsertMeta({...meta,folderPath});
       if(listProjects().find(project=>project.id===id)?.folderPath!==folderPath)throw Error('工程列表位置保存失败，原数据保留。');
-      if(useProjectStore.getState().id===id&&!useProjectStore.getState().folderPath)useProjectStore.setState({folderPath});
+      if(useProjectStore.getState().id===id&&!useProjectStore.getState().folderPath)useProjectStore.setState({folderPath,projectAuthoringSession:result.authoringSession??null,projectSaveStatus:projectAuthoringNotice(result.authoringSession)?'readonly':'saved',projectSaveError:projectAuthoringNotice(result.authoringSession)??null});
       try{get().refresh();}catch(error){console.warn('[migration] 位置已保存，列表刷新失败',error);}
       return {ok:true,message:`已迁移 ${result.screenCount} 个画框与 ${result.archiveFiles} 个附属文件至 ${folderDisplayName(folderPath)}（原数据保留）${result.warnings.length?'；'+result.warnings.join('；'):''}`};
     }catch(error){return {ok:false,message:`迁移未完成，原数据未改动：${String(error instanceof Error?error.message:error)}；目标可能有部分文件，请换空目录重试。`};}
@@ -265,6 +274,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
   },
 
   refresh: () => {
+    const revision=++refreshRevision;
     migrateLegacyProject();
     const projects = listProjects();
     set({
@@ -274,9 +284,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       // 此处只将「无 folderPath 且 localStorage 中无数据」的工程标记为丢失，
       // 文件夹工程打开时才会真正验证数据完整性。
       missingIds: projects
-        .filter((p) => !p.folderPath && !projectExists(p.id))
+        .filter((p) => !p.folderPath && !p.storageVersion && !projectExists(p.id))
         .map((p) => p.id)
     });
+    void Promise.all(projects.filter(project=>!project.folderPath&&project.storageVersion).map(async project=>{
+      const raw=await createProjectStorage(project.id).readText('project.json');
+      if(raw===null)return project.id;
+      try{const doc=JSON.parse(raw);return !doc||doc.id!==project.id||doc.deleted===true?project.id:null;}catch{return project.id;}
+    })).then(missing=>{if(revision===refreshRevision&&get().projects===projects)set({missingIds:[...get().missingIds,...missing.filter((id):id is string=>id!==null)]});})
+      .catch(()=>{if(revision===refreshRevision&&get().projects===projects)set({sourceTransitionError:'工程存储暂时不可读取，原数据已保留，请稍后重试。'});});
   },
 
   createProject: (name, deviceProfile, designSystem, initialDecisions, folderPath, referenceDeviceId) => {
@@ -287,6 +303,7 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     resumeHistoryPersistence();
     get().refresh();
     set({ activeProjectId: id, view: 'workspace' });
+    void waitForProjectSave(id,folderPath).then(()=>get().refresh()).catch(()=>get().refresh());
   },
 
   openProject: (id) => {
@@ -322,25 +339,25 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
       return true;
     }
 
-    if (!projectExists(id)) {
+    if (!meta?.storageVersion&&!projectExists(id)) {
       get().refresh();
       return false;
     }
-    resetHistory();
-    const ok = useProjectStore.getState().loadProjectById(id);
-    if (ok) {
-      void loadHistoryForProject(id,undefined,()=>get().navigationRevision===revision);
-      void loadStagedCandidate(id).then(candidate => {
-        if (get().navigationRevision===revision&&candidate) useProjectStore.getState().restoreStagedCandidate(candidate, id);
-      }).catch(error => console.warn('[candidate] 恢复失败', error));
-      set({ activeProjectId: id, view: 'workspace' });
-    } else {
-      resumeHistoryPersistence();
-    }
-    return ok;
+    void (async()=>{
+      const doc=await openBrowserProject(id);if(get().navigationRevision!==revision)return;
+      if(!doc){set({sourceTransitionError:'工程不存在或已删除，未从旧缓存恢复。'});return;}
+      resetHistory();
+      if(!useProjectStore.getState().loadProjectDocument(doc)){resumeHistoryPersistence();return;}
+      await loadHistoryForProject(id,undefined,()=>get().navigationRevision===revision);if(get().navigationRevision!==revision)return;
+      const candidate=await loadStagedCandidate(id);if(get().navigationRevision!==revision)return;
+      if(candidate)useProjectStore.getState().restoreStagedCandidate(candidate,id);
+      set({activeProjectId:id,view:'workspace'});
+    })().catch(error=>{if(get().navigationRevision===revision)set({sourceTransitionError:error instanceof Error?error.message:'工程打开失败，原数据保留。'});});
+    return true;
   },
 
   backToManager: () => {
+    assertNoProjectPublication();
     const revision=get().navigationRevision+1;set({navigationRevision:revision,sourceEditing:null,sourceTransition:null,sourceTransitionError:null});
     const { id, folderPath } = useProjectStore.getState();
     useProjectStore.getState().saveProject();
@@ -356,23 +373,15 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     set({ view: 'manager', uncleanShutdownAt: null });
   },
 
-  renameProject: (id, name) => {
-    if (get().activeProjectId === id) {
+  renameProject: async (id, name) => {
+    if (useProjectStore.getState().id === id) {
       useProjectStore.getState().setName(name);
+      await waitForProjectSave(id,useProjectStore.getState().folderPath);
     } else {
-      // 非当前工程：直接改存档，避免为了改名而载入整个工程
-      const raw = localStorage.getItem(projectKey(id));
-      if (raw) {
-        try {
-          const data = JSON.parse(raw);
-          data.name = name;
-          localStorage.setItem(projectKey(id), JSON.stringify(data));
-        } catch {
-          /* 存档损坏，仅更新列表名 */
-        }
-      }
-      const meta = get().projects.find((p) => p.id === id);
-      if (meta) upsertMeta({ ...meta, name });
+      const meta=listProjects().find(project=>project.id===id),storage=createProjectStorage(id,meta?.folderPath),doc=meta?.folderPath?await new ProjectRepository(storage).load():await openBrowserProject(id);
+      if(!doc)throw Error('工程不存在或已删除，未修改旧缓存。');doc.name=name;await new ProjectRepository(storage).save(doc);
+      if(!meta?.folderPath)cacheBrowserProject(doc,projectDocumentHistory(storage,doc));
+      if(meta)upsertMeta({...meta,name,storageVersion:'managed-v1'});
     }
     get().refresh();
   },
@@ -382,8 +391,11 @@ export const useWorkspaceStore = create<WorkspaceState>((set, get) => ({
     get().refresh();
   },
 
-  deleteProject: (id) => {
-    useProjectStore.getState().deleteProject(id);
+  deleteProject: async (id) => {
+    await useProjectStore.getState().deleteProject(id);
     get().refresh();
   }
-}));
+ });
+});
+const setWorkspaceState=useWorkspaceStore.setState;
+useWorkspaceStore.setState=(partial,replace)=>{const next=typeof partial==='function'?partial(useWorkspaceStore.getState()):partial;guardProjectPublicationFields(useWorkspaceStore.getState(),next,replace,['view','activeProjectId','navigationRevision','sourceEditing']);setWorkspaceState(next,replace);};

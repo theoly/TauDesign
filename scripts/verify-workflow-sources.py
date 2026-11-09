@@ -24,7 +24,8 @@ async def main(args):
               const {contentFingerprint}=await module('/src/services/ai/designWorkflow.ts');
               useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'controlled-local-fixture'})),bindings:defaultBindings});
               window.__sourcesFixture={requests:[],hold:false,done:0};
-              DefaultAIEngineCore.prototype.generateObject=async()=>{throw Error('Unexpected model analysis');};
+              const {chatPageTaskPlan}=await import('/test/fixtures/pageTaskPlan.ts');
+              DefaultAIEngineCore.prototype.generateObject=async(schema)=>{if(!schema.properties?.features)throw Error('Unexpected model schema');const plan=structuredClone(chatPageTaskPlan);plan.features[0].interactions[0].label='保存资料';return plan;};
               DefaultAIEngineCore.prototype.streamText=function(options){
                 const f=window.__sourcesFixture,s=window.__projectStore.getState(),last=options.messages.at(-1);
                 const system=options.messages.find(m=>m.role==='system').content;
@@ -98,8 +99,8 @@ async def main(args):
                 # Reopening uses real saved project metadata; historical input proof stays available.
                 await page.evaluate('''async result=>{
                   const module=async path=>import(performance.getEntriesByType('resource').map(e=>e.name).find(url=>new URL(url).pathname===path)||path);
-                  const {readProject}=await module('/src/utils/projectRegistry.ts'),{isPageCreationEvidence}=await module('/src/services/ai/pageCreationValidation.ts');
-                  const saved=readProject(result.projectId);window.__projectStore.getState().loadProject(saved);
+                  const {isPageCreationEvidence}=await module('/src/services/ai/pageCreationValidation.ts');
+                  await window.__projectStore.getState().saveProjectChecked();await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(result.projectId);
                   const e=window.__projectStore.getState().screens[result.screenId].metadata.creationEvidence;
                   if(!isPageCreationEvidence(e)||JSON.stringify(e)!==JSON.stringify(result.evidence))throw Error('Save/reopen lost source evidence '+JSON.stringify({valid:isPageCreationEvidence(e),same:JSON.stringify(e)===JSON.stringify(result.evidence),actual:e,expected:result.evidence}));
                 }''',result)

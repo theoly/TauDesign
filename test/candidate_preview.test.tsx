@@ -70,10 +70,10 @@ describe('unadopted candidate previews',()=>{
     try{
       complete();await settle();const archived=(await loadStagedCandidate(store.id))!;
       if(archived.preview?.status!=='ready')throw new Error('missing fixture preview');
-      const oldPath=archived.preview.relPath,storage=createProjectStorage(store.id);
+      const oldPath=archived.preview.relPath,storage=createProjectStorage(store.id);await store.saveProjectChecked();
       // A fresh application may reproduce the same render key; history still cannot count as a new capture.
       useProjectStore.setState({stagedRenderRevision:useProjectStore.getState().stagedRenderRevision-1});
-      store.loadProject(readProject(store.id)!);store.restoreStagedCandidate(archived,store.id);await settle();
+      await store.loadProjectById(store.id);store.restoreStagedCandidate(archived,store.id);await settle();
       expect(archived.preview.contextFingerprint).toBe(contentFingerprint(store.getStagedRenderContextKey()));
       expect(useProjectStore.getState().stagedRenderQuality).toBeNull();expect(await store.adoptStagedChange()).toBe(false);
       expect(store.getStagedDeliveryReport().status).toBe('pending');

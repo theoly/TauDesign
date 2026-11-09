@@ -1,3 +1,4 @@
+import {createMediaResourceSession} from '../../services/storage/mediaResourceSession';
 import { resolveProjectViewport } from '../../utils/referenceDevice';
 import { prepareHtmlImportRuntime } from '../../services/import/htmlImportRuntime';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -6,7 +7,7 @@ import { useProjectStore } from '../../stores/useProjectStore';
 import type { Screen } from '../../types/project';
 import type { HtmlImportAnalysis, HtmlImportCategory, HtmlImportMode } from '../../types/htmlImport';
 import { analyzeHtmlImport, convertHtmlImport } from '../../services/import/htmlImport';
-import { prepareImportResources, resolveImportedResources, type ImportResourceFile, type PreparedImportResources } from '../../services/import/importResources';
+import { prepareImportResources, resolveImportedResources,importResourceAssets, type ImportResourceFile, type PreparedImportResources } from '../../services/import/importResources';
 import { createProjectStorage } from '../../services/storage/projectStorage';
 import {importPreviewFingerprint} from '../../services/ai/pageCreationValidation';
 import { compileTokensToCss } from '../../utils/cssCompiler';
@@ -18,6 +19,7 @@ import { MobileNavigationOption } from '../theme/MobileNavigationOption';
 import {ExtractedStyleChoices} from '../theme/ExtractedStyleChoices';
 import {extractPageStyle,mergeExtractedStyle,type StyleSelection} from '../../services/import/pageStyleExtraction';
 import {styleApplicationKey} from '../../services/import/styleApplication';
+import {SvgMediaExternalizer} from '../../services/import/svgMediaExternalizer';
 
 const CATEGORIES: { id: HtmlImportCategory; name: string }[] = [
   { id: 'colors', name: '颜色' }, { id: 'typography', name: '字体与字号' },
@@ -109,6 +111,14 @@ export const HtmlImportDialog: React.FC<{ onClose: () => void }> = ({ onClose })
       const matching = files.filter(item => item.file.name === file.name && item.file.size === file.size);
       const path = file.webkitRelativePath || (matching.length === 1 ? matching[0].path : file.name);
       const prepared = await prepareImportResources(first.sanitizedHtml, path, files, { expandedRuntime: true });
+      const resourceStorage=Object.create(createProjectStorage(openingProject.current,folderPath)) as ReturnType<typeof createProjectStorage>;
+      const pending=new Map(prepared.binaries.map(binary=>[binary.relPath,binary.base64]));
+      resourceStorage.readBinary=async rel=>pending.get(rel)??createProjectStorage(openingProject.current,folderPath).readBinary(rel);
+      const svg=await SvgMediaExternalizer.prepare({screen:{id:'import-source',name:first.title,position:{x:0,y:0},htmlContent:prepared.html,metadata:{importedHtml:{version:1,fileName:file.name,mode:'preserve',categories:[],changes:[],retained:[]}}},settings,designSystem,storage:resourceStorage,sourceImport:true});
+      prepared.html=svg.screen.htmlContent;
+      for(const binary of svg.resources.binaries)if(!prepared.binaries.some(old=>old.relPath===binary.relPath))prepared.binaries.push(binary);
+      if(prepared.binaries.reduce((size,binary)=>size+atob(binary.base64).length,0)>30*1024*1024)throw Error('转换后的全部媒体资源超过30MiB限制，请缩小导入范围。');
+      prepared.resources.push(...svg.resources.resources);prepared.warnings.push(...svg.resources.warnings);
       const analysis = analyzeHtmlImport(prepared.html, file.name, { expandedResources: true });
       if (!current) return;
       setData({ analysis, prepared, warnings: [...new Set([...runtime.warnings, ...first.warnings, ...prepared.warnings, ...analysis.warnings])] });
@@ -153,7 +163,7 @@ export const HtmlImportDialog: React.FC<{ onClose: () => void }> = ({ onClose })
   useEffect(() => {
     const result = conversion?.result;
     if (!data || !result) { setPreview(undefined); return; }
-    let current = true;
+    let current = true;const media=createMediaResourceSession();
     setPreview(undefined);setPreviewReady(''); setPreviewError('');
     const storage = createProjectStorage(openingProject.current, folderPath);
     const memoryStorage = Object.create(storage) as typeof storage;
@@ -162,8 +172,8 @@ export const HtmlImportDialog: React.FC<{ onClose: () => void }> = ({ onClose })
     const baseScreen: Screen = { id: 'import-preview', name, position: { x: 0, y: 0 }, htmlContent: result.htmlContent, scopedCss: result.scopedCss, metadata: { importedHtml: result.metadata } };
     const options = { tokensCss: compileTokensToCss(effectiveTheme.tokens, effectiveMode), baseCss: '', screenOverrides: '', viewportHeight: resolveProjectViewport(settings).height, viewportWidth: settings.frameWidth };
     Promise.all([
-      resolveImportedResources(data.analysis.sanitizedHtml, '', memoryStorage),
-      resolveImportedResources(result.htmlContent, result.scopedCss, memoryStorage)
+      resolveImportedResources(data.analysis.sanitizedHtml, '', memoryStorage,new Set(),{referenceUrl:media.url}),
+      resolveImportedResources(result.htmlContent, result.scopedCss, memoryStorage,new Set(),{referenceUrl:media.url})
     ]).then(([original, converted]) => {
       const resultDocument=new DOMParser().parseFromString(buildScreenDocument({ ...baseScreen, ...converted }, { ...options, deviceProfile: settings.deviceProfile, useCustomNavigation, includeMobileChrome: true }),'text/html');
       resultDocument.querySelectorAll('meta[name="taudesign-import-preview"]').forEach(meta=>meta.remove());
@@ -173,7 +183,7 @@ export const HtmlImportDialog: React.FC<{ onClose: () => void }> = ({ onClose })
         result: '<!DOCTYPE html>'+resultDocument.documentElement.outerHTML
       });
     }).catch(cause => { if (current) setPreviewError(errorMessage(cause)); });
-    return () => { current = false; };
+    return () => { current = false;void media.close().catch(()=>{}); };
   }, [data, conversion, effectiveTheme, effectiveMode, folderPath, name, settings.deviceProfile, settings.viewportGuideHeight, settings.referenceDevice, useCustomNavigation,previewKey]);
 
   const addResources = (selected: FileList | null, folder = false) => {
@@ -189,10 +199,7 @@ export const HtmlImportDialog: React.FC<{ onClose: () => void }> = ({ onClose })
     confirmBusy.current=true;setSaving(true);setError('');
     const controller=new AbortController();importController.current=controller;
     const currentProject=useProjectStore.getState(),result=conversion.result;
-    const assets=data.prepared.binaries.filter(binary=>binary.mimeType.startsWith('image/')).map(binary=>({
-      id:`import_${binary.relPath.split('/').pop()!.split('.')[0]}`,name:binary.name,relPath:binary.relPath,
-      type:'image' as const,mimeType:binary.mimeType,source:'upload' as const,refCount:1
-    }));
+    const assets=importResourceAssets(data.prepared);
     try{
       await currentProject.importHtmlScreen({name:name.trim()||data.analysis.title,htmlContent:result.htmlContent,scopedCss:result.scopedCss,
         metadata:{importedHtml:result.metadata}}, {

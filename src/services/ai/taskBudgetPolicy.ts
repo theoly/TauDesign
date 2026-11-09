@@ -1,4 +1,4 @@
-import {TaskBudget} from './taskBudget';
+import {TaskBudget,isTaskBudgetSnapshot,type TaskBudgetSnapshot} from './taskBudget';
 import {RESTYLE_PATCH_THRESHOLD} from './restylePatches';
 
 /** Preserve existing per-target worst-case allowances; budgets scale only with confirmed work. */
@@ -10,9 +10,12 @@ export function createRestyleBudget(targets:ReadonlyArray<{html:string}>):TaskBu
 export function createPlanningBudget():TaskBudget {
   return new TaskBudget({maxRequests:2,maxRequestedOutputTokens:8192,maxDurationMs:1800000,maxRequestDurationMs:900000});
 }
-export function createMultiPageBudget(count:number):TaskBudget {
+export function createMultiPageBudget(count:number,tree=false,planning?:TaskBudgetSnapshot):TaskBudget {
   if(!Number.isInteger(count)||count<1||count>8)throw Error('批次页面数量无效。');
-  return new TaskBudget({maxRequests:count*4,maxRequestedOutputTokens:count*(32768+1800),maxDurationMs:count*900000,maxRequestDurationMs:900000});
+  if(planning!==undefined&&!isTaskBudgetSnapshot(planning))throw Error('先前规划消耗记录无效。');
+  const maxRequests=count*(tree?14:4)-(planning?.requests??0),maxRequestedOutputTokens=count*(32768+1800)-(planning?.requestedOutputTokens??0);
+  if(maxRequests<count||maxRequestedOutputTokens<count*8192)throw Error('已发生的规划消耗后，原批次额度不足；未开始生成。');
+  return new TaskBudget({maxRequests,maxRequestedOutputTokens,maxDurationMs:count*900000,maxRequestDurationMs:900000});
 }
 export function createSingleRequestBudget(outputTokens:number):TaskBudget {
   return new TaskBudget({maxRequests:1,maxRequestedOutputTokens:outputTokens,maxDurationMs:900000,maxRequestDurationMs:900000});

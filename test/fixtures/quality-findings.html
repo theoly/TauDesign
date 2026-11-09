@@ -1,0 +1,41 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>M4 检查结果分级</title><body style="margin:0;background:#020617;color:#e2e8f0"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {ScreenFrame} from '/src/components/canvas/ScreenFrame.tsx';
+import {QualityReportCard} from '/src/components/chat/QualityReportCard.tsx';
+import {RenderedQualityCard} from '/src/components/chat/RenderedQualityCard.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {neutralModernTheme} from '/src/utils/themePresets.ts';
+import {checkGenerationQuality} from '/src/services/ai/generationQuality.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+const device=new URLSearchParams(location.search).get('device')==='pc'?'pc':'mobile';
+const html=`<main data-nid="root0001" class="p-4" style="background-color:rgb(255,255,255)">
+  <h1 data-nid="title001">检查结果分级</h1>
+  <p data-nid="low00001" style="color:rgb(180,180,180)">纯色低对比度文字</p>
+  <p data-nid="gradient" style="color:rgb(180,180,180);background-image:linear-gradient(white,black)">渐变上的文字待人工核对</p>
+  <p data-nid="image001" style="color:rgb(180,180,180);background-image:url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%221%22 height=%221%22%3E%3Cpath fill=%22white%22 d=%22M0 0h1v1H0z%22/%3E%3C/svg%3E')">图片上的文字待人工核对</p>
+  <button data-nid="action01" class="btn btn-primary" style="width:80px;height:40px"></button>
+  <div class="icon-box"><svg data-nid="art00001" viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg></div>
+</main>`;
+const store=useProjectStore.getState();
+store.initNewProject({name:'M4分级独立验证',deviceProfile:device,designSystem:neutralModernTheme,createSpecimen:false});
+store.addScreen({name:'真实检查',htmlContent:html,position:{x:0,y:0}},'checking');
+const screen={...useProjectStore.getState().screens.checking,scopedCss:'[data-nid="art00001"]{width:24px;height:24px}'};
+const fixture={device,source:checkGenerationQuality(html,{deviceProfile:device}),report:null,requests:0};window.findingsFixture=fixture;
+for(const method of ['streamText','generateObject'])DefaultAIEngineCore.prototype[method]=()=>{fixture.requests++;throw Error('分级验证禁止模型调用');};
+function App(){
+ const [report,setReport]=React.useState(null),[unavailable,setUnavailable]=React.useState(false);
+ const locate=nid=>useProjectStore.getState().selectNodeByNid('checking',nid);
+ const receive=React.useCallback((_id,key,value)=>{fixture.report=value;setReport(value);},[]);
+ fixture.selection=()=>useProjectStore.getState().selectedNode;
+ return React.createElement(React.Fragment,null,
+  React.createElement('div',{style:{position:'absolute',left:16,top:16,width:device==='pc'?1440:390,height:900,transform:device==='pc'?'scale(0.48)':'none',transformOrigin:'top left'}},React.createElement(ScreenFrame,{screen,isStaged:true,lodLevel:2,renderQualityKey:'findings',onRenderQuality:receive})),
+  React.createElement('aside',{style:{position:'absolute',left:device==='pc'?735:430,top:16,width:500}},
+   React.createElement('section',{'aria-label':'源码分级'},React.createElement(QualityReportCard,{report:fixture.source,onLocate:locate})),
+   React.createElement('section',{'aria-label':'渲染分级'},report&&React.createElement(RenderedQualityCard,{report,onLocate:locate})),
+   React.createElement('button',{onClick:()=>setUnavailable(!unavailable)},'查看不可用状态说明'),
+   unavailable&&React.createElement('section',{'aria-label':'不可用分级'},React.createElement(RenderedQualityCard,{report:{status:'unavailable',findings:[],inspected:0,reason:'此说明检查尚未执行'}}))));
+}
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script></body></html>

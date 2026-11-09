@@ -1,3 +1,4 @@
+import {isPassedRender} from './evidenceSchema';
 import type {StagedCandidateData} from '../storage/candidateRepository';
 import type {CandidateDeliveryReport} from './candidateValidation';
 import type {PageCreationState} from './pageCreationValidation';
@@ -18,6 +19,7 @@ import {PageRenderCheck} from './pageRenderCheck';
 import {knowledgeFingerprint} from './projectKnowledge';
 import {pageCreationContext} from './pageCreationValidation';
 import {candidateInputIssue} from './candidateInputBinding';
+import {styleRepairErrorNids} from './styleRepairEligibility';
 
 export interface CandidateRepairInput {
  state:PageCreationState;candidate:StagedCandidateData;delivery:CandidateDeliveryReport;render?:RenderedQualityReport;
@@ -34,9 +36,9 @@ export function candidateRepairEligibility(input:CandidateRepairInput):{allowed:
  if(!baseline||task.target?.id!==candidate.targetScreenId||task.target.baselineFingerprint!==contentFingerprint(baseline.htmlContent)||candidate.baselineFingerprint!==contentFingerprint(baseline.htmlContent))return fail('原页或任务基线已变化。');
  const required=['task','source','quality','structure','entities','assets','asset_files'] as const;
  if(required.some(id=>delivery.checks.find(c=>c.id===id)?.status!=='passed'))return fail('请先通过任务、源码、结构、设计实体和资源检查。');
- const errors=render?.findings.filter(f=>f.severity==='error')??[];
- if(render?.status!=='complete'||!errors.length||errors.length>8||errors.some(f=>!f.nid||!['render_action_zero_size','render_action_invisible_label'].includes(f.code)))return fail('当前实际渲染问题不属于可受控修复的控件尺寸或字号问题。');
  const doc=parseHtmlCopy(candidate.newHtml).doc;
+ const errorNids=render?styleRepairErrorNids(doc,task,render):undefined;
+ if(!errorNids)return fail('当前实际渲染问题不属于可受控修复的控件尺寸或字号问题。');
  const nodes=Array.from(doc.body.querySelectorAll('[data-nid]'));
  const find=(nid:string)=>{const matches=nodes.filter(n=>n.getAttribute('data-nid')===nid);return matches.length===1?matches[0]:undefined;};
  const scope=task.allowedChanges.length&&task.allowedChanges.every(c=>c.startsWith('element:'))?task.allowedChanges.map(c=>c.slice(8)):[];
@@ -49,7 +51,7 @@ export function candidateRepairEligibility(input:CandidateRepairInput):{allowed:
  const localRoots=local?.map(find);
  if(localRoots&&(!localRoots.length||localRoots.some(r=>!r)))return fail('原局部修改范围缺失或不唯一。');
  const protectedNids=[...new Set([...task.protectedNids,...Object.entries(state.overrides??{}).filter(([key])=>key.startsWith(`${baseline.id}:`)).map(([,ov])=>ov.nid)])];
- const allowedNids=[...new Set(errors.map(f=>f.nid!))];
+ const allowedNids=errorNids;
  if(allowedNids.length>3)return fail('每次最多修复三个报错控件。');
  for(const nid of allowedNids){
   const el=find(nid);
@@ -76,12 +78,12 @@ async function repairCandidateTask(input:CandidateRepairInput,storage:ProjectSto
  const {state,candidate}=input,task=candidate.workflowContract!,baseline=state.screens[candidate.targetScreenId] as Screen;
  const current=()=>!options.signal?.aborted&&options.isCurrent();
  const guard=()=>{if(!current())throw Error('修复已取消或候选/工程上下文已变化。');};
- const policy={deviceProfile:state.settings.deviceProfile,useCustomNavigation:state.settings.useCustomNavigation,designSystem:state.designSystem};
+ const policy={requireExternalMedia:true,mediaCss:[baseline.scopedCss??'',...Object.entries(state.overrides??{}).filter(([key])=>key.startsWith(baseline.id+':')).flatMap(([,entry])=>Object.values(entry.declarations))].join('\n'),deviceProfile:state.settings.deviceProfile,useCustomNavigation:state.settings.useCustomNavigation,designSystem:state.designSystem};
  const makeScreen=(html:string):Screen=>({...baseline,name:candidate.screenName,htmlContent:html,metadata:{...baseline.metadata,...(candidate.navigationTitle?{navigationTitle:candidate.navigationTitle}:{})}});
  const validate=async(html:string)=>{
   guard();const libraryIssue=libraryReferenceIssue(state);if(libraryIssue)throw Error(libraryIssue);
   const source=checkGenerationSourceSafety(html,policy);if(!source.passed)throw Error(qualitySummary(source));
-  const quality=checkGenerationQuality(html,{...policy,baselineHtml:baseline.htmlContent,protectedNids:eligibility.protectedNids,modificationRequest:candidate.modificationRequest,formRuleRoots:formRuleScope(task)});if(!quality.passed)throw Error(qualitySummary(quality));
+  const quality=checkGenerationQuality(html,{...policy,wholePageRedesign:task.wholePageRedesign,contentTask:task,baselineHtml:baseline.htmlContent,protectedNids:eligibility.protectedNids,modificationRequest:candidate.modificationRequest,formRuleRoots:formRuleScope(task)});if(!quality.passed)throw Error(qualitySummary(quality));
   const structure=inspectWorkflowStructure(task,baseline.htmlContent,html,policy);if(!structure.passed)throw Error(structure.message);
   const entities=inspectDesignEntities(html,{components:state.components,pageIds:Object.keys(state.screens),baselineHtml:baseline.htmlContent});if(!entities.passed)throw Error(designEntitySummary(entities));
   const screen=screenForAssetAudit(makeScreen(html),state.overrides??{}),assets=Object.values(state.assets);
@@ -97,9 +99,9 @@ async function repairCandidateTask(input:CandidateRepairInput,storage:ProjectSto
   if(proposal.status==='proposed')onReceipt?.(proposal.record);else if(proposal.repair)onReceipt?.(proposal.repair);
   if(proposal.status!=='proposed')return {status:'blocked',message:proposal.message,repair:proposal.repair};
   receipt=proposal.record;guard();options.model.onPhase?.('verifying');guard();await validate(proposal.html);
-  const render=await PageRenderCheck.inspect({screen:makeScreen(proposal.html),settings:state.settings,designSystem:state.designSystem,assets:Object.values(state.assets),
+  const render=await PageRenderCheck.inspect({contentTask:task,screen:makeScreen(proposal.html),settings:state.settings,designSystem:state.designSystem,assets:Object.values(state.assets),
    overrides:Object.fromEntries(Object.entries(state.overrides??{}).filter(([key])=>key.startsWith(`${baseline.id}:`)))},storage,{signal:options.signal});
-  guard();if(render.status!=='complete'||render.findings.some(f=>f.severity==='error'))throw Error(render.findings.find(f=>f.severity==='error')?.message??render.reason??'实际渲染复验未完整通过。');
+  guard();if(!isPassedRender(render))throw Error(render.findings.find(f=>f.severity==='error')?.message??render.reason??'实际渲染复验未完整通过。');
   const previous=new Set(input.render!.findings.map(f=>JSON.stringify([f.code,f.nid,f.severity])));
   const introduced=render.findings.find(f=>!previous.has(JSON.stringify([f.code,f.nid,f.severity])));if(introduced)throw Error(`修复引入新的渲染问题：${introduced.message}`);
   await validate(proposal.html);guard();

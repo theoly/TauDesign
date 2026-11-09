@@ -3,13 +3,19 @@ import React from '/node_modules/.vite/deps/react.js';
 import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
 import '/src/styles/index.css';
 import {InfiniteCanvas} from '/src/components/canvas/InfiniteCanvas.tsx';
+import {ProjectPublicationOverlay} from '/src/components/workspace/ProjectPublicationOverlay.tsx';
 import {useProjectStore} from '/src/stores/useProjectStore.ts';
 import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
 import {buildDesignTaskContract} from '/src/services/ai/designWorkflow.ts';
 import {ProjectRepository} from '/src/services/storage/projectRepository.ts';
-import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {createProjectStorage,LocalStorageStorage} from '/src/services/storage/projectStorage.ts';
+import {getProjectPublication} from '/src/services/storage/projectPublication.ts';
 import {DeliveryRepository} from '/src/services/storage/deliveryRepository.ts';
-const params=new URL(location.href).searchParams,mode=params.get('mode')||'synthetic';
+import {loadHistoryForProject} from '/src/services/storage/historyPersistence.ts';
+import {browserProjectSnapshotStore} from '/src/services/storage/browserProjectSnapshot.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+let modelCalls=0;for(const method of ['streamText','generateObject'])DefaultAIEngineCore.prototype[method]=()=>{modelCalls++;throw Error('Toolbar verification must not call a model');};
+const params=new URL(location.href).searchParams,mode=params.get('mode')||'synthetic',device=params.get('device')==='mobile'?'mobile':'pc',resume=params.get('resume');
 const baseline='<main class="container-max p-6 col gap-4" data-nid="root0001"><section class="card p-4 col gap-4" data-nid="section1"><h1 class="text-xl">公开资料</h1><button class="btn btn-primary" data-nid="action01">打开资料</button></section></main>';
 const replacement='<main class="container-max p-6 col gap-4" data-nid="root0001"><article class="card p-4 col gap-4" data-nid="article1"><h1 class="text-xl">隐私提示</h1><button class="btn btn-primary" data-nid="action01">登录查看</button></article></main>';
 let target='page',newHtml=replacement,request='隐藏真实信息，展示登录提示',name='候选',contract;
@@ -18,12 +24,55 @@ if(mode==='real'){
  if(!doc||!useProjectStore.getState().loadProjectDocument(doc,inputs.folder))throw Error('Failed to load isolated copy');
  const saved=JSON.parse(await storage.readText('candidates/current.json')).candidate;target=saved.targetScreenId;newHtml=saved.newHtml;request=saved.modificationRequest;name=saved.screenName;contract=saved.workflowContract;
  useProjectStore.getState().setActiveScreen(target);
+}else if(resume){
+ if(!await useProjectStore.getState().loadProjectById(resume))throw Error('Saved fixture project missing');
+ if(useProjectStore.getState().settings.deviceProfile!==device)throw Error('Reference device changed during reopen');
+ await loadHistoryForProject(resume);
 }else{
- useProjectStore.getState().initNewProject({name:'候选操作独立验证',deviceProfile:'pc',createSpecimen:false});useProjectStore.getState().addScreen({name:'原版',htmlContent:baseline,position:{x:0,y:0}},target);
+ useProjectStore.getState().initNewProject({name:'候选操作独立验证',deviceProfile:device,createSpecimen:false});useProjectStore.getState().addScreen({name:'原版',htmlContent:baseline,position:{x:0,y:0}},target);
+ useProjectStore.getState().addScreen({name:'保持不变',htmlContent:'<main class="p-4"><h1>其它页面</h1></main>',position:{x:device==='pc'?3050:1150,y:0}},'other');
+ useProjectStore.getState().setActiveScreen(target);
+ useProjectStore.getState().setViewportTransform({x:40,y:220,scale:device==='pc'?0.45:0.85});
 }
-useHistoryStore.getState().restore(null);
+if(!resume)useHistoryStore.getState().restore(null);
+let resource;
+if(mode==='synthetic'&&params.has('resource')){
+ const {resourcePNGs}=await import('/test/helpers/resourcePng.ts');resource={path:'assets/images/publication-proof.png',...resourcePNGs};
+ const append=html=>{const doc=new DOMParser().parseFromString(html,'text/html'),image=doc.createElement('img');image.setAttribute('src',resource.path);image.setAttribute('alt','资源校验图片');image.setAttribute('class','icon');image.setAttribute('data-nid','proofimg');doc.querySelector('main').append(image);return doc.body.innerHTML;};
+ newHtml=append(newHtml);
+ if(!resume){const s=useProjectStore.getState();await createProjectStorage(s.id).writeBinary(resource.path,resource.original);s.addAsset({id:'publication-proof',name:'资源校验图片',type:'image',mimeType:'image/png',source:'upload',relPath:resource.path,refCount:1});s.updateScreenHtml(target,append(s.screens[target].htmlContent));useHistoryStore.getState().restore(null);await s.saveProjectChecked();}
+}
 function stage(){const s=useProjectStore.getState();const c=contract||buildDesignTaskContract({intent:'modify_screen',request,target:s.screens[target],deviceProfile:s.settings.deviceProfile,frameWidth:s.settings.frameWidth,designSystem:s.designSystem,allowedChanges:['screen:'+target]});s.stageScreenChange(target,newHtml,name,request,c);}
-stage();
-window.fixture={mode,target,original:useProjectStore.getState().screens[target].htmlContent,newHtml,stage,state:()=>useProjectStore.getState(),report:()=>useProjectStore.getState().getStagedDeliveryReport(),key:()=>useProjectStore.getState().getStagedRenderContextKey(),undo:()=>useHistoryStore.getState().undo(),redo:()=>useHistoryStore.getState().redo(),archives:async id=>{const s=useProjectStore.getState();return (await new DeliveryRepository(createProjectStorage(s.id,s.folderPath),s.id).listForScreen(id)).records;}};
-ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(InfiniteCanvas));
+if(!resume)stage();
+let taskId;
+if(!resume&&mode==='synthetic'&&params.has('journal')){
+ const {saveDesignTask}=await import('/src/services/storage/designTaskRepository.ts'),s=useProjectStore.getState(),candidate=s.stagedScreen,at=Date.now();taskId=candidate.workflowContract.taskId;
+ await saveDesignTask(createProjectStorage(s.id),{version:1,id:taskId,projectId:s.id,createdAt:at,updatedAt:at,state:'draft',request:candidate.workflowContract.request,contextFingerprint:candidate.inputContextFingerprint,binding:{providerId:'fixture',model:'synthetic-no-model',endpointIdentity:'fixture'},contract:candidate.workflowContract},[{stepId:'page-body',html:candidate.newHtml,complete:true}]);
+}
+window.fixture={mode,device,resumed:Boolean(resume),models:()=>modelCalls,target,original:useProjectStore.getState().screens[target].htmlContent,newHtml,stage,state:()=>useProjectStore.getState(),report:()=>useProjectStore.getState().getStagedDeliveryReport(),key:()=>useProjectStore.getState().getStagedRenderContextKey(),undo:()=>useHistoryStore.getState().undo(),redo:()=>useHistoryStore.getState().redo(),archives:async id=>{const s=useProjectStore.getState();return (await new DeliveryRepository(createProjectStorage(s.id,s.folderPath),s.id).listForScreen(id)).records;}};
+window.fixture.taskId=taskId;
+window.fixture.resource=resource;
+window.fixture.resourceTransactionStore=browserProjectSnapshotStore;
+window.fixture.openTasks=async()=>{
+ const {DesignTaskRecords}=await import('/src/components/chat/DesignTaskRecords.tsx'),host=document.createElement('div');document.body.append(host);const root=ReactDOM.createRoot(host);
+ root.render(React.createElement(DesignTaskRecords,{running:false,onClose:()=>{root.unmount();host.remove();},onRecover:async()=>{modelCalls++;throw Error('A committed task must never recover');}}));
+};
+let held;
+window.fixture.publication=()=>getProjectPublication();
+window.fixture.snapshot=()=>{const s=useProjectStore.getState();return createProjectStorage(s.id,s.folderPath).readManagedSnapshot();};
+window.fixture.history=()=>{const {past,future,checkpoints}=useHistoryStore.getState();return {past,future,checkpoints};};
+window.fixture.holdNext=async(fault='none')=>{
+ if(mode!=='synthetic'||held)throw Error('Only a single isolated browser fault is allowed');
+ const storage=createProjectStorage(useProjectStore.getState().id),scope=storage.scopeKey,publish=LocalStorageStorage.prototype.publishManagedSnapshot,read=LocalStorageStorage.prototype.readManagedSnapshot;
+ let release;const gate=new Promise(resolve=>release=resolve);held={entered:false,writes:0,unavailable:false};
+ LocalStorageStorage.prototype.readManagedSnapshot=async function(){if(this.scopeKey===scope&&held?.unavailable)throw Error('synthetic confirmation unavailable');return read.call(this);};
+ LocalStorageStorage.prototype.publishManagedSnapshot=async function(expected,changes,resources){
+  const root=changes.find(row=>row.path==='project.json')?.contents;
+  if(this.scopeKey!==scope||held.entered||!root||!JSON.parse(root).publicationCommits?.length)return publish.call(this,expected,changes,resources);
+  held.entered=true;held.writes++;await gate;if(fault==='before')throw Error('synthetic publication disk full');const result=await publish.call(this,expected,changes,resources);
+  if(fault==='after'||fault==='unknown'){held.unavailable=fault==='unknown';throw Error('synthetic response lost after actual storage IO');}return result;
+ };
+ window.fixture.held=()=>({entered:held.entered,writes:held.writes});window.fixture.release=()=>release();window.fixture.restoreIO=()=>{LocalStorageStorage.prototype.publishManagedSnapshot=publish;LocalStorageStorage.prototype.readManagedSnapshot=read;};
+};
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(React.Fragment,null,React.createElement(InfiniteCanvas),React.createElement(ProjectPublicationOverlay)));
 </script></body></html>

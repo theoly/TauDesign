@@ -18,8 +18,12 @@ import {makeGuidancePacket,withGuidanceReceipts} from '/src/services/ai/designKn
 import {selectDesignRules} from '/src/services/ai/designKnowledge/selector.ts';
 import {LocalStorageStorage} from '/src/services/storage/projectStorage.ts';
 const query=new URLSearchParams(location.search),device=query.get('device')==='pc'?'pc':'mobile',candidate=query.has('candidate');
-const original='<main data-nid="root0001" class="'+(device==='pc'?'container-max ':'')+'col gap-4 p-4"><h1>资料</h1><section data-nid="region01"><button data-nid="target01" class="btn btn-primary"><svg class="icon" viewBox="0 0 24 24"><path d="M1 1L2 2"/></svg><span>查看详情</span></button></section><button data-nid="other001" class="btn">暂存</button></main>';
-const s=useProjectStore.getState();s.initNewProject({name:'面板任务验证',deviceProfile:device,createSpecimen:false});s.addScreen({name:'资料页',htmlContent:original},'page');s.selectNodeByNid('page','target01');
+for(const k of Object.keys(localStorage))if(k!=='ai_designer_providers_v1')localStorage.removeItem(k);
+const s=useProjectStore.getState();s.initNewProject({name:'面板任务验证',deviceProfile:device,createSpecimen:false});
+await (await import('/src/services/ai/builtinMediaAssets.ts')).prepareBuiltinMediaAssets();
+const iconPath=Object.values(useProjectStore.getState().assets).find(a=>a.name==='图标 · check').relPath;
+const original='<main data-nid="root0001" class="'+(device==='pc'?'container-max ':'')+'col gap-4 p-4"><h1>资料</h1><section data-nid="region01"><button data-nid="target01" class="btn btn-primary"><span class="icon icon-mask" style="mask-image:url('+iconPath+');-webkit-mask-image:url('+iconPath+')" aria-hidden="true"></span><span>查看详情</span></button></section><button data-nid="other001" class="btn">暂存</button></main>';
+s.addScreen({name:'资料页',htmlContent:original},'page');s.selectNodeByNid('page','target01');
 let model='fixture';const binding=()=>({provider:{id:'panel-fixture',name:'本地面板夹具',protocol:'openai_compatible',baseUrl:'https://invalid.test',apiKey:'PANEL_SECRET'},modelId:model});
 useAIConfigStore.setState({getActiveProviderForRole:binding,autoReferenceDesignRules:false});
 const f={original,calls:[],pending:[],aborts:0,state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length,

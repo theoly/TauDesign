@@ -50,6 +50,7 @@ describe('candidate validation evidence', () => {
     expect(evidence.source.passed).toBe(true);
     expect(evidence.delivery.status).toBe('ready');
     expect(evidence.viewport).toMatchObject({ profile: 'pc', width: 1440 });
+    await useProjectStore.getState().saveProjectChecked();
     expect(readProject(store.id)).not.toContain('测试对比度记录');
     container = document.createElement('div'); document.body.appendChild(container); root = createRoot(container);
     act(() => root!.render(<CandidateEvidencePanel current={evidence} />));

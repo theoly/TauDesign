@@ -11,7 +11,8 @@ import {repairGuidanceIssue} from '../ai/designKnowledge/repairTrace';
 import {draftExecutionIssue} from '../ai/draftExecutionSource';
 import type {RuleEvidencePurpose} from '../ai/designKnowledge/safety';
 import {guidancePacketIssue} from '../ai/designKnowledge/receipt';
-import {isCandidateInputFingerprint} from '../ai/candidateInputBinding';
+import {isCandidateInputFingerprint,candidateAuthorizationBinding} from '../ai/candidateInputBinding';
+import {readPublicationCommits,matchesPublicationCommit,type ProjectPublicationCommit} from './projectPublicationRecord';
 
 export type DeliveryMode = 'replace' | 'force-replace' | 'keep-both' | 'confirm-structure-keep-both' | 'confirm-structure-replace';
 type PageSnapshot = Pick<Screen, 'id' | 'name' | 'htmlContent' | 'scopedCss' | 'metadata'>;
@@ -19,6 +20,7 @@ type PageSnapshot = Pick<Screen, 'id' | 'name' | 'htmlContent' | 'scopedCss' | '
 export interface DeliveryRecord {
   schemaVersion: 1;
   id: string;
+  publicationId?:string;
   projectId: string;
   createdAt: number;
   completedAt?: number;
@@ -48,12 +50,13 @@ function validRecord(value: unknown, projectId: string, screenId: string, purpos
   const page = (p: PageSnapshot | undefined) => p && typeof p.id === 'string' && typeof p.name === 'string' &&
     typeof p.htmlContent === 'string' && (p.scopedCss === undefined || typeof p.scopedCss === 'string');
   return Boolean(r && r.schemaVersion === 1 && typeof r.id === 'string' && validId(r.id) && r.projectId === projectId &&
-    typeof r.createdAt === 'number' && Number.isFinite(r.createdAt) && ['prepared', 'applied', 'aborted'].includes(r.status) &&
+    typeof r.createdAt === 'number' && Number.isFinite(r.createdAt) && (r.publicationId===undefined||r.publicationId===r.id)&&['prepared', 'applied', 'aborted'].includes(r.status) &&
     (r.reason === undefined || typeof r.reason === 'string') &&
     ['replace', 'force-replace', 'keep-both', 'confirm-structure-keep-both', 'confirm-structure-replace'].includes(r.mode) && page(r.before) && page(r.after) && r.after.id === screenId &&
     r.resultFingerprint === contentFingerprint(r.after.htmlContent) &&
     r.candidate && typeof r.candidate.newHtml === 'string' && typeof r.candidate.screenName === 'string' &&
     (r.candidate.inputContextFingerprint===undefined||isCandidateInputFingerprint(r.candidate.inputContextFingerprint))&&
+    (purpose==='history'||Boolean(candidateAuthorizationBinding(r.candidate.workflowContract)&&r.candidate.taskBindingFingerprint===candidateAuthorizationBinding(r.candidate.workflowContract)))&&
     (r.candidate.modificationRequest === undefined || typeof r.candidate.modificationRequest === 'string') &&
     isCandidateValidationEvidence(r.candidate.validationEvidence) &&
     r.candidate.validationEvidence.candidateFingerprint === contentFingerprint(r.candidate.newHtml)&&sameRecordedHtml(r.candidate.newHtml,r.after.htmlContent)&&
@@ -71,11 +74,26 @@ function validRecord(value: unknown, projectId: string, screenId: string, purpos
 /** Historical events remain available after undo; the project document remains the current-page authority. */
 export class DeliveryRepository {
   constructor(private readonly storage: ProjectStorage, private readonly projectId: string) {}
+  /** Read-only historical lookup. A matching candidate ID alone cannot hide a different draft. */
+  async committedCandidate(candidate:StagedCandidateData):Promise<DeliveryRecord|undefined>{
+    if(!candidate.candidateId)return;
+    const source=(value:StagedCandidateData)=>{const {preview,validationEvidence,restoredFromDisk,...frozen}=value;return JSON.stringify(Object.fromEntries(Object.entries(frozen).sort(([a],[b])=>a.localeCompare(b))));};
+    const commits=await readPublicationCommits(this.storage,this.projectId);
+    for(const commit of commits.filter(row=>row.kind==='candidate'&&row.screens.length===1).reverse()){
+      const record=await this.get(commit.screens[0].id,commit.id);
+      if(record?.publicationId===commit.id&&source(record.candidate)===source(candidate)&&await this.confirmed(record,[commit]))return record;
+    }
+  }
+  private async confirmed(record:DeliveryRecord,commits:ProjectPublicationCommit[]){const commit=commits.find(row=>row.id===record.publicationId);return await matchesPublicationCommit(commit,{id:record.id,kind:'candidate',screens:[record.after]})?commit:undefined;}
+  private async reconcile(record:DeliveryRecord,commits:ProjectPublicationCommit[]):Promise<DeliveryRecord>{
+    if(!record.publicationId||record.status==='applied')return record;const commit=await this.confirmed(record,commits);
+    return commit?{...record,status:'applied',completedAt:commit.at,reason:'工程原子提交已确认；交付收尾记录尚未同步。'}:record;
+  }
 
   async get(screenId: string, id: string): Promise<DeliveryRecord | null> {
     const raw=await this.storage.readText(recordPath(screenId,id));
     if(!raw||raw.length>24_000_000)return null;
-    try{const record=JSON.parse(raw);return validRecord(record,this.projectId,screenId)&&record.id===id?record:null;}catch{return null;}
+    try{const record=JSON.parse(raw);return validRecord(record,this.projectId,screenId)&&record.id===id?await this.reconcile(record,await readPublicationCommits(this.storage,this.projectId).catch(()=>[])):null;}catch{return null;}
   }
 
   async prepare(record: DeliveryRecord): Promise<void> {
@@ -90,11 +108,13 @@ export class DeliveryRepository {
   }
 
   async finish(record: DeliveryRecord, status: 'applied' | 'aborted', reason?: string): Promise<void> {
+    if(record.publicationId){const confirmed=await this.confirmed(record,await readPublicationCommits(this.storage,this.projectId));if(status==='applied'&&!confirmed||status==='aborted'&&confirmed)throw Error('工程提交事实与档案收尾状态不一致，未覆盖交付记录。');}
     if(!validRecord(record,this.projectId,record.after.id))throw new Error('交付来源或页面快照不一致，未更新交付状态。');
     await this.storage.writeTextAtomic(recordPath(record.after.id, record.id), JSON.stringify({ ...record, status, completedAt: Date.now(), ...(reason ? { reason } : {}) }));
   }
 
   async listForScreen(screenId: string, limit = 10): Promise<{ records: DeliveryRecord[]; invalidFiles: number; hasMore: boolean }> {
+    const commits=await readPublicationCommits(this.storage,this.projectId).catch(()=>[]);
     const files = (await this.storage.listDir(directory(screenId))).filter(name => /^delivery-[a-z0-9-]+\.json$/.test(name)).sort().reverse();
     const selected = files.slice(0, Math.max(1, Math.min(limit, 200)));
     const records: DeliveryRecord[] = [];
@@ -111,7 +131,7 @@ export class DeliveryRepository {
             status: 'failed', scope: 'first-screen', capturedAt: record.createdAt, candidateFingerprint: record.resultFingerprint,
             contextFingerprint: record.candidate.validationEvidence!.contextFingerprint, reason: '预览记录损坏或与交付版本不匹配。'
           };
-          return record;
+          return this.reconcile(record,commits);
         } catch { return null; }
       }));
       for (const record of batch) if (record) records.push(record); else invalidFiles++;

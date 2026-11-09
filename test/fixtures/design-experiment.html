@@ -1,0 +1,24 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>设计对照实验运行器</title><body><main><h1>设计对照实验运行器</h1><p>仅用于独立合成需求；不载入用户工程。进度来自实际执行事件。</p><pre id="progress">等待任务</pre></main><script type="module">
+import {runDesignExperimentTrial,experimentRuntimeFacts} from '/scripts/lib/designExperimentTrial.ts';
+let job=null;
+const status=document.getElementById('progress');
+window.trialHarness={
+ facts:experimentRuntimeFacts,
+ start({plan,runId,binding},controlled){
+  if(job&&!job.done)throw Error('A trial is still running');
+  const controller=new AbortController();job={done:false,controller,progress:null,result:null,error:null};const current=job;
+  const options={signal:controller.signal,onProgress:p=>{if(job===current){current.progress=p;status.textContent=JSON.stringify(p,null,2);}}};
+  if(controlled){if(!new URLSearchParams(location.search).has('controlled'))throw Error('Controlled transport is disabled');options.transport=controlled;}
+  runDesignExperimentTrial(plan,runId,binding,options).then(result=>{current.result=result;},()=>{current.error='Trial rejected before result; inspect journal and identity.';}).finally(()=>{current.done=true;});
+  return {started:true};
+ },
+ poll:()=>job?{done:job.done,progress:job.progress,error:job.error}:null,
+ result:()=>job?.done?job.result:null,
+ cancel:()=>job?.controller.abort()
+};
+// Test-only transport selection is explicit; the live runner rejects this scope.
+if(new URLSearchParams(location.search).has('controlled')){
+ const {MockTransport}=await import('/src/services/ai/engine/transport/mockTransport.ts');
+ window.startControlledTrial=(input,responses)=>{const transport=new MockTransport();for(const text of responses)transport.queueResponse(text,1);return window.trialHarness.start(input,transport);};
+}
+</script></body></html>

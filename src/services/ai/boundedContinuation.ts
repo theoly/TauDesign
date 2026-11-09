@@ -1,3 +1,5 @@
+import {sumTokenUsage} from './tokenUsage';
+import {embeddedMediaIssue} from './externalMedia';
 import type { AIProviderConfig } from '../../types/provider';
 import type { AIEngineCore, StreamTextOptions, TokenUsage } from './engine/core/types';
 import { htmlIsComplete } from '../../utils/htmlCompleteness';
@@ -33,7 +35,7 @@ export interface ContinuationResult {
 export async function streamWithContinuation(core: AIEngineCore, options: StreamTextOptions,
   callbacks: { onText?: (text: string) => void; onReasoning?: (text: string) => void; allowContinuation?: boolean;
     resume?: ContinuationCheckpoint; contextKey?: string; onContinuation?: (attempt: number, mode: 'native' | 'portable') => void;
-    budget?: {maxRequestedTokens?:number;autoContinuations?:number;continuationTokens?:number} } = {}): Promise<ContinuationResult> {
+    externalMediaOnly?:boolean;budget?: {maxRequestedTokens?:number;autoContinuations?:number;continuationTokens?:number} } = {}): Promise<ContinuationResult> {
   const result: ContinuationResult = { rawResponse: '', warnings: [], continuationCount: 0 };
   const cap=(value:number|undefined,fallback:number,max:number)=>Number.isInteger(value)&&value!>=1?Math.min(value!,max):fallback;
   const totalBudget=cap(callbacks.budget?.maxRequestedTokens,32768,32768);
@@ -49,9 +51,11 @@ export async function streamWithContinuation(core: AIEngineCore, options: Stream
     !Number.isInteger(resume.previousContinuations) || resume.previousContinuations < 0 || resume.previousContinuations > 1000)) {
     return { ...result, errorMessage: '续写检查点或工程/模型上下文已变化，请重新生成。' };
   }
+  if(callbacks.externalMediaOnly&&resume&&embeddedMediaIssue(resume.prefix))return {...result,errorMessage:'旧续写前缀含禁止的媒体内容，不能继续生成。'};
   const originalMessages = resume ? structuredClone(resume.messages) : options.messages;
   if (resume) { result.rawResponse = resume.prefix; result.continuationCount = resume.previousContinuations; }
   const keepCheckpoint = () => {
+    if(callbacks.externalMediaOnly&&embeddedMediaIssue(result.rawResponse))return result;
     if (result.rawResponse && originalMessages.reduce((n,m)=>n+m.content.length,result.rawResponse.length) <= 120000) result.checkpoint = { version: 1, prefix: result.rawResponse,
       prefixFingerprint: contentFingerprint(result.rawResponse), contextKey, bindingKey, messages: structuredClone(originalMessages),
       messagesFingerprint: continuationContextKey(originalMessages), previousContinuations: result.continuationCount };
@@ -102,10 +106,7 @@ export async function streamWithContinuation(core: AIEngineCore, options: Stream
         // without waiting for an unrelated reasoning/finish promise that may never resolve.
         const metadata = Promise.all([
           stream.reasoningPromise.then(reasoning => { if (metadataActive && reasoning) result.reasoningText = (result.reasoningText ?? '') + reasoning; }),
-          stream.usagePromise.then(usage => { if (metadataActive && usage) result.usage = {
-            inputTokens: (result.usage?.inputTokens ?? 0) + usage.inputTokens,
-            outputTokens: (result.usage?.outputTokens ?? 0) + usage.outputTokens
-          }; }),
+          stream.usagePromise.then(usage => { if(metadataActive&&usage)result.usage=sumTokenUsage(result.usage,usage); }),
           Promise.resolve(stream.recoveryPromise).then(recovery => { if (metadataActive && recovery) { result.recoveredStreamError = recovery; transportRecovery = recovery; } }),
           Promise.resolve(stream.finishReasonPromise).then(finish => { if (metadataActive) result.finishReason = finish; })
         ]);
@@ -146,6 +147,8 @@ export async function streamWithContinuation(core: AIEngineCore, options: Stream
       if (portable && !options.signal?.aborted) keepCheckpoint();
       return result;
     }
+    const mediaIssue=callbacks.externalMediaOnly?embeddedMediaIssue(result.rawResponse):undefined;
+    if(mediaIssue){result.errorMessage=mediaIssue.message;result.warnings.push(mediaIssue.message);return result;}
     const artifact = extractArtifact(result.rawResponse);
     const fence=/```html[ \t]*\r?\n([\s\S]*)$/i.exec(result.rawResponse);
     const unfinishedFence=!!fence&&!fence[1].includes('```')&&fence[1].trimStart().startsWith('<');

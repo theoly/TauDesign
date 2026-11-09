@@ -9,6 +9,7 @@ import {techBlueTheme} from '../../src/utils/themePresets';
 import {createChatTaskBudget,createRestyleBudget} from '../../src/services/ai/taskBudgetPolicy';
 import {guidancePacketIssue} from '../../src/services/ai/designKnowledge/receipt';
 import {chatPageTaskPlan} from '../../test/fixtures/pageTaskPlan';
+import {requestSchema} from '../../test/helpers/modelSchema';
 import {createHash} from 'node:crypto';
 import type {DesignTaskContract} from '../../src/services/ai/designWorkflow';
 import type {RuleFeature} from '../../src/services/ai/designKnowledge/types';
@@ -36,7 +37,7 @@ function verify(id:string,device:'pc'|'mobile',protocol:string,a:Wire[],b:Wire[]
  requireThat(a.length===b.length,'规则不得增加模型轮次');requireThat(budgetA===budgetB,'规则不得扩大累计申请输出');
  for(let i=0;i<a.length;i++){
   requireThat(a[i].body.max_tokens===b[i].body.max_tokens,'单次输出预算变化');
-  requireThat(sha(a[i].body.response_format)===sha(b[i].body.response_format),'实际输出Schema变化');
+  requireThat(sha(requestSchema(a[i]))===sha(requestSchema(b[i])),'实际输出Schema变化');
  }
  const inputChars=(requests:Wire[])=>requests.reduce((n,r)=>n+JSON.stringify(r.body.messages).length,0);
  requireThat(inputChars(b)<=inputChars(a),'最终请求字符预算增长');
@@ -44,13 +45,13 @@ function verify(id:string,device:'pc'|'mobile',protocol:string,a:Wire[],b:Wire[]
  const packet=contract.designGuidance!;requireThat(packet.selection.selected.length>0,'固定正例未注入任何规则');
  requireThat(packet.requests.every(r=>r.status==='completed'&&packet.selection.selected.every(s=>r.injectedRuleIds.includes(s.rule.id))),'子请求没有继承同一规则');
  return {id,device,protocol,status:'passed',baseline:{inputChars:inputChars(a),requests:a.length,requestedOutputTokens:budgetA},contextual:{inputChars:inputChars(b),requests:b.length,requestedOutputTokens:budgetB},
- receipts:packet.requests.length,rules:packet.selection.selected.map(s=>s.rule.id),messageSha256:b.map(r=>sha(r.body.messages)),schemaSha256:b.map(r=>sha(r.body.response_format))};
+ receipts:packet.requests.length,rules:packet.selection.selected.map(s=>s.rule.id),messageSha256:b.map(r=>sha(r.body.messages)),schemaSha256:b.map(r=>sha(requestSchema(r)))};
 }
 async function html(device:'pc'|'mobile',continuation:boolean):Promise<ProtocolDryRunRow>{
  const runs=[];
  for(const enabled of [false,true]){
   const f=capture((r,t)=>{
-   if(r.body.response_format)t.queueResponse(JSON.stringify(chatPageTaskPlan));
+   if(requestSchema(r))t.queueResponse(JSON.stringify(chatPageTaskPlan));
    else if(continuation){
     const marker=JSON.stringify(r.body.messages).match(/TAUDESIGN_CONTINUE_[\w-]+/)?.[0];
     if(marker)t.queueResponse(marker+'\n</main></artifact>');

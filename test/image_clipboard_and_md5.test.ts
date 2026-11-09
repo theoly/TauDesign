@@ -1,11 +1,10 @@
-import { describe, it, expect, beforeEach } from 'bun:test';
+import { describe, it, expect, beforeEach,afterEach } from 'bun:test';
 import { computeMd5, computeBase64Md5, parseImageInfoFromDataUrl, base64ToUint8Array } from '../src/utils/md5';
 import { AttachmentStore } from '../src/services/storage/attachmentStore';
 import { ProjectStorage } from '../src/services/storage/projectStorage';
 import { useProjectStore } from '../src/stores/useProjectStore';
-import React from 'react';
+import React,{act} from 'react';
 import { createRoot } from 'react-dom/client';
-import { act } from 'react-dom/test-utils';
 import { ChatDrawer } from '../src/components/chat/ChatDrawer';
 
 // 1x1 像素有效 PNG 的 dataUrl
@@ -154,6 +153,7 @@ describe('MD5 与剪切板粘贴图片去重系统 (MD5 & Image Clipboard Dedupl
       document.body.appendChild(container);
       root = createRoot(container);
     });
+    afterEach(()=>{act(()=>root.unmount());container.remove();});
 
     it('CHK-F-05: 粘贴剪切板图片时阻止默认行为并载入 attachedImage 预览', async () => {
       act(() => {

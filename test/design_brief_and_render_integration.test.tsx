@@ -110,6 +110,7 @@ describe('简表展示与画框渲染接线',()=>{
     let selected='';
     await act(async()=>root.render(<RenderedQualityCard report={{status:'incomplete',inspected:1,reason:'图片待加载',findings:[{code:'render_unexpected_wrap',severity:'warning',nid:'button1',message:'按钮换行',actual:'2行',expected:'完整单行'}]}} onLocate={nid=>{selected=nid;}}/>));
     expect(host.textContent).toContain('渲染检查未完成');expect(host.textContent).not.toContain('未发现已覆盖规则的问题');
+    expect(host.textContent).toContain('未验证');expect(host.textContent).toContain('必需检查');
     act(()=>host.querySelector('button')!.click());expect(selected).toBe('button1');
   });
 });

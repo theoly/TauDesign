@@ -1,3 +1,4 @@
+import {inspectText} from '../../utils/textNode';
 import type { QualityFinding } from './generationQuality';
 
 const ACTIONS = 'button,a[href],[role="button"],input[type="submit"],input[type="button"]';
@@ -28,15 +29,45 @@ function primary(el: Element): boolean {
     || [...el.classList].some(c => /(?:^|[-_])(primary|cta|submit)(?:$|[-_])/.test(c))
     || /^(提交|确认支付|立即支付|付款)/.test(label(el));
 }
+/** Supported author-name sources, distinct from visual text and full assistive-technology auditing. */
 export function hasAccessibleActionName(el: Element): boolean {
-  const ids = el.getAttribute('aria-labelledby')?.trim().split(/\s+/).filter(Boolean) ?? [];
-  const named = ids.length > 0 && ids.every(id => {
-    const targets = Array.from(el.ownerDocument.querySelectorAll('[id]')).filter(node => node.id === id);
-    return targets.length === 1 && Boolean(label(targets[0]));
+  const hiddenForName=(node:Element)=>{
+    if(hidden(node)||node.closest('[aria-hidden="true"]'))return true;
+    const win=node.ownerDocument.defaultView;
+    if(win)for(let cur:Element|null=node;cur;cur=cur.parentElement){
+      const style=win.getComputedStyle(cur);
+      if(style.display==='none'||['hidden','collapse'].includes(style.visibility)||style.getPropertyValue('content-visibility')==='hidden')return true;
+    }
+    return false;
+  };
+  const referenceText=(target:Element)=>{
+    // A directly referenced hidden node can name a control, including its hidden subtree.
+    const includeHidden=hiddenForName(target),parts:string[]=[];
+    const visit=(node:Node)=>{
+      if(node.nodeType===3){parts.push(node.textContent??'');return;}
+      if(node.nodeType!==1)return;
+      const element=node as Element;
+      if(element.matches('script,style,template')||(!includeHidden&&hiddenForName(element)))return;
+      element.childNodes.forEach(visit);
+    };
+    visit(target);return parts.join('').trim();
+  };
+  const referenced=(node:Element)=>{
+    const ids=node.getAttribute('aria-labelledby')?.trim().split(/\s+/).filter(Boolean)??[];
+    return ids.length>0&&ids.every(id=>{
+      const targets=Array.from(node.ownerDocument.querySelectorAll('[id]')).filter(target=>target.id===id);
+      return targets.length===1&&Boolean(referenceText(targets[0]));
+    });
+  };
+  if(hiddenForName(el))return false;
+  if(referenced(el)||el.getAttribute('aria-label')?.trim()||el.getAttribute('title')?.trim())return true;
+  return Array.from(el.querySelectorAll('img,svg')).some(icon=>{
+    if(hiddenForName(icon))return false;
+    return Boolean(referenced(icon)||icon.getAttribute('aria-label')?.trim()||
+      (icon.matches('img')?icon.getAttribute('alt')?.trim():Array.from(icon.children).some(node=>node.localName==='title'&&inspectText(node).text.trim())));
   });
-  return Boolean(named || el.getAttribute('aria-label')?.trim() || el.getAttribute('title')?.trim()
-    || Array.from(el.querySelectorAll('img[alt],svg title')).some(node => (node.getAttribute('alt') || node.textContent)?.trim()));
 }
+
 function authorizedRemoval(el: Element, request: string): boolean {
   const text = label(el), nid = el.getAttribute('data-nid');
   // 结构重排只授权布局，不能作为删除操作的依据；删除必须命中该操作的可读名称/身份。
@@ -55,7 +86,7 @@ export function inspectActionIntegrity(doc: Document, original?: Document, reque
   const findings: QualityFinding[] = [];
   const actions = Array.from(doc.querySelectorAll(ACTIONS));
   const add = (el: Element, code: string, message: string, actual: string, severity: 'error' | 'warning' = 'error') => {
-    findings.push({ code, severity, nid: el.getAttribute('data-nid') || undefined, message, actual: actual.slice(0, 300), expected: '保留可见、非空且可识别的操作文案；删除操作需明确授权' });
+    findings.push({ code, severity, nid: el.getAttribute('data-nid') || undefined, message, actual: actual.slice(0, 300), expected: code==='action_label_missing'?'提供可见操作文案，或为可见图标提供按钮名称；隐藏图标元数据不作为名称':'保留可见、非空且可识别的操作文案；删除操作需明确授权' });
   };
   const consumed = new Set<Element>();
   const originals = Array.from(original?.querySelectorAll(ACTIONS) ?? []);
@@ -83,7 +114,7 @@ export function inspectActionIntegrity(doc: Document, original?: Document, reque
     const icon = Array.from(action.querySelectorAll('svg,img,.icon')).some(node => !hidden(node));
     if (hidden(action) || !primary(action) || label(action) || (icon && hasAccessibleActionName(action))) continue;
     if (!findings.some(f => f.code === 'action_label_lost' && f.nid === (action.getAttribute('data-nid') || undefined))) {
-      add(action, 'action_label_missing', '主操作按钮没有可识别的操作文案。', '空按钮');
+      add(action, 'action_label_missing', '主操作按钮没有可识别的操作文案或图标名称。', icon?'图标缺少可识别的操作名称':'空按钮');
     }
   }
   return findings;

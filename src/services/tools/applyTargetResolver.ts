@@ -25,7 +25,7 @@ export interface ApplyTargetParams {
  * 裁决一段已生成 HTML 的最终落点 (BR-GRM-02 / BR-GRM-03)
  *
  * 始终以「用户原始诉求 + 本轮引用画框」为依据；
- * 已引用画框且为修改诉求（含守卫拦截态）时强制原地覆盖旧画框，
+ * 已引用画框且为修改诉求（含守卫拦截态）时绑定原目标，进入候选交付门禁，
  * 只有确实无目标可循时才回退新建，杜绝修改诉求漂移为新建页面。
  */
 export function resolveApplyToolCall(params: ApplyTargetParams): CanvasToolCall | null {

@@ -1,0 +1,193 @@
+{
+  "version": 1,
+  "scope": "M4 dedicated calibration; not M5 held-out evaluation",
+  "cases": [
+    {
+      "id": "linked",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\">手机号</label><input id=\"phone\" class=\"input\">",
+      "source": true,
+      "render": "pass"
+    },
+    {
+      "id": "implicit",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\">手机号<input class=\"input\"></label>",
+      "source": true,
+      "render": "pass"
+    },
+    {
+      "id": "nested",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\"><span>手机</span><strong>号</strong></label><input id=\"phone\" class=\"input\">",
+      "source": true,
+      "render": "pass"
+    },
+    {
+      "id": "select-options",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\">手机号<select><option>选项不能混入标签</option></select></label>",
+      "source": true,
+      "render": "pass"
+    },
+    {
+      "id": "textarea-value",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\">手机号<textarea>旧内容不能混入标签</textarea></label>",
+      "source": true,
+      "render": "pass"
+    },
+    {
+      "id": "decoration",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\">手机号<span aria-hidden=\"true\">*</span></label><input id=\"phone\" class=\"input\">",
+      "source": true,
+      "render": "pass"
+    },
+    {
+      "id": "disabled",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\">手机号</label><input id=\"phone\" disabled class=\"input\">",
+      "source": true,
+      "render": "pass"
+    },
+    {
+      "id": "wrong",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\">姓名</label><input id=\"phone\" class=\"input\">",
+      "source": false,
+      "render": "failed"
+    },
+    {
+      "id": "empty",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\"><span></span></label><input id=\"phone\" class=\"input\">",
+      "source": false,
+      "render": "failed"
+    },
+    {
+      "id": "placeholder",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<input data-nid=\"field\" class=\"input\" placeholder=\"手机号\">",
+      "source": false,
+      "render": "failed"
+    },
+    {
+      "id": "aria-name",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<input data-nid=\"field\" class=\"input\" aria-label=\"手机号\">",
+      "source": false,
+      "render": "failed"
+    },
+    {
+      "id": "adjacent",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<p>手机号</p><label data-nid=\"label\" for=\"phone\">姓名</label><input id=\"phone\" class=\"input\">",
+      "source": false,
+      "render": "failed"
+    },
+    {
+      "id": "unbound",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\">手机号</label><input class=\"input\">",
+      "source": false,
+      "render": "failed"
+    },
+    {
+      "id": "duplicate-id",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\">手机号</label><input id=\"phone\" class=\"input\"><input id=\"phone\" class=\"input\">",
+      "source": false,
+      "render": "failed"
+    },
+    {
+      "id": "implicit-multiple",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\">手机号<input class=\"input\"><input class=\"input\"></label>",
+      "source": false,
+      "render": "failed"
+    },
+    {
+      "id": "hidden-control",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\">手机号</label><input id=\"phone\" type=\"hidden\">",
+      "source": false,
+      "render": "failed"
+    },
+    {
+      "id": "hidden-label",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\" hidden>手机号</label><input id=\"phone\" class=\"input\">",
+      "source": false,
+      "render": "failed"
+    },
+    {
+      "id": "zero-font",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\" style=\"font-size:0\">手机号</label><input id=\"phone\" class=\"input\">",
+      "source": true,
+      "render": "failed"
+    },
+    {
+      "id": "css-hidden",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\" class=\"field-label\">手机号</label><input id=\"phone\" class=\"input\">",
+      "source": true,
+      "render": "failed",
+      "css": ".field-label{visibility:hidden}"
+    },
+    {
+      "id": "filter-unknown",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\" style=\"filter:blur(1px)\">手机号</label><input id=\"phone\" class=\"input\">",
+      "source": true,
+      "render": "unverified"
+    },
+    {
+      "id": "selected-outside",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<section data-nid=\"scope\"><input class=\"input\"></section><label for=\"phone\">手机号</label><input id=\"phone\" class=\"input\">",
+      "source": false,
+      "render": "failed",
+      "elementNid": "scope"
+    },
+    {
+      "id": "selected-inside",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<section data-nid=\"scope\"><label data-nid=\"label\" for=\"phone\">手机号</label><input id=\"phone\" class=\"input\"></section>",
+      "source": true,
+      "render": "pass",
+      "elementNid": "scope"
+    },
+    {
+      "id": "example",
+      "request": "例如：\n字段标签文案必须为“手机号”",
+      "html": "<p>只是参考数据</p>",
+      "source": true,
+      "render": "pass",
+      "ignored": true
+    },
+    {
+      "id": "negative",
+      "request": "不要将字段标签文案改为“手机号”",
+      "html": "<p>无需字段</p>",
+      "source": true,
+      "render": "pass",
+      "ignored": true
+    },
+    {
+      "id": "quoted-literal",
+      "request": "字段标签文案改为“仅为示例”",
+      "html": "<label for=\"phone\">仅为示例</label><input id=\"phone\" class=\"input\">",
+      "source": true,
+      "render": "pass"
+    },
+    {
+      "id": "display-contents",
+      "request": "字段标签文案必须为“手机号”",
+      "html": "<label data-nid=\"label\" for=\"phone\" style=\"display:contents\"><span style=\"display:contents\">手机号</span></label><input id=\"phone\" class=\"input\">",
+      "source": true,
+      "render": "pass"
+    }
+  ]
+}

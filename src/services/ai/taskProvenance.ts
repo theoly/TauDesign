@@ -30,3 +30,10 @@ export function taskProvenanceIssue(value:DesignTaskContract|undefined,completed
   (value.librarySource!==undefined&&!validLibrarySourceIdentity(value.librarySource)))return '任务来源身份不完整。';
  return guidancePacketIssue(value,completed,'history')??pageTaskPlanIssue(value);
 }
+
+import type {AIEngineCore,StreamTextOptions} from './engine/core/types';
+/** Metadata only. Does not alter messages, budgets, authorization or provider encoding. */
+export function withTaskProvenance(core:AIEngineCore,taskId:string,defaultStep='page-generation'):AIEngineCore{
+ const bound=(options:StreamTextOptions):StreamTextOptions=>({...options,provenance:{taskId,stepId:options.provenance?.stepId??defaultStep}});
+ return {streamText:options=>core.streamText(bound(options)),generateObject:(schema,options)=>core.generateObject(schema,bound(options))};
+}

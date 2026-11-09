@@ -1,18 +1,24 @@
+import {explicitFieldLabels,inspectExplicitFieldLabels,sourceFieldLabelText} from '../services/ai/explicitFieldContent';
 import type { QualityFinding } from '../services/ai/generationQuality';
 import { hasAccessibleActionName } from '../services/ai/actionIntegrity';
 import { contrastRatio } from './colorHarmony';
 import { inspectText } from './textNode';
 import type {RenderResourceFile} from '../services/storage/renderResourceSnapshot';
+import { assessedFinding } from '../services/ai/findingPolicy';
+import {explicitActionTexts,inspectExplicitActionTexts,sourceActionText,type ContentTask} from '../services/ai/explicitActionContent';
+import {createRenderCoverage,type RenderCoverageEntry} from '../services/ai/renderCoverage';
 
 export interface RenderedQualityReport {
   status: 'pending' | 'complete' | 'incomplete' | 'unavailable';
   findings: QualityFinding[];
   inspected: number;
   reason?: string;
+  coverage?:RenderCoverageEntry[];
   /** Local file bytes used by this rendering, never their binary content. */
   resourceFiles?:RenderResourceFile[];
 }
 const tolerance = 2;
+const nonBodySelector='button,a,input,textarea,select,svg,table,pre,code,[role="button"],[role="textbox"],[contenteditable="true"],[role="table"],[role="grid"]';
 type Color = [number, number, number, number];
 function color(value: string): Color | null {
   if (value === 'transparent') return [0, 0, 0, 0];
@@ -27,7 +33,8 @@ function composite(front: Color, back: Color): Color {
 const asHex = (c: Color) => '#' + c.slice(0, 3).map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
 
 /** 只读取真实渲染几何；无布局的DOM环境返回unavailable，不伪装验收通过。 */
-export function inspectRenderedQuality(doc: Document, options: { maxNodes?: number; resourcesReady?: boolean } = {}): RenderedQualityReport {
+export interface RenderedQualityOptions {maxNodes?:number;resourcesReady?:boolean;contentTask?:ContentTask}
+export function inspectRenderedQuality(doc: Document, options: RenderedQualityOptions = {}): RenderedQualityReport {
   const win = doc.defaultView;
   const width = doc.documentElement.clientWidth;
   if (!win || width <= 0 || !doc.body || doc.body.getBoundingClientRect().width <= 0) {
@@ -35,12 +42,16 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
   }
   const styles = new Map<Element, CSSStyleDeclaration>();
   const css = (el: Element) => { let s = styles.get(el); if (!s) { s = win.getComputedStyle(el); styles.set(el, s); } return s; };
-  const visible = (el: Element) => {
+  const cssVisible = (el: Element) => {
     for (let cur: Element | null = el; cur; cur = cur.parentElement) {
       const s = css(cur);
       if (cur.hasAttribute('hidden') || s.display === 'none' || ['hidden', 'collapse'].includes(s.visibility) || Number(s.opacity || 1) === 0) return false;
     }
-    const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0;
+    return true;
+  };
+  const visible = (el:Element) => {
+    if(!cssVisible(el))return false;
+    const r=el.getBoundingClientRect();return r.width>0&&r.height>0;
   };
   const hasComplexTransform = (el: Element) => {
     for (let cur: Element | null = el; cur; cur = cur.parentElement) {
@@ -57,6 +68,8 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
     return false;
   };
   const findings: QualityFinding[] = [];
+  const coverage=createRenderCoverage();
+  let bodyBudgetExceeded=false;
   const seen = new Set<string>();
   const elementIds = new Map<Element, number>();
   const add = (el: Element, code: string, message: string, actual: string, expected: string, severity: QualityFinding['severity'] = 'warning') => {
@@ -64,7 +77,11 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
     if (!elementIds.has(el)) elementIds.set(el, elementIds.size);
     const key = `${code}:${nid || elementIds.get(el)}`;
     if (seen.has(key)) return;
-    seen.add(key); findings.push({ code, severity, nid, message, actual, expected });
+    const finding = { code, severity, nid, message, actual, expected };
+    seen.add(key);
+    findings.push(code === 'render_contrast_unverified' ? assessedFinding('contrast-support', 'unverified', finding)
+      : code === 'render_contrast' ? assessedFinding('contrast', 'failed', finding)
+      : ['render_action_zero_size', 'render_action_invisible_label'].includes(code) ? assessedFinding('render-controls', 'failed', finding) : finding);
   };
   const scrollAncestor = (el: Element) => {
     for (let cur = el.parentElement; cur && cur !== doc.body; cur = cur.parentElement) {
@@ -89,12 +106,13 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
     }
     return clipped && (right <= left || (left >= -tolerance && right <= width + tolerance));
   };
-  const lineCount = (el: Element) => {
+  const lineCount = (el: Element, bodyOnly=false) => {
     const lines: Array<{ top: number; bottom: number }> = [];
     const walker = doc.createTreeWalker(el, 4);
     let node: Node | null;
     while ((node = walker.nextNode())) {
       if (!node.textContent?.trim() || !node.parentElement || node.parentElement.closest('svg') || !visible(node.parentElement)) continue;
+      if(bodyOnly&&(node.parentElement.closest(nonBodySelector)||!paintedLabel(node.parentElement,true)))continue;
       const range = doc.createRange(); range.selectNodeContents(node);
       for (const rect of Array.from(range.getClientRects())) {
         if (!rect.width || !rect.height) continue;
@@ -106,19 +124,21 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
     return lines.length;
   };
   const contrast = (el: Element) => {
+    const unsupported = (reason: string) => add(el, 'render_contrast_unverified', '此处文字对比度未验证。', reason, '人工核对实际背景上的文字可读性；此项不替代必需检查');
     const foreground = color(css(el).color);
-    if (!foreground || !foreground[3]) return;
+    if (!foreground) { unsupported('文字颜色不在当前纯色计算支持范围内'); return; }
+    if (!foreground[3]) {coverage.note('contrast-invisible-ink',el);return;}
     const chain: Element[] = [];
     for (let cur: Element | null = el; cur; cur = cur.parentElement) chain.unshift(cur);
     let background: Color = [0, 0, 0, 0];
     for (const cur of chain) {
       const s = css(cur);
-      // 渐变、图片、混合或透明组无法由单点CSS颜色可靠推断，跳过而非猜底色。
-      if ((s.backgroundImage && s.backgroundImage !== 'none') || Number(s.opacity || 1) < 1 || (s.mixBlendMode && s.mixBlendMode !== 'normal')) return;
-      const fill = color(s.backgroundColor); if (!fill) return;
+      if (s.backgroundImage && s.backgroundImage !== 'none') { unsupported('背景包含渐变或图片，未进行像素采样'); return; }
+      if (Number(s.opacity || 1) < 1 || (s.mixBlendMode && s.mixBlendMode !== 'normal')) { unsupported('存在透明组或混合模式，无法可靠推断最终颜色'); return; }
+      const fill = color(s.backgroundColor); if (!fill) { unsupported('背景颜色不在当前纯色计算支持范围内'); return; }
       background = composite(fill, background);
     }
-    if (background[3] < 0.999) return;
+    if (background[3] < 0.999) { unsupported('背景尚未合成为已知不透明纯色'); return; }
     const s = css(el), size = parseFloat(s.fontSize), bold = Number(s.fontWeight) >= 700 || s.fontWeight === 'bold';
     const minimum = size >= 24 || (bold && size >= 18.667) ? 3 : 4.5;
     const ratio = contrastRatio(asHex(composite(foreground, background)), asHex(background));
@@ -133,8 +153,8 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
     }
     return false;
   };
-  const paintedLabel = (el: Element, text: boolean) => {
-    if (!visible(el)) return false;
+  const paintedLabel = (el: Element, text: boolean, allowContents=false) => {
+    if (!(allowContents&&css(el).display==='contents'?cssVisible(el):visible(el))) return false;
     if (!text) return true;
     const s = css(el);
     if (parseFloat(s.fontSize) === 0) return false;
@@ -153,7 +173,7 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
       }
       return false;
     })();
-    if (el.hasAttribute('hidden') || s.display === 'none' || hiddenContainer(el) || el.matches(':disabled') || el.hasAttribute('disabled') || disabledFieldset || el.getAttribute('aria-disabled') === 'true') return;
+    if (el.hasAttribute('hidden') || s.display === 'none' || hiddenContainer(el) || el.matches(':disabled') || el.hasAttribute('disabled') || disabledFieldset || el.getAttribute('aria-disabled') === 'true') {coverage.note('inactive-control',el);return;}
     const rect = el.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) {
       add(el, 'render_action_zero_size', '操作控件的实际宽度或高度为零。', `${rect.width}×${rect.height}px`, '保留可见且可点击的操作区域', 'error');
@@ -176,19 +196,41 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
         const named = hasAccessibleActionName(el);
         hasLabel = Array.from(el.querySelectorAll('svg, img, .icon')).some(icon => {
           if (!paintedLabel(icon, false)) return false;
-          return named || Boolean(icon.getAttribute('alt')?.trim() || icon.querySelector('title')?.textContent?.trim());
+          return named;
         });
       }
     }
     if (!hasLabel) add(el, 'render_action_invisible_label', '操作控件缺少可见文案或有名称的可见图标。', '文字为空、隐藏、透明、字号为零或无可见尺寸', '恢复可见操作文案，或提供有可访问名称的可见图标', 'error');
+    if (el.matches('.btn, button, [role="button"]')) {
+      const html = el as HTMLElement;
+      const explicitWrap = ['normal','pre-wrap','pre-line','break-spaces'].includes(s.whiteSpace);
+      if (!explicitWrap && html.scrollWidth > html.clientWidth + tolerance) {
+        add(el, 'render_action_overflow', '操作控件内文案或图标超出按钮宽度。', `${html.scrollWidth}px > ${html.clientWidth}px`, '为长文案留足宽度或将辅助按钮设为紧凑宽度，避免文字紧贴边缘');
+      }
+    }
   };
   const inspectCompressedBody = (el: Element) => {
-    if (inspectText(el).text.replace(/\s/g, '').length < 20 || el.closest('button,a,input,textarea,select,svg,table,pre,code,[role="table"],[role="grid"]') || hasComplexTransform(el)) return;
+    if(el.closest(nonBodySelector)){
+      if(inspectText(el).text.replace(/\s/g,'').length>=20)coverage.note('body-structured-content',el);
+      return;
+    }
+    const walker=doc.createTreeWalker(el,4);let node:Node|null,bodyText='',transformedText=false,measuredTextNodes=0;
+    while((node=walker.nextNode())){
+      const parent=node.parentElement;
+      if(!parent||parent.closest(nonBodySelector)||!paintedLabel(parent,true))continue;
+      if(!node.nodeValue?.trim())continue;
+      if(++measuredTextNodes>maxNodes){bodyBudgetExceeded=true;coverage.note('body-measure-limit',el);return;}
+      bodyText+=node.nodeValue??'';
+      if(node.nodeValue?.trim()&&hasComplexTransform(parent))transformedText=true;
+    }
+    if(bodyText.replace(/\s/g,'').length<20)return;
+    if(transformedText){coverage.note('body-transform',el);return;}
+    if(hasComplexTransform(el)){coverage.note('body-transform',el);return;}
     const s = css(el), parent = el.parentElement;
     if (!parent || !['flex', 'inline-flex'].includes(css(parent).display) || !['row', 'row-reverse', ''].includes(css(parent).flexDirection)) return;
     for (let cur: Element | null = el; cur; cur = cur.parentElement) {
       const style = css(cur);
-      if (style.writingMode && style.writingMode !== 'horizontal-tb' || style.textOverflow === 'ellipsis' || Number(style.getPropertyValue('-webkit-line-clamp')) > 0) return;
+      if (style.writingMode && style.writingMode !== 'horizontal-tb' || style.textOverflow === 'ellipsis' || Number(style.getPropertyValue('-webkit-line-clamp')) > 0) {coverage.note('body-intentional-layout',el);return;}
     }
     const r = el.getBoundingClientRect(), p = parent.getBoundingClientRect(), font = parseFloat(s.fontSize);
     const contentWidth = r.width - (parseFloat(s.paddingLeft) || 0) - (parseFloat(s.paddingRight) || 0);
@@ -201,14 +243,14 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
         && Math.min(r.right, box.right) - Math.max(r.left, box.left) <= tolerance;
     });
     if (!crowded) return;
-    const lines = lineCount(el);
+    const lines = lineCount(el,true);
     if (lines < 4) return;
     const severe = contentWidth / font <= 6 && contentWidth / parentWidth <= 0.4 && lines >= 5;
     add(el, 'render_compressed_body', '操作区把长正文挤成了窄列。',
       `正文宽${Math.round(contentWidth)}px（${(contentWidth/font).toFixed(1)}em），${lines}行，占容器${Math.round(contentWidth/parentWidth*100)}%`,
       '将长正文与标签/操作组纵向排列，操作组空间不足整体换行；保留字号、文案和自然高度', severe ? 'error' : 'warning');
   };
-  const nodes = Array.from(doc.body.querySelectorAll(`[data-nid], p, .btn, .badge, .badge-soft, .badge-count, .badge-dot, .tag, .icon-box, .avatar, .text-nowrap, ${actionSelector}`));
+  const nodes = Array.from(doc.body.querySelectorAll(`[data-nid], p, label, .btn, .badge, .badge-soft, .badge-count, .badge-dot, .tag, .icon-box, .avatar, .text-nowrap, ${actionSelector}`));
   const maxNodes = options.maxNodes ?? 1500;
   let inspected = 0;
   if (doc.body.scrollWidth > width + tolerance && !['auto', 'scroll'].includes(css(doc.body).overflowX)) {
@@ -220,15 +262,32 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
     inspected++;
     inspectCompressedBody(el);
     const s = css(el), rect = el.getBoundingClientRect();
-    if (el.matches('.badge, .badge-soft, .badge-count, .badge-dot, .tag')
-      && (el.matches('.badge-count, .badge-dot') || ['absolute', 'fixed'].includes(s.position)) && !hasComplexTransform(el)) {
+    const isBadgeLike = el.matches('.badge, .badge-soft, .badge-count, .badge-dot, .tag');
+    const isPositionedBadge = isBadgeLike
+      && (el.matches('.badge-count, .badge-dot')
+        || ['absolute', 'fixed'].includes(s.position)
+        || (el.parentElement && ['absolute', 'fixed'].includes(css(el.parentElement).position))
+        || Boolean(el.closest('.absolute, [style*="position: absolute"], [style*="position:absolute"]')));
+    if (isPositionedBadge) {
       const host = el.parentElement?.closest('button, a[href], [role="button"], .notification-control, .icon-box, .card') || el.parentElement;
-      if (host && !hasComplexTransform(host)) {
+      if(hasComplexTransform(el)||host&&hasComplexTransform(host))coverage.note('badge-transform',el);
+      else if (host) {
         const overlaps = (other: DOMRect | DOMRectReadOnly) =>
           Math.min(rect.right, other.right) - Math.max(rect.left, other.left) > tolerance
           && Math.min(rect.bottom, other.bottom) - Math.max(rect.top, other.top) > tolerance;
-        const icons = Array.from(host.querySelectorAll('svg, .icon, img')).filter(icon => !el.contains(icon) && visible(icon) && !hasComplexTransform(icon));
-        let overlap = icons.some(icon => overlaps(icon.getBoundingClientRect()));
+        const icons = Array.from(host.querySelectorAll('svg, .icon, img')).filter(icon => !el.contains(icon) && visible(icon));
+        let cornerContact=false;
+        let overlap = icons.some(icon => {
+          if(hasComplexTransform(icon)){coverage.note('badge-transform',el);return false;}
+          const box=icon.getBoundingClientRect();
+          if(!overlaps(box))return false;
+          const centerX=(rect.left+rect.right)/2,centerY=(rect.top+rect.bottom)/2;
+          const iconCenterX=(box.left+box.right)/2,iconCenterY=(box.top+box.bottom)/2;
+          const coversCenter=iconCenterX>rect.left&&iconCenterX<rect.right&&iconCenterY>rect.top&&iconCenterY<rect.bottom;
+          if(el.matches('.badge-count,.badge-dot')&&['absolute','fixed'].includes(s.position)&&!coversCenter
+            &&(centerX<=box.left||centerX>=box.right)&&(centerY<=box.top||centerY>=box.bottom)){cornerContact=true;return false;}
+          return true;
+        });
         const walker = doc.createTreeWalker(host, 4);
         let node: Node | null, checked = 0;
         while (!overlap && (node = walker.nextNode()) && checked++ < 200) {
@@ -238,8 +297,24 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
           overlap = Array.from(range.getClientRects()).some(overlaps);
         }
         if (overlap) add(el, 'render_badge_overlap', '徽标可能遮挡主图标或内容。', '徽标与图标/文字的可见矩形重叠', '为角标留独立位置，使用notification-control；卡片标签预留内容区域');
+        else if(cornerContact)coverage.note('badge-corner-contact',el);
+        // Only an unambiguous, visible notification icon can define this anchor.
+        // Card/status labels and multi-icon controls have no inferred attachment target.
+        if (el.matches('.badge-count, .badge-dot') && icons.length === 1
+          && host.matches('button, a[href], [role="button"], .notification-control, .icon-box')
+          && !hasComplexTransform(icons[0])) {
+          const box = icons[0].getBoundingClientRect();
+          const gap = Math.max(tolerance, Math.min(box.width, box.height) / 4);
+          const centerX = (rect.left + rect.right) / 2, centerY = (rect.top + rect.bottom) / 2;
+          if (centerX < box.right - tolerance || centerY > box.top + tolerance
+            || rect.left > box.right + gap || rect.bottom < box.top - gap) {
+            add(el, 'render_badge_detached', '通知角标未附着在主图标的右上角。',
+              `角标中心(${Math.round(centerX)}, ${Math.round(centerY)})，图标右上(${Math.round(box.right)}, ${Math.round(box.top)})`,
+              '将角标锚定图标的紧凑定位单元，不能以整行或卡片为定位区，也不能与图标并排');
+          }
+        }
         if (el.matches('.badge-count, .badge-dot') && host.matches('button, a[href], [role="button"], .notification-control, .icon-box')
-          && icons.some(icon => rect.height > icon.getBoundingClientRect().height + tolerance)) {
+          && icons.some(icon => !hasComplexTransform(icon)&&rect.height > icon.getBoundingClientRect().height + tolerance)) {
           add(el, 'render_badge_oversized', '通知徽标高度超过主图标，视觉层级过强。', `${Math.round(rect.height)}px`, '计数使用xs字号与紧凑内边距，普通通知采用浅底，紧急事项才用危险色');
         }
       }
@@ -248,7 +323,8 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
       add(el, 'render_horizontal_overflow', '组件超出了画框左右边界。', `${Math.round(rect.left)}–${Math.round(rect.right)}px`, '保留完整内容，调整容器宽度或让组件组整体换行');
     }
     const html = el as HTMLElement;
-    const explicitWrap = html.style?.whiteSpace === 'normal';
+    const explicitWrap = ['normal','pre-wrap','pre-line','break-spaces'].includes(s.whiteSpace);
+    if(explicitWrap&&el.matches('.btn, .badge, .badge-soft, .tag, .text-nowrap')&&lineCount(el)>1)coverage.note('intentional-wrap',el);
     if (el.matches('.btn, .badge, .badge-soft, .tag, .text-nowrap') && !explicitWrap && lineCount(el) > 1) {
       add(el, 'render_unexpected_wrap', '按钮或短标签在实际渲染中分成了多行。', '多行文字', '为完整单行文案留足空间，父组可整体换行');
     }
@@ -258,6 +334,7 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
     if (!declaredTruncation && labelText && ((['hidden', 'clip'].includes(s.overflowX) && html.scrollWidth > html.clientWidth + tolerance) || (['hidden', 'clip'].includes(s.overflowY) && html.scrollHeight > html.clientHeight + tolerance))) {
       add(el, 'render_clipped_text', '组件中的文字存在被裁切的情况。', '内容尺寸超出可见区域', '增大容器或按业务场景允许换行');
     }
+    if(hasText&&!declaredTruncation&&hasComplexTransform(el))coverage.note('clipping-transform',el);
     if (hasText && !declaredTruncation && !hasComplexTransform(el)) {
       const textRects = Array.from(el.childNodes).filter(node => node.nodeType === 3 && node.textContent?.trim()).flatMap(node => {
         const range = doc.createRange(); range.selectNodeContents(node);
@@ -295,14 +372,58 @@ export function inspectRenderedQuality(doc: Document, options: { maxNodes?: numb
     }
     if (hasText) contrast(el);
   }
-  const budgetExceeded = nodes.length > maxNodes;
+  const budgetExceeded = nodes.length > maxNodes||bodyBudgetExceeded;
+  const observeLiteralText=(el:Element)=>{
+    const fieldLabel=el.matches('label');
+    if(!paintedLabel(el,false,fieldLabel))return {text:''};
+    const unsupportedEffects=(node:Element)=>{
+      for(let cur:Element|null=node;cur;cur=cur.parentElement){
+        const s=css(cur);
+        if(['filter','backdrop-filter','clip-path','mask-image','-webkit-mask-image'].some(name=>{const value=s.getPropertyValue(name);return value&&value!=='none';}))return true;
+      }
+      return false;
+    };
+    const unsupportedInk=(node:Element)=>{
+      const s=css(node),fill=s.getPropertyValue('-webkit-text-fill-color');
+      return !color(fill&&fill!=='currentcolor'&&fill!=='currentColor'?fill:s.color)||!['','none'].includes(s.textTransform);
+    };
+    if(hasComplexTransform(el)||unsupportedEffects(el))return {...(el.matches('label')?sourceFieldLabelText(el):sourceActionText(el)),uncertain:true};
+    if(el.matches('input'))return {text:paintedLabel(el,true)?el.getAttribute('value')??'':'',uncertain:unsupportedInk(el)||Boolean(parseFloat(css(el).textIndent))};
+    const walker=doc.createTreeWalker(el,4),parts:string[]=[];let node:Node|null,uncertain=false;
+    while((node=walker.nextNode())){
+      const parent=node.parentElement,text=node.nodeValue??'';
+      if(!parent||parent.closest('svg,script,style,template,noscript')||!paintedLabel(parent,true,fieldLabel))continue;
+      if(el.matches('label')&&parent.closest('input,select,textarea,button,[aria-hidden="true"]'))continue;
+      if(!text.trim()){parts.push(text);continue;}
+      if(hasComplexTransform(parent)){uncertain=true;continue;}
+      if(unsupportedInk(parent)||unsupportedEffects(parent))uncertain=true;
+      try{
+        const range=doc.createRange();range.selectNodeContents(node);
+        const rects=Array.from(range.getClientRects()).filter(rect=>rect.width>0&&rect.height>0);
+        if(!rects.length)continue;
+        for(const rect of rects){
+          if(rect.left < -tolerance||rect.right > width+tolerance)uncertain=true;
+          for(let cur:Element|null=parent;cur;cur=cur.parentElement){
+            const s=css(cur),box=cur.getBoundingClientRect();
+            if(['hidden','clip','scroll','auto'].includes(s.overflowX)&&(rect.left<box.left-tolerance||rect.right>box.right+tolerance))uncertain=true;
+            if(['hidden','clip','scroll','auto'].includes(s.overflowY)&&(rect.top<box.top-tolerance||rect.bottom>box.bottom+tolerance))uncertain=true;
+          }
+        }
+        parts.push(text);
+      }catch{uncertain=true;}
+    }
+    return {text:parts.join(''),uncertain};
+  };
+  findings.push(...inspectExplicitActionTexts(doc,explicitActionTexts(options.contentTask),observeLiteralText));
+  findings.push(...inspectExplicitFieldLabels(doc,explicitFieldLabels(options.contentTask),observeLiteralText));
   const resourcesReady = options.resourcesReady !== false;
-  return { status: budgetExceeded || !resourcesReady ? 'incomplete' : 'complete', findings, inspected,
-    reason: budgetExceeded ? `页面节点较多，仅检查了前${maxNodes}个相关节点` : !resourcesReady ? '字体或图片尚未就绪，结果可能继续变化' : undefined };
+  const coverageEntries=coverage.entries();
+  return { status: budgetExceeded || !resourcesReady ? 'incomplete' : 'complete', findings, inspected,...(coverageEntries.length?{coverage:coverageEntries}:{}),
+    reason: bodyBudgetExceeded ? `正文文本节点超过本次${maxNodes}个节点的测量预算，请分区检查` : budgetExceeded ? `页面节点较多，仅检查了前${maxNodes}个相关节点` : !resourcesReady ? '字体或图片尚未就绪，结果可能继续变化' : undefined };
 }
 
 /** 宿主监听现有iframe，取消时移除全部监听；不改变srcdoc或工程数据。 */
-export function observeRenderedQuality(iframe: HTMLIFrameElement, publish: (report: RenderedQualityReport) => void) {
+export function observeRenderedQuality(iframe: HTMLIFrameElement, publish: (report: RenderedQualityReport) => void, options: Pick<RenderedQualityOptions,'contentTask'> = {}) {
   let stopped = false, revision = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let resourceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -344,7 +465,7 @@ export function observeRenderedQuality(iframe: HTMLIFrameElement, publish: (repo
         if (stopped || ticket !== revision || iframe.contentDocument !== doc) return;
         clearTimeout(resourceTimer);
         const ready = !timedOut && Array.from(doc.querySelectorAll<HTMLImageElement>('img')).every(img => img.complete && img.naturalWidth > 0) && (!doc.fonts || doc.fonts.status === 'loaded');
-        try { publish(inspectRenderedQuality(doc, { resourcesReady: ready })); }
+        try { publish(inspectRenderedQuality(doc, { ...options, resourcesReady: ready })); }
         catch { publish({ status: 'unavailable', findings: [], inspected: 0, reason: '当前画框暂不能完成几何测量' }); }
       }, 100);
     };

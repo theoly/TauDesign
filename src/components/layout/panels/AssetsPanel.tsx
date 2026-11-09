@@ -30,6 +30,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
   const assetList = Object.values(assets);
   const images = assetList.filter((a) => a.type === 'image');
   const icons = assetList.filter((a) => a.type === 'svg_icon');
+  const media=assetList.filter(a=>a.type==='media'),fonts=assetList.filter(a=>a.type==='font');
   const componentList = Object.values(components);
 
   /** 应用到当前选中元素：img 改 src，其他元素设为背景图 */
@@ -99,8 +100,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
                   key={a.id}
                   title={a.name}
                   className="aspect-square rounded-md border border-slate-800 bg-slate-950 flex items-center justify-center p-1.5 text-slate-300"
-                  dangerouslySetInnerHTML={a.rawSvg ? { __html: a.rawSvg } : undefined}
-                />
+                ><AssetPreviewImage asset={a} mask className="h-full w-full"/></div>
               ))}
             </div>
           )}
@@ -136,10 +136,14 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
           )}
       </Accordion>
 
-      <Accordion panelKey="assets.fonts" title="字体" defaultOpen={false}>
+      <Accordion panelKey="assets.media" title="音视频与字幕" badge={media.length} defaultOpen={false}>
+        {media.length?media.map(asset=><p key={asset.id} title={asset.relPath} className="break-words px-3 py-2 text-[11px] text-slate-400">{asset.name}<span className="block text-slate-500">{asset.mimeType}</span></p>):empty('导入页面引用的音视频与字幕会作为独立文件保存在工程中。')}
+      </Accordion>
+      <Accordion panelKey="assets.fonts" title="字体" badge={fonts.length} defaultOpen={false}>
+        {fonts.map(asset=><p key={asset.id} title={asset.relPath} className="break-words px-3 py-2 text-[11px] text-slate-400">{asset.name}</p>)}
         <p className="px-3 py-3 text-[11px] text-slate-600 leading-relaxed flex items-start gap-1.5">
           <Shapes className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-700" />
-          <span>字体家族在「设计系统 → 排版」中配置，本期仅支持系统已安装字体。</span>
+          <span>字体家族在「设计系统 → 排版」中配置；导入的字体文件独立保存，由来源 CSS 的 @font-face 引用。</span>
         </p>
       </Accordion>
 

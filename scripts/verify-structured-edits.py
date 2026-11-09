@@ -77,7 +77,7 @@ async def main(args):
             await page.wait_for_function('Boolean(window.__projectStore)')
             reopened=await page.evaluate('''async fixture=>{
               const url=performance.getEntriesByType('resource').map(entry=>entry.name).find(url=>new URL(url).pathname==='/src/stores/useWorkspaceStore.ts');
-              const {useWorkspaceStore}=await import(url);if(!useWorkspaceStore.getState().openProject(fixture.id))throw new Error('Reopen failed');
+              const {useWorkspaceStore}=await import(url);await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(fixture.id);
               const store=window.__projectStore;store.getState().setActiveScreen('local');
               const {DeliveryRepository}=await import('/src/services/storage/deliveryRepository.ts');
               const {createProjectStorage}=await import('/src/services/storage/projectStorage.ts');

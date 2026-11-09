@@ -5,6 +5,8 @@ import { useProjectStore } from '../../stores/useProjectStore';
 import { useAIConfigStore } from '../../stores/useAIConfigStore';
 import {createAIEngineCore} from '../../services/ai/engine/core';
 import {generateIconSvg} from '../../services/ai/iconSvgGeneration';
+import {saveProjectIcon} from '../../services/ai/projectIconAsset';
+import {mediaReferenceIssue} from '../../services/ai/externalMedia';
 import { Asset, ComponentDefinition } from '../../types/project';
 import { ComponentDetector, ComponentCandidate } from '../../utils/componentDetector';
 import { ImageGenerator, ImageGenOptions } from '../../utils/imageGenerator';
@@ -84,7 +86,6 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
     insertComponent,
     deleteComponent,
     syncComponentInstances,
-    addAsset,
     removeAsset,
     replaceAssetGlobally,
     cleanupUnusedAssets,
@@ -105,7 +106,8 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [generatedSvg, setGeneratedSvg] = useState<string | null>(null);
   const svgJob=useRef<AbortController|null>(null);
-  useEffect(()=>()=>svgJob.current?.abort(),[projectId]);
+  const assetJob=useRef<AbortController|null>(null);
+  useEffect(()=>{setGeneratedSvg(null);setGeneratedImgUrl(null);setIsAiGenerating(false);return()=>{svgJob.current?.abort();assetJob.current?.abort();svgJob.current=null;assetJob.current=null;};},[projectId]);
 
   // Notification / Feedback msg
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -125,11 +127,15 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
     (i) => i.name.toLowerCase().includes(iconSearch.toLowerCase()) || i.label.includes(iconSearch)
   );
 
-  const handleCopySvg = (svgContent: string, key: string) => {
-    const fullSvg = `<svg class="icon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgContent}</svg>`;
-    navigator.clipboard.writeText(fullSvg);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 2000);
+  const handleCopySvg = async (svgContent: string, key: string) => {
+    if(assetJob.current)return;const job=new AbortController();assetJob.current=job;
+    try{
+      const {reference}=await saveProjectIcon(svgContent,key==='ai-gen'?aiIconPrompt:key,key==='ai-gen'?'ai_generated':'builtin',job.signal);
+      if(job.signal.aborted||useProjectStore.getState().id!==projectId)return;
+      await navigator.clipboard.writeText(reference);setCopiedKey(key);showFeedback('图标已独立保存，已复制页面引用。');
+      setTimeout(() => setCopiedKey(null), 2000);
+    }catch(error){if(!job.signal.aborted)showFeedback(error instanceof Error?error.message:'图标保存或复制失败。');}
+    finally{if(assetJob.current===job)assetJob.current=null;}
   };
 
   // Generate AI SVG Icon
@@ -167,10 +173,11 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
   // Save generated image to project assets (MD5 命名与去重)
   const handleSaveImageToAssets = async () => {
     if (!generatedImgUrl) return;
-    const attachmentStore = useProjectStore.getState().getAttachmentStore();
+    const state=useProjectStore.getState(),attachmentStore = state.getAttachmentStore();
     const saved = await attachmentStore.save(imgPrompt.slice(0, 16) || 'AI 生成图片', generatedImgUrl);
-    if (saved) {
-      addAsset({
+    const current=useProjectStore.getState();
+    if (saved&&current.id===projectId&&current.folderPath===state.folderPath) {
+      current.addAsset({
         ...saved,
         source: 'ai_generated'
       });
@@ -179,15 +186,23 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
   };
 
   // Apply image to currently selected element in canvas
-  const handleApplyImageToSelected = (imgUrl: string) => {
+  const handleApplyImageToSelected = async (imgUrl: string) => {
     if (!activeScreenId || !selectedNode) {
       alert('请先在画板中点击选中一个图片 (img) 或容器元素');
       return;
     }
-    const curScreen = screens[activeScreenId];
-    if (!curScreen) return;
-
     try {
+      const initial=useProjectStore.getState(),source=initial.screens[activeScreenId],nid=selectedNode.nid;
+      if(!source)return;
+      if(imgUrl.startsWith('data:')){
+        const saved=await initial.getAttachmentStore().save(imgPrompt.slice(0,16)||'生成图片',imgUrl);
+        if(!saved)throw Error('图片未能独立保存，页面未修改。');
+        const current=useProjectStore.getState();if(current.id!==projectId||current.folderPath!==initial.folderPath||current.screens[activeScreenId]?.htmlContent!==source.htmlContent||current.selectedNode?.nid!==nid)throw Error('工程、页面或选区已变化，未应用图片。');
+        if(!Object.values(current.assets).some(a=>a.relPath===saved.relPath))current.addAsset({...saved,source:'ai_generated'});
+        imgUrl=saved.relPath;
+      }
+      if(mediaReferenceIssue(imgUrl)||imgUrl.startsWith('assets/')&&!Object.values(useProjectStore.getState().assets).some(a=>a.relPath===imgUrl))throw Error('请选用已登记的独立素材或HTTPS链接。');
+      const curScreen=useProjectStore.getState().screens[activeScreenId];
       const parsed = parseHtmlCopy(curScreen.htmlContent), doc = parsed.doc;
       const el = doc.querySelector(`[data-nid="${selectedNode.nid}"]`);
       if (!el) return;
@@ -203,7 +218,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
       updateScreenHtml(activeScreenId, parsed.serialize(), `应用素材图片到 #${selectedNode.nid}`);
       showFeedback('素材图片已成功应用至选中元素');
     } catch (e) {
-      console.error(e);
+      showFeedback(e instanceof Error?e.message:'图片应用失败，页面未修改。');
     }
   };
 
@@ -212,7 +227,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    const attachmentStore = useProjectStore.getState().getAttachmentStore();
+    const initial=useProjectStore.getState(),attachmentStore = initial.getAttachmentStore();
 
     Array.from(files).forEach((file) => {
       const reader = new FileReader();
@@ -220,8 +235,9 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
         const result = loadEvent.target?.result as string;
         if (result) {
           const saved = await attachmentStore.save(file.name, result);
-          if (saved) {
-            addAsset(saved);
+          const current=useProjectStore.getState();
+          if (saved&&current.id===projectId&&current.folderPath===initial.folderPath) {
+            current.addAsset(saved);
             showFeedback(`上传成功: ${file.name}`);
           }
         }
@@ -608,10 +624,10 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                           </button>
                           <button
                             onClick={() => {
-                              const newUrl = prompt('请输入新素材图片的 URL 或 DataURL 以执行全工程替换:');
+                              const newUrl = prompt('请输入已登记素材路径或 HTTPS 图片链接以执行全工程替换:');
                               if (newUrl) {
-                                const cnt = replaceAssetGlobally(ast.id, newUrl);
-                                showFeedback(`已全局替换 ${cnt} 处引用此素材的画板位置`);
+                                try{const cnt = replaceAssetGlobally(ast.id, newUrl);showFeedback(`已全局替换 ${cnt} 处引用此素材的画板位置`);}
+                                catch(error){showFeedback(error instanceof Error?error.message:'素材替换失败。');}
                               }
                             }}
                             className="text-[10px] text-slate-400 hover:text-slate-200"
@@ -731,7 +747,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                         className="flex items-center justify-center gap-1.5 py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition"
                       >
                         {copiedKey === 'ai-gen' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedKey === 'ai-gen' ? '已复制完整 SVG' : '复制矢量 SVG 代码'}</span>
+                        <span>{copiedKey === 'ai-gen' ? '已复制独立图标引用' : '保存图标并复制页面引用'}</span>
                       </button>
                     </div>
                   </div>

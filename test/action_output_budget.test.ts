@@ -44,12 +44,10 @@ describe('操作修改输出预算传到实际网络请求', () => {
       await new AIServiceTransport().stream(transportRequest, () => {}).promise;
       expect(settings(protocol, bodies[0])).toEqual({ maxTokens: 8192, temperature: 0.7 });
     });
-    test(`${protocol}: 直接调用保持原有默认`, async () => {
+    test(`${protocol}: 直接调用使用统一逻辑默认`, async () => {
       const bodies = outbound();
       await AIService.stream(provider(protocol), 'test-model', messages, () => {}).promise;
-      expect(settings(protocol, bodies[0])).toEqual(protocol === 'ollama_native'
-        ? { maxTokens: undefined, temperature: undefined }
-        : { maxTokens: protocol === 'gemini' ? 4096 : 8192, temperature: 0.7 });
+      expect(settings(protocol, bodies[0])).toEqual({maxTokens:8192,temperature:0.7});
     });
   }
   test('AIService第五位置仍是timeoutMs，第六位置预算不覆盖超时', async () => {

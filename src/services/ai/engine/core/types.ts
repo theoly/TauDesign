@@ -8,10 +8,17 @@ export interface EngineMessage {
   partial?: true;
 }
 
+export interface TransportReceipt {version:1;requestId?:string;taskId?:string;stepId?:string;attemptIds:string[];connected:boolean;closed:boolean;httpStatus?:number;finishReason?:string;errorKind?:string;capacity?:import('../../modelCapacity').CapacityReceipt;usage?:TokenUsage}
+
 export interface StreamTextOptions {
   provider: AIProviderConfig;
   model: string;
   messages: EngineMessage[];
+  provenance?:{taskId:string;stepId:string};
+  onTransportEvidence?:(receipt:TransportReceipt)=>void;
+  onCapacity?:(capacity:import('../../modelCapacity').CapacityReceipt)=>void;
+  /** Metadata callback for structured calls whose return value contains only the parsed JSON. */
+  onUsage?:(usage:TokenUsage|undefined)=>void;
   temperature?: number;
   maxTokens?: number;
   jsonSchema?: Record<string, unknown>;
@@ -23,6 +30,8 @@ export interface StreamTextOptions {
 export interface TokenUsage {
   inputTokens: number;
   outputTokens: number;
+  source?: 'provider' | 'estimated' | 'unknown';
+  reasoningTokens?:number;
 }
 
 export interface StreamTextResult {
@@ -40,6 +49,7 @@ export interface StreamTextResult {
   recoveryPromise?: Promise<string | undefined>;
   /** Provider的真实结束原因，保留length等输出上限信息。 */
   finishReasonPromise?: Promise<string | undefined>;
+  transportEvidencePromise?:Promise<TransportReceipt>;
   abort: () => void;
 }
 

@@ -1,5 +1,5 @@
 import { AITransport, StreamEvent } from '../transport/types';
-import { AIEngineCore, StreamTextOptions, StreamTextResult, TokenUsage } from './types';
+import { AIEngineCore, StreamTextOptions, StreamTextResult, TokenUsage,TransportReceipt } from './types';
 import { prepareModelRequest } from './protocolAdapter';
 import { structuredOutputIssue } from '../../structuredOutput';
 
@@ -23,7 +23,7 @@ export class DefaultAIEngineCore implements AIEngineCore {
   }
 
   public streamText(options: StreamTextOptions): StreamTextResult {
-    const { transportRequest, estimatedInputChars } = prepareModelRequest(options);
+    const { transportRequest, estimatedInputChars,capacity } = prepareModelRequest(options);
 
     let rawAccumulated = '';
     let settled = false;
@@ -32,6 +32,12 @@ export class DefaultAIEngineCore implements AIEngineCore {
     let resolveFinishReason!: (reason: string | undefined) => void;
     const finishReasonPromise = new Promise<string | undefined>(resolve => { resolveFinishReason = resolve; });
     let isInsideThink = false;
+    const receipt:TransportReceipt={version:1,taskId:options.provenance?.taskId,stepId:options.provenance?.stepId,attemptIds:[],connected:false,closed:false,capacity};
+    let resolveTransport!:(receipt:TransportReceipt)=>void;
+    const transportEvidencePromise=new Promise<TransportReceipt>(resolve=>{resolveTransport=resolve;});
+    const publishTransport=()=>{try{options.onTransportEvidence?.(structuredClone(receipt));}catch{/* diagnostics must not change execution */}};
+    let typedEvents=false;
+    let typedReasoning='';
 
     // Async queues for textStream and reasoningStream
     const textQueue: string[] = [];
@@ -86,10 +92,16 @@ export class DefaultAIEngineCore implements AIEngineCore {
 
     const handleEvent = (ev: StreamEvent) => {
       if (settled) return;
+      if(ev.type==='RequestStarted'){typedEvents=true;receipt.requestId=ev.requestId;publishTransport();return;}
+      if(ev.type==='TransportAttempt'){if(!receipt.attemptIds.includes(ev.attemptId))receipt.attemptIds.push(ev.attemptId);publishTransport();return;}
+      if(ev.type==='Connected'){receipt.connected=true;receipt.httpStatus=ev.http_status;publishTransport();return;}
+      if(ev.type==='ReasoningDelta'){typedReasoning+=ev.text;notifyReasoning(ev.text);return;}
+      if(ev.type==='TransportClosed'){finishReason??='unknown';receipt.closed=true;receipt.finishReason=finishReason;publishTransport();return;}
       if (ev.type === 'Delta') {
         const deltaText = ev.text;
         rawAccumulated += deltaText;
 
+        if(typedEvents){notifyText(deltaText);return;}
         // Process thinking vs content
         let remaining = deltaText;
         while (remaining.length > 0) {
@@ -122,13 +134,16 @@ export class DefaultAIEngineCore implements AIEngineCore {
       } else if (ev.type === 'Usage') {
         finalUsage = {
           inputTokens: ev.input_tokens,
-          outputTokens: ev.output_tokens
+          outputTokens: ev.output_tokens,
+          ...(ev.source?{source:ev.source}:{}),...(ev.reasoning_tokens!==undefined?{reasoningTokens:ev.reasoning_tokens}:{})
         };
       } else if (ev.type === 'Done') {
         // Transport stop/end_turn must not erase an earlier limit/filter/failure reason.
         if (ev.finish_reason && (!finishReason || structuredOutputIssue(ev.finish_reason) || !structuredOutputIssue(finishReason))) finishReason = ev.finish_reason;
+        receipt.finishReason=finishReason;publishTransport();
         finishQueues();
       } else if (ev.type === 'Error') {
+        receipt.errorKind=ev.kind;receipt.httpStatus=ev.http_status??receipt.httpStatus;publishTransport();
         streamError = new Error(`[${ev.kind}] ${ev.message}`);
         recoverableStreamError = ev.kind === 'network_error' || ev.kind === 'timeout';
         finishQueues();
@@ -139,16 +154,19 @@ export class DefaultAIEngineCore implements AIEngineCore {
 
     const usageOrEstimate = (): TokenUsage | undefined => finalUsage ?? (rawAccumulated.length ? {
       inputTokens: Math.max(1, Math.round(estimatedInputChars / 3.5)),
-      outputTokens: Math.max(1, Math.round(rawAccumulated.replace(/<\/?think>/g, '').length / 3.5))
+      outputTokens: Math.max(1, Math.round((rawAccumulated.length+typedReasoning.length) / 3.5)), source:'estimated'
     } : undefined);
+    let usagePublished=false;
+    const settleUsage=()=>{const usage=usageOrEstimate();receipt.usage=usage;publishTransport();resolveUsage(usage);if(!usagePublished){usagePublished=true;try{options.onUsage?.(usage);}catch{/* usage display cannot change completion */}}};
     const abort = () => {
       if (settled) return;
       settled = true;
       options.signal?.removeEventListener('abort', abort);
       finishQueues();
+      receipt.closed=true;receipt.errorKind='cancelled';publishTransport();resolveTransport(structuredClone(receipt));
       rejectText(new DOMException('生成已取消', 'AbortError'));
       resolveReasoning(undefined);
-      resolveUsage(usageOrEstimate());
+      settleUsage();
       resolveRecovery(undefined);
       resolveFinishReason(finishReason);
       try { transportAbort(); } catch { /* settle independently of transport cooperation */ }
@@ -159,15 +177,15 @@ export class DefaultAIEngineCore implements AIEngineCore {
     const completeWithText = (recoveryMessage?: string) => {
       // Final extraction of text & reasoning
       const thinkMatch = rawAccumulated.match(/<think>([\s\S]*?)(?:<\/think>|$)/i);
-      const reasoning = thinkMatch ? thinkMatch[1].trim() : undefined;
+      const reasoning = typedEvents?typedReasoning||undefined:thinkMatch ? thinkMatch[1].trim() : undefined;
       // Prefix completion must preserve boundary whitespace byte-for-byte.
-      const cleanText = rawAccumulated.replace(/<think>[\s\S]*?(?:<\/think>|$)/i, '');
+      const cleanText = typedEvents?rawAccumulated:rawAccumulated.replace(/<think>[\s\S]*?(?:<\/think>|$)/i, '');
 
       finalUsage = usageOrEstimate();
 
       resolveText(cleanText);
       resolveReasoning(reasoning);
-      resolveUsage(usageOrEstimate());
+      settleUsage();
       resolveRecovery(recoveryMessage);
       resolveFinishReason(finishReason);
     };
@@ -184,7 +202,7 @@ export class DefaultAIEngineCore implements AIEngineCore {
           } else {
             rejectText(streamError);
             resolveReasoning(undefined);
-            resolveUsage(usageOrEstimate());
+            settleUsage();
             resolveRecovery(undefined);
             resolveFinishReason(finishReason);
           }
@@ -203,11 +221,11 @@ export class DefaultAIEngineCore implements AIEngineCore {
         } else {
           rejectText(err);
           resolveReasoning(undefined);
-          resolveUsage(usageOrEstimate());
+          settleUsage();
           resolveRecovery(undefined);
           resolveFinishReason(finishReason);
         }
-      });
+      }).finally(()=>{receipt.closed=true;receipt.finishReason=finishReason;publishTransport();resolveTransport(structuredClone(receipt));});
 
     const createAsyncIterable = (queue: string[], resolvers: Array<() => void>): AsyncIterable<string> => ({
       [Symbol.asyncIterator]() {
@@ -226,6 +244,7 @@ export class DefaultAIEngineCore implements AIEngineCore {
     });
 
     return {
+      transportEvidencePromise,
       textStream: createAsyncIterable(textQueue, textResolvers),
       reasoningStream: createAsyncIterable(reasoningQueue, reasoningResolvers),
       textPromise,

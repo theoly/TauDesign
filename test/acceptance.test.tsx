@@ -7,7 +7,8 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { App } from '../src/App';
 import { useWorkspaceStore } from '../src/stores/useWorkspaceStore';
-import { useProjectStore } from '../src/stores/useProjectStore';
+import { useProjectStore,waitForProjectSave,waitForPendingProjectSaves } from '../src/stores/useProjectStore';
+import {createProjectStorage} from '../src/services/storage/projectStorage';
 import { listProjects } from '../src/utils/projectRegistry';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -29,6 +30,11 @@ const cleanup = () => {
   container.remove();
 };
 
+async function persistAndRefresh(id=useProjectStore.getState().id){await act(async()=>{await waitForProjectSave(id,useProjectStore.getState().folderPath);useWorkspaceStore.getState().refresh();});}
+async function openAndWait(id:string,trigger?:()=>void){
+ const session=useProjectStore.getState().projectAuthoringSession;act(()=>{if(trigger)trigger();else useWorkspaceStore.getState().openProject(id);});
+ await act(async()=>{const until=Date.now()+3000;while(useProjectStore.getState().id!==id||useProjectStore.getState().projectAuthoringSession===session||useWorkspaceStore.getState().view!=='workspace'){if(Date.now()>until)throw Error('Workspace did not finish opening');await new Promise(resolve=>setTimeout(resolve,0));}});
+}
 const text = () => container.textContent || '';
 const byTitle = (t: string) => container.querySelector(`[title="${t}"]`) as HTMLElement | null;
 const allByTitle = (t: string) => Array.from(container.querySelectorAll(`[title*="${t}"]`)) as HTMLElement[];
@@ -42,7 +48,8 @@ const findButton = (label: string) =>
   Array.from(container.querySelectorAll('button')).find((b) => (b.textContent || '').includes(label)) || null;
 
 describe('M1 验收 · 工程管理页与工作空间外壳', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await waitForPendingProjectSaves();
     localStorage.clear();
     useWorkspaceStore.setState({ view: 'manager', projects: [], activeProjectId: null, missingIds: [] });
   });
@@ -123,13 +130,14 @@ describe('M1 验收 · 工程管理页与工作空间外壳', () => {
     expect(byTitle('页面')).not.toBeNull();
   });
 
-  test('8. 返回工程管理后，最近列表出现该工程并可重新打开', () => {
+  test('8. 返回工程管理后，最近列表出现该工程并可重新打开', async () => {
     render();
     click(findButton('新建第一个工程'));
     click(findButton('创建并进入'));
     const projectId = useWorkspaceStore.getState().activeProjectId!;
 
     click(byTitle('保存并返回工程管理'));
+    await persistAndRefresh();
     expect(useWorkspaceStore.getState().view).toBe('manager');
     expect(text()).toContain('未命名工程');
     expect(text()).toContain('PC 1440');
@@ -142,31 +150,34 @@ describe('M1 验收 · 工程管理页与工作空间外壳', () => {
     const card = Array.from(container.querySelectorAll('div')).find((d) =>
       (d.className || '').includes('group relative bg-slate-900')
     );
-    click(card!);
+    await openAndWait(projectId,()=>{(card as HTMLElement).click();});
     expect(useWorkspaceStore.getState().view).toBe('workspace');
     expect(useProjectStore.getState().id).toBe(projectId);
   });
 
-  test('10. 工程数据丢失时卡片置灰并阻止打开', () => {
+  test('10. 工程数据丢失时卡片置灰并阻止打开', async () => {
     render();
     click(findButton('新建第一个工程'));
     click(findButton('创建并进入'));
     const projectId = useWorkspaceStore.getState().activeProjectId!;
     click(byTitle('保存并返回工程管理'));
+    await persistAndRefresh();
 
     // 模拟工程文件夹被移走
-    localStorage.removeItem(`ai_designer_project_${projectId}`);
+    await createProjectStorage(projectId).remove('project.json');
     act(() => {
       useWorkspaceStore.getState().refresh();
     });
 
+    await act(async()=>{const until=Date.now()+2000;while(!useWorkspaceStore.getState().missingIds.includes(projectId)){if(Date.now()>until)throw Error('Missing canonical root was not detected');await new Promise(resolve=>setTimeout(resolve,0));}});
     expect(useWorkspaceStore.getState().missingIds).toContain(projectId);
     expect(text()).toContain('工程数据已丢失');
   });
 });
 
 describe('画框顶栏拖动 (PRD §3.3.2)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await waitForPendingProjectSaves();
     localStorage.clear();
     useWorkspaceStore.setState({ view: 'manager', projects: [], activeProjectId: null, missingIds: [] });
   });
@@ -233,19 +244,21 @@ describe('画框顶栏拖动 (PRD §3.3.2)', () => {
 });
 
 describe('工程隔离', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await waitForPendingProjectSaves();
     localStorage.clear();
     useWorkspaceStore.setState({ view: 'manager', projects: [], activeProjectId: null, missingIds: [] });
   });
   afterEach(cleanup);
 
-  test('两个工程的档位与页面互不串台', () => {
+  test('两个工程的档位与页面互不串台', async () => {
     render();
     click(findButton('新建第一个工程'));
     click(findButton('创建并进入')); // PC 默认
     const pcId = useWorkspaceStore.getState().activeProjectId!;
     act(() => useProjectStore.getState().setName('PC 工程'));
     click(byTitle('保存并返回工程管理'));
+    await persistAndRefresh();
 
     click(findButton('新建工程'));
     click(findButton('移动端'));
@@ -256,9 +269,8 @@ describe('工程隔离', () => {
 
     // 切回 PC 工程
     click(byTitle('保存并返回工程管理'));
-    act(() => {
-      useWorkspaceStore.getState().openProject(pcId);
-    });
+    await persistAndRefresh();
+    await openAndWait(pcId);
     expect(useProjectStore.getState().name).toBe('PC 工程');
     expect(useProjectStore.getState().settings.frameWidth).toBe(1440);
     expect(listProjects().length).toBe(2);
@@ -266,7 +278,8 @@ describe('工程隔离', () => {
 });
 
 describe('ISSUE-001～004 验收 · 检查器文本字段', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await waitForPendingProjectSaves();
     localStorage.clear();
     useWorkspaceStore.setState({ view: 'manager', projects: [], activeProjectId: null, missingIds: [] });
   });
@@ -359,7 +372,8 @@ describe('ISSUE-001～004 验收 · 检查器文本字段', () => {
 });
 
 describe('折叠面板展开状态随工程持久化 (PRD §3.0.3)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await waitForPendingProjectSaves();
     localStorage.clear();
     useWorkspaceStore.setState({ view: 'manager', projects: [], activeProjectId: null, missingIds: [] });
   });
@@ -386,7 +400,7 @@ describe('折叠面板展开状态随工程持久化 (PRD §3.0.3)', () => {
     expect(text()).not.toContain('无衬线');
   });
 
-  test('折叠后状态写入 store 并落盘', () => {
+  test('折叠后状态写入 store 并落盘', async () => {
     enterWorkspace();
     click(byTitle('设计系统'));
 
@@ -395,11 +409,11 @@ describe('折叠面板展开状态随工程持久化 (PRD §3.0.3)', () => {
     expect(text()).not.toContain('Primary 500');
 
     const projectId = useProjectStore.getState().id;
-    const saved = JSON.parse(localStorage.getItem(`ai_designer_project_${projectId}`)!);
+    await persistAndRefresh(projectId);const saved=JSON.parse((await createProjectStorage(projectId).readText('project.json'))!);
     expect(saved.panelStates['design.colors']).toBe(false);
   });
 
-  test('切走再回来，展开状态恢复（跨视图 / 跨会话）', () => {
+  test('切走再回来，展开状态恢复（跨视图 / 跨会话）', async () => {
     enterWorkspace();
     click(byTitle('设计系统'));
     click(panelToggle('色彩'));        // 收起
@@ -414,10 +428,8 @@ describe('折叠面板展开状态随工程持久化 (PRD §3.0.3)', () => {
     // 回工程管理再重新打开工程 —— 相当于跨会话
     const projectId = useProjectStore.getState().id;
     click(byTitle('保存并返回工程管理'));
-    act(() => {
-      useProjectStore.setState({ panelStates: {} }); // 确保不是内存残留
-      useWorkspaceStore.getState().openProject(projectId);
-    });
+    await persistAndRefresh();
+    act(()=>useProjectStore.setState({panelStates:{}}));await openAndWait(projectId);
 
     expect(useProjectStore.getState().panelStates['design.colors']).toBe(false);
     expect(useProjectStore.getState().panelStates['design.typography']).toBe(true);
@@ -426,7 +438,7 @@ describe('折叠面板展开状态随工程持久化 (PRD §3.0.3)', () => {
     expect(text()).toContain('无衬线');
   });
 
-  test('不同工程各记各的，互不影响', () => {
+  test('不同工程各记各的，互不影响', async () => {
     enterWorkspace();
     click(byTitle('资源'));
     click(panelToggle('图片'));        // 工程 A 收起图片面板
@@ -434,6 +446,7 @@ describe('折叠面板展开状态随工程持久化 (PRD §3.0.3)', () => {
     expect(useProjectStore.getState().panelStates['assets.images']).toBe(false);
 
     click(byTitle('保存并返回工程管理'));
+    await persistAndRefresh();
     click(findButton('新建工程'));
     click(findButton('创建并进入'));
 
@@ -444,9 +457,8 @@ describe('折叠面板展开状态随工程持久化 (PRD §3.0.3)', () => {
 
     // 切回 A 仍是收起的
     click(byTitle('保存并返回工程管理'));
-    act(() => {
-      useWorkspaceStore.getState().openProject(projectA);
-    });
+    await persistAndRefresh();
+    await openAndWait(projectA);
     expect(useProjectStore.getState().panelStates['assets.images']).toBe(false);
   });
 });

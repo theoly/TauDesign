@@ -13,6 +13,7 @@ import {structuredOutputIssue} from './structuredOutput';
 import {TaskBudget,withTaskBudget} from './taskBudget';
 import {frozenRepairGuidance,repairGuidanceIssue} from './designKnowledge/repairTrace';
 import {makeGuidancePacket,withGuidanceReceipts} from './designKnowledge/receipt';
+import {styleRepairErrorNids} from './styleRepairEligibility';
 
 export interface PageRepairModel {
   core:AIEngineCore;provider:StreamTextOptions['provider'];model:string;
@@ -20,7 +21,6 @@ export interface PageRepairModel {
   taskBudget?:TaskBudget;
 }
 const attempted=new Set<string>();
-const allowedErrors=new Set(['render_action_zero_size','render_action_invisible_label']);
 const properties=new Set(['width','height','min-width','min-height','max-width','max-height','font-size','line-height','padding','padding-top','padding-right','padding-bottom','padding-left']);
 const schema={type:'object',additionalProperties:false,required:['operations'],properties:{operations:{type:'array',minItems:1,maxItems:8,items:{type:'object',additionalProperties:false,required:['nid','type','value'],properties:{nid:{type:'string',maxLength:100},type:{type:'string',enum:['set_styles','remove_styles']},value:{type:'string',maxLength:512}}}}}};
 
@@ -33,10 +33,12 @@ export async function proposeStyleRepair(input:{state:PageCreationState;html:str
  const safety=taskRuleSafetyIssue(task);if(safety)return {status:'blocked',message:safety};
  const current=()=>!options.signal?.aborted&&options.isCurrent()&&!taskRuleSafetyIssue(task);
  const guard=()=>{if(!current())throw Error(taskRuleSafetyIssue(task)??'修复已取消或工程上下文已变化，未应用结果。');};
- const errors=render.findings.filter(f=>f.severity==='error');
- if(!current()||render.status!=='complete'||!errors.length||errors.some(f=>!allowedErrors.has(f.code)||!f.nid))return {status:'skipped',message:'没有可受控修复的完整渲染报告。'};
-  const nids=[...new Set(errors.map(f=>f.nid!))];if(nids.length>3||nids.some(nid=>options.allowedNids&&!options.allowedNids.includes(nid)))return {status:'skipped',message:'报错控件无法安全修复。'};
+ if(!current())return {status:'skipped',message:'没有可受控修复的完整渲染报告。'};
   const doc=parseHtmlCopy(input.html).doc;
+  const nids=styleRepairErrorNids(doc,task,render);
+  if(!nids)return {status:'skipped',message:'没有可受控修复的完整渲染报告。'};
+  const errors=render.findings.filter(f=>f.severity==='error');
+  if(nids.some(nid=>options.allowedNids&&!options.allowedNids.includes(nid)))return {status:'skipped',message:'报错控件无法安全修复。'};
   const targets=nids.map(nid=>Array.from(doc.body.querySelectorAll('[data-nid]')).filter(node=>node.getAttribute('data-nid')===nid));
   if(targets.some(nodes=>nodes.length!==1||!nodes[0].matches('button,a[href],[role="button"],input[type="submit"],input[type="button"]')||[...task.protectedNids,...(options.protectedNids??[])].some(nid=>Array.from(doc.querySelectorAll('[data-nid]')).some(protectedNode=>protectedNode.getAttribute('data-nid')===nid&&(protectedNode.contains(nodes[0])||nodes[0].contains(protectedNode))))||nodes[0].closest('template')||
     (!nodes[0].textContent?.trim()&&!nodes[0].querySelector('svg,img,.icon')&&!nodes[0].getAttribute('value'))))return {status:'skipped',message:'报错控件无法安全修复。'};

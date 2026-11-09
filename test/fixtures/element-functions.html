@@ -1,4 +1,5 @@
 <!doctype html><html><meta charset="utf-8"><title>明确元素功能规划验证</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><script type="module">
+import {requestSchema} from '/test/helpers/modelSchema.ts';
 import React from '/node_modules/.vite/deps/react.js';
 import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
 import '/src/styles/index.css';
@@ -19,11 +20,12 @@ const field=form?'<label>邮箱<input data-nid="email001" class="input"/></label
 const original='<main data-nid="page0001"><section data-nid="region01"><h2 data-nid="title001">资料</h2>'+field+'<a data-nid="link0001" href="/privacy" aria-label="隐私规则">隐私</a><button data-nid="save0001" type="button" class="btn btn-primary">保存</button></section><aside data-nid="aside001">'+Array.from({length:18},(_,i)=>`<p data-nid="keep${i}">OUTSIDE_REGION_${i}</p>`).join('')+'</aside></main>';
 store.addScreen({name:'资料页',htmlContent:original},'page');
 useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'FIXTURE_SECRET'})),bindings:reference?{...defaultBindings,vision:{role:'vision',providerId:'prov-openai',modelId:'gpt-4o'}}:defaultBindings});
+await (await import('/src/services/ai/builtinMediaAssets.ts')).prepareBuiltinMediaAssets();
 const state={requests:[],pipelineCalls:0,state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length,original};window.elementFunctionFixture=state;
 const execute=PipelineExecutor.execute;PipelineExecutor.execute=options=>{state.pipelineCalls++;return execute(options);};
 const transport=new MockTransport();
 const core=new DefaultAIEngineCore({id:'local',stream:(request,event)=>{
- const schema=request.body.response_format?.json_schema?.schema,stage=schema?.properties.features?'plan':schema?.properties.nid?'region':'analysis';
+ const schema=requestSchema(request),stage=schema?.properties.features?'plan':schema?.properties.nid?'region':'analysis';
  const last=request.body.messages.at(-1),images=Array.isArray(last.content)?last.content.filter(c=>c.type==='image_url').map(c=>c.image_url.url):[];
  const text=Array.isArray(last.content)?last.content.find(c=>c.type==='text').text:last.content;
  let planningInput;if(stage==='plan'){const input=JSON.parse(text);planningInput={nids:input.regions.map(r=>r.nid),outsideInBaseline:JSON.stringify(input.regions).includes('OUTSIDE_REGION_'),fullBaselinePresent:Object.hasOwn(input,'baselineHtml')};}

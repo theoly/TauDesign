@@ -7,10 +7,11 @@ import {getBaseCss} from '../../styles/baseCss';
 export function taskInputBinding(contract:DesignTaskContract):string {
  return contentFingerprint(JSON.stringify([guidanceBinding(contract),contract.acceptance,contract.referencePageId,contract.sourceName,
   contract.projectPages,contract.projectPageCount,contract.modificationReview,
-  contract.designGuidance?[contract.designGuidance.protocol,contract.designGuidance.selection]:undefined]));
+  contract.designGuidance?[contract.designGuidance.protocol,contract.designGuidance.selection]:undefined,
+  ...(contract.wholePageRedesign?['whole-page-redesign',contract.wholePageRedesign]:[]),...(contract.regionSubdivision?['region-subdivision',contract.regionSubdivision]:[]),...(contract.pageWriteStrategy?['page-write-strategy',contract.pageWriteStrategy]:[])]));
 }
 /** Application-owned revision. Bump when rendered checks or their dependencies change. */
-export const RenderEvidenceAuthority={revision:()=> 'render-checks-2026-10-31.2'};
+export const RenderEvidenceAuthority={revision:()=> 'render-checks-2026-11-05.1'};
 const cssCache=new Map<string,{source:string;fingerprint:string}>();
 export function renderEvidenceIdentity(profile:'pc'|'mobile'):string {
  const source=getBaseCss(profile);let css=cssCache.get(profile);

@@ -41,7 +41,7 @@ export function inspectReferenceInput(contract:DesignTaskContract):Omit<Workflow
   const ok=validReferenceImageIdentity(image)&&r?.version===1&&Number.isFinite(r.checkedAt)&&r.checkedAt>=0&&
     r.imageFingerprint===image.fingerprint&&r.requestFingerprint===contentFingerprint(contract.request)&&fingerprint(r.messageFingerprint)&&
     typeof r.providerId==='string'&&Boolean(r.providerId)&&typeof r.model==='string'&&Boolean(r.model);
-  return {status:ok?'passed':'blocked',message:ok?r?.reusedFromTaskId?`本次仅修复草稿文字，沿用生成任务 ${r.reusedFromTaskId} 的参考图输入回执；未重新发送图片，不代表视觉相似度。`:`本轮图片「${image!.name}」已进入模型消息，指纹 ${image!.fingerprint}；此项仅验证输入，不代表视觉相似度。`:'缺少当前请求与参考图片一致的实际输入回执，请重新生成。'};
+  return {status:ok?'passed':'blocked',message:ok?r?.reusedFromTaskId?`本次复用已完成内容，沿用生成任务 ${r.reusedFromTaskId} 的参考图输入回执；未重新发送图片，不代表视觉相似度。`:`本轮图片「${image!.name}」已进入模型消息，指纹 ${image!.fingerprint}；此项仅验证输入，不代表视觉相似度。`:'缺少当前请求与参考图片一致的实际输入回执，请重新生成。'};
 }
 
 export function inspectCreationSources(contract:DesignTaskContract,state:{designLibraryBinding?:DesignLibraryBinding;components:Record<string,ComponentDefinition>},html:string):{

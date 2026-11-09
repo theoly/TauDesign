@@ -8,6 +8,12 @@ test('complete monochrome shapes and a single code fence serialize to safe SVG c
     const result=validateIconSvg(raw);expect(result).not.toContain('<svg');expect(result.length).toBeGreaterThan(10);
   }
 });
+test('native XML namespace serialization can be safely validated again without allowing foreign namespaces',()=>{
+ const shapes='<circle xmlns="http://www.w3.org/2000/svg" cx="12" cy="12" r="8"/><g xmlns="http://www.w3.org/2000/svg"><path d="M0 0L2 2"/></g>';
+ expect(validateIconSvg(validateIconSvg(shapes))).toContain('circle');
+ expect(()=>validateIconSvg('<circle xmlns="https://foreign.test/svg" cx="12" cy="12" r="8"/>')).toThrow();
+ expect(()=>validateIconSvg('<circle xmlns:x="http://www.w3.org/2000/svg" cx="12" cy="12" r="8"/>')).toThrow();
+});
 test.each([
   '<path d="M2 2"','<script>alert(1)</script>','<path d="M2 2" onclick="alert(1)"/>',
   '<image href="https://external.test/x"/>','<foreignObject><div>text</div></foreignObject>',

@@ -8,6 +8,9 @@ import { CandidatePreviewPanel } from './CandidatePreviewPanel';
 import {DesignGuidanceCard} from '../chat/DesignGuidanceCard';
 import {PageTaskPlanCard} from '../chat/PageTaskPlanCard';
 import {HistoricalDraftSource} from '../chat/HistoricalDraftSource';
+import {QualityFindings,findingSummary} from '../chat/QualityFindings';
+import {renderFindingsForDisplay} from '../../services/ai/findingPolicy';
+import {RenderCoverageDetails} from '../chat/RenderCoverageDetails';
 
 const labels = { entities:'设计实体引用', task: '任务快照', source: '源码安全', quality: '静态质量', structure:'结构授权', assets: '资源登记', asset_files: '资源文件', render: '实际渲染' };
 const statuses = { passed: '通过', blocked: '未通过', pending: '待检查' };
@@ -30,13 +33,15 @@ export function EvidenceRecord({ evidence }: { evidence: CandidateValidationEvid
     </details>}
     {!!evidence.quality.findings.length && <details>
       <summary className="cursor-pointer text-slate-400">静态检查发现 {evidence.quality.findings.length} 项</summary>
-      <ul className="mt-2 space-y-1 text-amber-300">{evidence.quality.findings.slice(0, 20).map((finding, index) => <li key={index}>{finding.nid && `[${finding.nid}] `}{finding.message}</li>)}</ul>
-      {evidence.quality.findings.length > 20 && <p className="text-slate-500">其余记录保存在工程候选文件中。</p>}
+      <p className="mt-2 text-slate-400">{findingSummary(evidence.quality.findings)}</p>
+      <QualityFindings findings={evidence.quality.findings}/>
     </details>}
     {evidence.render && <details>
       <summary className="cursor-pointer text-slate-400">iframe 检查了 {evidence.render.inspected} 个节点，发现 {evidence.render.findings.length} 项</summary>
       {evidence.render.reason && <p className="mt-2 text-amber-300">{evidence.render.reason}</p>}
-      <ul className="mt-2 space-y-1 text-amber-300">{evidence.render.findings.slice(0, 20).map((finding, index) => <li key={index}>{finding.nid && `[${finding.nid}] `}{finding.message}</li>)}</ul>
+      <p className="mt-2 text-slate-400">{findingSummary(renderFindingsForDisplay(evidence.render))}</p>
+      <QualityFindings findings={renderFindingsForDisplay(evidence.render)}/>
+      <RenderCoverageDetails coverage={evidence.render.coverage}/>
     </details>}
     <RepairReceipt value={evidence.repair}/>
     {audit ? <div className="space-y-2 border-t border-slate-800 pt-2">

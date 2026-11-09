@@ -107,9 +107,9 @@ test('request receipt reflects each actual dispatch; image data is represented o
   const contract=fixture(),packet=contract.designGuidance!;
   const transport=new MockTransport();transport.queueResponse('first');transport.queueResponse('second');
   const core=withGuidanceReceipts(new DefaultAIEngineCore(transport),contract,packet);
-  for(let n=0;n<2;n++)await core.streamText({provider,model:'mock',messages:[{role:'system',content:packet.selection.body},{role:'user',content:'reference',imageUrl:'data:image/png;base64,private-image'}]}).textPromise;
+  for(let n=0;n<2;n++)await core.streamText({provider,model:'mock',messages:[{role:'system',content:packet.selection.body},{role:'user',content:'reference',imageUrl:'data:image/png;base64,cHJpdmF0ZS1pbWFnZQ=='}]}).textPromise;
   expect(packet.requests).toHaveLength(2);expect(packet.requests[0].requestId).not.toBe(packet.requests[1].requestId);
-  expect(JSON.stringify(packet)).not.toContain('private-image');
+  expect(JSON.stringify(packet)).not.toContain('private-image');expect(JSON.stringify(packet)).not.toContain('cHJpdmF0ZS1pbWFnZQ==');
   expect(guidancePacketIssue(contract)).toBeUndefined();
   expect(ruleFingerprint(packet.selection.selected[0].rule)).toBe(packet.selection.selected[0].fingerprint);
 });

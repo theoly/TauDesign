@@ -194,10 +194,10 @@ describe('candidate and delivery safety lifecycle',()=>{
   const render=spyOn(PageRenderCheck,'inspect').mockResolvedValue({status:'complete',findings:[],inspected:2});
   try{
    const plan=await prepareCheckedRestyle(store,outcome,storage,{contextKey:'test',isCurrent:()=>true});expect(plan.validation.status).toBe('passed');
-   const record=buildRestyleDelivery(store,outcome,plan),repo=new RestyleDeliveryRepository(storage,store.id);await repo.prepare(record);
+   const applied=await store.applyRestyleOutcome(outcome);expect(applied.applied).toBe(true);const repo=new RestyleDeliveryRepository(storage,store.id),record=(await repo.list()).records[0];
    withdraw();expect((await repo.get(record.id))?.outcome.workflowContract).toEqual(c);await repo.finish(record,'applied');
    expect((await repo.list()).invalidFiles).toBe(0);
-   await expect(repo.prepare({...record,id:`restyle-${crypto.randomUUID()}`})).rejects.toThrow('快照不完整');
+   const newId=`restyle-${crypto.randomUUID()}`;await expect(repo.prepare({...record,id:newId,publicationId:newId,status:'prepared'})).rejects.toThrow('快照不完整');
    const denied=await prepareCheckedRestyle(store,outcome,storage,{contextKey:'test',isCurrent:()=>true});
    expect(denied.validation.status).toBe('blocked');expect(denied.validation.message).toContain('安全撤回');
   }finally{render.mockRestore();}

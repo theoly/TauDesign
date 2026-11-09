@@ -1,3 +1,4 @@
+import {waitForPublicationIdle} from './helpers/publication';
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -72,7 +73,8 @@ describe('restyle batch orchestration and application guards',()=>{
     const store=useProjectStore.getState();store.initNewProject({name:'批量测试',deviceProfile:'pc',designSystem:neutralModernTheme,createSpecimen:false});
     for(const id of ['a','b','c'])store.addScreen({name:id,htmlContent:html(id),position:{x:0,y:0}},id);
   });
-  afterEach(()=>{
+  afterEach(async()=>{
+    await waitForPublicationIdle();
     render.mockRestore();
     if(root)act(()=>root!.unmount());host?.remove();host=undefined;root=undefined;
     useProjectStore.setState(priorProject,true);useHistoryStore.setState(priorHistory,true);
@@ -106,14 +108,18 @@ describe('restyle batch orchestration and application guards',()=>{
   for(const change of ['edit','project','cancel'] as const)test(`stops after ${change} during a later model request; no stale overwrite or subsequent request`,async()=>{
     const store=useProjectStore.getState(),o=batchOptions(),controller=new AbortController();let release!:(result:RestyleOutcome)=>void;let waiting!:RestyleTarget;let calls=0;
     const pending=executeRestyleBatch({...o,signal:controller.signal,generate:async t=>{calls++;waiting=t;return new Promise(resolve=>{release=resolve;});}});
-    await pause();expect(store.screens.a.htmlContent).toBe(html('a'));expect(useProjectStore.getState().screens.a.htmlContent).toContain('p-6');
-    if(change==='edit')store.updateScreenHtml('b','<main>人工修改</main>','人工修改');
-    if(change==='project')store.initNewProject({name:'新工程',deviceProfile:'pc',createSpecimen:false});
-    if(change==='cancel')controller.abort();
-    release(await generate(waiting));const result=await pending;
-    expect(result.status).toBe(change==='cancel'?'cancelled':'stale');expect(calls).toBe(1);expect(result.outcomes).toHaveLength(1);
-    if(change==='edit')expect(useProjectStore.getState().screens.b.htmlContent).toContain('人工修改');
-    if(change==='project')expect(useProjectStore.getState().screenOrder).toHaveLength(0);
+    try{
+      const deadline=Date.now()+3000;while(!release&&Date.now()<deadline)await pause();expect(release).toBeDefined();
+      expect(store.screens.a.htmlContent).toBe(html('a'));expect(useProjectStore.getState().screens.a.htmlContent).toContain('p-6');
+      if(change==='edit')store.updateScreenHtml('b','<main>人工修改</main>','人工修改');
+      if(change==='project')store.initNewProject({name:'新工程',deviceProfile:'pc',createSpecimen:false});
+      if(change==='cancel')controller.abort();
+      release(await generate(waiting));const result=await pending;
+      expect(result.status).toBe(change==='cancel'?'cancelled':'stale');expect(calls).toBe(1);expect(result.outcomes).toHaveLength(1);
+      if(change==='edit')expect(useProjectStore.getState().screens.b.htmlContent).toContain('人工修改');
+      if(change==='project')expect(useProjectStore.getState().screenOrder).toHaveLength(0);
+    }finally{controller.abort();if(release)release(await generate(waiting));await pending;}
+
   });
   test('dry-run context or queue mismatch is rejected before application and model work',async()=>{
     const o=batchOptions();let called=0;
@@ -184,9 +190,12 @@ describe('restyle batch orchestration and application guards',()=>{
       act(()=>useAIConfigStore.getState().setAutoReferenceDesignRules(false));
       for(let i=0;i<3;i++)await act(async()=>{(host!.querySelectorAll('input[type="checkbox"]')[i] as HTMLInputElement).click();});
       const find=(text:string)=>Array.from(host!.querySelectorAll('button')).find(b=>b.textContent?.includes(text))!;
-      await act(async()=>{find('试跑单个目标').click();await pause();});expect(requests).toHaveLength(1);expect(host.textContent).toContain('本次设计依据');
-      await act(async()=>{find('确认效果').click();await pause();await pause();});
-      expect(requests).toHaveLength(3);expect(Object.values(useProjectStore.getState().screens).every(s=>s.htmlContent.includes('p-6'))).toBe(true);expect(useAIConfigStore.getState().autoReferenceDesignRules).toBe(false);
+      act(()=>find('试跑单个目标').click());
+      const trialDeadline=Date.now()+4000;while(!find('确认效果')&&Date.now()<trialDeadline)await act(async()=>{await new Promise(resolve=>setTimeout(resolve,1));});expect(find('确认效果')).toBeDefined();expect(requests).toHaveLength(1);expect(host.textContent).toContain('本次设计依据');
+      act(()=>find('确认效果').click());
+      const deadline=Date.now()+4000;while(!Array.from(host!.querySelectorAll('button')).some(button=>button.textContent==='完成')&&Date.now()<deadline)await act(async()=>{await new Promise(resolve=>setTimeout(resolve,1));});
+      await act(async()=>{await waitForPublicationIdle();});
+      expect(Array.from(host!.querySelectorAll('button')).some(button=>button.textContent==='完成')).toBe(true);expect(requests).toHaveLength(3);expect(Object.values(useProjectStore.getState().screens).every(s=>s.htmlContent.includes('p-6'))).toBe(true);expect(useAIConfigStore.getState().autoReferenceDesignRules).toBe(false);
     }finally{streamSpy.mockRestore();binding.mockRestore();useAIConfigStore.setState(prior,true);}
   });
 });

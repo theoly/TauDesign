@@ -1,3 +1,14 @@
+import {createElement} from 'react';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {PageCreationEvidencePanel} from '../src/components/inspector/PageCreationEvidencePanel';
+import {listDesignTasks,readDesignTask,listDesignTaskIndex,settleDesignTaskPublication} from '../src/services/storage/designTaskRepository';
+import {createProjectStorage,LocalStorageStorage} from '../src/services/storage/projectStorage';
+import {waitForProjectSave} from '../src/stores/useProjectStore';
+import {getProjectPublication} from '../src/services/storage/projectPublication';
+import {readPublicationCommits} from '../src/services/storage/projectPublicationRecord';
+import {ProjectRepository} from '../src/services/storage/projectRepository';
+import {treeCheckpointPlan} from '../src/services/ai/treeTaskCheckpoint';
+import {RenderEvidenceAuthority} from '../src/services/ai/evidenceIdentity';
 import * as BudgetPolicy from '../src/services/ai/taskBudgetPolicy';
 import {TaskBudget} from '../src/services/ai/taskBudget';
 import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
@@ -36,7 +47,70 @@ const core:AIEngineCore={async generateObject(schema){objectCalls++;if((schema.p
  return {textStream:(async function*(){yield answer;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(answer),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('stop'),abort(){}};
 }};
 const prepare=(extra:Partial<Parameters<typeof prepareMultiPagePlan>[0]>={})=>prepareMultiPagePlan({state:useProjectStore.getState(),request:'生成登录页、注册页两个页面',provider,model:'model',core,isCurrent:()=>true,...extra});
-const run=(plan:PreparedMultiPagePlan,extra:Partial<Parameters<typeof executeMultiPagePlan>[2]>={})=>executeMultiPagePlan(plan,plan.plan.pages,{getState:()=>useProjectStore.getState(),commit:batch=>{useProjectStore.getState().applyMultiPageCreation(batch);},...extra});
+const run=(plan:PreparedMultiPagePlan,extra:Partial<Parameters<typeof executeMultiPagePlan>[2]>={})=>executeMultiPagePlan(plan,plan.plan.pages,{getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch),...extra});
+
+test('same project reopened after planning does not renew the original plan author even when design context is identical',async()=>{
+ const plan=await prepare(),store=useProjectStore.getState(),author=store.projectAuthoringSession;await store.saveProjectChecked();expect(await store.loadProjectById(store.id)).toBe(true);expect(useProjectStore.getState().projectAuthoringSession).not.toBe(author);const result=await run(plan);expect(result.status).toBe('blocked');expect(result.message).toContain('重新打开');expect(streamCalls).toHaveLength(0);expect(useProjectStore.getState().screenOrder).toEqual(['old']);
+});
+test('parent deadline is rechecked after final storage preparation, before any page or History write',async()=>{
+ const plan=await prepare(),store=useProjectStore.getState();await store.saveProjectChecked();const storage=createProjectStorage(store.id),before=await storage.readManagedSnapshot!(),historyBefore=structuredClone(useHistoryStore.getState().past);let now=0;
+ const budget=new TaskBudget({maxRequests:2,maxRequestedOutputTokens:16384,maxDurationMs:10000,maxRequestDurationMs:10000},()=>now),factory=spyOn(BudgetPolicy,'createMultiPageBudget').mockReturnValue(budget),save=ProjectRepository.prototype.save;
+ const delayedSave=spyOn(ProjectRepository.prototype,'save').mockImplementation(function(doc,options){if(options?.publication?.kind==='batch')now=10000;return save.call(this,doc,options);});
+ try{const result=await run(plan);expect(result.status).toBe('blocked');expect(result.message).toContain('总时限');expect(budget.snapshot().cancelled).toBe(true);expect(await storage.readManagedSnapshot!()).toEqual(before);expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past).toEqual(historyBefore);expect(getProjectPublication()).toBeNull();}
+ finally{delayedSave.mockRestore();factory.mockRestore();budget.close();}
+});
+for(const fault of ['before-commit','cancel-after-handoff'] as const)test(`entire multi-page batch ${fault} has one durable page/History boundary`,async()=>{
+ const plan=await prepare(),store=useProjectStore.getState();await store.saveProjectChecked();const storage=createProjectStorage(store.id),before=await storage.readManagedSnapshot!(),historyBefore=structuredClone(useHistoryStore.getState().past),publish=LocalStorageStorage.prototype.publishManagedSnapshot,controller=new AbortController();
+ let entered!:()=>void,release!:()=>void,writes=0;const entry=new Promise<void>(resolve=>entered=resolve),gate=new Promise<void>(resolve=>release=resolve);
+ const spy=spyOn(LocalStorageStorage.prototype,'publishManagedSnapshot').mockImplementation(async function(expected,changes,resources){if(this.scopeKey!==storage.scopeKey)return publish.call(this,expected,changes,resources);writes++;entered();await gate;if(fault==='before-commit')throw Error('synthetic batch disk full');return publish.call(this,expected,changes,resources);});
+ const pending=run(plan,{signal:controller.signal,commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch,{isCurrent:()=>!controller.signal.aborted})});
+ try{
+  await Promise.race([entry,new Promise((_,reject)=>setTimeout(()=>reject(Error('Batch did not reach storage')),3000))]);expect(getProjectPublication()).not.toBeNull();expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past).toEqual(historyBefore);
+  if(fault==='cancel-after-handoff')controller.abort();release();const result=await pending;expect(writes).toBe(1);expect(getProjectPublication()).toBeNull();
+  if(fault==='before-commit'){expect(result.status).toBe('blocked');expect(result.message).toContain('disk full');expect(await storage.readManagedSnapshot!()).toEqual(before);expect(useHistoryStore.getState().past).toEqual(historyBefore);expect(useProjectStore.getState().screenOrder).toEqual(['old']);}
+  else{expect(result.status).toBe('complete');expect(result.screenIds).toHaveLength(2);expect(useProjectStore.getState().screenOrder).toHaveLength(3);expect(useHistoryStore.getState().past).toHaveLength(historyBefore.length+1);expect((await readPublicationCommits(storage,store.id))[0]).toMatchObject({kind:'batch',id:plan.plan.id});expect(JSON.parse((await storage.readText('history.json'))!).past).toEqual(useHistoryStore.getState().past);}
+ }finally{release();await pending;spy.mockRestore();await waitForProjectSave(store.id).catch(()=>{});}
+});
+for(const interruptedFinalization of [false,true])test(`confirmed shared-tree path commits all pages; interrupted finalization=${interruptedFinalization}`,async()=>{
+ const calls:string[]=[];
+ const treeCore:AIEngineCore={...core,async generateObject(schema,options){
+  if((schema.properties as any)?.rootRequirements){const data=options.messages.at(-1)!.content,items=JSON.parse(data.slice(data.lastIndexOf('\n')+1));return {version:1,rootRequirements:'共用业务说明',groups:[],leaves:items.map((p:any)=>({pageId:p.id,parentId:'root'}))} as any;}
+  return core.generateObject(schema,options);
+ },streamText(options){if(options.provenance?.stepId==='root'){
+  calls.push('root');const text='<artifact identifier="shared" type="screen" title="共享"><main class="col"><header class="p-4"><p>共同服务</p></header><div data-generation-slot="content-root"></div></main></artifact>';
+  return {textStream:(async function*(){yield text;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(text),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('stop'),abort(){}};
+ }calls.push('leaf');return core.streamText(options);}};
+ const prepared=await prepare({core:treeCore,textReferences:[{name:'业务要求.md',source:'paste',content:'不可丢失的业务事实'}]}),before=useHistoryStore.getState().past.length;
+ const originalManifest=LocalStorageStorage.prototype.publishTaskManifest;
+ const finalization=interruptedFinalization?spyOn(LocalStorageStorage.prototype,'publishTaskManifest').mockImplementation(function(id,expected,contents){const task=JSON.parse(contents);if(task.treeCheckpoint&&task.state==='completed')return Promise.reject(Error('synthetic final marker interruption'));return originalManifest.call(this,id,expected,contents);}):undefined;
+ let result:Awaited<ReturnType<typeof run>>;try{result=await run(prepared,{generationTree:{concurrency:2}});}finally{finalization?.mockRestore();}expect(result.status).toBe('complete');expect(calls).toEqual(['root','leaf','leaf']);
+ expect(result.screenIds.map(id=>useProjectStore.getState().screens[id].name)).toEqual(['登录页','注册页']);
+ for(const id of result.screenIds){const html=useProjectStore.getState().screens[id].htmlContent;expect(html).toContain('共同服务');expect(html).toContain('data-generation-region');expect(html).not.toContain('data-generation-slot');}
+ expect(useHistoryStore.getState().past.length).toBe(before+1);
+ const state=useProjectStore.getState(),storage=createProjectStorage(state.id,state.folderPath),tasks=await listDesignTasks(storage,state.id,true),task=tasks.find(t=>t.treeCheckpoint);expect(task).toBeDefined();
+ const saved=(await readDesignTask(storage,state.id,task!.id))!;expect(saved.task.state).toBe(interruptedFinalization?'draft':'completed');expect(saved.publication?.kind).toBe('batch');expect(saved.task.treeCheckpoint?.delivery.pages.map(p=>p.screenId)).toEqual(result.screenIds);expect(saved.task.treeCheckpoint?.leafSources).toHaveLength(2);expect(saved.task.treeCheckpoint?.sharedPlan?.leaves).toHaveLength(2);expect(saved.parts.find(p=>p.stepId==='input-text-1')?.html).toBe('不可丢失的业务事实');
+ expect(treeCheckpointPlan(saved.task.treeCheckpoint!,saved.task.contextFingerprint).pages).toEqual(prepared.plan.pages);expect(saved.task.treeCheckpoint!.leafSources.every(row=>row.contract.pageTaskPlan?.request.planSource?.kind==='confirmed-multi-page')).toBe(true);
+ if(interruptedFinalization){
+  const path=`tasks/${task!.id}/manifest.json`,raw=await storage.readText(path),past=structuredClone(useHistoryStore.getState().past);
+  expect((await listDesignTaskIndex(storage,state.id)).tasks).toHaveLength(0);expect(await storage.readText(path)).toBe(raw);
+  const {prepareTreeTaskRecovery}=await import('../src/services/ai/treeTaskRecovery');await expect(prepareTreeTaskRecovery(storage,task!.id,state,provider,'model')).rejects.toThrow('已保存');
+  const writes=spyOn(storage,'publishTaskManifest').mockRejectedValueOnce(Error('synthetic task disk full'));
+  try{await expect(settleDesignTaskPublication(storage,state.id,task!.id)).rejects.toThrow('disk full');}finally{writes.mockRestore();}
+  expect(await storage.readText(path)).toBe(raw);expect(await settleDesignTaskPublication(storage,state.id,task!.id)).toBe(true);
+  const settled=(await readDesignTask(storage,state.id,task!.id))!;expect(settled.task.state).toBe('completed');expect(settled.task.budget).toEqual(saved.task.budget);expect(settled.task.treeCheckpoint).toEqual(saved.task.treeCheckpoint);expect(useHistoryStore.getState().past).toEqual(past);
+  useHistoryStore.getState().undo();await useProjectStore.getState().saveProjectChecked();expect((await readDesignTask(storage,state.id,task!.id))?.publication?.kind).toBe('batch');expect(calls).toEqual(['root','leaf','leaf']);
+ }
+
+});
+for(const change of ['replace','delete'] as const)test(`multi-page final handoff rejects resource ${change} with no partial batch or History`,async()=>{
+ const store=useProjectStore.getState(),storage=createProjectStorage(store.id),path='assets/images/batch-handoff.png';await storage.writeBinary(path,'AAEC/w==');store.addAsset({id:'batch-photo',name:'共享图片',type:'image',mimeType:'image/png',source:'upload',relPath:path,refCount:1});await store.saveProjectChecked();
+ const mediaCore:AIEngineCore={...core,streamText(options){const raw=core.streamText(options),textPromise=raw.textPromise.then(text=>{const doc=new DOMParser().parseFromString(text,'text/html'),image=doc.createElement('img');image.setAttribute('src',path);image.setAttribute('alt','共享图片');doc.querySelector('main')!.append(image);return doc.body.innerHTML;});return {...raw,textPromise,textStream:(async function*(){yield await textPromise;})()};}};
+ const plan=await prepare({core:mediaCore}),before=await storage.readManagedSnapshot!(),history=structuredClone(useHistoryStore.getState().past),publish=LocalStorageStorage.prototype.publishManagedSnapshot;let entered!:()=>void,release!:()=>void,dependencies=0;const entry=new Promise<void>(resolve=>entered=resolve),gate=new Promise<void>(resolve=>release=resolve);
+ const spy=spyOn(LocalStorageStorage.prototype,'publishManagedSnapshot').mockImplementation(async function(expected,changes,resources){if(this.scopeKey!==storage.scopeKey)return publish.call(this,expected,changes,resources);dependencies=resources?.length??0;entered();await gate;return publish.call(this,expected,changes,resources);});
+ const pending=run(plan);
+ try{await Promise.race([entry,new Promise((_,reject)=>setTimeout(()=>reject(Error('Resource batch did not reach IO')),3000))]);expect(dependencies).toBe(1);if(change==='replace')await storage.writeBinary(path,'AAED/w==');else await storage.remove(path);release();const result=await pending;expect(result.status).toBe('blocked');expect(result.message).toContain(change==='replace'?'已变化':'不存在');expect(await storage.readManagedSnapshot!()).toEqual(before);expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past).toEqual(history);}
+ finally{release();await pending;spy.mockRestore();}
+});
 for(const request of ['生成3个页面','设计多页面会员系统','新建登录页、注册页和首页','创建登录页面和注册页面','创建一套后台页面','create multiple pages','generate home and profile pages'])test(`多页路由 ${request}`,()=>expect(requiresMultiPagePlan(request)).toBe(true));
 for(const request of ['新建一个资料页，参考首页和详情页','生成一个页面，使用两列卡片','创建详情页，底部链接列表页','修改当前页面','分析这些页面','create one page with two cards'])test(`单页或非新建不误判 ${request}`,()=>expect(requiresMultiPagePlan(request)).toBe(false));
 
@@ -74,7 +148,7 @@ test('全部页面实际验收后才一次History加入，关系有效并支持U
 
 test('用户缩减到一页并修改要求，清理关联后确认范围披露',async()=>{
  const plan=await prepare();const selected=[{...plan.plan.pages[0],name:'登录设置',requirements:'用户补充的登录要求',links:[]}];
- const result=await executeMultiPagePlan(plan,selected,{getState:()=>useProjectStore.getState(),commit:batch=>{useProjectStore.getState().applyMultiPageCreation(batch);}});
+ const result=await executeMultiPagePlan(plan,selected,{getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch)});
  expect(result.status).toBe('complete');expect(result.message).toContain('原计划2页');expect(result.message).toContain('缩减为1页');expect(streamCalls[0].messages.at(-1)?.content).toContain('用户补充的登录要求');expect(useProjectStore.getState().screens[result.screenIds[0]].name).toBe('登录设置');
 });
 for(const mode of ['unsafe','wrong-name','missing-links','unknown-link','no-html'] as const)test(`不合格页面 ${mode} 不加入部分页`,async()=>{
@@ -105,8 +179,8 @@ test('直接Pipeline与单页工具不能把明确多页需求当作单页交付
  const contract=buildDesignTaskContract({intent:'create_screen',request:'生成3个页面',deviceProfile:'mobile',frameWidth:390});
  const result=await CanvasToolExecutor.executeAsync({tool:'create_screen',params:{title:'仅一页',html:'<main>仅一页</main>',workflowContract:contract}});expect(result.success).toBe(false);expect(useProjectStore.getState().screenOrder).toEqual(['old']);
 });
-test('伪造批次或复制句柄不能绕过私有批次与History',()=>{
- expect(()=>useProjectStore.getState().applyMultiPageCreation({version:1,id:'fake',fingerprint:'fake',names:[]})).toThrow('批次');
+test('伪造批次或复制句柄不能绕过私有批次与History',async()=>{
+ await expect(useProjectStore.getState().applyMultiPageCreation({version:1,id:'fake',fingerprint:'fake',names:[]})).rejects.toThrow('批次');
  const items=[{id:'a',name:'a',requirements:'a',links:['missing']}];expect(()=>validateMultiPageItems(items)).toThrow('关联');
 });
 
@@ -130,7 +204,8 @@ for(const image of [false,true])test(`one real JSON protocol response supplies p
    transport.queueResponse(`<artifact type="screen" title="${scope.name}"><main class="p-4"><h1>${scope.name}</h1><button class="btn btn-primary">提交</button>${scope.requiredTargetIds.map((id:string)=>`<button class="btn" data-target-screen-id="${id}">关联</button>`).join('')}</main></artifact>`);
   }return transport.stream(request,event);
  }});
- const prepared=await prepare({core:realCore,attachment,model:image?'fixture-vision':'model'});expect(prepared.plan.pages.every(p=>p.task?.features.length)).toBe(true);
+ // Native schema assertions require a known endpoint; arbitrary compatible gateways use instructions.
+ const prepared=await prepare({core:realCore,provider:{...provider,baseUrl:'https://api.openai.com/v1'},attachment,model:image?'fixture-vision':'model'});expect(prepared.plan.pages.every(p=>p.task?.features.length)).toBe(true);
  expect(requests).toHaveLength(1);expect(requests[0].body.response_format.type).toBe('json_schema');
  expect(requests[0].body.response_format.json_schema.schema.properties.pages.items.required).toContain('task');
  const result=await run(prepared);expect(result.status).toBe('complete');expect(requests).toHaveLength(3);
@@ -225,7 +300,7 @@ for(const bad of ['cross-link','five','under-count'] as const)test(`无效方案
 for(const bad of ['single','links','kind'] as const)test(`确认方案范围 ${bad} 无效时不生成`,async()=>{
  const plan=await prepareVariants();if(bad==='kind')plan.plan.kind=undefined;
  const edited=structuredClone(plan.plan.pages);if(bad==='single')edited.pop();if(bad==='links')edited[0].links=[edited[1].id];
- const result=await executeMultiPagePlan(plan,edited,{getState:()=>useProjectStore.getState(),commit:batch=>{useProjectStore.getState().applyMultiPageCreation(batch);}});
+ const result=await executeMultiPagePlan(plan,edited,{getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch)});
  expect(result.status).toBe('blocked');expect(streamCalls).toHaveLength(0);expect(useProjectStore.getState().screenOrder).toEqual(['old']);
 });
 for(const failure of ['second','cancel','stale'] as const)test(`同页方案 ${failure} 不交付部分副本`,async()=>{
@@ -251,6 +326,7 @@ test('多个业务页再做多方案须拆分，不静默只生成一个业务�
 import {createProjectStorage} from '../src/services/storage/projectStorage';
 for(const change of ['removed','replaced'] as const)test(`font ${change} while a later scheme is generating blocks the complete batch, not just the last page`,async()=>{
  const font=`assets/imports/fonts/${'a'.repeat(64)}.woff2`,storage=createProjectStorage(useProjectStore.getState().id);await storage.writeBinary(font,'dGVzdA==');
+ useProjectStore.getState().addAsset({id:'import-font',name:'已登记字体',type:'font',mimeType:'font/woff2',source:'upload',relPath:font,refCount:1});
  const plan=await prepareVariants({core:{...core,streamText(options){const output=core.streamText(options);if(streamCalls.length===1){const inject=(text:string)=>text.replace('<main ',`<style>@font-face{font-family:Imported;src:url(${font})}</style><main `);return {...output,textStream:(async function*(){yield inject(await output.textPromise);})(),textPromise:output.textPromise.then(inject)};}return output;}}});
  PageRenderCheck.inspect=async(request,memory)=>{const report=await resourceRenderReport(request,memory);if(streamCalls.length===2){if(change==='removed')await storage.remove(font);else await storage.writeBinary(font,btoa('changed font'));}return report;};
  const before=useHistoryStore.getState().past.length,result=await run(plan);expect(result.status).toBe('blocked');expect(result.message).toContain(change==='removed'?'不存在':'资源内容已变化');expect(streamCalls).toHaveLength(2);expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past.length).toBe(before);
@@ -297,4 +373,56 @@ test('a hung final-page renderer is interrupted by the parent deadline without a
  PageRenderCheck.inspect=async(request,storage)=>{if(++rendered===2)await gate;return resourceRenderReport(request,storage,{status:'complete',findings:[],inspected:5});};
  try{const result=await run(plan);expect(result.status).toBe('blocked');expect(result.message).toContain('总时限');expect(rendered).toBe(2);expect(streamCalls).toHaveLength(2);expect(useProjectStore.getState().screenOrder).toEqual(['old']);release();await new Promise(resolve=>setTimeout(resolve,2));expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past).toHaveLength(before);}
  finally{release();mock.mockRestore();budget.close();}
+});
+
+for(const phase of ['render','ready-handle'] as const)test(`checker change ${phase} cannot publish a partially or previously verified batch`,async()=>{
+ const plan=await prepare(),before=useHistoryStore.getState().past.length;let changed=false;
+ const revision=spyOn(RenderEvidenceAuthority,'revision').mockImplementation(()=>changed?'batch-checker-next':'batch-checker-current');
+ if(phase==='render')PageRenderCheck.inspect=async()=>{changed=true;return {status:'complete',findings:[],inspected:5};};
+ try{
+  const result=await run(plan,phase==='ready-handle'?{commit:batch=>{changed=true;return useProjectStore.getState().applyMultiPageCreation(batch);}}:{});
+  expect(result.status).toBe('blocked');expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past).toHaveLength(before);
+ }finally{revision.mockRestore();}
+});
+for(const request of ['设计长页面，按分区生成同一页，不拆成多个页面','创建长文章页面。请不要拆分为多个页面','生成产品说明，别拆成多页面'])test(`单页分区的显式否定多页不应误分流：${request}`,()=>expect(requiresMultiPagePlan(request)).toBe(false));
+test('independent positive multi-page scope survives a separate negative split instruction',()=>expect(requiresMultiPagePlan('创建登录页、注册页和首页，不拆成多个页面')).toBe(true));
+
+for(const scenario of ['complete','render-failure','cancelled','all-complete','image'] as const)test(`interrupted full nested tree ${scenario} keeps IDs, independent inputs, source receipts and a new root budget`,async()=>{
+ const {prepareTreeTaskRecovery,treeRecoveryData,treeRecoveryMetadata,claimPreparedTreeRecovery}=await import('../src/services/ai/treeTaskRecovery');
+ const {saveDesignTask,removeDesignTask}=await import('../src/services/storage/designTaskRepository');
+ const model=scenario==='image'?'fixture-vision':'model',attachment=scenario==='image'?{name:'独立参考.png',dataUrl:'data:image/png;base64,YQ=='}:undefined;
+ const calls:string[]=[];let leafCalls=0;
+ const treeCore:AIEngineCore={...core,async generateObject(schema,options){
+  if((schema.properties as any)?.rootRequirements){const text=options.messages.at(-1)!.content,pages=JSON.parse(text.slice(text.lastIndexOf('\n')+1));return {version:1,rootRequirements:'共用项目布局',groups:[{id:'branch-form',parentId:'root',requirements:'表单公共信息'},{id:'branch-inner',parentId:'branch-form',requirements:'内层公共说明'}],leaves:pages.map((page:any)=>({pageId:page.id,parentId:'branch-inner'}))} as any;}
+  return core.generateObject(schema,options);
+ },streamText(options){const step=options.provenance?.stepId??'leaf';calls.push(step);if(step==='root'||step.startsWith('branch-')){
+  const text=`<artifact><main class="col"><p>${step}</p><div data-generation-slot="content-${step}"></div></main></artifact>`;return {textStream:(async function*(){yield text;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(text),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('stop'),abort(){}};
+ }if(++leafCalls===2&&scenario!=='all-complete')throw Error('tree fixture interrupted');return core.streamText(options);}};
+ const prepared=await prepare({core:treeCore,model,attachment,textReferences:[{name:'完整需求.md',source:'paste',content:'完整需求不可省略'}]}),before=useHistoryStore.getState().past.length;
+ const failed=await run(prepared,{generationTree:{concurrency:1},...(scenario==='all-complete'?{commit:()=>{throw Error('fixture publication rejected');}}:{})});expect(failed.message).toContain(scenario==='all-complete'?'fixture publication rejected':'tree fixture interrupted');expect(failed.status).toBe('blocked');expect(useHistoryStore.getState().past.length).toBe(before);expect(useProjectStore.getState().screenOrder).toEqual(['old']);
+ const state=useProjectStore.getState(),storage=createProjectStorage(state.id,state.folderPath);let source=(await listDesignTasks(storage,state.id)).find(task=>task.treeCheckpoint)!;
+ for(let i=0;i<50&&scenario!=='all-complete'&&source.state!=='blocked';i++){await new Promise(resolve=>setTimeout(resolve,10));source=(await readDesignTask(storage,state.id,source.id))!.task;}expect(source.state).toBe(scenario==='all-complete'?'draft':'blocked');
+ const count=calls.length,handle=await prepareTreeTaskRecovery(storage,source.id,state,provider,model),data=treeRecoveryData(handle);expect(calls).toHaveLength(count);expect(handle.parents).toBe(3);expect(handle.leaves).toBe(scenario==='all-complete'?2:1);expect(handle.total).toBe(5);expect(data.completed.map(part=>part.id)).toEqual(['root','branch-form','branch-inner','page-1',...(scenario==='all-complete'?['page-2']:[])]);expect(data.inputs.textReferences[0].content).toBe('完整需求不可省略');expect(data.history.map(row=>row.taskId)).toEqual([prepared.contract.taskId,source.id]);
+ await expect(prepareTreeTaskRecovery(storage,source.id,{...state,screens:{...state.screens,old:{...state.screens.old,htmlContent:'<main>changed</main>'}}},provider,model)).rejects.toThrow('已变化');
+ await expect(prepareTreeTaskRecovery(storage,source.id,state,{...provider,requestOutputCaps:{[model]:1024}},model)).rejects.toThrow('模型配置');
+ if(attachment){const original=(await readDesignTask(storage,state.id,source.id))!;expect(original.task.inputs?.attachment).toBeDefined();expect(JSON.stringify(original.task)).not.toContain(attachment.dataUrl);const path=original.task.inputs!.attachment!.relPath;await storage.writeBinary(path,'Yg==');await expect(prepareTreeTaskRecovery(storage,source.id,state,provider,model)).rejects.toThrow('图片字节已变化');await storage.writeBinary(path,'YQ==');expect(data.inputs.attachment?.dataUrl).toBe(attachment.dataUrl);}
+ const newContract=structuredClone(data.source.contract);newContract.taskId='design-tree-recovered-'+crypto.randomUUID();const tree=structuredClone(data.tree);tree.taskId=newContract.taskId;const original=(await readDesignTask(storage,state.id,source.id))!;
+ const newBudget=BudgetPolicy.createMultiPageBudget(2,true);await saveDesignTask(storage,{...data.source,id:newContract.taskId,originTaskId:source.id,state:'draft',budget:newBudget.snapshot(),contract:newContract,recovery:treeRecoveryMetadata(handle)},original.parts,tree);newBudget.close();await claimPreparedTreeRecovery(storage,handle,newContract);
+ await removeDesignTask(storage,state.id,source.id);const second=await prepareTreeTaskRecovery(storage,newContract.taskId,state,provider,model);expect(second.parents).toBe(3);expect(second.leaves).toBe(scenario==='all-complete'?2:1);expect(second.history.map(row=>row.taskId)).toEqual([prepared.contract.taskId,source.id,newContract.taskId]);expect(treeRecoveryData(second).completed).toEqual(data.completed);expect(calls).toHaveLength(count);
+ const {prepareRecoveredMultiPagePlan}=await import('../src/services/ai/multiPageService');
+ const recovery=await prepareRecoveredMultiPagePlan(second,state,provider,model,treeCore);expect(calls).toHaveLength(count);const historyBefore=useHistoryStore.getState().past.length;
+ const cancelled=new AbortController();
+ if(scenario==='render-failure')PageRenderCheck.inspect=async()=>({status:'incomplete',findings:[],inspected:0,reason:'fresh recovery render unavailable'});
+ if(scenario==='cancelled')PageRenderCheck.inspect=async()=>{cancelled.abort();return {status:'complete',findings:[],inspected:5};};
+ const restored=await run(recovery,{generationTree:{concurrency:1},signal:cancelled.signal});
+ if(scenario==='render-failure'||scenario==='cancelled'){
+  expect(restored.status).toBe(scenario==='cancelled'?'cancelled':'blocked');if(scenario==='render-failure')expect(restored.message).toContain('fresh recovery render unavailable');expect(calls).toHaveLength(count);expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past.length).toBe(historyBefore);return;
+ }
+ expect(restored.status).toBe('complete');expect(restored.message).toContain('全部通过');expect(calls).toHaveLength(count+(scenario==='all-complete'?0:1));expect(restored.screenIds).toEqual(data.checkpoint.delivery.pages.map(page=>page.screenId));expect(useHistoryStore.getState().past.length).toBe(historyBefore+1);
+ const restoredScreens=restored.screenIds.map(id=>useProjectStore.getState().screens[id]);expect(restoredScreens[0].metadata?.creationEvidence?.recovery?.sourceTaskId).toBe(data.checkpoint.leafSources[0].contract.taskId);expect(restoredScreens[0].metadata?.creationEvidence?.recovery?.sourceRootTaskId).toBe(newContract.taskId);if(scenario==='all-complete')expect(restoredScreens[1].metadata?.creationEvidence?.recovery).toBeDefined();else expect(restoredScreens[1].metadata?.creationEvidence?.recovery).toBeUndefined();
+ if(attachment){expect(restoredScreens[0].metadata?.creationEvidence?.contract.referenceImage?.inputReceipt?.reusedFromTaskId).toBe(data.checkpoint.leafSources[0].contract.taskId);expect(JSON.stringify(restoredScreens.map(screen=>screen.metadata))).not.toContain(attachment.dataUrl);expect(streamCalls.at(-1)?.messages.some(message=>message.imageUrl===attachment.dataUrl)).toBe(true);}
+ const panel=renderToStaticMarkup(createElement(PageCreationEvidencePanel,{screen:restoredScreens[0]}));expect(panel).toContain('复用历史完成页面');expect(panel).toContain('本次未重新生成此页');
+ const finished=(await listDesignTasks(storage,state.id,true)).find(task=>task.state==='completed'&&task.originTaskId===newContract.taskId)!;expect(finished.budget?.requests).toBe(scenario==='all-complete'?0:1);expect(finished.recovery?.ancestors?.map(row=>row.taskId)).toEqual([prepared.contract.taskId,source.id,newContract.taskId]);
+ useHistoryStore.getState().undo();expect(useProjectStore.getState().screenOrder).toEqual(['old']);useHistoryStore.getState().redo();expect(useProjectStore.getState().screenOrder).toEqual(['old',...restored.screenIds]);
+
 });

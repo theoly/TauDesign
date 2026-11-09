@@ -74,7 +74,7 @@ export async function readDesignLibraryCopy(storage: Pick<ProjectStorage,'readTe
   if (new Set(mappedIds.values()).size !== mappedIds.size) throw new Error('来源工程组件 ID 规范化后冲突。');
   const sourceAssets: Asset[] = Array.isArray(data.assets) ? data.assets : Object.values(data.assets ?? {});
   if (sourceAssets.some(asset=>!asset||typeof asset.id!=='string'||!asset.id||typeof asset.relPath!=='string'||typeof asset.name!=='string'||
-    !['image','svg_icon'].includes(asset.type)||typeof asset.mimeType!=='string'||!asset.mimeType.startsWith('image/')||
+    !['image','svg_icon','font','media'].includes(asset.type)||typeof asset.mimeType!=='string'||!(/^(?:image|font|audio|video)\//.test(asset.mimeType)||asset.type==='media'&&asset.mimeType==='text/vtt')||
     !['upload','ai_generated','builtin'].includes(asset.source)||(asset.rawSvg!==undefined&&typeof asset.rawSvg!=='string')||
     (asset.dimensions!==undefined&&(!Number.isFinite(asset.dimensions?.width)||!Number.isFinite(asset.dimensions?.height)))) ||
     new Set(sourceAssets.map(asset=>asset.id)).size!==sourceAssets.length || new Set(sourceAssets.map(asset=>asset.relPath)).size!==sourceAssets.length) throw new Error('来源资源登记无效或 ID/路径重复。');
@@ -128,7 +128,8 @@ export async function readDesignLibraryCopy(storage: Pick<ProjectStorage,'readTe
     const dir = asset.relPath.startsWith('assets/icons/') ? 'icons' : 'images';
     const relPath = `assets/${dir}/${id}-${contentFingerprint(base64Data)}.${extension}`;
     if (assets[id]) throw new Error('来源资源 ID 规范化后冲突。');
-    assets[id] = { ...asset, id, relPath, refCount: 0 };
+    const {rawSvg:_legacyCache,...metadata}=asset;
+    assets[id] = { ...metadata, id, relPath, refCount: 0 };
     assetFiles.push({ relPath, base64Data });
     originalFiles.set(asset.relPath,base64Data);
     mappedAssetIds.set(oldId, id);

@@ -1,3 +1,4 @@
+import type {buildScopedPageContext} from './engine/context/scopedPageContext';
 import { mobileNavigationPrompt } from '../../utils/mobileNavigation';
 import { checkGenerationQuality, qualitySummary } from './generationQuality';
 import type { AIEngineCore, StreamTextOptions } from './engine/core/types';
@@ -169,10 +170,11 @@ export async function generateSupplementedLocalEdits(core: AIEngineCore, options
   designSystem: DesignSystem; mode: 'light' | 'dark'; allowText?: boolean;
   imageUrl?: string;
   projectKnowledge?: string;
+  sourceContext?:ReturnType<typeof buildScopedPageContext>;
   guidanceSelection?:RuleSelection;
 }) {
   const { byNid } = parseOriginal(options.html);
-  const adapted=renderTokenGuidance({request:options.request,projectKnowledge:options.projectKnowledge,allowedNids:options.allowedNids,
+  const adapted=renderTokenGuidance({request:options.request,projectKnowledge:options.projectKnowledge,...(options.sourceContext?{readOnlySourceContext:options.sourceContext}:{}),allowedNids:options.allowedNids,
     targets:options.allowedNids.map(nid=>byNid.get(nid)?.[0]?.outerHTML),tokens:compileTokensToCss(options.designSystem.tokens,options.mode),classes:extractClassWhitelist(getBaseCss(options.device))},options.guidanceSelection);
   const schema = { type: 'object', additionalProperties: false,
     required: ['requiresPageRewrite', 'reason', 'operations'], properties: {

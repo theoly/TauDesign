@@ -1,3 +1,4 @@
+import {explicitFieldLabels,inspectExplicitFieldLabels} from './explicitFieldContent';
 import { normalizeMobileNavigation } from '../../utils/mobileNavigation';
 import type { DesignSystem } from '../../types/designSystem';
 import type { DeviceProfile } from '../../styles/baseCss';
@@ -7,6 +8,11 @@ import { techBlueTheme } from '../../utils/themePresets';
 import { inspectActionIntegrity } from './actionIntegrity';
 import { htmlIsComplete } from '../../utils/htmlCompleteness';
 import {inspectFormRuleChanges} from './formBehaviorChanges';
+import { assessedFinding, type FindingAssessment } from './findingPolicy';
+import {explicitActionTexts,inspectExplicitActionTexts,type ContentTask} from './explicitActionContent';
+import {inspectExternalMedia} from './externalMedia';
+import {buildPageRedesignSource,inspectRedesignContent} from './pageRedesignSource';
+import {contentFingerprint} from './designWorkflow';
 
 export interface QualityFinding {
   code: string;
@@ -15,9 +21,15 @@ export interface QualityFinding {
   actual: string;
   expected: string;
   message: string;
+  assessment?: FindingAssessment;
 }
 export interface QualityReport { passed: boolean; findings: QualityFinding[] }
 export interface QualityOptions {
+  /** Required by production output/delivery entry points; legacy read-only inspection stays available. */
+  requireExternalMedia?:boolean;
+  mediaCss?:string;
+  wholePageRedesign?:import('./designWorkflow').DesignTaskContract['wholePageRedesign'];
+  contentTask?: ContentTask;
   deviceProfile?: DeviceProfile;
   useCustomNavigation?: boolean;
   designSystem?: DesignSystem;
@@ -40,11 +52,25 @@ export function checkGenerationQuality(html: string, options: QualityOptions = {
     if (element.tagName.toLowerCase() === 'template') elements.push(...Array.from((element as HTMLTemplateElement).content.querySelectorAll('*')));
   }
   const findings: QualityFinding[] = [];
+  if(options.wholePageRedesign)try{
+    if(!options.baselineHtml)throw Error('整页重设计缺少原业务基线。');
+    const source=buildPageRedesignSource(options.baselineHtml,{deviceProfile:options.deviceProfile??'pc',useCustomNavigation:options.useCustomNavigation,protectedNids:options.protectedNids});
+    if(options.wholePageRedesign.version!==1||source.sourceFingerprint!==options.wholePageRedesign.sourceFingerprint||contentFingerprint(JSON.stringify(source))!==options.wholePageRedesign.inventoryFingerprint)throw Error('整页重设计的业务来源或保护范围已变化。');
+    findings.push(...inspectRedesignContent(source,html,options.modificationRequest??'',options.baselineHtml));
+  }catch(error){findings.push({code:'redesign_source_invalid',severity:'error',actual:'基线或业务来源不匹配',expected:'当前完整业务来源清单',message:error instanceof Error?error.message:String(error)});}
+  if(options.requireExternalMedia)for(const violation of inspectExternalMedia(html,options.mediaCss).violations)findings.push({
+    code:violation.code,severity:'error',nid:violation.nid,actual:violation.attribute,expected:'引用独立媒体文件或已批准的HTTPS资源',
+    message:violation.message+' 旧页面请先在项目设置中转换媒体。'
+  });
+  findings.push(...inspectExplicitActionTexts(doc,explicitActionTexts(options.contentTask??options.modificationRequest)));
+  findings.push(...inspectExplicitFieldLabels(doc,explicitFieldLabels(options.contentTask??options.modificationRequest)));
   if(options.baselineHtml&&options.modificationRequest)for(const finding of inspectFormRuleChanges(options.baselineHtml,html,options.modificationRequest,options.formRuleRoots))findings.push({code:'form_rule_not_applied',severity:'error',...finding});
   if (!htmlIsComplete(html)) findings.push({ code: 'incomplete_html', severity: 'error', message: '页面HTML未完整结束或标签嵌套损坏，不能采纳浏览器自动补全后的残缺页面。', actual: '存在未完成的标签、属性、文本容器或必需闭合标签', expected: '重新生成完整页面；原页面保持不变' });
   const byNid = new Map<string, Element>();
-  const add = (el: Element, code: string, severity: QualityFinding['severity'], message: string, actual: string, expected: string) =>
-    findings.push({ code, severity, nid: el.getAttribute('data-nid') || undefined, actual, expected, message });
+  const add = (el: Element, code: string, severity: QualityFinding['severity'], message: string, actual: string, expected: string) => {
+    const finding = { code, severity, nid: el.getAttribute('data-nid') || undefined, actual, expected, message };
+    findings.push(code === 'unbounded_icon' ? assessedFinding('icon-sizing', 'advice', finding) : finding);
+  };
   for (const el of elements) {
     const tag = el.tagName.toLowerCase();
     const nid = el.getAttribute('data-nid');
@@ -101,7 +127,7 @@ export function qualitySummary(report: QualityReport): string {
 
 /** Validate raw source before DOM normalization; business/action checks run on the retained content. */
 export function checkGenerationSourceSafety(html: string, options: QualityOptions = {}): QualityReport {
-  const safetyCodes = new Set(['incomplete_html', 'duplicate_nid', 'active_content', 'event_handler', 'unsafe_url']);
+  const safetyCodes = new Set(['incomplete_html', 'duplicate_nid', 'active_content', 'event_handler', 'unsafe_url',...(options.requireExternalMedia?['embedded_media','temporary_media','inline_media','invalid_media_reference']:[])]);
   const findings = checkGenerationQuality(html, options).findings.filter(finding => safetyCodes.has(finding.code));
   return { passed: !findings.some(finding => finding.severity === 'error'), findings };
 }

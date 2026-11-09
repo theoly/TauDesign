@@ -1193,3 +1193,397 @@ M3-04/AC-21按完整消费者与兼容矩阵收口，顶层18/27完成、9待完
 | git diff --check | 通过 |
 
 原日志位于/private/tmp/taudesign-readme-commit-{test,types,build}.log。既有React act及预期错误日志未隐藏；没有真实Provider、人评、浏览器重跑、原生实机、打包或发布。本次按明确请求提交并推送当前工作，整体重构尚未完成。
+
+
+## 2026-11-02 IM-05 恢复、旧消息与强制确认门禁
+
+上一轮README/提交推送属于有效进展，本轮继续M3-05原范围。真实副本存取发现：旧候选恢复时生成临时ID，立即丢弃无法匹配磁盘无ID副本；旧聊天forceApply在无候选时绕过当前交付，失败后还会按当前输入重新暂存旧HTML；手动补挂仅冻结点击时上下文，漏掉生成后/点击前AI文档变化。另查到聊天按钮和store对强制确认不一致：前者误禁可确认structure，后者能豁免任意quality。
+
+修复：旧无ID副本仅在restoredFromDisk且完整原候选身份一致时可匹配；新ID/新请求不删除。无候选/不同任务旧消息明确阻断，不重建授权；低层forceInPlace入口停用。原会话生成输入另存运行态绑定，普通/明确元素/已确认局部区块均保留原始上下文，补挂前先比对，重开历史不补造。聊天和store共享“全部通过或只有结构差异可确认”语义，质量/来源/资源/渲染/任务必须通过。旧路由spec保留原文并标记直接覆盖语义废弃，详见invalidation.md IM-05。
+
+新增10项回归：旧候选只读/三种采纳、立即丢弃、并发无ID/新ID替换4项；点击前变更force/remount、丢弃结果不重授权、有效候选force/Undo、旧消息不采纳新任务5项；坏CTA不能force1项。另替换原raw-force成功用例为禁止旁路断言，保留真实结构确认UI正例，档案测试拒绝空白质量失败后再验证合格force交付模式。实际低层入口失败不增加History/checkpoint。
+
+负例/打回记录：首轮34/6的并发夹具未等资产审计持久化，补等真实队列；其后35/6的一项读了恢复前store对象，改读最新快照；最终36/5有效负例复现。修复首轮40/1及扩展88/1来自旧UI夹具缺合同/设备，换真实当前设备buildDesignTaskContract且保留实际点击。共享门禁后六文件90/0；首次全量2841/2为另一旧UI缺合同及档案测试要求质量失败仍force，按新合同改为真实合同及不应用断言。两文件22/0通过，全部日志保留，不隐藏失败。
+
+| 最终检查 | 结果 |
+| --- | --- |
+| bun test | 2843 pass / 0 fail / 18577 assertions / 245 files / 67.64秒 |
+| bun run type-check | exit0 |
+| bun run build | exit0，Vite2.73秒 |
+| Python浏览器脚本编译及git diff --check | 通过 |
+| 新增聚焦浏览器 | Chromium/WebKit，各mobile390/PC1440通过；无pageErrors/外部请求 |
+| 完整浏览器消费者 | 同上，含新输入矩阵、旧主题/功能规划/来源、资源、撤回、修复、分区/续写、独立入口、多页面及交付档案 |
+| 浏览器前后源码 | 742文件SHA256完全相同；运行中无源码/脚本/测试修改 |
+
+新增浏览器逐项证明AI归纳与导航metadata变化后，实际iframe可再次渲染complete而三种采纳均false，原HTML/History/冻结输入不变；两设备旧结果补挂点击前加AI文档后，按钮显示“重新发起”，不启动渲染、不多发请求、不新建页面或候选；旧无ID候选实际文件恢复后立即丢弃返回null。已查看WebKit移动端完整过期补挂截图，原因在错误卡可见。合成模型计数不等同真实Provider/费用或模型质量。
+
+原始证据按规则Git忽略：`evidence/2026-11-02-input-focused/result.json`、`evidence/2026-11-02-input-full/result.json`；全部中间/失败/最终日志和742文件前后指纹归档`evidence/2026-11-02-input-audit/`。原日志/private/tmp/taudesign-im05-*.log。Vite session13052已Ctrl-C结束；聚焦27809、完整17786均exit0。没有新真实Provider、人评、原生实机、打包、发布或Git操作；保留既有React act/预期错误日志。
+
+IM-05及IM-01当前遗漏输入修复验收，IM-02/03/04原完整矩阵继续；顶层仍18/27完成、9待完成，场景规则默认关闭，不宣布整体重构完成。
+
+
+## 2026-11-02 IM-06 检查依赖与最终提交
+
+有效负例187/8复现创建/导入render及验证返回后、重塑render/archive、多页render/ready句柄的检查版本变化仍写入。修复在验证器与最终提交所有者独立捕获renderEvidenceIdentity；多页首个实际验证至原子提交保持一致，ready句柄消费前再验。没有把检查身份加入TaskContract/知识输入或持久化schema，也不回填旧授权。
+
+本轮新增24项：上述8、坏/缺输入及持久化和CSS/UA/DPR8、修复缺/坏输入2、档案等待3模式3、纯画布1、直接验证器2。专项195/0、78/0、10文件324/0及直接验证63/0通过。当前全量2867/0、18740断言、245文件、67.89秒；类型exit0；构建exit0/Vite2.78秒；Python脚本和diff检查通过。
+
+新增聚焦和完整Chromium/WebKit mobile390/PC1440均通过，pageErrors/externalRequests均0。真实iframe新检查、旧回调拒绝、同候选采纳按钮、Undo/Redo/保存重开后entry为screens/page.html；模型调用仍1次。新页检查期间版本变化首次不创建，之后点击复验可零新增模型创建，原规划+生成仍2次、History只增加1。已查看WebKit移动端恢复完成截图。
+
+742源码/测试/脚本/构建输入前后SHA256一致，运行中无修改。原始结果`evidence/2026-11-02-epoch-focused/result.json`、`evidence/2026-11-02-epoch-full/result.json`；全部日志及指纹归档`evidence/2026-11-02-epoch-audit/`，按规则Git忽略。首次聚焦启动自动审批超时，未创建进程；按工具允许重试一次后42774终态0，完整67180终态0，Vite22301 Ctrl-C/130；未重复启动已有浏览器。没有真实Provider、原生、人评、打包、发布或Git操作，既有React act/预期错误未隐藏。
+
+IM-06当前切片通过。逐要求索引见invalidation-audit.md；静态审计另识别IM-07授权字段删除/兼容降级路径，须负例证明并收口前不放行M3-05。顶层18/27、9待完成，规则默认关闭。
+
+
+## 2026-11-02 IM-07与M3-05最终收口
+
+在IM-06完成后继续逐要求审计，删除可选taskBindingFingerprint会跳过原授权校验，同时删除合同与绑定也会降为legacy许可；修复入口同样未拒绝。新增5项回归首轮80/4，只有“删合同但保留绑定”原来已拒绝。每个新候选现在都记录原合同绑定或明确无合同状态，完整输入与原授权共用检查；旧缺失值只读，不补造。原有效合同绑定算法保持，坏/删除字段不能借新报告恢复许可。
+
+又加真实档案负例，16/1复现旧缺授权记录finish/get可读后换ID prepare被接受。新prepare要求原绑定一致，历史get/list/finish继续保留原记录；该测试不依赖预览ID不匹配等其它拒绝条件。共6项新增，六文件177/0；中间2872/0为档案补查前记录，最终如下。
+
+| 最终检查 | 结果 |
+| --- | --- |
+| bun test | 2873 pass / 0 fail / 18777 assertions / 245 files / 66.66秒 |
+| bun run type-check | exit0 |
+| bun run build | exit0，Vite2.71秒 |
+| bun scripts/verify-design-protocols.ts --output .../2026-11-02-auth-protocols/report.json | passed:true，16行，0失败，含当前源文件SHA256 |
+| 完整与聚焦浏览器 | Chromium/WebKit，各mobile390/PC1440通过，pageErrors0/externalRequests0 |
+| 源码冻结 | 742文件浏览器前后SHA256完全相同，运行中无修改 |
+| Python脚本及git diff --check | 通过 |
+
+新增浏览器在实际候选文件中删除授权绑定/同时删除合同，加载恢复后实际iframe仍complete，但三种采纳均false；冻结输入、原HTML及History不变、模型调用仍1。旧任务检查器更新拒绝旧回调，真实刷新后可按按钮采纳，Undo/Redo/保存重开entry为screens/page.html；另一个新页在检查中换版本后不写入，复验可零新增模型挂载，原规划/生成仍2请求、1次History。已查看WebKit移动端绑定缺失截图，禁用原因清晰可见。默认规则关闭。
+
+当前结果`evidence/2026-11-02-auth-focused/result.json`、`evidence/2026-11-02-auth-full/result.json`；协议结果`evidence/2026-11-02-auth-protocols/report.json`；所有失败/中间/最终日志与前后指纹归档`evidence/2026-11-02-auth-audit/`，原日志/private/tmp/taudesign-im07-*.log，均按规则Git忽略。聚焦51465及完整86164终态0，协议71702终态0；Vite16561已Ctrl-C/130。
+
+原IV-01至04与IM-01至07逐消费者/正反例/持久化/历史/浏览器证据索引见invalidation-audit.md。本轮按原范围关闭M3-05，AC-22/27/29更新当前证据，AC-25更新当前命令。顶层19/27完成、8待完成：M4-01/02/05及M5-01至05，真实模型对照、人评、macOS原生和其它平台/发布门槛不由本次受控结果代替。无新真实Provider、原生、人评、打包、发布或Git操作；已有React act与预期错误日志保留，不声称零警告。
+
+
+## 2026-11-02 M4 V4-NAME控件名称与可见性校准
+
+上一轮M3-05关闭是有效进展。本轮核对M4原范围，发现ContentObligation目前主要在简表展示，四分类findings及required/advisory尚待实现；先处理控件名称的确定性缺口，不把这一步等同M4完成。
+
+新增22例专用M4校准数据，来源是W3C对隐藏名称与显式引用的区分，不使用M5留出。源码14正/8负、渲染12正/10负，各22测试共44新增。首轮105/12复现：4种aria-hidden图标/祖先SVG-title或img-alt被两层接受；直接引用隐藏标签子树、SVG自身aria-label两种合法正例被两层误阻断。修复共享hasAccessibleActionName，隐藏元数据不借名，保留显式引用隐藏标签的例外；渲染不再本地兜底绕过共享判断，且仍要求图标实际可见。原文案丢失保护不放松。来源错误的actual区分图标无名称和空按钮，建议允许有名称纯图标。检查器版本升为render-checks-2026-11-02.3，旧报告须复验，原任务授权不重建。
+
+五文件专项256/0，CSS样例纠正后两文件117/0。首次聚焦浏览器失败源于样例.test-hide的display:none优先级低于真实编辑器.btn > .icon display:block，实际图标未隐藏；原JSON和匹配CSS规则诊断保留，改用[data-nid="control"] svg.test-hide表达原定状态，预期source=true/render=false及阈值保持。纠正后两引擎两档位22/22均通过。
+
+完整浏览器第一次报旧回调覆盖，静态核对发现IM-06脚本在await动态模块导入前取store快照，可能在等待期间已有正常报告更新。改为导入后读live状态，新增版本必须实际改变live key断言，再比较旧回调前后的整个live记录；冷启动已授权dev服务清除之前调试HMR状态。保留首轮失败、截图及当时源码清单，严格拒绝断言不放宽。
+
+| 最终检查 | 当前结果 |
+| --- | --- |
+| bun test（最终诊断文字补齐后） | 2917 pass / 0 fail / 18843 assertions / 245 files / 69.49秒 |
+| bun run type-check | exit0 |
+| bun run build | exit0，Vite2.67秒 |
+| Python验证脚本编译、git diff --check | 通过 |
+| 完整浏览器 | Chromium/WebKit mobile390/PC1440通过；每引擎pageErrors0/externalRequests0 |
+| 新校准矩阵 | 各引擎22 mobile+22 PC，共88组，源码/实际渲染及支持正例role名称符合冻结表 |
+| 校准其它严重问题 | 所有错误均属于预期control节点；正例无其它error |
+| 代码身份 | 最终744文件浏览器前后SHA256完全相同，过程中无源码/测试/脚本修改 |
+
+仅诊断校准：实际DefaultAIEngineCore的streamText/generateObject已计数并禁止调用，校准计数均0；不把常量冒充模型调用证据，不涉及真实Provider或费用。本次没有独立人工盲评/辅助技术验收、原生实机、打包、发布或Git。保留已有React act与预期错误，不声称零警告。
+
+最终原始结果`evidence/2026-11-02-action-name-final-ui/result.json`；校准分类汇总/数据SHA、初始与纠正后的JSON、全部负例/中间/最终日志和前后源码清单归档`evidence/2026-11-02-action-name-audit/`，按规则Git忽略。各次聚焦/调试失败另在action-name-focused/debug/css-debug路径，纠正聚焦在action-name-corrected；不拿中间结果代替最终源码证据。原日志/private/tmp/taudesign-v4-name-*.log。
+
+最终完整85577终态0；旧完整17491终态1且保留；两次Vite6183/45244均已Ctrl-C/130。已查看WebKit移动端直接引用隐藏标签子树的正例截图，与原失败的实际可见图标截图。最早两次2917全量是CSS/诊断文字补齐前中间记录，以evidence-full/final-types/final-build及最终source清单为准。
+
+V4-NAME当前切片验收，顶层仍19/27完成、8待完成，自动规则默认关闭。M4-01内容义务/其余布局校准、M4-02四分类与required/advisory及M4-05交付UI原范围继续，不用此22例宣称全面UI质量或M4已完成。
+
+## V4-FINDINGS 四类检查结果与采纳矩阵（2026-11-02，本轮）
+
+范围：M4-02的固定finding策略、兼容schema、实际源码/像素生产者、对话/画布/候选归档展示、必需/建议采纳矩阵。M4-01/02/05完整验收与M5仍开放，自动指导仍默认关闭。
+
+- 新增应用内检查注册表。支持的操作控件失败必需；渲染整体未完成派生显示为必需未验证；纯色对比度不足为建议类警告；渐变、图片、透明组、无法解析颜色的对比度为建议类未验证；组件SVG尺寸启发式为设计建议。
+- error/warning及既有stage枚举不变，旧合法报告兼容。schema拒绝未知checkId、状态、代码组合、额外等级字段及严重错误降级；遗漏元数据也不能把固定严重控件代码改成warning。非法实时报告转为不可用，创建（包括导入/多页公共路径）、重塑、候选/受控修复复用isPassedRender。
+- 共享列表展示分类、必需/建议类、实际值、预期和定位；候选存档复用列表，历史记录仅供阅读。源码消息只在htmlOutput与已挂载screen完全对应时启用定位，避免定位到原页或历史旧产物。
+- 47项新策略/schema/UI/三入口矩阵测试，另新增创建和重塑严重错误不得降级两项。覆盖替换、结构确认替换、两版保留，必需失败/未知与普通建议混合仍拒绝；建议类未知/警告/建议可在必需通过后采纳。候选文件及交付仓库按真实结果页面ID读回metadata。
+
+### 回归与打回记录
+
+| 检查 | 结果 |
+| --- | --- |
+| 首轮生产负例 | 83通过/2失败：复杂背景被无说明跳过，未完成卡片缺必需未验证；修复后106/0 |
+| 类型预检 | 原类型谓词导致失败分支never；收紧成功谓词为complete子集后通过 |
+| 扩展矩阵首轮 | 80通过/4失败：SVG夹具漏组件适用条件，两版保留误查原页归档；按真实条件/结果ID修正，84/0 |
+| 全量首轮 | 2962通过/2失败：旧创建/重塑夹具把严重控件代码直接降成warning；改用真实对比度warning并各补降级拒绝测试 |
+| 最终bun test | 2966通过/0失败，19055断言，246文件，68.47秒 |
+| 随后bun run type-check | exit 0 |
+| 随后bun run build | exit 0，Vite 2.69秒 |
+| Python语法与diff检查 | 通过；后续最终状态再核对 |
+| 浏览器聚焦首轮 | 新夹具不稳定回调造成pending循环，30秒超时；终态后停dev，固定useCallback，不改生产逻辑和超时断言 |
+| 聚焦复验 | Chromium/WebKit各mobile/pc通过，真实Frame得到纯色warning、渐变/图片未验证、控件error及源码SVG建议；节点回传action01，不可用状态披露，页面错误/外部请求均0 |
+| 完整浏览器回归 | Chromium/WebKit mobile390/PC1440均通过；两引擎pageErrors=0、externalRequests=0；新增finding检查纳入默认完整脚本 |
+
+上述浏览器使用受控Core/MockTransport或明确禁止模型调用的独立夹具，不发送真实Provider请求，也不写用户工程。图标/长文案/角标整体校准、逐检查不适用依据及人工语义验收仍按M4剩余原范围推进；不能据本切片宣布整体重构完成。本轮未运行Rust/原生实机/打包发布或Git提交。
+
+### V4-FINDINGS 最终证据
+
+完整结果：[双引擎/两设备result.json](./evidence/2026-11-02-findings-final-ui/result.json)。独立聚焦结果：[findings focused](./evidence/2026-11-02-findings-focused-final-ui/result.json)。审计汇总：[verification-summary.json](./evidence/2026-11-02-findings-audit/verification-summary.json)，原始日志及两轮源码指纹均在同一audit目录；首轮失败截图保留在findings-focused-ui。
+
+652份源码/测试/脚本/构建配置（按列出的源文件扩展名收集，不含文档和二进制）在最终浏览器前后SHA-256完全一致。浏览器期间无生产源码/夹具/脚本热修改；唯一夹具回调修正发生于首轮浏览器终态并停止dev之后。最终完整回归结束已停止本地Vite（exit130），浏览器进程terminal exit0。
+
+本切片验收通过，不关闭M4-01/02/05完整任务。尤其逐检查不适用依据与内容义务人工语义边界尚需结合后续检查接入；当前19/27顶层完成、8项开放。49项新增测试（47项finding策略矩阵＋创建/重塑各1项降级拒绝），总计2966/0。
+
+## V4-CONTENT 明确按钮原文检查（2026-11-02，本轮）
+
+范围：M4-01的字面原文子集，不等同完整内容义务/业务功能验证，不关闭M4-01/02/05与M5。
+
+### 实际改动
+
+- 新增共享explicitActionContent：只从当前冻结用户请求的明确独立引号句式提取操作原文；引用/代码/示例/条件/禁止语境不升级为必需；多页总要求不直接套到每一页。项目知识、上传文档和模型规划不会经此自动变成硬要求。
+- 简表默认展示这些用户原文字面义务；现有手动传入语义/文档义务仍保留其来源，不伪造已验证。
+- 共同源码检查要求原文完整位于操作控件文本或按钮value。aria/title/placeholder、SVG标题、旁文及选区外文字不借名，按NFC/排版空白比较，不用NFKC把全角数字换成另一原文。读取直接文本节点，不写回DOM。
+- 实际iframe检查隐藏、透明、字号零、Range几何和裁切；复杂变换/裁切/滤镜及其他不支持效果为required/unverified。只确认支持范围内的字面原文，不证明主操作角色、业务结果或全部光学字形。
+- 新建（含公共创建路径）、候选交付/存档、重塑和受控修复使用冻结任务request/elementNid；Pipeline终端、草稿及画布预览使用同一规则。已有页面不自动改写，明确小改不加确认。
+- 新finding策略required-action-text/support绑定应用等级，不能省略metadata或降成warning。检查器版本提升为render-checks-2026-11-02.5，旧证据须重验，原任务输入不变。
+
+### 负例、修正与最终代码回归
+
+| 项目 | 结果 |
+| --- | --- |
+| 首轮源码负例 | 12通过/7失败，缺原文/旁文/aria/隐藏/选区外借名及字符不符未被检出；原日志content-negative保留 |
+| 首轮实现专项 | 102通过/2失败：两个样例同时含目标原文与旧文案导致源码不匹配；改用可见有名称图标表达原定CSS/字号可见性边界，预期不变 |
+| 裁切专项 | 126通过/1失败；HappyDOM未将overflow简写展开到computed overflowX/Y，用等价轴属性表达原场景 |
+| 集成矩阵 | 首轮200通过/1失败，新增测试误从HistoryStore读取screenOrder；修正为ProjectStore后201/0 |
+| 语境校准 | 示例原文恰好叫“仅为示例”暴露引号内文字被当语境；改为独立提示行前缀，并新增条件/否定/示例段落边界 |
+| 第一轮全量 | 3041/0；补语境后3056/0；均为中间快照，不替代最终结果 |
+| 最终bun test | 3062通过/0失败；19171断言；247文件；70.42秒 |
+| 随后bun run type-check | exit0 |
+| 随后bun run build | exit0，Vite2.73秒 |
+
+96项新增：30源码、30提取、30渲染、6简表/schema/创建与三种采纳集成。30例为M4专用校准，不使用M5独立留出：源码21正/9负；渲染16正/14负，其中3例必需未验证（变换/裁切/滤镜）。
+
+### 浏览器证据与截图根因
+
+初轮30例×双引擎×双设备120组实际报告一致，但复查截图发现报告卡可能被截图过程重新触发pending。先加稳定250ms和具体finding.message断言，再由本机Playwright driver源码screenshotter.js确认：WebKit截图同步动画时在frame内临时加入并移除空body样式；hideCaret还会对input改style。真实观察器应当继续响应，不能通过忽略这些文档改动来放宽生产门禁。两轮完整运行主动中止，不作为通过；原始日志、截图和当时源文件指纹保留。
+
+最终专用夹具截图态明确标记“刚刚验证的已完成检查记录”，仅固定刚通过真实DOM和具体UI断言的报告卡显示值；观察器继续运行并记录所有截图期间回调。截图后恢复live报告，再等待稳定并核对同一预期。每张快照的报告finding必须等于截图前真实检查结果。未在生产代码增加Playwright特例、阈值例外或暂停检查开关。
+
+加强后的聚焦120组通过，页面错误/外部请求均0；所有120组恢复live后复验。实际截图期间pending：WebKit60/60、Chromium2/60，与临时样式及input caret修改相符。人工查看WebKit隐藏文字及裁切截图，已显示具体阻断/未验证，且有清楚快照标记。
+
+最终完整浏览器复验已通过：Chromium/WebKit mobile390/PC1440均通过，pageErrors与externalRequests均为0，默认完整脚本包含本次120组校准及截图后实时复验。本轮不发真实Provider请求、不写用户工程，不执行原生实机/打包发布/Git任务；自动指导仍默认关闭。
+
+### V4-CONTENT 最终验收证据
+
+- [完整双浏览器结果](./evidence/2026-11-02-content-verified-ui/result.json)与[独立内容校准](./evidence/2026-11-02-content-capture-ui/result.json)。原始较弱截图/断言的结果保留为中间证据，不替代这两份最终结果。
+- [审计汇总](./evidence/2026-11-02-content-audit/verification-summary.json)、最终前后SHA-256、所有负例/中间/最终日志、两次主动中止记录在同一audit目录。656份源码/测试/脚本/构建配置指纹一致，排除文档和二进制。
+- 全量单测/类型/构建之后，仅修改了独立浏览器HTML和验证脚本以修复截图证据；应用源码、Bun测试和校准数据不变，差异清单[harness-delta.json](./evidence/2026-11-02-content-audit/harness-delta.json)。最终浏览器对这两个实际更改文件重新验证，没有在运行期间热改。
+- 最终浏览器exit0；验证结束后本地Vite已停止（exit130）。共412张完整回归截图，内容校准截图明确标记已完成检查快照；截图期间pending保留在result中，所有样例恢复实时后复验。
+- V4-CONTENT本切片通过。顶层仍19/27完成、8项开放；没有将字面原文检查等同于功能完整性、真实模型质量或M4/M5整体通过。
+
+## V4-LAYOUT 布局边界与适用性（2026-11-02开始，2026-11-03收尾）
+
+原M4-01/02范围；不增加交互原型、不默认开启指导、不使用M5留出调参。
+
+### 改动与语义
+
+- 以computed white-space识别自然多行，内联与scoped来源一致；nowrap里的实际多行仍警告。
+- 通知角标仅在图标外角接触时，不根据矩形推断墨迹遮挡，记录建议类未验证；覆盖中心、正文范围或过大仍警告。支持普通平移，复杂变换记录未验证，不改成图标角标并排。
+- 严重正文窄列原阈值保持；新增span/strong等内联正文只读遍历。控件、表格、代码、隐藏文字不计入正文；跨复杂变换不混算。测量节点超预算报告incomplete，不能采纳。
+- 新可选report.coverage固定reason/count/nids，应用注册reason决定检查及不适用/未验证语义；不能传passed或requirement。旧报告无新字段保持可读；非法字段/计数/重复原因/节点样本拒绝，报告卡不显示无问题。
+- 控件隐藏/禁用、特殊正文布局、允许多行、复杂变换、外角接触、透明墨色与超预算等分支按实际记录；不是完整CSS能力清单。说明提供有限节点样本，现场finding沿用实际定位；历史仅回溯，不跳到旧节点。
+- 适用性摘要接入画布报告与候选/交付存档，未知建议不误阻断。required失败、未完成或明确原文不满足仍在替换、结构确认替换和两版保留拒绝；禁用控件的inactive说明也不能豁免字面义务。
+
+### 单测与回归
+
+| 阶段 | 结果 |
+| --- | --- |
+| 首轮负例 | 108通过/3失败：scoped多行误报、外角误报、禁用无说明 |
+| 第一轮专项 | 122/0；策略/仓储矩阵158/0 |
+| 嵌套正文负例 | 111通过/1失败；修正只读遍历和正文专用行数，不降阈值 |
+| 测量预算负例 | maxNodes不足时原来complete；现incomplete并说明正文预算 |
+| 中间全量 | 3097/0、3098/0、3099/0（19290断言）；保留各快照原日志 |
+| 最终bun test | 3099/0，19323断言，248文件，68.31秒 |
+| 随后type-check | exit0 |
+| 随后build | exit0，Vite2.71秒；原大chunk提示保留，未更改打包限制 |
+
+37新增：32项coverage schema/UI/采纳与真实仓储读回，5项几何/嵌套/预算回归。schema负例覆盖未知原因、伪造passed/grade、非法计数/样本、重复原因；有效advisory说明在所有required通过后仍可采纳。
+
+### 实际画框与完整回归
+
+26个M4专用样例，原生Token与导入型scopedCSS组件，Chromium/WebKit mobile390/PC1440共104组聚焦通过；严重/中等正文、嵌套正文、纵向/换行/竖排/截断/表格、正常角标/外角/核心/文字/过大/平移/隐藏/变换、自然标签/强制多行/姓名职业、居中/偏移图标等。检查器版本render-checks-2026-11-02.6。人工查看外角与嵌套严重正文截图，分类和具体原因一致。截图使用上一轮已验证的标注快照机制，检查器继续运行，截图后回到live复验。
+
+完整首轮在既有independent-activity checkbox失败（30秒element-not-stable），未force点击。独立双引擎两档位复现全部通过；原失败图显示rule-control夹具没有生产的满高约束，h-full退为auto撑高文档至1508px。终态后停dev，补html/body/root高度与overflow边界，脚本断言根高度不超viewport；不改生产滚动或放宽稳定性。修正后独立四组合与最终完整双浏览器均通过；根高度断言保留，没有force点击或放宽超时。
+
+本轮没有真实Provider请求、用户工程写入、原生实机、打包发布或Git操作。M4-01剩余检查与M4-05交付链/M5仍单独验收，不能从几何校准声称完整功能或审美保证。
+
+### V4-LAYOUT / M4-02 最终证据（2026-11-03）
+
+- [当前完整result.json](./evidence/2026-11-03-layout-verified-ui/result.json)，Chromium/WebKit mobile390/PC1440全部通过，pageErrors/externalRequests均0。包含原88组名称、120组原文和本轮104组布局，所有布局截图后恢复live并复验。
+- [布局聚焦result.json](./evidence/2026-11-02-layout-focused-ui/result.json)；[满高修正独立交互复验](./evidence/2026-11-03-layout-independent-fixed/result.json)。原完整失败和首次独立复现均保留，不冒充最终通过。
+- [审计汇总](./evidence/2026-11-02-layout-audit/verification-summary.json)、源文件前后SHA-256、所有原始/中间/最终日志均在layout-audit。661份源/测试/脚本/构建配置在最终浏览器期间完全一致，不含文档/二进制。
+- [harness-delta](./evidence/2026-11-02-layout-audit/harness-delta.json)：应用/Bun测试源码在单测/类型/构建后未变；后续只改rule-control浏览器容器和验证脚本，当前完整浏览器已重新验证。
+- 最终浏览器exit0；本地Vite已停止（exit130）。验收M4-02与AC-17/28，见[逐项审计](./validation-level-audit.md)。顶层20/27完成，7项开放。M4-01全部内容/组件、M4-05交付链及M5仍须按原范围完成；规则默认关闭不变。
+
+
+## V4-DELIVERY / M4-05 交付链验收（2026-11-03）
+
+对应[交付链审计](./delivery-audit.md)。macOS本机Bun、Chromium145.0.7632.6与WebKit26.0；仅独立夹具和受控Core响应，无真实Provider调用或用户工程写入。检查器身份`render-checks-2026-11-03.7`。
+
+### 变更与负例
+
+明确按钮原文已经存在、仅控件自身字号/尺寸失效时，原错误类型白名单未包含原文可见性错误；选中区块时错误nid还会落到容器。新增共享`styleRepairEligibility.ts`，先验报告schema和源码原文，要求唯一实际操作控件及自身零样式/同控件可修复测量证据；精准定位唯一文案承载控件。保留原一次1800输出、最多3控件/8操作与样式属性白名单，不增修复额度。
+
+先失败专项180通过/3失败，再按原预期修复。最终专项201/0、789断言、4文件、3.47秒；新增21项包括实际创建/候选/定位3项、资格14项和坏/不完整报告4项。错/空/旁文、子节点未知、重复源匹配、错误nid、未知错误、坏coverage/assessment/findings均不开请求。现有文本/SVG/链接/颜色/子树禁改、保护和范围交集、超限、预算、迟到/取消/保存预约失败、独立复验不通过等回归保留。
+
+### 依次执行的完整门禁
+
+| 命令 | 结果 |
+|---|---|
+| `bun test` | **3120 pass / 0 fail**，19353断言，249文件，66.81秒 |
+| `bun run type-check` | exit0，`tsc --noEmit`无类型错误 |
+| `bun run build` | exit0，Vite2.67秒；保留既有超过1600kB的chunk提示 |
+
+保留既有预期错误/React act日志，不声称测试输出零警告。后续只调整浏览器脚本与HTML夹具，生产/Bun源码不变，差异与指纹归档`harness-delta.json`。
+
+### 实际UI、持久化与浏览器
+
+- `verify-candidate-actions.py`：Chromium/WebKit × mobile/PC × 放弃/替换/两版/重新stage，共16组。使用真实InfiniteCanvas工具栏；结构确认用Space，未确认禁用且原因可见；重新stage清除旧确认，wheel不穿透。检查mask/原版/候选/工具栏实际z顺序、elementFromPoint及真实mask点击，其他页面不能被误选。8组采纳保存后真实reload并读应用仓储，源HTML/数量/档案applied/undo/redo一致；0模型调用、0pageErrors、0externalRequests。
+- `verify-candidate-repair.py --explicit-text`：两引擎两设备4组，每组实际修复按钮→1次受控JSON请求（1800输出）→1次独立iframe复验→用户采纳→History+1→undo/redo→保存重开和修复回执。原页在采纳前不变，文案/SVG/其它节点/L4保留。另每组非法set_text、取消、受保护和越界4种，共16个拒绝分支；失败/取消记录保存后不可重试；0pageErrors、0externalRequests。
+- `verify-delivery-history.py --candidate-preview`：两引擎主应用未采纳预览存盘，重开时只恢复历史图而清空旧render许可，重新实际检查；候选和交付PNG确实decode，临时预览清理及交付History保留。浏览器PNG，不冒称原生PNG。
+- `verify-design-evidence.py`最终完整运行exit0：Chromium/WebKit mobile/PC全部原流程、来源、取消、失效、样例与截图后live复验通过；原88名称/120原文/104布局组合也通过；0pageErrors、0externalRequests。
+
+已视觉查看WebKit mobile修复记录和Chromium PC比较蒙版。Playwright截图可能临时触发pending，图中等待不作为通过；实际采纳仍等待真实按钮并重新经交付门禁，不注入假报告或force点击。
+
+### 工具栏打回与最终身份
+
+首次工具栏Chromium mobile放弃、替换/保存重开通过，两版undo数量失败（exit1）。终态后停Vite（130），诊断真实History发现额外“页面加长避让下排”：新蒙版测试页y950进入实测高度＋120px间隔，引发独立排布。将夹具放到同排独立列，设置初始检查视口；保留原单次undo数量/原文断言，不改生产History或排布逻辑，不放宽门禁。第一次和诊断日志/图均保留。
+
+最终663份源码/测试/脚本/构建输入SHA256前后一致，无运行中修改。原始证据按规则Git忽略：`evidence/2026-11-03-delivery-audit/`含初始/失败/最终日志、指纹和`verification-summary.json`；`2026-11-03-delivery-actions-final/browser.json`、`2026-11-03-delivery-repair/`四报告、`2026-11-03-delivery-history/`两报告及`2026-11-03-delivery-complete-ui/result.json`含详细结果。最后Vite session31032已停止exit130，其余验证进程终态exit0。
+
+按原前端范围验收M4-05与AC-18，顶层**21/27完成、6项开放**：M4-01、M5-01至05。AC-20的原生副本继续待M5-03；本轮未重跑Rust/原生、未运行真实模型或独立人评，Windows/Linux缺口保留，规则默认关闭。没有Git提交/推送、安装包或发布。
+
+
+## V4-FIELD / V4-CLOSE / M4-01 验收（2026-11-03）
+
+对应[内容与控件审计](./content-check-audit.md)、[字段合同与校准范围](./validation-findings.md)。本机Bun、Chromium145.0.7632.6、WebKit26.0，mobile390/PC1440；全部本地夹具，无真实Provider或用户工程写入。最终检查器`render-checks-2026-11-03.9`。
+
+### 实现与先失败证据
+
+- 用户独立明确的字段标签原文进入共享段落语境提取、简表及实际Prompt；引用/示例/代码/条件/否定/多页不升级为新义务。字段对象与同文案按钮分别展示，旧无target简表兼容。
+- `explicitFieldContent.ts`校验原生label唯一for/id或唯一隐式控件关联、授权范围和DOM原文；嵌套控件值/选项和aria-hidden装饰不混入标签。占位符、旁文、aria命名、隐藏/缺失/重复关联均不能替代原文。
+- 共同generationQuality/实际iframe检查、固定finding策略、创建/三采纳/仓储读回及独立复验；字段错误不能借按钮样式修复额度。复杂文字效果维持required未验证，不伪造通过。
+- 字段label/内联文字使用display:contents时，只豁免容器自身盒子的判断，仍读CSS可见性、字号/墨色与真实文字Range；不放宽按钮点击区域或其它底线。所有读取只读，不改DOM文本/结构。
+
+首轮25例源码负例：14 pass/11 fail（`field-negative`）；随后核心专项110/0，扩展294/0。提前类型检查发现简表异构数组target的TS2339两处，补明确映射返回类型；未删target去重或降低类型检查。display:contents零盒子负例139/1，修复后专项**298 pass/0 fail，409断言，5文件，3.75秒**。
+
+本轮新增94项：26源码、26提取、26渲染、5语境、简表/Prompt/元数据与精确定位、创建与三采纳/重开、拒绝借样式修复及UI展示/零盒子回归。另新增6个M4布局校准数据（姓名职业正常/裁切、纯色足够/不足、RGBA合成和opacity组），不新增生产阈值/审美阻断，不用M5留出调参。
+
+### 最终依次全量门禁
+
+| 命令 | 最终结果 |
+|---|---|
+| `bun test` | **3214 pass / 0 fail**，19478断言，250文件，70.30秒 |
+| `bun run type-check` | exit0，无类型错误 |
+| `bun run build` | exit0，Vite2.72秒，保留既有大于1600kB chunk提示 |
+
+中间3210/0、68.53秒及69.68秒为display:contents修正前的已完成记录；不当作最终版本。既有React act和预期错误日志保留，不声称全测试输出零警告。
+
+### 真实Frame及完整UI
+
+- 初轮25字段100组合通过，源码版本与结果单独保留；发现零盒子边界后停Vite，再扩展26例与真实负例。`focused-to-final-delta.json`明确记录实际生产/测试/数据变化，不声称只是测试夹具修正。
+- 最终26字段：源码15正/11负，渲染12满足/13失败/1未验证，其中2例无义务语境排除；四个引擎/设备组合共**104组**。实际关联/原文/复杂效果分类、简表字段对象、具体提示、真实检查记录快照及截图后live恢复均通过。
+- 最终32布局：**128组**，新增姓名职业正常无误报、裁切有定位警告；低对比度为诊断警告，RGBA已知纯色合成正常，opacity/渐变/图片等不支持的背景披露未验证。未改变原严重正文/控件错误或角标诊断阈值。
+- 最终`verify-design-evidence.py`完整双引擎mobile/PC exit0：原88名称/120按钮原文＋104字段/128布局，共**440校准组合**及全部原流程、规则来源、取消、修复、授权/输入失效、旧历史、资源证据和采纳回归均通过；**0pageErrors、0externalRequests**。
+- Agent视觉自查：字段有效关联、滤镜必需未知、display:contents；姓名职业正常/裁切；纯色低对比度、RGBA合成、opacity组及渐变/图片背景。calibration截图标明已完成记录快照、检查器仍运行并截图后live复验。findings总览截图可能因WebKit截图操作临时pending，仅以其真实complete报告字段断言通过，不把图中等待态当证据。此自查不是M5独立盲评。
+
+666份已登记源码/测试/脚本/构建输入前后SHA256一致。最终Vite输出两次`web/index.html`变更提示；该路径为Git忽略的独立宣传页，当前应用入口为根index.html及src/main.tsx、验证夹具也未导入web目录。所有实际流程及对应指纹/报告通过；未因此修改应用或强制跳过检查。最后Vite session81791已停止exit130，字段60288/布局81299/完整82405均终态exit0。
+
+### 归档与结论
+
+本地忽略证据：`evidence/2026-11-03-field-audit/`含原始失败、中间/最终日志、source-field-focused/source-before/source-after及差异、verification-summary；`2026-11-03-field-final-ui/result.json`、`2026-11-03-m4-layout-final-ui/result.json`和`2026-11-03-m4-complete-ui/result.json`及图为最终依据。可重跑代码/数据保留在仓库。
+
+按原“可靠阻断子集＋诊断校准”范围关闭**M4-01、AC-15/16/33**；M4代码与浏览器范围完成，顶层**22/27完成，5项开放（M5-01至05）**。并不宣称任意自然语言、业务语义、完整无障碍、任意CSS、真实模型收益或美感均能自动验证。AC-14/20原生部分、真实工程/HTML与原生PNG、双人盲评、Win/Linux实机和发布边界保持原状态。设计规则仍默认关闭，本轮无新原生/Rust、真实模型、独立人评、Git提交推送或打包发布。
+
+
+## M5-01 正式离线评估（2026-11-03）
+
+遵照用户新验证节奏，仅运行影响模块：`bun test test/design_offline_evaluation.test.ts test/design_calibration_report.test.ts`，**8 pass/0 fail、43断言、2文件、663ms**。新合成测试不使用实际留出期望调参，覆盖独立分母/弃答、固定.85/.95门槛、空正/负分区、汇总不一致、禁止规则不被删、family/id/分区非法。原开发校准仍不读取留出query。
+
+新增正式CLI `scripts/evaluate-design-offline.ts`和`offlineEvaluation.ts`。独占写入input-manifest预留首轮，即使中途失败也不覆盖；冻结全部designKnowledge模块、脚本、数据、package/bun.lock的SHA256，评分后再核对。首次正式执行exit0：校准21/21正、19/19负；留出10/10正、10/10负；单独范围审计及forbidden均0，全部离线门槛通过。没有改目录、别名、冻结数据、门槛或删失败；所有行均保留。baseline留出也全对，因此不推断实际生成收益。
+
+本地原始证据`evidence/2026-11-03-m5-offline/input-manifest.json`、`report.json`；原日志/private/tmp/taudesign-m5-offline-{focused,result}.log。M5-01及AC-23按完整离线范围关闭，23/27完成；M5-02至05仍待真实生成、人评、原生、放行与交付。阶段未运行全量、完整UI、构建、模型、用户工程写入或Git任务；之前3214全量只保留原M4版本范围，全部开发完后再执行一次总验收。
+
+
+## M5-02实验计划、统计及盲评工具阶段（2026-11-03）
+
+本阶段仅相关测试，未全量或实际调用模型。
+
+- 新experiment模块固定24对48任务，独立随机调用/左右、完整计划与模型/主题/预算/源身份；盲包不带mode/seed。任务/评阅身份及费用不合法拒绝，缺失/取消/失败保留24/48分母；中位数包括失败，仅完整记录才给比较。>=2名独立真人声明，四轴评分+可采纳性，争议/缺评不算胜；不可采纳的平局不算半胜。
+- 首轮10通过/4失败暴露评阅数量、无效平局、零请求passed和空身份，按原标准修复。初版CLI测试18/1由于Happy DOM Blob不被Bun.spawn stdin接受，改标准Node管道，业务CLI继续实际子进程执行。
+- CLI准备/盲包/未完成拒绝验收实测、统计和模板合计**19 pass/0 fail、104断言、3文件、285ms**。全为独立临时目录、synthetic-cli-test身份，无模型或真人评阅。
+- 聚焦新模块/脚本及依赖类型检查：/tmp配置需指向工程@types，随后暴露旧格式纠错Error/SyntaxError结构窄化；改为先识别专用FormatError再读message，原异常guard/语义保持。实际相关格式和实验回归**27 pass/0 fail、125断言、4文件、548ms**；聚焦类型检查exit0。没有运行全盘类型/测试/构建来冒充当前验收。
+- 新本地盲评HTML：Chromium/WebKit真实填写/下载/恢复及输入转义、缺项和外来计划拒绝均通过，0pageErrors/0externalRequests。自动点击的human声明只为合成UI回归，planId固定synthetic-ui-only；报告humanReviewPerformed=false、modelRequests=0。不是两名真人，也不计正式实验。
+
+证据：/private/tmp/taudesign-m5-experiment-{negative,retest,fixture,review,cli,cli-retest}.log、taudesign-m5-integration-related.log、taudesign-m5-focused-type*.log、taudesign-m5-review-ui.log；evidence/2026-11-03-m5-review-ui/result.json及截图。代码/数据/受影响测试保留。M5-02仍待真实执行器、48任务及独立评阅；M5-03至05继续，23/27完成，当前未做总验收、真实模型、原生、Git或打包发布。
+
+## M5执行器、原生副本与放行工具专项（2026-11-03）
+
+- 长页面“不要拆成多个页面”首轮97/3，修正显式否定分流后与执行器105/0、391断言通过。独立正向多页要求保留。
+- 请求账本、取消/凭证/协议、恢复和统计相关28项145断言通过；后续放行/用户偏好合计41项195断言通过。CLI缺证据与新账本最后20项102断言通过。Python日志恢复/OS互斥锁/输出隔离/只读哈希/符号链接拒绝7项通过。
+- 聚焦执行器与脚本类型检查通过。新CLI首次Bun专属ImportMeta.dir类型失败，改用标准fileURLToPath；原日志rollout-types保留，复验rollout-final-types通过。
+- 实际DOM：Chromium/WebKit×mobile/pc×create/local/repair/source-reject共16组通过。新建与局部走实际Core/Pipeline/Store/源/资源/iframe；一次修复前后真实渲染；合成模型0次真实Provider、0真人。源安全首轮把warning unknown_class误设error，修正测试为明确禁止的内联事件，不改产品等级。首次与最终目录m5-trial-ui/m5-trial-ui-fixed均保留。
+- 原生：真实Tauri两工程只读副本save→退出自有进程组→全新进程reopen，采纳undo/redo、History、待采纳候选不能复用旧渲染、HTML与4张native-webview-pdf PNG通过。全部原文件SHA未变。首轮脚本误读仓储screenOrder失败保留m5-native-focused，修复后m5-native-retest通过；目视核对移动修复样页及真实移动旧页导出。Windows/Linux未执行，沿用已确认缺口。后续源码冻结后最终复验，不以专项报告替代当前完整验收。
+- 新放行CLI只读本地开发证据重算，缺人评/未知中断成本/过期输入/未完成原生或全量均保持optional；应用编译默认false，手动opt-in及历史成果不受影响。
+
+阶段未执行全量Bun/type/build、真实48模型任务或独立人评；M5-02至05保持开放。准备进入全部代码完成后的最终验收，详细命令与证据策略见m5-delivery.md。
+
+## M5首次完整链与生产Schema缺陷打回（2026-11-03）
+
+`verify-design-delivery.py`首次完整链通过：3263/0，19705断言，256文件，69.34s；type-check 3.74s，build总6.42s（Vite2.84s），完整Chromium/WebKit554.10s，原生17.51s。425运行源、719含测试输入前后一致；原生2真实工程副本、save/退出独立进程/reopen、4张native-webview-pdf、原工程SHA不变。生产构建有既有大块体积提示，未为压掉警告提高阈值。该证据对应ce5e33f7源，**不是后续Schema修复源的验收**。
+
+随后真实DeepSeek/`deepseek-flash`实验暴露Core→AIService Schema丢失。原4ca18e2b的8失败全记录、1中断measurementComplete=false、39未启动保持固定48分母；实际已报告输入4844/输出24576为已知下界，不伪造中断费用。中止并打回，不删除首轮失败，不改目录/留出/阈值或只重试较差组。
+
+Schema修复后：实际fetch及Rust IPC负例首轮0/7，修复后54/0。相关12文件首轮150/6，改共同Schema前缀保留原协议前缀且允许JSON字段内HTML后156/0、865断言、4.03s；聚焦类型通过。真实DOM16组双引擎通过。新测试覆盖4协议Schema实际出站、幂等一次注入、预算/用户消息不变、未知端点/模型不猜vendor参数、普通文本思考配置不变、实际单请求JSON解析及Rust IPC body。证据/private/tmp/taudesign-m5-schema-{wire-negative,wire-related,integration,integration-fixed,focused-types}.log与evidence/2026-11-03-m5-schema-trial-ui。
+
+新fb58b984计划与修复源冻结，全部48真实任务、48请求、8图片已完成。baseline/contextual各4通过20失败；30待确认问题、10规划格式/来源/范围拒绝，均安全未交付，不能宣称新建质量通过。两组输入/输出实际usage39208/12265及38544/12766；输入中位数同1287.5，耗时中位数3107.70/3129.71ms，约+0.71%，测量完整且无usage估计。8通过仅局部场景；40无渲染不冒称无布局问题。人评尚缺，已提供具体本地盲评表单并请求两份独立真人JSON路径；即使4可用对全胜，0.167仍不足0.60，指导保持默认关闭。
+
+修复后最终链已启动：全量3277/0（19753断言、257文件、74.10s），类型/构建通过；完整双浏览器和原生终态待归档。后续只核对该冻结源的最终证据；本轮未Git提交、打包安装或发布。
+
+
+## RG正确生成与最终评阅交付（2026-11-03）
+
+相关回归：规划/预算/分区/历史/思考/评阅等8文件75/0（811断言）；传输/实验/统计相关4文件41/0（214断言）；Python日志恢复与401/402/403/429熔断7/0；聚焦类型通过。首轮分区预算、独立续写分配与旧请求次数断言失败均保留/private/tmp/taudesign-rg-*日志，按m5-delivery.md范围修正，未放宽源/预算门禁。合成评阅表单Chromium/WebKit通过：2输入对仅1可评分，真实下载/恢复、缺图不能评分；humanReviewPerformed=false。
+
+完整验收权威目录[evidence/2026-11-03-rg-final-acceptance-v2/result.json](./evidence/2026-11-03-rg-final-acceptance-v2/result.json)：
+
+- `bun test`：3286 pass/0 fail，19802断言，258文件，73.05s。
+- `bun run type-check`：exit0，3.47s。
+- `bun run build`：exit0，6.35s；保留既有Vite大块体积提示。
+- 完整Chromium/WebKit：exit0，569.19s，两个档位/所有登记入口及原文、字段、布局、候选失效等实际UI通过。
+- 真实Tauri：exit0，20.49s；smatch/pc01两个工程只读临时副本，保存→自有进程退出→新进程重开、候选旧渲染不能复用、采纳Undo/Redo和History、HTML与4原生PNG通过，原始全部文件SHA不变。
+- 426运行输入、722含测试输入冻结不变；日志各有SHA。首次3285全量的浏览器ESM双实例失败、随后实际检查器/候选仓储资源URL修正与聚焦双引擎通过保留rg-final-acceptance及rg-checker-related[-v2]。不以改错实例或降低真实Store身份断言验收。
+
+真实生成：rg-development-preflight首批4/6、第二批rg-development-preflight-v2为6/6；余额不足rg-review-generation批次4/48保留。用户充值后实际Schema探测200，rg-ready-generation完整48任务、42首轮/47最终通过、47PNG；r6830afac内联事件安全拒绝。单列rg-delivery-review/recoveries/r6830afac/1真实重生成成功，最终交付48张但原实验仍47/48；各记录原SHA保持，源安全未绕过。
+
+[新版交付评阅页](./evidence/2026-11-03-rg-delivery-review/review/review.html)：24组48图、独立reviewId，不替代原实验统计。[实际浏览器检查](./evidence/2026-11-03-rg-delivery-review/review-check.json)：Chromium/WebKit各48实际PNGdecode成功、24评分卡、32可滚动长图面板、0页面错误/外部请求/缺图占位，未预填人评。content-check.json抽查20页明确字段/金额/项目/8章节无缺失；contact-sheet及首末页截图供可视复核。此处只证明产物可评阅，机器检查不代替实际语义、视觉质量或独立真人偏好。未调用额外Provider、未发送用户工程正文、未Git/打包发布。M5-02/04/05仍开放。
+
+
+## 用户角标评阅后修复（2026-11-03）
+
+当前新版本3292/0、19812断言、258文件、72.01s；类型/构建exit0（3.49/6.37s），源码/测试输入哈希不变。新6项相关188/0；真实双浏览器两设备44几何组合、34校准样例136实际ScreenFrame组合通过；4页修正图8次实际重渲染无模型费用，原图与评分不变。首次夹具入参及省略网格结束线导致显式全宽失败的日志保留。完整证据与评分汇总见[badge-anchor/test.md](../badge-anchor/test.md)。本次没有重新做完整原生/全部入口UI验收，也没有重新生成48实验或默认启用；此前完整链仅对原冻结版本有效，新影响范围由上述真实浏览器覆盖。
+
+
+## 用户反馈后当前完整验收（2026-11-03）
+
+权威为../conversation-readability/evidence/2026-11-03/final-acceptance-v3/result.json：3295/0、19845断言、259文件，106.17s；类型3.30s、构建5.95s、完整Chromium/WebKit583.90s、真实macOS两工程副本17.18s，全部exit0。428运行/725含测试输入一致，原工程SHA不变，HTML与4原生PNG及完整候选/History/保存退出重开通过。37布局样例148组合、独立表面级联248组合、两张原文副本4次实际浏览器检查通过；用户明确认可p021排版方向。
+
+两次完整验收单测失败与根因记录见../conversation-readability/test.md；不是以调门禁/放松断言消除失败。源码、测试和浏览器当前链无mock几何旁路，受控报告的单元组件测试明确隔离Happy DOM真实无布局观察器。
+
+post-feedback-generation完整24对48任务：baseline首轮20/24最终23/24，contextual首轮18/24最终23/24，46PNG；超时1、骨架插槽源格式拒绝1，原成本保留，baseline含1个usage估算任务。真实CLI返回optional/default false，blockers=independentReviewComplete/preference/firstPassNotLower；其它源/离线/账本/本机/成本门槛通过，不代表统计显著或收益通过。M5-04原不足则保持可选分支及M5-05文档收口完成，26/27，仅M5-02正式独立评估开放；安装包/发布未做、Win/Linux实机缺口保留。
+
+
+正式人评包补核（2026-11-03）：新ffdc5778包实际Chromium/WebKit均22组/44张PNG加载成功，2个失败配对不生成评分控件，24配对和48任务记录不变，未预填真人声明/分数、0外部请求/模型调用/页面错误；证据post-review-audit/formal-review-check.json。Downloads当前仅发现旧dc876a54的review-1.json；无新正式评分，不能变更planId复用。M5-02仍待至少两名独立正式评阅，原询问保持待回复；未重跑全盘测试或追加模型采样。
+
+
+正式评分保存更新（2026-11-03）：通过当前Edge评阅页读取用户真实选择，仅按用户明确“3分”补p003左侧任务完成度，页面成功导出review-2.json。文件已逐项与UI原草稿核对：22组44份，其他分数/可采纳性/综合偏好不变；p002/p021生成失败不评分。字节原件及SHA归档evidence/2026-11-03-live-user-review/review-2.original.json和export-check.json。当前ffdc5778已获得1份正式评分（reviewerId=2），不能与旧dc876a54的review-1混作两名当前评阅者；仍需另一名独立评阅，质量首轮未达与默认关闭保持。仅复算评估数据，未修改业务源码或重跑全盘测试。
+
+
+当前单人正式反馈已复算并作为真实CLI输入：39/44已评分页面可采纳，5不可采纳，另2配对/4页面未评分保留原分母；四项均分及5个原拒绝记录见evidence/2026-11-03-live-user-review/single-review-analysis.json。回访抽屉只读诊断确认备注在HTML中但初始截图被内部滚动区遮蔽，诊断图排除正式评分，原图/分数不变。实际CLI纳入reviewer2后仍optional/default false；独立人评缺另一份且首轮质量未达。分析不泄露私有组别或替用户改分，未改业务源码或重跑全盘。
+
+
+## 正式双人评阅终态（2026-11-03）
+
+用户提交当前 ffdc5778 批次 review-3.json，并在核对两份评分完全相同后明确确认“两位评阅者独立完成”。两份原件、SHA 与确认依据已归档；工具不能认证真人身份或独立过程。两人均完成全部22个可评配对，p002/p021因生成失败无完整双图，未补分，原24对48任务分母保持。contextual胜8、baseline胜7、平局7、不可评2，固定得分11.5/24=47.92% < 60%；首轮18/24亦低于20/24。每人44个评分页面可采纳39个（baseline20/22，contextual19/22），不重复计为88个独立页面。
+
+[M5正式结论](./evidence/2026-11-03-formal-review-completion/README.md)和原CLI保留全部失败/成本及三个阻断；independentReviewComplete=false是严格要求全部24对有评分，两对生成失败所致，并非仍缺第二人。没有改门禁、阈值、原评分或原图。M5-02按对照与独立评阅的**执行任务完成、结果为负**登记，顶层27/27执行收口；AC-24质量验收失败、AC-08完整语义限制保留，不宣称所有验收通过。M5-04沿原不足则可选分支，optional/default false不变。
+
+最终3295/0、类型/构建/完整双浏览器/macOS两真实副本的428运行输入、725含测试输入及五份日志SHA再次复核一致。本次仅评分统计和文档，无代码变化、无额外模型调用、未重复全盘测试。Win/Linux实机缺口、安装包与发布仍按原范围披露。此前单人/待补评阅文字为历史过程，由本节更新当前状态。

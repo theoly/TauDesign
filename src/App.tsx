@@ -1,5 +1,7 @@
 import {LibraryEditingBanner} from './components/workspace/LibraryEditingBanner';
+import {ProjectPublicationOverlay} from './components/workspace/ProjectPublicationOverlay';
 import { bindHtmlImportMenu } from './services/desktop/htmlImportMenu';
+import {bindDesignTaskMenu,openDesignTaskRecords} from './services/desktop/designTaskMenu';
 import { HtmlImportDialog } from './components/canvas/HtmlImportDialog';
 import React, { useEffect, useState } from 'react';
 import { Header } from './components/layout/Header';
@@ -142,6 +144,7 @@ export const App: React.FC = () => {
   const { view, refresh, activeProjectId } = useWorkspaceStore();
   const [showHtmlImport, setShowHtmlImport] = useState(false);
   useEffect(() => bindHtmlImportMenu(() => setShowHtmlImport(true)), []);
+  useEffect(() => bindDesignTaskMenu(openDesignTaskRecords), []);
   useEffect(() => setShowHtmlImport(false), [view, activeProjectId]);
 
   useEffect(() => {
@@ -159,6 +162,7 @@ export const App: React.FC = () => {
     >
       {view === 'workspace' ? <Workspace key={activeProjectId}/> : <ProjectManager />}
       {view === 'workspace' && showHtmlImport && <HtmlImportDialog key={activeProjectId} onClose={() => setShowHtmlImport(false)} />}
+      <ProjectPublicationOverlay/>
     </ErrorBoundary>
   );
 };

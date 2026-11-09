@@ -40,13 +40,14 @@ beforeEach(() => {
 });
 afterEach(() => { act(() => root.unmount()); host.remove(); (globalThis as any).IS_REACT_ACT_ENVIRONMENT = previousAct; });
 
-test('独立按钮文字保存、非法值拒绝、恢复自动可 Undo/Redo、重载不丢角色', () => {
+test('独立按钮文字保存、非法值拒绝、恢复自动可 Undo/Redo、重载不丢角色', async () => {
   choose('主按钮文字来源', 'custom');
   fill('主按钮文字颜色值', '#123456');
   act(() => element<HTMLInputElement>('主按钮文字颜色值').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
   expect(tokens().colorRoles?.light?.onPrimary).toEqual({ source: 'custom', value: '#123456' });
   expect(tokens().colors.textPrimary).toEqual(defaultTheme.tokens.colors.textPrimary);
   const id = useProjectStore.getState().id;
+  await act(async()=>{await useProjectStore.getState().saveProjectChecked();});
   expect(JSON.parse(readProject(id)!).designSystem.tokens.colorRoles.light.onPrimary.value).toBe('#123456');
   fill('主按钮文字颜色值', '#zzzzzz');
   act(() => element<HTMLInputElement>('主按钮文字颜色值').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
@@ -59,7 +60,7 @@ test('独立按钮文字保存、非法值拒绝、恢复自动可 Undo/Redo、�
   act(() => useHistoryStore.getState().redo());
   expect(tokens().colorRoles?.light?.onPrimary).toBeUndefined();
   act(() => useHistoryStore.getState().undo());
-  act(() => { useProjectStore.getState().loadProjectById(id); });
+  await act(async () => { await useProjectStore.getState().loadProjectById(id); });
   expect(resolveThemeColors(tokens(), 'light').values.onPrimary).toBe('#123456');
 });
 

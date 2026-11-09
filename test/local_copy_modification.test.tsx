@@ -72,6 +72,7 @@ describe('旧页面副本的受限局部操作', () => {
 });
 
 describe('局部模式选择与实际接线', () => {
+  const original=`<main data-nid="root" class="col"><h1 data-nid="title" class="text-sm">原标题</h1><button data-nid="action" class="btn btn-ghost custom-button" data-component-id="shared"><img data-nid="icon" class="icon" src="https://example.test/icon.svg" alt="" aria-hidden="true"><span data-nid="label">原文案</span></button><section data-nid="untouched" style="padding:var(--space-4)">${Array.from({length:15},(_,i)=>`<p data-nid="other-${i}">保留内容${i}</p>`).join('')}</section></main>`;
   let host:HTMLDivElement, root:Root, id:string, engine:ReturnType<typeof useAIEngineChat>;
   let objects:ReturnType<typeof spyOn>, pipeline:ReturnType<typeof spyOn>;
   const Harness=()=>{engine=useAIEngineChat();return null;};

@@ -1,3 +1,5 @@
+import {isPassedRender} from './evidenceSchema';
+import {renderEvidenceIdentity} from './evidenceIdentity';
 import {hasTemplateContract,compileComponentTemplate} from '../../utils/componentTemplate';
 import {inspectDesignEntities,designEntitySummary} from './designEntityValidation';
 import {libraryMemberLocked,libraryReadOnlyMessage,libraryReferenceIssue,verifyLibraryReferenceFiles} from './designLibraryReference';
@@ -39,8 +41,10 @@ export async function prepareCheckedRestyle(state: RestyleValidationState, outco
   options: {contextKey:string;isCurrent:()=>boolean;signal?:AbortSignal}): Promise<CheckedRestylePlan> {
   const report: RestyleValidationReport = {status:'blocked',checkedAt:Date.now(),contextFingerprint:options.contextKey,pages:[],assetIssues:[]};
   const result: CheckedRestylePlan = {screens:[],referencedAssets:[],validation:report};
-  const current = () => !options.signal?.aborted && options.isCurrent()&&!taskRuleSafetyIssue(outcome.workflowContract);
-  const fail = (message:string) => {report.message = taskRuleSafetyIssue(outcome.workflowContract)??message;return result;};
+  const renderIdentity=renderEvidenceIdentity(state.settings.deviceProfile);
+  const sameRendering=()=>renderEvidenceIdentity(state.settings.deviceProfile)===renderIdentity;
+  const current = () => sameRendering() && !options.signal?.aborted && options.isCurrent()&&!taskRuleSafetyIssue(outcome.workflowContract);
+  const fail = (message:string) => {report.message = taskRuleSafetyIssue(outcome.workflowContract)??(!sameRendering()?'检查器、基座样式或渲染环境已变化，请重新检查；原任务输入未更新。':message);return result;};
   try {
     if (!current()) return fail('工程已变化或重塑已取消。');
     const {target,html} = outcome;
@@ -55,7 +59,7 @@ export async function prepareCheckedRestyle(state: RestyleValidationState, outco
     if(contract&&(contract.target!.id!==target.id||contract.target!.baselineFingerprint!==contentFingerprint(baseline)||contract.device.profile!==state.settings.deviceProfile||contract.device.frameWidth!==state.settings.frameWidth))return fail('工作流合同的目标、基线或设备已不匹配。');
     const unsupported=task.plan.stages.find(stage=>!['source-safety','quality','structure','asset-references','asset-files','render','design-entities'].includes(stage));
     if(unsupported)return fail(`批量核验器不支持必要阶段 ${unsupported}。`);
-    const qualityOptions = {deviceProfile:state.settings.deviceProfile,useCustomNavigation:state.settings.useCustomNavigation,designSystem:state.designSystem};
+    const qualityOptions = {requireExternalMedia:true,deviceProfile:state.settings.deviceProfile,useCustomNavigation:state.settings.useCustomNavigation,designSystem:state.designSystem};
     const safety = checkGenerationSourceSafety(html,qualityOptions);
     if (!safety.passed) return fail(qualitySummary(safety));
     const protectedNids = (id:string) => Object.entries(state.overrides).filter(([key])=>key.startsWith(`${id}:`)).map(([,ov])=>ov.nid);
@@ -91,15 +95,16 @@ export async function prepareCheckedRestyle(state: RestyleValidationState, outco
     if (report.assetIssues.length) return fail(report.assetIssues[0].message);
     for (const [index,screen] of checked.entries()) {
       if (!current()) return fail('渲染期间工程已变化或重塑已取消。');
-      const source = checkGenerationSourceSafety(screen.htmlContent,qualityOptions);
-      const quality = checkGenerationQuality(screen.htmlContent,{...qualityOptions,
+      const mediaCss=screenForAssetAudit(screen,state.overrides).scopedCss;
+      const source = checkGenerationSourceSafety(screen.htmlContent,{...qualityOptions,mediaCss});
+      const quality = checkGenerationQuality(screen.htmlContent,{...qualityOptions,mediaCss,contentTask:contract,
         baselineHtml:state.screens[screen.id]?.htmlContent,protectedNids:protectedNids(screen.id)});
       report.pages[index].source = source;report.pages[index].quality = quality;
       if (!source.passed || !quality.passed) return fail(qualitySummary(!source.passed ? source : quality));
-      const render = await PageRenderCheck.inspect({screen,settings:state.settings,designSystem:state.designSystem,assets,overrides:perPageOverrides(screen.id)},storage,{signal:options.signal});
+      const render = await PageRenderCheck.inspect({contentTask:contract,screen,settings:state.settings,designSystem:state.designSystem,assets,overrides:perPageOverrides(screen.id)},storage,{signal:options.signal});
       report.pages[index].render = render;
       if (!current()) return fail('渲染期间工程已变化或重塑已取消。');
-      if (render.status !== 'complete' || render.findings.some(f=>f.severity === 'error')) return fail(`${screen.name}：${render.findings.find(f=>f.severity === 'error')?.message ?? render.reason ?? 'iframe 检查尚未完整通过。'}`);
+      if (!isPassedRender(render)) return fail(`${screen.name}：${render.findings.find(f=>f.severity === 'error')?.message ?? render.reason ?? 'iframe 检查尚未完整通过。'}`);
       const actual=await readProjectRenderResources(storage,[screen],assets,perPageOverrides(screen.id));
       if(!current())return fail('核对渲染资源期间工程已变化或重塑已取消。');
       if(actual.issues.length)return fail(actual.issues[0].message);

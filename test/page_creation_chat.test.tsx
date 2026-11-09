@@ -1,3 +1,5 @@
+import {stubIndependentMediaTransport} from './helpers/independentMedia';
+stubIndependentMediaTransport();
 import {chatPageTaskPlan} from './fixtures/pageTaskPlan';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import React,{act} from 'react';
@@ -11,23 +13,26 @@ import {PipelineExecutor} from '../src/services/ai/engine/pipeline/executor';
 import {PageRenderCheck} from '../src/services/ai/pageRenderCheck';
 import type {AIEngineCore} from '../src/services/ai/engine/core/types';
 const execute=PipelineExecutor.execute,inspect=PageRenderCheck.inspect;
-let previousAct:unknown;
+let previousAct:unknown,priorProject:ReturnType<typeof useProjectStore.getState>,priorHistory:ReturnType<typeof useHistoryStore.getState>,priorConfig:ReturnType<typeof useAIConfigStore.getState>;
 let root:Root,host:HTMLDivElement,answer:string,requests:number,plannerRequests:number,plannerQuestions:string[];
-beforeEach(()=>{
+beforeEach(async()=>{
+ priorProject=useProjectStore.getState();priorHistory=useHistoryStore.getState();priorConfig=useAIConfigStore.getState();
  previousAct=(globalThis as any).IS_REACT_ACT_ENVIRONMENT;(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  localStorage.clear();useHistoryStore.getState().restore(null);
  useProjectStore.getState().initNewProject({name:'新建聊天',deviceProfile:'mobile',designSystem:defaultTheme,createSpecimen:false});
  useProjectStore.getState().addScreen({name:'保留原页',htmlContent:'<main data-nid="old">旧页面</main>'},'old');
  useAIConfigStore.setState({providers:defaultProviders.map(p=>p.id==='prov-deepseek'?{...p,apiKey:'test'}:p),bindings:defaultBindings});
  answer='<artifact identifier="new-page" type="screen" title="资料"><main><h1>新资料</h1><button class="btn btn-primary">保存资料</button></main></artifact>';requests=0;plannerRequests=0;plannerQuestions=[];
- const core:AIEngineCore={streamText(){requests++;return {textStream:(async function*(){yield answer;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(answer),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),abort(){}};},async generateObject<T>(){plannerRequests++;return {...chatPageTaskPlan,questions:plannerQuestions} as T;}};
+ const core:AIEngineCore={streamText(){requests++;return {textStream:(async function*(){yield answer;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(answer),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('stop'),abort(){}};},async generateObject<T>(){plannerRequests++;return {...chatPageTaskPlan,questions:plannerQuestions} as T;}};
  PipelineExecutor.execute=o=>execute({...o,engineCore:core});PageRenderCheck.inspect=async()=>({status:'complete',findings:[],inspected:3});
- host=document.createElement('div');document.body.append(host);root=createRoot(host);act(()=>root.render(<ChatDrawer/>));
+ host=document.createElement('div');document.body.append(host);root=createRoot(host);await act(async()=>{root.render(<ChatDrawer/>);await new Promise(resolve=>setTimeout(resolve,0));});
 });
-afterEach(()=>{act(()=>root.unmount());host.remove();PipelineExecutor.execute=execute;PageRenderCheck.inspect=inspect;(globalThis as any).IS_REACT_ACT_ENVIRONMENT=previousAct;});
+afterEach(()=>{act(()=>root.unmount());host.remove();PipelineExecutor.execute=execute;PageRenderCheck.inspect=inspect;useProjectStore.setState(priorProject,true);useHistoryStore.setState(priorHistory,true);useAIConfigStore.setState(priorConfig,true);(globalThis as any).IS_REACT_ACT_ENVIRONMENT=previousAct;});
 async function send(){const input=host.querySelector('textarea')!;await act(async()=>{
  Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(input,'新建一个资料页面');input.dispatchEvent(new Event('input',{bubbles:true}));});
- await act(async()=>{(host.querySelector('button[title*="发送设计诉求"]') as HTMLButtonElement).click();await new Promise(resolve=>setTimeout(resolve,20));});
+ await act(async()=>{(host.querySelector('button[title*="发送设计诉求"]') as HTMLButtonElement).click();await new Promise(resolve=>setTimeout(resolve,10));});
+ for(let i=0;i<200&&host.querySelector('button[title*="(Stop)"]');i++)await act(async()=>{await new Promise(resolve=>setTimeout(resolve,10));});
+ expect(host.querySelector('button[title*="(Stop)"]')).toBeNull();
 }
 test('new page render failure is shown as not applied and retains original page, without a fake success',async()=>{
  PageRenderCheck.inspect=async()=>({status:'unavailable',findings:[],inspected:0,reason:'测试渲染不可用'});
@@ -46,7 +51,7 @@ test('new page success stores actual creation proof through the same chat applic
 
 test('ordinary creation stops at critical questions without HTML or History',async()=>{
  plannerQuestions=['请确认资料的可见权限'];const before=useHistoryStore.getState().checkpoints.length;await send();
- expect(plannerRequests).toBe(1);expect(requests).toBe(0);expect(host.textContent).toContain('请确认资料的可见权限');expect(host.textContent).toContain('0 tokens');expect(host.textContent).toContain('业务规划未返回用量');expect(Object.keys(useProjectStore.getState().screens)).toEqual(['old']);expect(useHistoryStore.getState().checkpoints).toHaveLength(before);
+ expect(plannerRequests).toBe(1);expect(requests).toBe(0);expect(host.textContent).toContain('请确认资料的可见权限');expect(host.textContent).toContain('0 tokens');expect(host.textContent).toContain('功能规划等步骤的累计用量见任务预算');expect(Object.keys(useProjectStore.getState().screens)).toEqual(['old']);expect(useHistoryStore.getState().checkpoints).toHaveLength(before);
 });
 
 test('successful creation persists the original plan and reopens it without current-page coverage or new requests',async()=>{

@@ -12,10 +12,11 @@ import {sameRecordedHtml,taskProvenanceIssue} from '../ai/taskProvenance';
 import {draftExecutionIssue} from '../ai/draftExecutionSource';
 import type {RuleEvidencePurpose} from '../ai/designKnowledge/safety';
 import {guidancePacketIssue} from '../ai/designKnowledge/receipt';
+import {readPublicationCommits,matchesPublicationCommit,type ProjectPublicationCommit} from './projectPublicationRecord';
 
 export type RestylePageSnapshot = Pick<Screen, 'id' | 'name' | 'htmlContent' | 'scopedCss' | 'metadata'>;
 export interface RestyleDeliveryRecord {
-  schemaVersion: 1; id: string; projectId: string; batchId?: string; createdAt: number; completedAt?: number;
+  schemaVersion: 1; id: string; projectId: string; publicationId?:string;batchId?: string; createdAt: number; completedAt?: number;
   status: 'prepared' | 'applied' | 'aborted'; reason?: string;
   outcome: Omit<RestyleOutcome, 'validation' | 'delivery'>;
   validation: RestyleValidationReport;
@@ -46,7 +47,7 @@ function validRecord(value: unknown, projectId: string,purpose:RuleEvidencePurpo
     typeof p.htmlContent === 'string' && (p.scopedCss === undefined || typeof p.scopedCss === 'string');
   const passedQuality=(q:unknown)=>isQualityReport(q)&&q.passed;
   if (!r || r.schemaVersion !== 1 || typeof r.id !== 'string' || !validId(r.id) || r.projectId !== projectId ||
-    !Number.isFinite(r.createdAt) || !['prepared','applied','aborted'].includes(r.status) ||
+    !Number.isFinite(r.createdAt) || (r.publicationId!==undefined&&r.publicationId!==r.id)||!['prepared','applied','aborted'].includes(r.status) ||
     (r.reason !== undefined && typeof r.reason !== 'string') || (r.batchId !== undefined && typeof r.batchId !== 'string') ||
     !r.outcome || r.outcome.status !== 'applied' || !r.outcome.target || !['screen','component'].includes(r.outcome.target.kind) ||
     typeof r.outcome.target.id !== 'string' || typeof r.outcome.target.name !== 'string' || typeof r.outcome.target.html !== 'string' || typeof r.outcome.html !== 'string' ||
@@ -80,9 +81,14 @@ function validRecord(value: unknown, projectId: string,purpose:RuleEvidencePurpo
 /** One canonical event contains the entire checked component/page write set. Undo never deletes it. */
 export class RestyleDeliveryRepository {
   constructor(private readonly storage: ProjectStorage, private readonly projectId: string) {}
+  private async confirmed(record:RestyleDeliveryRecord,commits:ProjectPublicationCommit[]){const commit=commits.find(row=>row.id===record.publicationId);return await matchesPublicationCommit(commit,{id:record.id,kind:'restyle',screens:record.pages.map(p=>p.after),components:record.component?[record.component.after]:[]})?commit:undefined;}
+  private async reconcile(record:RestyleDeliveryRecord,commits:ProjectPublicationCommit[]):Promise<RestyleDeliveryRecord>{
+    if(!record.publicationId||record.status==='applied')return record;const commit=await this.confirmed(record,commits);
+    return commit?{...record,status:'applied',completedAt:commit.at,reason:'工程原子提交已确认；重塑收尾记录尚未同步。'}:record;
+  }
   async get(id:string):Promise<RestyleDeliveryRecord|null>{
     const raw=await this.storage.readText(recordPath(id));if(!raw||raw.length>maxLength)return null;
-    try{const record=JSON.parse(raw);return validRecord(record,this.projectId)&&record.id===id?record:null;}catch{return null;}
+    try{const record=JSON.parse(raw);return validRecord(record,this.projectId)&&record.id===id?await this.reconcile(record,await readPublicationCommits(this.storage,this.projectId).catch(()=>[])):null;}catch{return null;}
   }
   async prepare(record: RestyleDeliveryRecord): Promise<void> {
     if (!validRecord(record,this.projectId,'execute') || record.status !== 'prepared' || record.pages.some((p,index) =>
@@ -93,10 +99,12 @@ export class RestyleDeliveryRepository {
     await this.storage.ensureDir(directory);await this.storage.writeTextAtomic(path,raw);
   }
   async finish(record: RestyleDeliveryRecord, status: 'applied' | 'aborted', reason?: string): Promise<void> {
+    if(record.publicationId){const confirmed=await this.confirmed(record,await readPublicationCommits(this.storage,this.projectId));if(status==='applied'&&!confirmed||status==='aborted'&&confirmed)throw Error('工程提交事实与重塑收尾状态不一致，未覆盖交付记录。');}
     if(!validRecord(record,this.projectId))throw new Error('重塑来源或页面快照不一致，未更新交付状态。');
     await this.storage.writeTextAtomic(recordPath(record.id),JSON.stringify({...record,status,completedAt:Date.now(),...(reason ? {reason} : {})}));
   }
   async list(options: { screenId?: string; limit?: number } = {}): Promise<{records: RestyleDeliveryRecord[]; invalidFiles: number; hasMore: boolean}> {
+    const commits=await readPublicationCommits(this.storage,this.projectId).catch(()=>[]);
     const files = (await this.storage.listDir(directory)).filter(name => /^restyle-[a-z0-9-]+\.json$/.test(name)).sort().reverse();
     const selected = files.slice(0,Math.max(1,Math.min(options.limit ?? 10,200)));
     const records: RestyleDeliveryRecord[] = [];let invalidFiles = 0;
@@ -113,7 +121,7 @@ export class RestyleDeliveryRepository {
               contextFingerprint:record.validation.contextFingerprint,reason:'重塑预览记录损坏或归属不匹配。'
             };
           });
-          return record;
+          return this.reconcile(record,commits);
         } catch {return null;}
       }));
       for (const record of batch) if (!record) invalidFiles++;else if (!options.screenId || record.pages.some(p=>p.after.id === options.screenId)) records.push(record);

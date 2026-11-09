@@ -2,6 +2,7 @@ import type { Asset, Screen, StyleOverride } from '../../types/project';
 import type { ProjectStorage } from '../storage/projectStorage';
 import { resolveImportedResources } from '../import/importResources';
 import {createRenderResourceSnapshot,type RenderResourceFile} from '../storage/renderResourceSnapshot';
+import {inspectExternalMedia} from './externalMedia';
 
 export interface ProjectAssetIssue {
   code: 'invalid_asset_path' | 'unresolved_asset_id' | 'unregistered_asset_reference' | 'missing_asset_file' | 'asset_check_unavailable';
@@ -58,7 +59,7 @@ export async function readProjectRenderResources(storage: ProjectStorage, screen
 }
 
 export function isSafeProjectAssetPath(path: string): boolean {
-  return /^assets\/(?:images|icons)\/[a-zA-Z0-9_.-]+$/.test(path) && !path.split('/').includes('..');
+  return /^assets\/(?:images|icons|media|imports\/fonts)\/[a-zA-Z0-9_.-]+$/.test(path) && !path.split('/').includes('..');
 }
 
 /** Read-only projection of all page styles; never persist the audit CSS back into the page. */
@@ -69,6 +70,7 @@ export function screenForAssetAudit(screen: Screen, overrides: Record<string, St
 }
 
 export function referencedProjectAssetPaths(screen: Screen): string[] {
+  const parsedReferences=inspectExternalMedia(screen.htmlContent??'',screen.scopedCss??'').references.map(ref=>ref.url);
   const doc = new DOMParser().parseFromString(screen.htmlContent ?? '', 'text/html');
   const values: string[] = [];
   for (const element of Array.from(doc.querySelectorAll('[src], [poster], [href], [srcset]'))) {
@@ -84,8 +86,8 @@ export function referencedProjectAssetPaths(screen: Screen): string[] {
   for (const style of styles) {
     for (const match of style.matchAll(/url\(\s*(['"]?)(.*?)\1\s*\)/gi)) values.push(match[2]);
   }
-  return [...new Set(values.map(value => value.trim().replace(/^\.\//, '').split(/[?#]/)[0])
-    .filter(value => /^assets\/(?:images|icons)\//.test(value)))];
+  return [...new Set([...values,...parsedReferences].map(value => value.trim().replace(/^\.\//, '').split(/[?#]/)[0])
+    .filter(value => /^assets\/(?:images|icons|media|imports\/fonts)\//.test(value)))];
 }
 
 /** Pure metadata/reference audit. The optional storage check below supplies physical evidence. */

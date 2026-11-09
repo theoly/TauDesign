@@ -1,4 +1,5 @@
 import {withMultiPageTasks,multiPageTask} from './fixtures/multiPageTask';
+import {waitForChatIdle} from './modification_review_helpers';
 import {beforeEach,afterEach,expect,test} from 'bun:test';
 import React,{act} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
@@ -24,7 +25,7 @@ beforeEach(async()=>{
  };
  PageRenderCheck.inspect=async()=>({status:'complete',findings:[],inspected:4});host=document.createElement('div');document.body.append(host);root=createRoot(host);await act(async()=>root.render(<ChatDrawer/>));
 });
-afterEach(()=>{act(()=>root.unmount());host.remove();DefaultAIEngineCore.prototype.generateObject=generate;DefaultAIEngineCore.prototype.streamText=stream;PageRenderCheck.inspect=inspect;useProjectStore.setState(prior,true);useHistoryStore.setState(history,true);useAIConfigStore.setState(config,true);(globalThis as any).IS_REACT_ACT_ENVIRONMENT=priorAct;});
+afterEach(async()=>{release?.();await waitForChatIdle(host);act(()=>root.unmount());host.remove();DefaultAIEngineCore.prototype.generateObject=generate;DefaultAIEngineCore.prototype.streamText=stream;PageRenderCheck.inspect=inspect;useProjectStore.setState(prior,true);useHistoryStore.setState(history,true);useAIConfigStore.setState(config,true);(globalThis as any).IS_REACT_ACT_ENVIRONMENT=priorAct;});
 const card=()=>Array.from(host.querySelectorAll('[data-testid="multi-page-plan"]')).at(-1)!;
 const button=(text:string)=>Array.from(card().querySelectorAll('button')).find(b=>b.textContent===text)!;
 async function send(request='生成登录页、注册页两个页面'){const input=host.querySelector('textarea[placeholder^="输入设计诉求"]')! as HTMLTextAreaElement;await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(input,request);input.dispatchEvent(new Event('input',{bubbles:true}));});await act(async()=>{(host.querySelector('button[title="发送设计诉求 (Enter)"]') as HTMLButtonElement).click();await new Promise(r=>setTimeout(r,15));});}
@@ -33,14 +34,17 @@ async function input(label:string,value:string){const field=card().querySelector
 test('真实聊天先规划，编辑名称要求、确认后才生成，全部加入一次History',async()=>{
  const before=useHistoryStore.getState().past.length;await send();expect(plans).toBe(1);expect(streams).toBe(0);expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(card().textContent).toContain('确认 2 页');
  await input('第1页名称','登录设置');await input('第1页要求','新的登录要求');await act(async()=>{button('确认计划并生成 2 页').click();button('确认计划并生成 2 页')?.click();await new Promise(r=>setTimeout(r,20));});
+ await waitForChatIdle(host);
  expect(streams).toBe(2);expect(useProjectStore.getState().screenOrder).toHaveLength(3);expect(useHistoryStore.getState().past.length).toBe(before+1);expect(card().textContent).toContain('已按确认计划新增 2 页');expect(card().textContent).toContain('已加入画布');expect(Object.values(useProjectStore.getState().screens).some(p=>p.name==='登录设置')).toBe(true);
 });
 test('删除页面同步清理关联，用户明确缩减后只生成选定页',async()=>{
- await send();await act(async()=>button('移除此页：注册页').click());expect(card().querySelector('input[type="checkbox"]')).toBeNull();await act(async()=>{button('确认计划并生成 1 页').click();await new Promise(r=>setTimeout(r,20));});
+ await send();await act(async()=>button('移除此页：注册页').click());expect(Boolean(card().querySelector('fieldset input[type="checkbox"]'))).toBe(false);expect(Boolean(card().querySelector('input[aria-label="使用共享生成树"]'))).toBe(true);await act(async()=>{button('确认计划并生成 1 页').click();await new Promise(r=>setTimeout(r,20));});
+ await waitForChatIdle(host);
  expect(streams).toBe(1);expect(card().textContent).toContain('原计划2页');expect(useProjectStore.getState().screenOrder).toHaveLength(2);
 });
 test('多页面历史优先展示用户需求与关联，内部请求折叠，异常范围显示损坏',async()=>{
  await send();await act(async()=>{button('确认计划并生成 2 页').click();await new Promise(r=>setTimeout(r,20));});
+ await waitForChatIdle(host);
  const page=Object.values(useProjectStore.getState().screens).find(p=>p.id!=='old')!;
  act(()=>root.render(<PageCreationEvidencePanel screen={page}/>));
  const technical=Array.from(host.querySelectorAll('details')).find(d=>d.querySelector(':scope > summary')?.textContent==='本次生成请求（技术记录）')!;
@@ -59,9 +63,10 @@ test('确认前取消不生成；生成期间取消不加入任何页面',async(
 test('聊天多方案明确引用原页时只读规划、可补差异、并排生成，无业务关联选项',async()=>{
  DefaultAIEngineCore.prototype.generateObject=async(schema)=>{plans++;if((schema.properties as any)?.features)return multiPageTask('调整后的页面',['用户确认的新要求']) as any;return withMultiPageTasks({summary:'同一登录页比较',pages:[{name:'紧凑方案',requirements:['手机号登录','紧凑布局'],links:[]},{name:'引导方案',requirements:['手机号登录','步骤引导'],links:[]}]}) as any;};
  const before=useHistoryStore.getState().past.length;
- await send('为当前页面生成两个方案用于比较');expect(plans).toBe(1);expect(streams).toBe(0);expect(card().textContent).toContain('同页方案比较');expect(card().querySelector('input[type="checkbox"]')).toBeNull();
+ await send('为当前页面生成两个方案用于比较');expect(plans).toBe(1);expect(streams).toBe(0);expect(card().textContent).toContain('同页方案比较');expect(Boolean(card().querySelector('fieldset input[type="checkbox"]'))).toBe(false);expect(Boolean(card().querySelector('input[aria-label="使用共享生成树"]'))).toBe(true);
  expect(button('移除此方案：紧凑方案').disabled).toBe(true);await input('第1方案名称','重点方案');await input('第1方案要求','手机号登录，突出按钮与隐私提示');
  await act(async()=>{button('确认计划并生成 2 个方案').click();button('确认计划并生成 2 个方案')?.click();await new Promise(r=>setTimeout(r,30));});
+ await waitForChatIdle(host);
  expect(streams).toBe(2);expect(useProjectStore.getState().screenOrder).toHaveLength(3);expect(useHistoryStore.getState().past.length).toBe(before+1);expect(card().textContent).toContain('已并排新增 2 个方案');
  const page=Object.values(useProjectStore.getState().screens).find(p=>p.id!=='old')!;act(()=>root.render(<PageCreationEvidencePanel screen={page}/>));expect(host.textContent).toContain('同页方案确认计划');expect(host.textContent).toContain('突出按钮与隐私提示');expect(host.textContent).toContain('原计划 2 个方案');
 });
@@ -75,6 +80,7 @@ test('confirmation shows functional information and feedback, flags edited requi
  expect(card().textContent).toContain('需要展示：手机号登录');expect(card().textContent).toContain('前提：信息已填写');expect(card().textContent).toContain('状态：默认');
  await input('第1页要求','新增邮箱信息');expect(card().textContent).toContain('初始功能规划（要求已调整）');expect(card().textContent).toContain('原批次预算内重新梳理本页功能');
  await act(async()=>{button('确认计划并生成 2 页').click();await new Promise(r=>setTimeout(r,30));});
+ await waitForChatIdle(host);
  expect(plans).toBe(2);expect(streams).toBe(2);
  const page=Object.values(useProjectStore.getState().screens).find(p=>p.name==='注册页')!;
  act(()=>root.render(<PageCreationEvidencePanel screen={page}/>));expect(host.textContent).toContain('规划来自已确认的多页计划');expect(host.textContent).toContain('需求覆盖线索');

@@ -7,10 +7,17 @@ ROOT=Path(__file__).resolve().parents[1]
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output',default='doc/ui-design-workflow/evidence/2026-10-30-json-ui')
 parser.add_argument('--independent-only',action='store_true',help='Run only the independent-entry activity matrix for focused debugging.')
+parser.add_argument('--drafts-only',action='store_true',help='Run only draft source, withdrawal, resource and recovery activity checks.')
 parser.add_argument('--recovery-only',action='store_true',help='Run only recovery activity checks for focused debugging.')
 parser.add_argument('--variants-only',action='store_true',help='Run only page-variant activity checks for focused debugging.')
 parser.add_argument('--panels-only',action='store_true',help='Run only inspector and candidate-repair activity checks.')
 parser.add_argument('--legacy-history-only',action='store_true',help='Run only frozen full-theme history compatibility checks.')
+parser.add_argument('--invalidation-only',action='store_true',help='Run input invalidation and stale-remount checks.')
+parser.add_argument('--action-names-only',action='store_true',help='Run independent M4 action-name source/render calibration.')
+parser.add_argument('--findings-only',action='store_true',help='Run M4 finding categories against real frame rendering and report UI.')
+parser.add_argument('--field-content-only',action='store_true',help='Run explicit native field-label source/render calibration.')
+parser.add_argument('--content-only',action='store_true',help='Run M4 explicit action text calibration against real frame rendering.')
+parser.add_argument('--layout-only',action='store_true',help='Run M4 layout applicability and warning calibration against actual frames.')
 ARGS=parser.parse_args()
 OUT=(ROOT/ARGS.output).resolve()
 async def verify_history(page,engine,kind):
@@ -174,6 +181,7 @@ async def verify_element_structure(page,engine,mode,png):
     assert not await page.evaluate('document.documentElement.scrollWidth>innerWidth')
     await page.screenshot(path=str(OUT/f'{engine}-element-{mode}.png'),full_page=True)
     if mode=='form':
+        await page.evaluate('()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
         await page.wait_for_function('elementFunctionFixture.state().getStagedDeliveryReport().status==="ready"')
         await page.get_by_role('button',name='采纳新版 (替换原版)',exact=True).first.click()
         await page.wait_for_function('!elementFunctionFixture.state().stagedScreen')
@@ -256,7 +264,7 @@ async def verify_protocol_guidance(page,engine,device):
     assert result['scope']==['element:region01'] and result['requestedOutputTokens']==4096,result
     assert result['receipts']==[{'status':'completed','protocol':'json-object','rules':['LY-04']}],result
     assert len(result['requests'])==1 and result['requests'][0]['rulePresent'] and not result['requests'][0]['wholeHtml'],result
-    assert result['requests'][0]['schema']['type']=='json_schema' and result['requests'][0]['maxTokens']==4096,result
+    assert result['requests'][0]['schema']['type']=='object' and result['requests'][0]['maxTokens']==4096,result
     assert 'FIXTURE_SECRET' not in await page.locator('body').inner_text()
     assert not await page.evaluate('document.documentElement.scrollWidth>innerWidth')
     await page.screenshot(path=str(OUT/f'{engine}-protocol-{device}.png'),full_page=True)
@@ -641,14 +649,22 @@ async def verify_resource_invalidation(page,engine,device):
     await page.wait_for_function('ruleControlFixture.state().getStagedDeliveryReport().status==="ready"')
     await page.get_by_role('button',name='刷新预览并复验',exact=True).first.click()
     await page.wait_for_function('ruleControlFixture.state().getStagedDeliveryReport().status==="ready"')
-    proof=await page.evaluate('''()=>{
+    proof=await page.evaluate('''async()=>{
       const f=ruleControlFixture,s=f.state(),files=s.stagedRenderQuality.report.resourceFiles;
-      return {files,changed:files[0].sha256!==f.resourceOldProof.resourceFiles[0].sha256,
-        materialized:document.querySelector('iframe[data-inspector-screen="page"]').contentDocument.querySelector('[data-nid="resource01"]').src.includes(f.resourceNext),
+      let materialized=false,pixel;const deadline=Date.now()+8000;
+      while(!materialized&&Date.now()<deadline){
+        const img=document.querySelector('iframe[data-inspector-screen="page"]')?.contentDocument?.querySelector('[data-nid="resource01"]');
+        if(img)try{await img.decode();const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,1,1);pixel=Array.from(ctx.getImageData(0,0,1,1).data);materialized=img.src.startsWith(location.origin+'/__aidesign_media/')&&JSON.stringify(pixel)==='[34,85,204,255]';}catch{}
+        if(!materialized)await new Promise(r=>setTimeout(r,20));
+      }
+      return {files,changed:files[0].sha256!==f.resourceOldProof.resourceFiles[0].sha256,materialized,pixel,
         noCalls:f.requests.length===f.resourceCalls,taskCurrent:s.isStagedTaskCurrent()};
     }''')
     assert proof['changed'] and proof['materialized'] and proof['noCalls'] and proof['taskCurrent'],proof
+    await page.wait_for_function('ruleControlFixture.state().getStagedDeliveryReport().status==="ready"')
     await page.screenshot(path=str(OUT/f'{engine}-resource-proof-{device}.png'),full_page=True)
+    await page.evaluate('()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))')
+    await page.wait_for_function('ruleControlFixture.state().getStagedDeliveryReport().status==="ready"')
     await page.get_by_role('button',name='采纳新版 (替换原版)',exact=True).first.click()
     await page.wait_for_function('!ruleControlFixture.state().stagedScreen')
     delivered=await page.evaluate('''()=>{
@@ -707,6 +723,7 @@ async def verify_independent_activity(page,engine,device):
     assert await page.evaluate('ruleControlFixture.pendingEntries.length')==1
     await page.evaluate('ruleControlFixture.releaseEntry(0)')
     review=page.get_by_test_id('modification-review')
+    await page.wait_for_function("document.getElementById('root').getBoundingClientRect().height<=innerHeight+1")
     await review.locator('input[type=checkbox]').first.check()
     await review.locator('input[type=radio]').first.check()
     await review.get_by_role('button',name='按所选内容生成新版',exact=True).click()
@@ -926,7 +943,7 @@ async def verify_panel_activity(page,engine,device):
     assert await page.evaluate('!panelOperationFixture.state().stagedScreen')
 
     await page.goto(url+'&candidate=1',wait_until='networkidle')
-    await page.wait_for_function('panelOperationFixture.ready')
+    await page.wait_for_function('window.panelOperationFixture?.ready')
     report=await page.evaluate('panelOperationFixture.initialReport')
     assert report['status']=='complete' and any(f['code']=='render_action_invisible_label' for f in report['findings']),report
     primary=page.locator('[data-control=primary]')
@@ -945,7 +962,7 @@ async def verify_panel_activity(page,engine,device):
     await page.screenshot(path=str(OUT/f'{engine}-candidate-cancelled-{device}.png'))
 
     await page.goto(url+'&candidate=1',wait_until='networkidle')
-    await page.wait_for_function('panelOperationFixture.ready')
+    await page.wait_for_function('window.panelOperationFixture?.ready')
     await page.locator('[data-control=primary]').get_by_role('button',name='修复一次并重新检查',exact=True).click()
     await page.wait_for_function('panelOperationFixture.calls.length===1')
     await page.evaluate('panelOperationFixture.release(0)')
@@ -965,7 +982,7 @@ async def verify_panel_activity(page,engine,device):
     await page.screenshot(path=str(OUT/f'{engine}-candidate-repaired-{device}.png'))
 
     await page.goto(url+'&candidate=1&verifyHold=1',wait_until='networkidle')
-    await page.wait_for_function('panelOperationFixture.ready')
+    await page.wait_for_function('window.panelOperationFixture?.ready')
     await page.locator('[data-control=primary]').get_by_role('button',name='修复一次并重新检查',exact=True).click()
     await page.wait_for_function('panelOperationFixture.calls.length===1')
     await page.evaluate('panelOperationFixture.release(0)')
@@ -979,7 +996,7 @@ async def verify_panel_activity(page,engine,device):
     assert result=={'calls':1,'unchanged':True,'original':True,'history':0,'maxTokens':1800},result
     assert 'PANEL_SECRET' not in await page.locator('body').inner_text()
     await page.goto(url+'&candidate=1&verifyHold=1',wait_until='networkidle')
-    await page.wait_for_function('panelOperationFixture.ready')
+    await page.wait_for_function('window.panelOperationFixture?.ready')
     await page.evaluate('panelOperationFixture.startDeadline()')
     await page.wait_for_function('panelOperationFixture.calls.length===1')
     await page.evaluate('panelOperationFixture.release(0)')
@@ -1000,7 +1017,7 @@ async def verify_panel_activity(page,engine,device):
     deadline['lateVerificationSettled']=True
     await page.screenshot(path=str(OUT/f'{engine}-candidate-deadline-{device}.png'))
     await page.goto(url+'&candidate=1&guidance=1&claimHold=1',wait_until='networkidle')
-    await page.wait_for_function('panelOperationFixture.ready')
+    await page.wait_for_function('window.panelOperationFixture?.ready')
     assert await page.evaluate('panelOperationFixture.plannedRules.length>0')
     await page.evaluate('panelOperationFixture.startDeadline()')
     await page.wait_for_function('panelOperationFixture.claimHeld')
@@ -1017,7 +1034,7 @@ async def verify_panel_activity(page,engine,device):
     assert await page.evaluate('panelOperationFixture.calls.length')==0
     await page.screenshot(path=str(OUT/f'{engine}-repair-source-assembled-{device}.png'))
     await page.goto(url+'&candidate=1&guidance=1',wait_until='networkidle')
-    await page.wait_for_function('panelOperationFixture.ready')
+    await page.wait_for_function('window.panelOperationFixture?.ready')
     await page.locator('[data-control=primary]').get_by_role('button',name='修复一次并重新检查',exact=True).click()
     await page.wait_for_function('panelOperationFixture.calls.length===1')
     await page.evaluate('panelOperationFixture.release(0)')
@@ -1033,6 +1050,274 @@ async def verify_panel_activity(page,engine,device):
     await page.screenshot(path=str(OUT/f'{engine}-repair-source-called-{device}.png'))
     return {'inspectorSelectedScope':True,'inspectorStopAndModelChange':True,'duplicateRepairAndOtherControlCancel':True,'reopenPreservesAttempt':True,'repairAdoptUndoRedo':True,'verificationCancel':result,'verificationDeadline':deadline,'repairProvenance':provenance}
 
+async def verify_input_invalidation(page,engine,device):
+    await page.set_viewport_size({'width':1280,'height':1000})
+    base='http://127.0.0.1:5174/test/fixtures/rule-control.html?device='+device
+    async def send(text):
+        await page.locator('textarea[placeholder^="输入设计诉求"]').fill(text)
+        await page.locator('button[title*="发送设计诉求"]').click()
+    explicit='[引用元素 nid="button01" 画框="资料页" 标签=<button>]\n\n主按钮内边距增大'
+    changes=[]
+    for kind in ['ai','metadata','binding','both']:
+        await page.goto(base,wait_until='networkidle')
+        await send(explicit)
+        await page.wait_for_function('!!ruleControlFixture.state().stagedScreen')
+        await page.evaluate('ruleControlFixture.preview()')
+        await page.wait_for_function('ruleControlFixture.state().getStagedDeliveryReport().status==="ready"')
+        await page.evaluate('''async kind=>{
+          const f=ruleControlFixture,s=f.state();f.oldInput=s.stagedScreen.inputContextFingerprint;
+          if(kind==='ai')s.upsertProjectDocument({id:'project-analysis',title:'AI归纳',content:'新的业务要求',source:'ai',enabled:true,createdAt:1,updatedAt:1});
+          else if(kind==='metadata')s.updateScreen('page',{metadata:{...s.screens.page.metadata,navigationTitle:'人工新导航'}});
+          else {
+            const repositoryUrl=performance.getEntriesByType('resource').find(entry=>new URL(entry.name).pathname==='/src/services/storage/candidateRepository.ts')?.name;
+            if(!repositoryUrl)throw Error('Live candidate repository module was not observed');
+            const repo=await import(repositoryUrl);
+            const saved=structuredClone(await repo.loadStagedCandidate(s.id));delete saved.taskBindingFingerprint;
+            if(kind==='both')delete saved.workflowContract;
+            await repo.saveStagedCandidate(s.id,undefined,saved);
+            s.restoreStagedCandidate(await repo.loadStagedCandidate(s.id),s.id);
+          }
+          f.protectedHistory=f.history().past.length;f.protectedHtml=f.state().screens.page.htmlContent;
+        }''',kind)
+        await page.wait_for_function('ruleControlFixture.state().stagedRenderQuality?.report.status==="complete"')
+        result=await page.evaluate('''async()=>{
+          const f=ruleControlFixture,s=f.state(),blocked=[await s.adoptStagedChange(),await s.forceAdoptStagedChange(),await s.keepBothScreens()];
+          return {blocked,current:f.state().isStagedTaskCurrent(),status:f.state().getStagedDeliveryReport().status,
+            sameInput:f.state().stagedScreen.inputContextFingerprint===f.oldInput,render:f.state().stagedRenderQuality.report.status,
+            calls:f.requests.length,historyUnchanged:f.history().past.length===f.protectedHistory,htmlUnchanged:f.state().screens.page.htmlContent===f.protectedHtml};
+        }''')
+        assert result=={'blocked':[False,False,False],'current':False,'status':'blocked','sameInput':True,'render':'complete','calls':1,'historyUnchanged':True,'htmlUnchanged':True},result
+        await page.get_by_text('请重新发起任务',exact=False).first.wait_for()
+        await page.screenshot(path=str(OUT/f'{engine}-input-{kind}-{device}.png'),full_page=True)
+        changes.append({'kind':kind,**result})
+    await page.goto(base,wait_until='networkidle')
+    await send(explicit)
+    await page.wait_for_function('!!ruleControlFixture.state().stagedScreen')
+    await page.evaluate('ruleControlFixture.preview()')
+    await page.wait_for_function('ruleControlFixture.state().getStagedDeliveryReport().status==="ready"')
+    await page.evaluate('''async()=>{
+      const identityUrl=performance.getEntriesByType('resource').find(entry=>new URL(entry.name).pathname==='/src/services/ai/evidenceIdentity.ts')?.name;
+      if(!identityUrl)throw Error('Live checker module was not observed');
+      const {RenderEvidenceAuthority}=await import(identityUrl);
+      const f=ruleControlFixture,s=f.state();
+      f.oldCheckKey=s.getStagedRenderContextKey();f.oldCheckReport=s.stagedRenderQuality.report;
+      f.oldCheckCandidate=JSON.stringify(s.stagedScreen);f.protectedHistory=f.history().past.length;
+      RenderEvidenceAuthority.revision=()=>"browser-next-checker";
+      if(f.state().getStagedRenderContextKey()===f.oldCheckKey)throw Error('checker revision did not change the live store key');
+      const beforeCallback=f.state().stagedRenderQuality;
+      s.setStagedRenderQuality(f.oldCheckKey,{status:'unavailable',findings:[],inspected:0});
+      if(f.state().stagedRenderQuality!==beforeCallback)throw Error('late callback replaced the live frozen report');
+      s.refreshStagedRender();
+    }''')
+    await page.wait_for_function('ruleControlFixture.state().getStagedDeliveryReport().status==="ready"')
+    checking=await page.evaluate('''()=>{const f=ruleControlFixture,s=f.state();return {current:s.isStagedTaskCurrent(),sameCandidate:JSON.stringify(s.stagedScreen)===f.oldCheckCandidate,newKey:s.getStagedRenderContextKey()!==f.oldCheckKey,calls:f.requests.length};}''')
+    assert checking=={'current':True,'sameCandidate':True,'newKey':True,'calls':1},checking
+    await page.get_by_role('button',name='采纳新版 (替换原版)',exact=True).first.click()
+    await page.wait_for_function('!ruleControlFixture.state().stagedScreen')
+    adoption=await page.evaluate('''async()=>{
+      const f=ruleControlFixture,s=f.state(),{readProject}=await import('/src/utils/projectRegistry.ts');
+      const html=s.screens.page.htmlContent,history=f.history().past.length===f.protectedHistory+1;
+      f.history().undo();const undone=f.state().screens.page.htmlContent===f.original;
+      f.history().redo();const redone=f.state().screens.page.htmlContent===html;
+      await f.state().saveProjectChecked();await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(s.id);
+      return {history,undone,redone,reopened:f.state().screens.page.htmlContent===html,entry:f.state().screens.page.entry,calls:f.requests.length};
+    }''')
+    assert adoption=={'history':True,'undone':True,'redone':True,'reopened':True,'entry':'screens/page.html','calls':1},adoption
+    await page.screenshot(path=str(OUT/f'{engine}-checker-recheck-{device}.png'),full_page=True)
+    await page.goto(base+'&remountActivity=1',wait_until='networkidle')
+    await send('新建长正文说明页')
+    button=page.get_by_role('button',name='重新检查并挂载',exact=True)
+    await button.wait_for()
+    await page.evaluate('''()=>{const f=ruleControlFixture;f.state().upsertProjectDocument({id:'project-analysis',title:'AI归纳',content:'点击前新增业务要求',source:'ai',enabled:true,createdAt:1,updatedAt:1});f.protectedHistory=f.history().past.length;}''')
+    await button.click()
+    await page.get_by_text('原生成输入已变化或缺少原输入快照',exact=False).wait_for()
+    remount=await page.evaluate('''()=>{const f=ruleControlFixture;return {calls:f.requests.length,pages:Object.keys(f.state().screens).length,candidate:!!f.state().stagedScreen,historyUnchanged:f.history().past.length===f.protectedHistory,renderStarted:!!f.releaseRender};}''')
+    assert remount=={'calls':2,'pages':1,'candidate':False,'historyUnchanged':True,'renderStarted':False},remount
+    await page.screenshot(path=str(OUT/f'{engine}-stale-remount-{device}.png'),full_page=True)
+    await page.goto(base,wait_until='networkidle')
+    await send(explicit)
+    await page.wait_for_function('!!ruleControlFixture.state().stagedProjectAssetAudit')
+    legacy=await page.evaluate('''async()=>{
+      const repositoryUrl=performance.getEntriesByType('resource').find(entry=>new URL(entry.name).pathname==='/src/services/storage/candidateRepository.ts')?.name;
+      if(!repositoryUrl)throw Error('Live candidate repository module was not observed');
+      const f=ruleControlFixture,s=f.state(),repo=await import(repositoryUrl);
+      const old=structuredClone(await repo.loadStagedCandidate(s.id));delete old.candidateId;delete old.inputContextFingerprint;
+      await repo.saveStagedCandidate(s.id,undefined,old);const saved=await repo.loadStagedCandidate(s.id),before=f.history().past.length;
+      const restored=s.restoreStagedCandidate(saved,s.id);s.discardStagedChange();
+      return {restored,removed:await repo.loadStagedCandidate(s.id)===null,htmlUnchanged:f.state().screens.page.htmlContent===f.original,historyUnchanged:f.history().past.length===before,calls:f.requests.length};
+    }''')
+    assert legacy=={'restored':True,'removed':True,'htmlUnchanged':True,'historyUnchanged':True,'calls':1},legacy
+    await page.goto(base+'&remountActivity=1',wait_until='networkidle')
+    await send('新建长正文说明页')
+    await page.get_by_role('button',name='重新检查并挂载',exact=True).click()
+    await page.wait_for_function('!!ruleControlFixture.releaseRender')
+    await page.evaluate('''async()=>{
+      const identityUrl=performance.getEntriesByType('resource').find(entry=>new URL(entry.name).pathname==='/src/services/ai/evidenceIdentity.ts')?.name;
+      if(!identityUrl)throw Error('Live checker module was not observed');
+      const {RenderEvidenceAuthority}=await import(identityUrl);
+      RenderEvidenceAuthority.revision=()=>"late-new-page-checker";
+      await ruleControlFixture.releaseRender();
+    }''')
+    await page.get_by_text('检查器、基座样式或渲染环境已变化',exact=False).wait_for()
+    assert await page.evaluate('Object.keys(ruleControlFixture.state().screens).length')==1
+    await page.evaluate('delete ruleControlFixture.releaseRender')
+    await page.get_by_role('button',name='重新检查并挂载',exact=True).click()
+    await page.wait_for_function('!!ruleControlFixture.releaseRender')
+    await page.evaluate('ruleControlFixture.releaseRender()')
+    await page.wait_for_function('Object.keys(ruleControlFixture.state().screens).length===2')
+    recovery=await page.evaluate('''()=>{const f=ruleControlFixture;return {calls:f.requests.length,pages:Object.keys(f.state().screens).length,history:f.history().past.length-f.before};}''')
+    assert recovery=={'calls':2,'pages':2,'history':1},recovery
+    await page.screenshot(path=str(OUT/f'{engine}-checker-remount-recovered-{device}.png'),full_page=True)
+    return {'changes':changes,'checkerRecheck':checking,'recheckAdoption':adoption,'staleRemount':remount,'legacyDiscard':legacy,'checkerRemountRecovery':recovery}
+
+async def verify_action_names(page,engine,device):
+    await page.set_viewport_size({'width':1280,'height':1000})
+    await page.goto('http://127.0.0.1:5174/test/fixtures/action-name-calibration.html?device='+device,wait_until='networkidle')
+    await page.wait_for_function('!!window.actionNameFixture?.source')
+    rows=await page.evaluate('actionNameFixture.cases')
+    results=[]
+    for index,row in enumerate(rows):
+        await page.get_by_label('校准样例',exact=True).select_option(str(index))
+        await page.wait_for_function('''index=>actionNameFixture.report?.key===`name-${actionNameFixture.device}-${index}`&&actionNameFixture.report.status==='complete' ''',arg=index)
+        observed=await page.evaluate('''()=>({source:actionNameFixture.source.passed,render:!actionNameFixture.report.findings.some(f=>f.severity==='error'&&f.nid==='control'),errors:actionNameFixture.report.findings.filter(f=>f.severity==='error').map(f=>({code:f.code,nid:f.nid})),requests:actionNameFixture.requests})''')
+        if observed['source']!=row['source'] or observed['render']!=row['render']:
+            observed['dom']=await page.frame_locator('iframe').locator('html').evaluate('''el=>{
+              const icon=el.querySelector('.icon'),rules=[];
+              const visit=list=>{for(const rule of list){if(rule.selectorText&&icon&&icon.matches(rule.selectorText)&&rule.style?.display)rules.push(rule.cssText);if(rule.cssRules)visit(rule.cssRules);}};
+              for(const sheet of el.ownerDocument.styleSheets)visit(sheet.cssRules);
+              return {css:el.querySelector('#scoped-css')?.textContent,iconDisplay:icon&&getComputedStyle(icon).display,displayRules:rules,body:el.querySelector('main')?.outerHTML};
+            }''')
+        assert observed['source']==row['source'] and observed['render']==row['render'],(row['id'],row['source'],row['render'],observed)
+        assert observed['requests']==0,observed
+        if row.get('accessibleName'):
+            await expect(page.frame_locator('iframe').get_by_role('button',name=row['accessibleName'],exact=True)).to_have_count(1)
+        await page.screenshot(path=str(OUT/f'{engine}-action-name-{row["id"]}-{device}.png'),full_page=True)
+        results.append({'id':row['id'],**observed})
+    return {'cases':results,'modelRequests':0}
+
+async def verify_findings(page,engine,device):
+    await page.set_viewport_size({'width':1280,'height':1000})
+    await page.goto('http://127.0.0.1:5174/test/fixtures/quality-findings.html?device='+device,wait_until='networkidle')
+    await page.wait_for_function("window.findingsFixture?.report?.status==='complete'")
+    observed=await page.evaluate('''()=>({source:findingsFixture.source.findings,render:findingsFixture.report.findings,requests:findingsFixture.requests})''')
+    for nid,code,check,status,severity in [
+        ('low00001','render_contrast','contrast','failed','warning'),
+        ('gradient','render_contrast_unverified','contrast-support','unverified','warning'),
+        ('image001','render_contrast_unverified','contrast-support','unverified','warning'),
+        ('action01','render_action_invisible_label','render-controls','failed','error')]:
+        finding=next((f for f in observed['render'] if f.get('nid')==nid and f['code']==code),None)
+        assert finding and finding.get('assessment')=={'checkId':check,'status':status} and finding['severity']==severity,(nid,observed)
+    assert any(f['code']=='unbounded_icon' and f.get('assessment')=={'checkId':'icon-sizing','status':'advice'} for f in observed['source']),observed
+    source=page.get_by_role('region',name='源码分级',exact=True)
+    render=page.get_by_role('region',name='渲染分级',exact=True)
+    await source.locator('summary').click();await render.locator('summary').click()
+    for text in ['阻断：','警告：','未验证：','必需检查','建议类检查','实际：']:
+        await expect(render).to_contain_text(text)
+    await expect(source).to_contain_text('设计建议：')
+    await render.get_by_role('button',name='定位组件 action01',exact=True).click()
+    selected=await page.evaluate('findingsFixture.selection()')
+    assert selected and selected['nid']=='action01',selected
+    await page.get_by_role('button',name='查看不可用状态说明',exact=True).click()
+    unavailable=page.get_by_role('region',name='不可用分级',exact=True)
+    await unavailable.locator('summary').click()
+    await expect(unavailable).to_contain_text('1 项未验证');await expect(unavailable).to_contain_text('必需检查')
+    await expect(unavailable).not_to_contain_text('未发现已覆盖规则的问题')
+    assert observed['requests']==0,observed
+    await page.screenshot(path=str(OUT/f'{engine}-findings-{device}.png'),full_page=True)
+    return {**observed,'selectedNid':selected['nid'],'unavailableDisclosure':True}
+
+async def wait_content_report(page,index):
+    await page.wait_for_function('''index=>{
+      const r=contentFixture.report;
+      if(r?.key!==`content-${index}`||r.status!=='complete'){window.contentStableReport=null;return false;}
+      const signature=JSON.stringify(r),now=performance.now(),prior=window.contentStableReport;
+      if(!prior||prior.signature!==signature){window.contentStableReport={signature,since:now};return false;}
+      return now-prior.since>=250;
+    }''',arg=index)
+
+async def verify_content(page,engine,device,kind='action'):
+    prefix='required_field_label_' if kind=='field' else 'required_action_text_'
+    file_kind='field-content' if kind=='field' else 'content'
+    await page.set_viewport_size({'width':1280,'height':1000})
+    await page.goto('http://127.0.0.1:5174/test/fixtures/explicit-action-content.html?device='+device+'&kind='+kind,wait_until='networkidle')
+    await page.wait_for_function('!!window.contentFixture?.source')
+    rows=await page.evaluate('contentFixture.cases');results=[]
+    for index,row in enumerate(rows):
+        await page.get_by_label('原文校准样例',exact=True).select_option(str(index))
+        await wait_content_report(page,index)
+        observed=await page.evaluate('''prefix=>({source:!contentFixture.source.findings.some(f=>f.code.startsWith(prefix)),render:!contentFixture.report.findings.some(f=>f.code.startsWith(prefix)),findings:contentFixture.report.findings.filter(f=>f.code.startsWith(prefix)),otherErrors:contentFixture.report.findings.filter(f=>f.severity==='error'&&!f.code.startsWith(prefix)),requests:contentFixture.requests})''',prefix)
+        expected_render=row['render']=='pass' if kind=='field' else row['render']
+        expected_unknown=row['render']=='unverified' if kind=='field' else row.get('unverified',False)
+        assert observed['source']==row['source'] and observed['render']==expected_render,(row['id'],observed)
+        if expected_unknown:assert observed['findings'][0]['assessment']['status']=='unverified',observed
+        assert not observed['otherErrors'] if expected_render else True,(row['id'],observed)
+        assert observed['requests']==0,observed
+        if kind=='field':
+            brief=page.get_by_test_id('design-brief')
+            if await brief.get_attribute('open') is None:await brief.locator('summary').click()
+            if row.get('ignored'):await expect(brief).not_to_contain_text('字段标签 · 保留原文：')
+            else:await expect(brief).to_contain_text('字段标签 · 保留原文：')
+        if observed['findings']:
+            await page.locator('[data-testid="render-quality-report"] summary').click()
+            await wait_content_report(page,index)
+            card=page.locator('[data-testid="render-quality-report"]')
+            await expect(card).to_contain_text('必需检查')
+            await expect(card).to_contain_text(observed['findings'][0]['message'])
+            if expected_unknown:await expect(card).to_contain_text('未验证：')
+        await expect(page.locator('[data-testid="render-quality-report"] summary')).to_contain_text('渲染检查 ·')
+        await page.evaluate('contentFixture.beginCapture()')
+        await expect(page.get_by_test_id('capture-notice')).to_be_visible()
+        await page.screenshot(path=str(OUT/f'{engine}-{file_kind}-{row["id"]}-{device}.png'),full_page=True)
+        capture=await page.evaluate('contentFixture.finishCapture()')
+        assert capture['snapshot']['status']=='complete',capture
+        assert [f for f in capture['snapshot']['findings'] if f['code'].startswith(prefix)]==observed['findings'],capture
+        await wait_content_report(page,index)
+        recovered=await page.evaluate("prefix=>!contentFixture.report.findings.some(f=>f.code.startsWith(prefix))",prefix)
+        assert recovered==expected_render,(row['id'],recovered)
+        results.append({'id':row['id'],**observed,'captureCallbacks':capture['callbacks'],'captureSnapshotStatus':'complete','liveRecovered':True})
+    return {'cases':results,'modelRequests':0}
+
+async def wait_layout_report(page,index):
+    await page.wait_for_function('''index=>{
+      const r=layoutFixture.report;
+      if(r?.key!==`layout-${index}`||r.status!=='complete'){window.layoutStableReport=null;return false;}
+      const signature=JSON.stringify(r),now=performance.now(),prior=window.layoutStableReport;
+      if(!prior||prior.signature!==signature){window.layoutStableReport={signature,since:now};return false;}
+      return now-prior.since>=250;
+    }''',arg=index)
+
+async def verify_layout(page,engine,device):
+    await page.set_viewport_size({'width':1280,'height':1000})
+    await page.goto('http://127.0.0.1:5174/test/fixtures/layout-calibration.html?device='+device,wait_until='networkidle')
+    await page.wait_for_function('!!window.layoutFixture?.cases')
+    rows=await page.evaluate('layoutFixture.cases');results=[]
+    for index,row in enumerate(rows):
+        await page.get_by_label('布局校准样例',exact=True).select_option(str(index))
+        await wait_layout_report(page,index)
+        observed=await page.evaluate('''()=>({findings:layoutFixture.report.findings,coverage:layoutFixture.report.coverage??[],requests:layoutFixture.requests})''')
+        for code,severity in row['expected'].items():
+            findings=[f for f in observed['findings'] if f['code']==code]
+            assert bool(findings)==(severity is not None),(row['id'],code,severity,observed)
+            if severity is not None:assert all(f['severity']==severity for f in findings),(row['id'],observed)
+        if row['noErrors']:assert not any(f['severity']=='error' for f in observed['findings']),(row['id'],observed)
+        for reason in row['coverage']:assert any(c['reason']==reason for c in observed['coverage']),(row['id'],reason,observed)
+        assert observed['requests']==0,observed
+        card=page.get_by_test_id('render-quality-report')
+        await card.locator('summary').click();await wait_layout_report(page,index)
+        if observed['coverage']:
+            await expect(card.get_by_role('region',name='检查范围与局限')).to_be_visible()
+            await expect(card).to_contain_text('不代表检查通过')
+        await page.evaluate('layoutFixture.beginCapture()');await expect(page.get_by_test_id('capture-notice')).to_be_visible()
+        await page.screenshot(path=str(OUT/f'{engine}-layout-{row["id"]}-{device}.png'),full_page=True)
+        capture=await page.evaluate('layoutFixture.finishCapture()')
+        assert capture['snapshot']['findings']==observed['findings'],capture
+        assert capture['snapshot'].get('coverage',[])==observed['coverage'],capture
+        await wait_layout_report(page,index)
+        current=await page.evaluate('({findings:layoutFixture.report.findings,coverage:layoutFixture.report.coverage??[]})')
+        assert current=={'findings':observed['findings'],'coverage':observed['coverage']},(row['id'],current,observed)
+        results.append({'id':row['id'],**observed,'captureCallbacks':capture['callbacks'],'liveRecovered':True})
+    return {'cases':results,'modelRequests':0}
+
 async def main():
     OUT.mkdir(parents=True,exist_ok=True);results=[]
     (OUT/'result.json').unlink(missing_ok=True)
@@ -1040,12 +1325,58 @@ async def main():
         for engine in ['chromium','webkit']:
             browser=await getattr(p,engine).launch(headless=True)
             page=await browser.new_page(viewport={'width':1280,'height':1000},locale='zh-CN');errors=[];external=[]
+            await page.add_init_script('performance.setResourceTimingBufferSize(10000)')
             page.on('pageerror',lambda error:errors.append(str(error)))
             async def route(request):
                 if request.request.url.startswith(('http://127.0.0.1:5174/','data:','blob:')):await request.continue_()
                 else:external.append(request.request.url);await request.abort()
             await page.route('**/*',route)
             try:
+                if ARGS.layout_only:
+                    mobile=await verify_layout(page,engine,'mobile');pc=await verify_layout(page,engine,'pc')
+                    assert not errors,errors
+                    assert not external,external
+                    results.append({'engine':engine,'status':'passed','layoutMobile':mobile,'layoutPc':pc,'pageErrors':errors,'externalRequests':external})
+                    print(json.dumps(results[-1],ensure_ascii=False),flush=True)
+                    continue
+                if ARGS.field_content_only:
+                    mobile=await verify_content(page,engine,'mobile','field');pc=await verify_content(page,engine,'pc','field')
+                    assert not errors,errors
+                    assert not external,external
+                    results.append({'engine':engine,'status':'passed','fieldMobile':mobile,'fieldPc':pc,'pageErrors':errors,'externalRequests':external})
+                    print(json.dumps(results[-1],ensure_ascii=False),flush=True)
+                    continue
+                if ARGS.content_only:
+                    mobile=await verify_content(page,engine,'mobile');pc=await verify_content(page,engine,'pc')
+                    assert not errors,errors
+                    assert not external,external
+                    results.append({'engine':engine,'status':'passed','contentMobile':mobile,'contentPc':pc,'pageErrors':errors,'externalRequests':external})
+                    print(json.dumps(results[-1],ensure_ascii=False),flush=True)
+                    continue
+                if ARGS.findings_only:
+                    mobile=await verify_findings(page,engine,'mobile')
+                    pc=await verify_findings(page,engine,'pc')
+                    assert not errors,errors
+                    assert not external,external
+                    results.append({'engine':engine,'status':'passed','findingsMobile':mobile,'findingsPc':pc,'pageErrors':errors,'externalRequests':external})
+                    print(json.dumps(results[-1],ensure_ascii=False),flush=True)
+                    continue
+                if ARGS.action_names_only:
+                    mobile=await verify_action_names(page,engine,'mobile')
+                    pc=await verify_action_names(page,engine,'pc')
+                    assert not errors,errors
+                    assert not external,external
+                    results.append({'engine':engine,'status':'passed','actionNamesMobile':mobile,'actionNamesPc':pc,'pageErrors':errors,'externalRequests':external})
+                    print(json.dumps(results[-1],ensure_ascii=False),flush=True)
+                    continue
+                if ARGS.invalidation_only:
+                    mobile=await verify_input_invalidation(page,engine,'mobile')
+                    pc=await verify_input_invalidation(page,engine,'pc')
+                    assert not errors,errors
+                    assert not external,external
+                    results.append({'engine':engine,'status':'passed','inputMobile':mobile,'inputPc':pc,'pageErrors':errors,'externalRequests':external})
+                    print(json.dumps(results[-1],ensure_ascii=False),flush=True)
+                    continue
                 if ARGS.legacy_history_only:
                     mobile=await verify_legacy_history(page,engine,'mobile')
                     pc=await verify_legacy_history(page,engine,'pc')
@@ -1062,6 +1393,15 @@ async def main():
                     assert not errors,errors
                     assert not external,external
                     results.append({'engine':engine,'status':'passed','guidedRepairMobile':mobile,'guidedRepairPc':pc,'recoveryActivityMobile':recovery_mobile,'recoveryActivityPc':recovery_pc,'pageErrors':errors,'externalRequests':external})
+                    print(json.dumps(results[-1],ensure_ascii=False),flush=True)
+                    continue
+                if ARGS.drafts_only:
+                    checks={}
+                    for device in ['mobile','pc']:
+                        checks[device]={'draft':await verify_local_draft_source(page,engine,device),'withdrawal':await verify_rule_withdrawal(page,engine,device),'resources':await verify_resource_invalidation(page,engine,device),'recovery':await verify_recovery_activity(page,engine,device)}
+                    assert not errors,errors
+                    assert not external,external
+                    results.append({'engine':engine,'status':'passed','scope':'incremental draft/recovery checks only','checks':checks,'pageErrors':errors,'externalRequests':external})
                     print(json.dumps(results[-1],ensure_ascii=False),flush=True)
                     continue
                 if ARGS.independent_only:
@@ -1129,10 +1469,10 @@ async def main():
                     contextualGuidance:{features:['button']},isCurrent:()=>true});
                   return {status:result.status,ruleIds:result.contract.designGuidance?.selection.selected.map(s=>s.rule.id),
                     requests:result.contract.designGuidance?.requests.map(r=>({status:r.status,outputProtocol:r.outputProtocol})),
-                    schema:transport.lastRequest?.body.response_format?.type,originalUnchanged:fixture.state().screens.page.htmlContent===fixture.original};
+                    schema:(await import('/test/helpers/modelSchema.ts')).requestSchema(transport.lastRequest)?.type,originalUnchanged:fixture.state().screens.page.htmlContent===fixture.original};
                 }''')
                 assert json_pilot=={'status':'ready','ruleIds':['TY-06'],'requests':[{'status':'completed','outputProtocol':'json-object'}],
-                                   'schema':'json_schema','originalUnchanged':True},json_pilot
+                                   'schema':'object','originalUnchanged':True},json_pilot
                 await page.goto('http://127.0.0.1:5174/test/fixtures/function-first.html',wait_until='networkidle')
                 await page.get_by_role('button',name='运行功能优先设计').click()
                 await page.get_by_text('受控验证完成',exact=True).wait_for()
@@ -1165,7 +1505,7 @@ async def main():
                 assert function_chat=={'requests':[{'json':True,'containsPlan':False},{'json':False,'containsPlan':True}],
                                       'plan':True,'workflow':'ready','originalUnchanged':True},function_chat
                 text=await page.locator('body').inner_text()
-                assert '业务规划未返回用量' in text and 'FIXTURE_SECRET' not in text
+                assert '功能规划等步骤的累计用量见任务预算' in text and 'FIXTURE_SECRET' not in text
                 assert not await page.evaluate('document.documentElement.scrollWidth>innerWidth')
                 await page.get_by_label('需求覆盖线索',exact=True).locator('summary').click()
                 await page.get_by_label('需求覆盖线索',exact=True).scroll_into_view_if_needed()
@@ -1258,6 +1598,18 @@ async def main():
                 recovery_pc=await verify_recovery_activity(page,engine,'pc')
                 panels_mobile=await verify_panel_activity(page,engine,'mobile')
                 panels_pc=await verify_panel_activity(page,engine,'pc')
+                input_mobile=await verify_input_invalidation(page,engine,'mobile')
+                input_pc=await verify_input_invalidation(page,engine,'pc')
+                names_mobile=await verify_action_names(page,engine,'mobile')
+                names_pc=await verify_action_names(page,engine,'pc')
+                findings_mobile=await verify_findings(page,engine,'mobile')
+                findings_pc=await verify_findings(page,engine,'pc')
+                content_mobile=await verify_content(page,engine,'mobile')
+                content_pc=await verify_content(page,engine,'pc')
+                field_mobile=await verify_content(page,engine,'mobile','field')
+                field_pc=await verify_content(page,engine,'pc','field')
+                layout_mobile=await verify_layout(page,engine,'mobile')
+                layout_pc=await verify_layout(page,engine,'pc')
                 assert not errors,errors
                 assert not external,external
                 results.append({'engine':engine,'status':'passed',**result,'svgRestrictedXml':svg_safe,'jsonPilot':json_pilot,'functionFirst':function_first,'functionChat':function_chat,'functionalModify':functional_modify,'creationHistory':creation_history,'modificationHistory':modification_history,'referenceCreation':reference_creation,'referenceHistory':reference_history,'referenceModify':reference_modify,'multiUnchanged':multi_unchanged,'multiEdited':multi_edited,'regionText':region_text,'regionReference':region_reference,'elementText':element_text,'elementReference':element_reference,'elementDecorative':element_decorative,'elementForm':element_form,'pageErrors':errors,'externalRequests':external})
@@ -1272,6 +1624,10 @@ async def main():
                 results[-1].update(recoveryActivityMobile=recovery_mobile,recoveryActivityPc=recovery_pc)
                 results[-1].update(panelsMobile=panels_mobile,panelsPc=panels_pc)
                 results[-1].update(legacyHistoryMobile=legacy_mobile,legacyHistoryPc=legacy_pc)
+                results[-1].update(inputMobile=input_mobile,inputPc=input_pc)
+                results[-1].update(actionNamesMobile=names_mobile,actionNamesPc=names_pc,findingsMobile=findings_mobile,findingsPc=findings_pc)
+                results[-1].update(contentMobile=content_mobile,contentPc=content_pc,fieldMobile=field_mobile,fieldPc=field_pc)
+                results[-1].update(layoutMobile=layout_mobile,layoutPc=layout_pc)
                 print(json.dumps(results[-1],ensure_ascii=False),flush=True)
             except Exception:
                 await page.screenshot(path=str(OUT/f'{engine}-failed.png'),full_page=True)

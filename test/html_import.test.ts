@@ -3,6 +3,8 @@ import { analyzeHtmlImport, convertHtmlImport } from '../src/services/import/htm
 import { defaultTheme, techBlueTheme } from '../src/utils/themePresets';
 import { compileTokensToCss } from '../src/utils/cssCompiler';
 import { prepareImportResources } from '../src/services/import/importResources';
+import {SvgMediaExternalizer} from '../src/services/import/svgMediaExternalizer';
+import {LocalStorageStorage} from '../src/services/storage/projectStorage';
 
 const parse = (html: string) => new DOMParser().parseFromString(html, 'text/html');
 // Happy DOM starts stylesheet fetches in DOMParser documents, unlike browser
@@ -23,10 +25,12 @@ describe('HTML import analysis', () => {
     expect(() => analyzeHtmlImport('中'.repeat(700_000), 'big.html')).toThrow();
   });
 
-  test('preserves full document attributes, styles in cascade order, nested text and SVG', () => {
-    const source = '<!doctype html><html lang="zh" class="page"><head><title>账单</title><style>.x{color:red}</style></head><body id="app" style="margin:0"><div class="x">你好 <span>世界</span><svg viewBox="0 0 1 1"><path d="M0 0h1v1Z"/></svg></div><style>.x{color:blue}</style></body></html>';
+  test('preserves full document attributes, cascade and nested text while SVG drawing lives in a separate file', async () => {
+    const source = '<!doctype html><html lang="zh" class="page"><head><title>账单</title><style>.x{color:red}</style></head><body id="app" style="margin:0"><div class="x">你好 <span>世界</span><svg fill="black" viewBox="0 0 1 1"><path d="M0 0h1v1Z"/></svg></div><style>.x{color:blue}</style></body></html>';
     const analysis = analyzeHtmlImport(source, 'bill.html');
-    const result = convertHtmlImport(analysis, { mode: 'preserve', designSystem: defaultTheme, colorMode: 'light' });
+    expect(()=>convertHtmlImport(analysis,{mode:'preserve',designSystem:defaultTheme,colorMode:'light'})).toThrow('独立文件');
+    const media=await SvgMediaExternalizer.prepare({screen:{id:'import',name:'账单',position:{x:0,y:0},htmlContent:analysis.sanitizedHtml},settings:{deviceProfile:'pc',frameWidth:1440,colorMode:'light',lodBudget:12},designSystem:defaultTheme,storage:new LocalStorageStorage('import-svg-'+crypto.randomUUID()),sourceImport:true});
+    const result = convertHtmlImport(analyzeHtmlImport(media.screen.htmlContent,'bill.html'), { mode: 'preserve', designSystem: defaultTheme, colorMode: 'light' });
     const doc = parse(result.htmlContent);
     expect(doc.documentElement.getAttribute('lang')).toBe('zh');
     expect(doc.documentElement.className).toBe('page');
@@ -35,7 +39,7 @@ describe('HTML import analysis', () => {
     expect(doc.querySelector('div')!.textContent).toBe('你好 世界');
     expect(doc.querySelectorAll('style')[0].textContent).toBe('.x{color:red}');
     expect(doc.querySelectorAll('style')[1].parentElement).toBe(doc.body);
-    expect(doc.querySelector('path')!.getAttribute('d')).toBe('M0 0h1v1Z');
+    expect(doc.querySelector('path')).toBeNull();expect(media.resources.binaries).toHaveLength(1);expect(atob(media.resources.binaries[0].base64)).toContain('M0 0h1v1Z');
     expect(result.scopedCss).toBe('');
     expect(result.executionRecord).toMatchObject({ source: 'html-import', completeHtml: result.htmlContent, continuationCount: 0 });
     expect(result.changes).toEqual([]);
@@ -296,14 +300,15 @@ describe('HTML import conversion', () => {
     expect(JSON.stringify(defaultTheme)).toBe(themeBefore);
   });
 
-  test('selective typography isolates source variables and leaves colors, spacing and SVG untouched', () => {
-    const result = convert('<style>:root{--color-bg:#123456}.x{background:var(--color-bg);padding:12px;font-family:Arial,sans-serif;font-size:14px}</style><p class="x">Hello<svg fill="#ff0000"><path/></svg></p>', ['typography']);
+  test('selective typography isolates source variables and leaves colors, spacing and independent SVG unchanged', async () => {
+    const media=await prepareImportResources('<style>:root{--color-bg:#123456}.x{background:var(--color-bg);padding:12px;font-family:Arial,sans-serif;font-size:14px}</style><p class="x">Hello<img src="data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" fill="#ff0000" viewBox="0 0 1 1"><path d="M0 0h1v1Z"/></svg>')+'"></p>','type.html',[]);
+    const result = convert(media.html, ['typography']);
     const doc = parse(result.htmlContent), css = doc.querySelector('style')!.textContent!;
     expect(css).toContain('--color-bg:#123456');
     expect(css).toContain('background:var(--color-bg)');
     expect(css).toContain('padding:12px');
     expect(css).toContain('var(--td-import-font-sans)');
-    expect(doc.querySelector('svg')!.getAttribute('fill')).toBe('#ff0000');
+    expect(doc.querySelector('path')).toBeNull();expect(atob(media.binaries[0].base64)).toContain('#ff0000');expect(doc.querySelector('img')!.getAttribute('src')).toBe(media.binaries[0].relPath);
   });
 
   test('preserves fallback declarations, conditional structures and unknown at-rules around mapped values', () => {

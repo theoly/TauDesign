@@ -2,11 +2,12 @@ import { useHistoryStore } from '../../stores/useHistoryStore';
 import { createProjectStorage } from './projectStorage';
 import {
   HistoryRepository,
-  HistorySnapshot,
+  HistorySnapshot,readHistoryArchive,
   deleteHistoryLocal,
-  readHistoryLocal,
-  writeHistoryLocal,historyKey,serializeHistory,LOCAL_HISTORY_BUDGET
+  readHistoryLocal,localHistoryRequiresFiles,readHistoryLocalChecked,saveHistoryLocalOrdered
 } from './historyRepository';
+import {HistoryMediaError} from './historyMedia';
+import {getProjectPublication} from './projectPublication';
 
 /**
  * 历史归档的落盘调度 (BR-HIS-04 / BR-HIS-06)
@@ -26,6 +27,9 @@ let timer: ReturnType<typeof setTimeout> | null = null;
 let pending: PersistTarget | null = null;
 /** 工程加载期间挂起一切落盘 (BR-HIS-04) */
 let suspended = false;
+// Registered by the project store after its initialization; avoids a module cycle.
+let projectHistoryIO:{save:(projectId:string,folderPath?:string)=>Promise<boolean>;source:(projectId:string,folderPath?:string)=>string|null|undefined}|null=null;
+export function registerProjectHistoryIO(io:NonNullable<typeof projectHistoryIO>){projectHistoryIO=io;}
 
 function snapshot(): HistorySnapshot {
   const { past, future, checkpoints } = useHistoryStore.getState();
@@ -34,17 +38,17 @@ function snapshot(): HistorySnapshot {
 
 async function writeNow(target: PersistTarget,checked=false): Promise<void> {
   const snap = snapshot();
-  if (target.folderPath) {
-    const operation=new HistoryRepository(
-      createProjectStorage(target.projectId, target.folderPath),
-      target.projectId
-    )
-      .save(snap);
-    if(checked)await operation;else await operation.catch((e)=>console.warn('[history] 归档写入失败',e));
+  if (projectHistoryIO) {
+    try{if(await projectHistoryIO.save(target.projectId,target.folderPath))return;}
+    catch(e){if(checked)throw e;console.warn('[history] 归档写入失败',e);return;}
+  }
+  if(target.folderPath){
+    if(checked)throw Error('工程历史保存会话未就绪，未独立覆盖归档。');
+    console.warn('[history] 工程历史保存会话未就绪，未独立覆盖归档。');
     return;
   }
-  if(checked)localStorage.setItem(historyKey(target.projectId),serializeHistory(target.projectId,snap,LOCAL_HISTORY_BUDGET));
-  else writeHistoryLocal(target.projectId, snap);
+  const operation=saveHistoryLocalOrdered(target.projectId,snap);
+  if(checked)await operation;else await operation.catch(e=>console.warn('[history] 归档写入失败',e));
 }
 
 function cancelPending(): void {
@@ -54,9 +58,12 @@ function cancelPending(): void {
   }
   pending = null;
 }
+/** Only cancel this active author's debounce; do not suspend loads or another project. */
+export function cancelScheduledHistorySave(projectId:string,folderPath?:string){if(pending?.projectId===projectId&&pending.folderPath===folderPath)cancelPending();}
 
 /** 历史发生变化后调度一次防抖落盘 */
 export function scheduleHistorySave(projectId: string, folderPath?: string): void {
+  if(getProjectPublication())return;
   if (suspended || !projectId) return;
   pending = { projectId, folderPath };
   if (timer) clearTimeout(timer);
@@ -102,17 +109,24 @@ export function isHistoryPersistenceSuspended(): boolean {
  */
 export async function loadHistoryForProject(projectId: string, folderPath?: string,isCurrent:()=>boolean=()=>true): Promise<boolean> {
   let snap: HistorySnapshot | null = null;
+  let boundSource=false;
   try {
-    snap = folderPath
-      ? await new HistoryRepository(createProjectStorage(projectId, folderPath), projectId).load()
-      : readHistoryLocal(projectId);
+    const raw=projectHistoryIO?.source(projectId,folderPath);boundSource=raw!==undefined;
+    if(folderPath&&!boundSource)throw Error('工程历史来源未就绪。');
+    snap=boundSource?await readHistoryArchive(createProjectStorage(projectId,folderPath),projectId,raw!):localHistoryRequiresFiles(projectId)?await readHistoryLocalChecked(projectId):readHistoryLocal(projectId);
   } catch (e) {
+    if(e instanceof HistoryMediaError||folderPath||boundSource){
+      if(!isCurrent())return false;
+      useHistoryStore.getState().setArchiveError((e instanceof Error?e.message:String(e))+'；原归档已保留，历史写入暂停。修复资源后请重新打开工程。');
+      return false;
+    }
     console.warn('[history] 归档读取失败，以空栈启动', e);
     snap = null;
   }
 
   if(!isCurrent())return false;
   useHistoryStore.getState().restore(snap);
+  useHistoryStore.getState().setArchiveError(null);
   resumeHistoryPersistence();
   return Boolean(snap);
 }

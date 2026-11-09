@@ -14,6 +14,8 @@ import {makeGuidancePacket,guidancePacketIssue} from '../src/services/ai/designK
 import {selectDesignRules,ruleFingerprint} from '../src/services/ai/designKnowledge/selector';
 import {captureDesignGuidanceHistory} from '../src/services/ai/designKnowledge/history';
 import {DeliveryPreviewCapture} from '../src/services/storage/deliveryPreview';
+import {stubIndependentMediaTransport,unitMediaUrl} from './helpers/independentMedia';
+stubIndependentMediaTransport(true);
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
 const path='assets/images/example.png',font=`assets/imports/fonts/${'a'.repeat(64)}.woff2`;
 const data=btoa('first image bytes'),next=btoa('different image bytes'),clean={status:'complete' as const,findings:[],inspected:3};
@@ -116,10 +118,10 @@ describe('resource-aware candidate rendering and adoption',()=>{
   try{
    await act(async()=>{root.render(<Probe revision={0}/>);});
    for(let i=0;i<30&&host.textContent!=='ready';i++)await act(async()=>{await pause();});
-   expect(current.a.resourceFiles).toHaveLength(2);expect(current.b.css).toContain(data);
+   expect(current.a.resourceFiles).toHaveLength(2);expect(current.b.css).toContain(await unitMediaUrl(path,data));
    await storage.writeBinary(path,next);await act(async()=>{root.render(<Probe revision={1}/>);});
    for(let i=0;i<30&&host.textContent!=='ready';i++)await act(async()=>{await pause();});
-   expect(current.a.screen.htmlContent).toContain(next);expect(current.b.css).toContain(next);
+   expect(current.a.screen.htmlContent).toContain(await unitMediaUrl(path,next));expect(current.b.css).toContain(await unitMediaUrl(path,next));expect(current.a.screen.htmlContent).not.toContain('data:image');
    expect(screen.htmlContent).toBe(before);expect(screen.scopedCss).toContain(font);
   }finally{act(()=>root.unmount());host.remove();}
  });

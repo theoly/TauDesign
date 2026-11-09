@@ -87,7 +87,7 @@ async def main(args):
               const {useHistoryStore}=await import(load);const after=structuredClone(s.designLibraryBinding);
               useHistoryStore.getState().undo();if(window.__projectStore.getState().designLibraryBinding.sourceFingerprint!==window.__firstBinding.sourceFingerprint)throw Error('Update undo failed');
               useHistoryStore.getState().redo();if(window.__projectStore.getState().designLibraryBinding.sourceFingerprint!==after.sourceFingerprint)throw Error('Update redo failed');
-              window.__projectStore.getState().insertComponent('page','lib-source-card');window.__projectStore.getState().saveProject();
+              window.__projectStore.getState().insertComponent('page','lib-source-card');await window.__projectStore.getState().saveProjectChecked();
               return {binding:after,assets,oldInstancePreserved:true,sourceWrites:window.__libraryFixture.sourceWrites};
             }''')
             assert updated['sourceWrites']==0
@@ -99,7 +99,7 @@ async def main(args):
             await page.wait_for_function('Boolean(window.__projectStore)')
             reopened=await page.evaluate('''async id=>{
               const load=performance.getEntriesByType('resource').map(e=>e.name).find(u=>new URL(u).pathname==='/src/stores/useWorkspaceStore.ts');
-              const {useWorkspaceStore}=await import(load);if(!useWorkspaceStore.getState().openProject(id))throw Error('Reopen failed');
+              const {useWorkspaceStore}=await import(load);await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(id);
               const s=window.__projectStore.getState();s.setActiveScreen('page');
               const {libraryReferenceIssue,verifyLibraryReferenceFiles}=await import('/src/services/ai/designLibraryReference.ts');
               const {createProjectStorage}=await import('/src/services/storage/projectStorage.ts');
@@ -130,7 +130,7 @@ async def main(args):
             # A reload closes UI panels, open theme again and verify conversion changes only the lock.
             await page.reload(wait_until='networkidle')
             await page.wait_for_function('Boolean(window.__projectStore)')
-            await page.evaluate('''async id=>{const url=performance.getEntriesByType('resource').map(e=>e.name).find(u=>new URL(u).pathname==='/src/stores/useWorkspaceStore.ts');const {useWorkspaceStore}=await import(url);useWorkspaceStore.getState().openProject(id);}''',fixture['id'])
+            await page.evaluate('''async id=>{const url=performance.getEntriesByType('resource').map(e=>e.name).find(u=>new URL(u).pathname==='/src/stores/useWorkspaceStore.ts');const {useWorkspaceStore}=await import(url);await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(id);}''',fixture['id'])
             panel=await editor()
             assert await page.get_by_label('自定义品牌主色',exact=True).is_disabled()
             await panel.get_by_role('button',name='转为项目副本',exact=True).click()

@@ -1,5 +1,7 @@
+import {RenderEvidenceAuthority} from '../src/services/ai/evidenceIdentity';
+import * as CreationPreparation from '../src/services/ai/pageCreationRepair';
 import {TaskBudget} from '../src/services/ai/taskBudget';
-import {afterEach,beforeEach,expect,test} from 'bun:test';
+import {afterEach,beforeEach,expect,test,spyOn} from 'bun:test';
 import {useProjectStore} from '../src/stores/useProjectStore';
 import {useHistoryStore} from '../src/stores/useHistoryStore';
 import {CanvasToolExecutor} from '../src/services/tools/canvasToolExecutor';
@@ -100,7 +102,7 @@ test('render exceptions and caller-invalidated results are rejected without hist
 test('creation evidence survives project.json save/load without embedding generated HTML in metadata',async()=>{
  const {createProjectStorage}=await import('../src/services/storage/projectStorage'),{ProjectRepository}=await import('../src/services/storage/projectRepository');
  const result=await create(),s=useProjectStore.getState(),repo=new ProjectRepository(createProjectStorage(s.id));
- await repo.save({id:s.id,name:s.name,settings:s.settings,screens:s.screens,assets:s.assets,overrides:s.overrides,components:s.components,decisions:s.decisions,designSystem:s.designSystem} as any);const loaded=await repo.load(),e=(loaded!.screens as any)[result.screenId!].metadata.creationEvidence;
+ await s.saveProjectChecked();const loaded=await repo.load(),e=(loaded!.screens as any)[result.screenId!].metadata.creationEvidence;
  expect(e.workflow.status).toBe('ready');expect(e.contract.request).toBe('创建资料页');expect(e).not.toHaveProperty('completeHtml');
  const projectJson=await createProjectStorage(s.id).readText('project.json');expect(projectJson).not.toContain('<main');
 });
@@ -115,6 +117,7 @@ import {createProjectStorage} from '../src/services/storage/projectStorage';
 const importedFont=`assets/imports/fonts/${'a'.repeat(64)}.woff2`;
 for(const mode of ['present','missing','removed-during-render','replaced-during-render'] as const)test(`AI creation font ${mode} uses actual resource reads and records dependencies`,async()=>{
  const state=useProjectStore.getState(),storage=createProjectStorage(state.id),value=`<style>@font-face{font-family:Imported;src:url(${importedFont})}</style>${html}`;
+ state.addAsset({id:'registered-font',name:'Imported',relPath:importedFont,type:'font',mimeType:'font/woff2',source:'upload',refCount:1});
  if(mode!=='missing')await storage.writeBinary(importedFont,'dGVzdA==');
  PageRenderCheck.inspect=async request=>{
   const {readProjectRenderResources}=await import('../src/services/ai/projectAssetIntegrity');
@@ -157,4 +160,24 @@ test('external cancellation stops verification and cannot leave a pending creati
   PageRenderCheck.inspect=async()=>({status:'complete',inspected:3,findings:[]});expect((await create(html,contract)).success).toBe(true);
   const before=historyCounts();release();await new Promise(resolve=>setTimeout(resolve,0));expect(useProjectStore.getState().screenOrder).toHaveLength(1);expect(historyCounts()).toEqual(before);
  }finally{release();budget.close();}
+});
+
+for(const phase of ['render','after-validation'] as const)test(`checker change ${phase} refuses a new page without changing original task inputs`,async()=>{
+ const contract=task(),frozen=JSON.stringify(contract),before=historyCounts();let changed=false;
+ const revision=spyOn(RenderEvidenceAuthority,'revision').mockImplementation(()=>changed?'test-checker-next':'test-checker-current');
+ const real=CreationPreparation.prepareNewPageWithRepair;
+ const preparation=phase==='after-validation'?spyOn(CreationPreparation,'prepareNewPageWithRepair').mockImplementation(async(...args)=>{const result=await real(...args);expect(result.status).toBe('ready');changed=true;return result;}):undefined;
+ if(phase==='render')PageRenderCheck.inspect=async()=>{changed=true;return {status:'complete',findings:[],inspected:3};};
+ try{
+  const result=await create(html,contract);expect(result.success).toBe(false);expect(useProjectStore.getState().screenOrder).toHaveLength(0);expect(historyCounts()).toEqual(before);expect(JSON.stringify(contract)).toBe(frozen);
+ }finally{preparation?.mockRestore();revision.mockRestore();}
+});
+
+test('direct page preparation checks its own renderer epoch without relying on a caller guard',async()=>{
+ const {prepareNewPage}=await import('../src/services/ai/pageCreationValidation'),{createProjectStorage}=await import('../src/services/storage/projectStorage');
+ const state=useProjectStore.getState(),before=historyCounts();let changed=false;
+ const revision=spyOn(RenderEvidenceAuthority,'revision').mockImplementation(()=>changed?'direct-next':'direct-current');
+ PageRenderCheck.inspect=async()=>{changed=true;return {status:'complete',findings:[],inspected:3};};
+ try{const result=await prepareNewPage(state,{id:'direct-new',name:'资料',position:{x:0,y:0},htmlContent:html},task(),createProjectStorage(state.id),{isCurrent:()=>true});expect(result.status).toBe('blocked');expect(historyCounts()).toEqual(before);}
+ finally{revision.mockRestore();}
 });

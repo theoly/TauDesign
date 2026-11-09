@@ -1,5 +1,7 @@
+import {RenderEvidenceAuthority} from '../src/services/ai/evidenceIdentity';
+import * as ImportPreparation from '../src/services/ai/pageCreationValidation';
 import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
-import {afterEach,beforeEach,expect,test} from 'bun:test';
+import {afterEach,beforeEach,expect,test,spyOn} from 'bun:test';
 import {useProjectStore} from '../src/stores/useProjectStore';
 import {useHistoryStore} from '../src/stores/useHistoryStore';
 import {defaultTheme} from '../src/utils/themePresets';
@@ -135,6 +137,16 @@ for(const mode of ['preserve','selective','unify'] as const)test(`${mode} creati
  expect(e.workflow.status).toBe('ready');
 });
 test('preserve import still refuses an unnamed primary icon-only action without history changes',async()=>{
- const r=request('preserve',{},markup.replace('<button>保存</button>','<button class="btn-primary"><svg viewBox="0 0 24 24"><path d="M1 1L9 9"/></svg></button>'));
+ const r=request('preserve',{},markup.replace('<button>保存</button>','<button class="btn-primary"><img class="icon" src="https://example.test/icon.svg" alt="" aria-hidden="true"></button>'));
  const before=counts();await expect(apply(r)).rejects.toThrow();expect(counts()).toEqual(before);
+});
+
+for(const phase of ['render','after-validation'] as const)test(`checker change ${phase} refuses imported output without writing page or theme`,async()=>{
+ const r=request(),before=counts(),theme=JSON.stringify(useProjectStore.getState().designSystem);let changed=false;
+ const revision=spyOn(RenderEvidenceAuthority,'revision').mockImplementation(()=>changed?'import-checker-next':'import-checker-current');
+ const real=ImportPreparation.prepareNewPage;
+ const preparation=phase==='after-validation'?spyOn(ImportPreparation,'prepareNewPage').mockImplementation(async(...args)=>{const result=await real(...args);expect(result.status).toBe('ready');changed=true;return result;}):undefined;
+ if(phase==='render')PageRenderCheck.inspect=async()=>{changed=true;return {status:'complete',findings:[],inspected:4};};
+ try{await expect(apply(r)).rejects.toThrow();expect(counts()).toEqual(before);expect(JSON.stringify(useProjectStore.getState().designSystem)).toBe(theme);}
+ finally{preparation?.mockRestore();revision.mockRestore();}
 });

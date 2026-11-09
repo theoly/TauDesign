@@ -25,8 +25,12 @@ function fixture(image=false){
 for(const image of [false,true])test(`confirmed functional region (${image?'image':'text'}) plans only authorized source before scoped JSON and preserves outside DOM`,async()=>{
  const f=fixture(image);f.transport.queueResponse(JSON.stringify(f.response));f.transport.queueResponse(JSON.stringify({nid:'form0001',html:replacement}));
  const result=await executeStructuredEdit(f.core,f.options);expect(result.status).toBe('ready');if(result.status!=='ready')throw Error(result.message);
- expect(f.requests).toHaveLength(2);expect(f.requests[0].body.response_format.json_schema.schema.properties.features).toBeDefined();
- expect(f.requests[1].body.response_format.json_schema.schema.properties.nid.enum).toEqual(['form0001']);
+ expect(f.requests).toHaveLength(2);
+ // An arbitrary compatible mock endpoint has no verified native schema support.
+ const sentSchema=(request:any)=>JSON.parse(request.body.messages[0].content.split('[TAUDESIGN_JSON_SCHEMA]\n')[1].split('\n[/TAUDESIGN_JSON_SCHEMA]')[0]);
+ for(const request of f.requests)expect(request.body.response_format).toBeUndefined();
+ expect(sentSchema(f.requests[0]).properties.features).toBeDefined();
+ expect(sentSchema(f.requests[1]).properties.nid.enum).toEqual(['form0001']);
  expect(f.requests[1].body.messages[0].content).toContain('PAGE TASK PLAN');
  const plannerContent=JSON.stringify(f.requests[0].body.messages);expect(plannerContent).toContain('form0001');expect(plannerContent).not.toContain('OUTSIDE_PRIVATE_NOT_FOR_PLANNER');const last=f.requests[0].body.messages.at(-1).content;expect(JSON.parse(Array.isArray(last)?last.find((c:any)=>c.type==='text').text:last).baselineHtml).toBeUndefined();
  const doc=(html:string)=>new DOMParser().parseFromString(html,'text/html');

@@ -77,7 +77,7 @@ async def main(args):
               const {createProjectStorage}=await import('/src/services/storage/projectStorage.ts');
               const records=(await new DeliveryRepository(createProjectStorage(s.id),s.id).listForScreen('page')).records;
               if(records.length!==1||!records[0].candidate.workflowContract.modificationReview)throw new Error('Archive lost analysis');
-              window.__projectStore.getState().saveProject();
+              await window.__projectStore.getState().saveProjectChecked();
               return {id:records[0].id,receipt:records[0].candidate.workflowContract.modificationReview,renderStates:window.__analysisTest.renderStates};
             }''')
             assert delivery['receipt']==candidate['receipt']
@@ -98,7 +98,7 @@ async def main(args):
             await page.wait_for_function('Boolean(window.__projectStore)')
             reopened=await page.evaluate('''async fixture=>{
               const url=performance.getEntriesByType('resource').map(e=>e.name).find(url=>new URL(url).pathname==='/src/stores/useWorkspaceStore.ts');
-              const {useWorkspaceStore}=await import(url);if(!useWorkspaceStore.getState().openProject(fixture.id))throw new Error('Reopen failed');
+              const {useWorkspaceStore}=await import(url);await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(fixture.id);
               const {DeliveryRepository}=await import('/src/services/storage/deliveryRepository.ts');
               const {createProjectStorage}=await import('/src/services/storage/projectStorage.ts');
               const records=(await new DeliveryRepository(createProjectStorage(fixture.id),fixture.id).listForScreen('page')).records;

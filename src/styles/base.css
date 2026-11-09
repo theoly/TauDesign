@@ -219,8 +219,8 @@ a { color: var(--color-primary-text); }
 .shadow-md { box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1)); }
 .shadow-lg { box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1)); }
 
-/* 8. Component Primitives */
-.card {
+/* 8. Component Primitives — defaults must yield to explicit Token utilities. */
+:where(.card) {
   background-color: var(--color-surface, #ffffff);
   border: 1px solid var(--color-border, #e2e8f0);
   border-radius: var(--radius-lg, 12px);
@@ -228,7 +228,7 @@ a { color: var(--color-primary-text); }
   overflow: hidden;
 }
 
-.sheet-card {
+:where(.sheet-card) {
   background-color: var(--color-surface, #ffffff);
   border: 1px solid var(--color-border, #e2e8f0);
   border-top-left-radius: var(--radius-xl, 16px);
@@ -238,7 +238,7 @@ a { color: var(--color-primary-text); }
   box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
 }
 
-.panel {
+:where(.panel) {
   background-color: var(--color-surface-alt, #f1f5f9);
   border: 1px solid var(--color-border, #e2e8f0);
   border-radius: var(--radius-md, 8px);
@@ -262,6 +262,12 @@ a { color: var(--color-primary-text); }
   text-decoration: none;
   transition: background-color 0.15s ease, opacity 0.15s ease;
 }
+
+.btn.px-0 { padding-left: var(--space-0, 0px); padding-right: var(--space-0, 0px); }
+.btn.px-1 { padding-left: var(--space-1, 4px); padding-right: var(--space-1, 4px); }
+.btn.px-2 { padding-left: var(--space-2, 8px); padding-right: var(--space-2, 8px); }
+.btn.px-3 { padding-left: var(--space-3, 12px); padding-right: var(--space-3, 12px); }
+.btn.px-4 { padding-left: var(--space-4, 16px); padding-right: var(--space-4, 16px); }
 
 
 
@@ -331,6 +337,16 @@ a { color: var(--color-primary-text); }
   border-radius: var(--radius-sm, 4px);
 }
 
+/* Interactive tags share Token defaults; explicit state classes keep precedence. */
+:where(button.tag) {
+  appearance: none;
+  font-family: inherit;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+}
+
 .avatar {
   width: calc(var(--space-5) * 2);
   height: calc(var(--space-5) * 2);
@@ -384,6 +400,8 @@ a { color: var(--color-primary-text); }
 }
 
 /* 9. Utility Modifiers */
+.relative { position: relative; }
+.absolute { position: absolute; }
 .overflow-hidden { overflow: hidden; }
 .sticky-top { position: sticky; top: 0; z-index: 10; }
 .cursor-pointer { cursor: pointer; }
@@ -465,33 +483,38 @@ a { color: var(--color-primary-text); }
 .badge-soft.text-warning { color: var(--color-warning); background-color: var(--color-warning-light); }
 .badge-soft.text-danger { color: var(--color-danger); background-color: var(--color-danger-light); }
 
-/* 预留上沿容纳右上角徽标，主图标水平居中且不与角标相交。 */
+/* 角标定位在唯一图标的网格单元，而不是可被父布局拉宽的点击区。 */
 .notification-control {
   position: relative;
   text-decoration: none;
-  display: inline-flex;
+  display: inline-grid;
+  grid-template-columns: max-content;
+  grid-template-rows: max-content;
   align-items: center;
   justify-content: center;
+  align-self: flex-start;
+  justify-self: start;
+  width: max-content;
   min-width: calc(var(--space-5) * 2 + var(--space-1));
   min-height: calc(var(--space-5) * 2 + var(--space-1));
-  padding: calc(var(--font-size-xs) + var(--space-1)) var(--space-3) var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2);
   flex: none;
   vertical-align: middle;
 }
 .notification-control > .icon {
+  grid-area: 1 / 1 / 2 / 2;
   align-self: center;
   display: block;
 }
-.notification-control > .badge-count {
-  position: absolute;
-  top: 0;
-  right: 0;
-}
+.notification-control > .badge-count,
 .notification-control > .badge-dot {
   position: absolute;
-  top: calc(var(--font-size-xs) - var(--space-1) / 2);
-  right: var(--space-2);
+  grid-area: 1 / 1 / 2 / 2;
+  top: 0;
+  right: 0;
+  transform: translate(60%, -60%);
 }
+
 .badge-count {
   display: inline-flex;
   align-items: center;
@@ -577,3 +600,18 @@ a { color: var(--color-primary-text); }
 .text-info { color: var(--color-info); }
 
 .input:disabled::placeholder { color: var(--color-disabled-text); }
+
+/* External SVG masks preserve token/currentColor without embedding image payload in the page. */
+.icon-mask {
+  display: inline-block;
+  inline-size: var(--font-size-lg);
+  block-size: var(--font-size-lg);
+  flex-shrink: 0;
+  background-color: currentColor;
+  mask-size: contain;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+}

@@ -20,7 +20,9 @@ import { resolveOverlapAfterManualMove, calculateDragSnap } from '../../utils/ca
 import { captureScreenSnippetAsDataUrl } from '../../utils/screenCapture';
 import { Copy, Edit2, Smartphone, Monitor, Image as ImageIcon, Check } from 'lucide-react';
 
+import type {ContentTask} from '../../services/ai/explicitActionContent';
 interface ScreenFrameProps {
+  contentTask?:ContentTask;
   screen: Screen;
   lodLevel: 0 | 1 | 2; // 0=bitmap proxy, 1=frozen iframe, 2=active iframe
   isStaged?: boolean;
@@ -34,7 +36,9 @@ interface ScreenFrameProps {
   onPolish?: (screenId: string) => void;
 }
 
-export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isStaged, isComparisonTarget, isComparisonBackground, overrideSourceScreenId, renderQualityKey, onRenderQuality, qualityFocusNid, onPolish }) => {
+export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isStaged, isComparisonTarget, isComparisonBackground, overrideSourceScreenId, renderQualityKey, onRenderQuality, qualityFocusNid, onPolish, contentTask }) => {
+  const contentPolicy = useMemo(()=>contentTask?{request:contentTask.request,elementNid:contentTask.elementNid,multiPage:contentTask.multiPage}:undefined,
+    [contentTask?.request,contentTask?.elementNid,Boolean(contentTask?.multiPage)]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [measuredHeight, setMeasuredHeight] = useState<number>(screen.measuredHeight || 800);
@@ -192,8 +196,8 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
     const iframe = iframeRef.current;
     if (!iframe || !frameDocument || !onRenderQuality || !renderQualityKey || !(isStaged || isActive) || lodLevel === 0 || styleResources.loading) return;
     if(styleResources.error||renderResources.error){onRenderQuality(screen.id,renderQualityKey,{status:'unavailable',inspected:0,findings:[],reason:styleResources.error??renderResources.error});return;}
-    return observeRenderedQuality(iframe, report => onRenderQuality(screen.id, renderQualityKey, {...report,resourceFiles:renderResources.files}));
-  }, [screen.id, frameDocument, renderQualityKey, onRenderQuality, isStaged, isActive, lodLevel,styleResources.loading,styleResources.error,renderResources]);
+    return observeRenderedQuality(iframe, report => onRenderQuality(screen.id, renderQualityKey, {...report,resourceFiles:renderResources.files}),{contentTask:contentPolicy});
+  }, [screen.id, frameDocument, renderQualityKey, onRenderQuality, isStaged, isActive, lodLevel,styleResources.loading,styleResources.error,renderResources,contentPolicy]);
 
   useEffect(() => {
     const iframe = iframeRef.current;

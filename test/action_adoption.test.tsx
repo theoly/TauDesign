@@ -1,5 +1,6 @@
 import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test, spyOn } from 'bun:test';
+import * as RenderQuality from '../src/utils/renderedQuality';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { InfiniteCanvas } from '../src/components/canvas/InfiniteCanvas';
@@ -21,10 +22,12 @@ let mounted: Root | undefined;
 let container: HTMLDivElement | undefined;
 let history: ReturnType<typeof useHistoryStore.getState>;
 let saved: ReturnType<typeof useProjectStore.getState>;
-beforeEach(() => {
+beforeEach(async () => {
   saved = useProjectStore.getState();
   history = useHistoryStore.getState();
+  useProjectStore.getState().initNewProject({name:'候选采纳验证',deviceProfile:saved.settings.deviceProfile,designSystem:saved.designSystem,createSpecimen:false});
   useProjectStore.setState({ screens: { action: { id: 'action', name: '操作页', htmlContent: original, scopedCss: '', position: { x: 0, y: 0 } } }, screenOrder: ['action'], activeScreenId: 'action', overrides: {}, projectDocuments: {}, stagedScreen: null, stagedRenderQuality: null });
+  await useProjectStore.getState().saveProjectChecked();
 });
 afterEach(() => {
   if (mounted) act(() => mounted!.unmount());
@@ -186,7 +189,7 @@ describe('候选采纳底线', () => {
     expect(useProjectStore.getState().screens.action.htmlContent).toBe(original);
   });
   test('原页已有的缺失图片仍阻断最终候选，补齐文件后可以重新核对', async () => {
-    const projectId = `retained-asset-${Date.now()}`;
+    const projectId = useProjectStore.getState().id;
     const path = 'assets/images/retained.png';
     const asset = { id: 'retained', name: '原有图片', type: 'image' as const, mimeType: 'image/png', source: 'upload' as const, relPath: path, refCount: 1 };
     const baseline = `${original}<img src="${path}" alt="原有图片">`;
@@ -319,6 +322,9 @@ describe('候选采纳底线', () => {
     expect(useProjectStore.getState().stagedScreen).toBeNull();
   });
   test('画布采纳及两版保留在渲染严重错误时禁用', async () => {
+    // Inject a controlled report without a layout-less Happy DOM observer race.
+    const observer=spyOn(RenderQuality,'observeRenderedQuality').mockImplementation(()=>()=>{});
+    try {
     const store = useProjectStore.getState();
     store.stageScreenChange('action', candidate, '候选');
     store.setStagedRenderQuality(key(), error);
@@ -331,6 +337,7 @@ describe('候选采纳底线', () => {
       expect(button?.disabled).toBe(true);
     }
     expect(container.textContent).toContain('按钮文字不可见');
+    } finally {observer.mockRestore();}
   });
   test('候选新引入未登记图片时画布禁用采纳并说明资源问题', async () => {
     const store = useProjectStore.getState();

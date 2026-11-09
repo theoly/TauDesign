@@ -3,7 +3,7 @@ import {isLegacyHistoryTheme} from './designKnowledge/legacyHistoryTheme';
 type Data=Record<string,unknown>;
 const pick=(value:unknown,keys:string[]):Data=>Object.fromEntries(Object.entries(value as Data).filter(([key])=>keys.includes(key)));
 const fields=['version','taskId','request','workflowId','operation','strategy','sourceName','target','referencePageId','elementNid','device','designSystem','designSystemOrigin',
- 'librarySource','referenceImage','multiPage','allowedChanges','protectedNids','knowledgeSources','knowledgeFingerprint','generationMode','pageTaskPlan'];
+ 'librarySource','referenceImage','multiPage','allowedChanges','protectedNids','knowledgeSources','knowledgeFingerprint','generationMode','pageTaskPlan','regionSubdivision','wholePageRedesign'];
 /** Preserve field order: existing fingerprints deliberately bind the exact frozen data. */
 export function projectHistoryContract(c:DesignTaskContract):DesignTaskContract {
  const result=pick(c,fields);
@@ -24,6 +24,11 @@ export function projectHistoryContract(c:DesignTaskContract):DesignTaskContract 
  if(c.librarySource)result.librarySource=pick(c.librarySource,['mode','sourceProjectId','sourceFingerprint','sourceTokenVersion','bindingFingerprint']);
  if(c.referenceImage){result.referenceImage=pick(c.referenceImage,['name','fingerprint','region']);if(c.referenceImage.region)(result.referenceImage as Data).region=pick(c.referenceImage.region,['sourceFingerprint','sourceWidth','sourceHeight','x','y','width','height']);}
  if(c.multiPage)result.multiPage=pick(c.multiPage,['version','kind','planId','planFingerprint','itemId','screenId','name','index','total','originalPageCount','pageIds','requiredTargetIds']);
+ if(c.regionSubdivision){
+  const scope=pick(c.regionSubdivision,['version','baselineFingerprint','roots','fragments','shellOperations','inputFingerprint']);
+  scope.fragments=c.regionSubdivision.fragments.map(fragment=>pick(fragment,['nid','rootNid','requirements']));
+  scope.shellOperations=c.regionSubdivision.shellOperations.map(operation=>pick(operation,['nid','type','value']));result.regionSubdivision=scope;
+ }
  result.knowledgeSources=c.knowledgeSources.map(s=>pick(s,['kind','id','fingerprint','stale']));
  return result as unknown as DesignTaskContract;
 }

@@ -1,3 +1,5 @@
+import {stubIndependentMediaTransport} from './helpers/independentMedia';
+stubIndependentMediaTransport();
 import {chatPageTaskPlan} from './fixtures/pageTaskPlan';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import React,{act} from 'react';
@@ -24,10 +26,10 @@ beforeEach(async()=>{
  host=document.createElement('div');document.body.append(host);root=createRoot(host);await act(async()=>root.render(<Harness/>));
 });
 afterEach(()=>{act(()=>root.unmount());host.remove();DefaultAIEngineCore.prototype.streamText=stream;PageRenderCheck.inspect=inspect;useProjectStore.setState(project,true);useHistoryStore.setState(history,true);useAIConfigStore.setState(config,true);(globalThis as any).IS_REACT_ACT_ENVIRONMENT=previousAct;});
-test('实际聊天生成后受控修复，最终代码/会话为通过HTML，生成与修复用量和规划未知用量分开说明',async()=>{
+test('实际聊天生成后受控修复，最终代码/会话为通过HTML，生成与修复用量和规划用量分开说明',async()=>{
  await act(async()=>{await engine.sendMessage('新建一个会员资料页面');});
  expect(calls).toBe(3);const page=Object.values(useProjectStore.getState().screens).find(s=>s.id!=='old')!;expect(page).toBeDefined();expect(page.metadata!.creationEvidence!.repair!.status).toBe('repaired');
- const message=engine.messages.find(m=>m.screenId===page.id)!;expect(message.text).toContain('已完成一次控件样式修复');expect(message.htmlOutput).toBe(page.htmlContent);expect(message.usageNote).toContain('业务规划未返回用量');expect(message.taskBudget?.requests).toBe(3);expect(message.usage).toMatchObject({promptTokens:223,completionTokens:245,totalTokens:468});
+ const message=engine.messages.find(m=>m.screenId===page.id)!;expect(message.text).toContain('已完成一次控件样式修复');expect(message.htmlOutput).toBe(page.htmlContent);expect(message.usageNote).toContain('功能规划等步骤的累计用量见任务预算');expect(message.taskBudget?.requests).toBe(3);expect(message.usage).toMatchObject({promptTokens:223,completionTokens:245,totalTokens:468});
  const turns=await useProjectStore.getState().getConversationStore().loadRecent(1);expect(turns[0].assistant.text).not.toContain('font-size:0');expect(turns[0].assistant.text).toContain(page.htmlContent);expect(useProjectStore.getState().screens.old.htmlContent).toContain('保留旧内容');
 });
 test('修复失败不能发布成功消息，仍累计失败请求用量且不新增页面',async()=>{

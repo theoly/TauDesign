@@ -1,3 +1,4 @@
+import {requestSchema} from './helpers/modelSchema';
 import {expect,test} from 'bun:test';
 import {PipelineExecutor} from '../src/services/ai/engine/pipeline/executor';
 import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
@@ -77,11 +78,11 @@ test('borrowed output budget is neither expanded nor replaced after the planning
 test('whole-page continuation retains reference planning and sends no second planner request',async()=>{
  const f=fixture();f.transport.queueResponse(JSON.stringify(plan));f.transport.enqueueScenario({events:[{type:'Delta',text:response.slice(0,-'</main></artifact>'.length)},{type:'Done',finish_reason:'length'}]});
  const core=new DefaultAIEngineCore({id:'capture',stream:(request,event)=>{f.requests.push(request);const marker=JSON.stringify(request.body.messages).match(/TAUDESIGN_CONTINUE_[\w-]+/)?.[0];if(marker)f.transport.queueResponse(marker+'\n</main></artifact>');return f.transport.stream(request,event);}});
- const result=await PipelineExecutor.execute({...f.options,engineCore:core});expect(result.status).toBe('staged_side_by_side');expect(f.requests).toHaveLength(3);expect(f.requests.filter(r=>r.body.response_format)).toHaveLength(1);expect(result.executionRecord?.continuationCount).toBe(1);for(const r of f.requests)expect(images(r)).toEqual([attachment.dataUrl]);expect(inspectReferenceInput(result.workflowContract!).status).toBe('passed');
+ const result=await PipelineExecutor.execute({...f.options,engineCore:core});expect(result.status).toBe('staged_side_by_side');expect(f.requests).toHaveLength(3);expect(f.requests.filter(r=>requestSchema(r))).toHaveLength(1);expect(result.executionRecord?.continuationCount).toBe(1);for(const r of f.requests)expect(images(r)).toEqual([attachment.dataUrl]);expect(inspectReferenceInput(result.workflowContract!).status).toBe('passed');
 });
 test('saved failed whole-page image drafts repair labels without replanning or losing original input evidence',async()=>{
  const {saveQualityDraft,loadQualityDrafts}=await import('../src/services/storage/qualityDraftRepository');const {draftRepairTargets}=await import('../src/services/ai/qualityDraft');
- const f=fixture();f.transport.queueResponse(JSON.stringify(plan));f.transport.queueResponse(response.replace('>保存</button>','><svg class="icon"><path d="M1 1L2 2"/></svg><span></span></button>'));
+ const f=fixture();f.transport.queueResponse(JSON.stringify(plan));f.transport.queueResponse(response.replace('>保存</button>','><img class="icon" src="https://example.com/fixture-icon.svg" alt=""/><span></span></button>'));
  const result=await PipelineExecutor.execute(f.options);expect(result.status).toBe('rejected_by_quality');const draft=result.failedDraft!;
  const saved={version:1 as const,id:`draft-${crypto.randomUUID()}`,projectId:`project-${crypto.randomUUID()}`,createdAt:Date.now(),draft,request:f.options.input.rawPrompt,projectContext:'context',status:'blocked' as const,
  decision:{action:'modify_screen' as const,targetScreenId:'page',styleReferenceScreenId:null,elementNid:null,referenceSource:'toggle' as const,reason:'明确整页修改'}};

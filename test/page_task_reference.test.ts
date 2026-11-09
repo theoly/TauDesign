@@ -1,3 +1,4 @@
+import {requestSchema} from './helpers/modelSchema';
 import {expect,test} from 'bun:test';
 import React from 'react';
 import {renderToStaticMarkup} from 'react-dom/server';
@@ -28,7 +29,7 @@ const imageUrls=(request:any)=>request.body.messages.flatMap((m:any)=>Array.isAr
 test('actual reference pixels enter JSON planning before HTML; image attribution and history remain bounded metadata',async()=>{
  const f=fixture();f.transport.queueResponse(JSON.stringify(plan));f.transport.queueResponse(html);
  const output=await PipelineExecutor.execute(f.options);expect(output.status).toBe('applied');expect(f.requests).toHaveLength(2);
- expect(f.requests[0].body.response_format.type).toBe('json_schema');expect(f.requests[1].body.response_format).toBeUndefined();
+ expect(requestSchema(f.requests[0]).properties.features).toBeDefined();expect(f.requests[1].body.response_format).toBeUndefined();
  for(const request of f.requests)expect(imageUrls(request)).toEqual([attachment.dataUrl]);
  expect(JSON.stringify(f.requests[0].body.messages)).toContain('sourceFingerprint');
  expect(f.requests[0].body.messages[0].content).toContain('WECHAT');
@@ -84,12 +85,12 @@ test('output continuation preserves the image and frozen plan without another JS
   return f.transport.stream(request,event);
  }});
  const output=await PipelineExecutor.execute({...f.options,engineCore:core});expect(output.status).toBe('applied');
- expect(f.requests).toHaveLength(3);expect(f.requests.filter(r=>r.body.response_format)).toHaveLength(1);expect(output.executionRecord?.continuationCount).toBe(1);
+ expect(f.requests).toHaveLength(3);expect(f.requests.filter(r=>requestSchema(r))).toHaveLength(1);expect(output.executionRecord?.continuationCount).toBe(1);
  for(const r of f.requests)expect(imageUrls(r)).toEqual([attachment.dataUrl]);expect(output.workflowContract?.pageTaskPlan?.plan.features[0].basis).toBe('image');
 });
 test('reference failed drafts save and repair with original image plan but no additional model request',async()=>{
  const {saveQualityDraft,loadQualityDrafts}=await import('../src/services/storage/qualityDraftRepository');const {draftRepairTargets}=await import('../src/services/ai/qualityDraft');
- const f=fixture();f.transport.queueResponse(JSON.stringify(plan));f.transport.queueResponse('<artifact title="预约"><main class="p-4"><button class="btn btn-primary"><svg class="icon"><path d="M1 1L2 2"/></svg><span></span></button></main></artifact>');
+ const f=fixture();f.transport.queueResponse(JSON.stringify(plan));f.transport.queueResponse('<artifact title="预约"><main class="p-4"><button class="btn btn-primary"><img class="icon" src="https://example.com/fixture-icon.svg" alt=""/><span></span></button></main></artifact>');
  const output=await PipelineExecutor.execute(f.options);expect(output.status).toBe('rejected_by_quality');const draft=output.failedDraft!;
  const saved={version:1 as const,id:`draft-${crypto.randomUUID()}`,projectId:`project-${crypto.randomUUID()}`,createdAt:Date.now(),draft,request:f.options.input.rawPrompt,projectContext:'context',status:'blocked' as const,
   decision:{action:'create_screen' as const,targetScreenId:null,styleReferenceScreenId:null,elementNid:null,referenceSource:null,reason:'明确新建'}};

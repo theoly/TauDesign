@@ -12,6 +12,7 @@ import { useAIConfigStore, defaultProviders, defaultBindings } from '../src/stor
 import { useHistoryStore } from '../src/stores/useHistoryStore';
 
 const original = '<!doctype html><html lang="zh"><head><title>原页</title></head><body><main data-nid="root"><a data-nid="notice" class="tap-target" href="/m/messages" aria-label="消息" style="position:relative;width:44px;height:44px"><svg data-nid="bell" class="icon" viewBox="0 0 24 24" style="width:24px;height:24px"><path data-nid="shape" d="M3 3h18"/></svg><span data-nid="count" class="badge" style="position:absolute;right:0;top:0;font-size:12px;padding:2px">3</span></a><aside data-nid="other"><p>保持合同规则与业务说明。</p></aside></main></body></html>';
+const pageOriginal=original.replace('<svg data-nid="bell" class="icon" viewBox="0 0 24 24" style="width:24px;height:24px"><path data-nid="shape" d="M3 3h18"/></svg>','<img data-nid="bell" class="icon" src="https://example.com/fixture-bell.svg" alt="" style="width:24px;height:24px"/>');
 const operations = [
   {nid:'notice',type:'add_classes',value:'notification-control'},
   {nid:'notice',type:'remove_styles',value:'width;height'},
@@ -58,7 +59,7 @@ describe('引用元素直接副本路径',()=>{
  const send=()=>engine.sendMessage('[引用元素 nid="notice" 画框="外勤" 标签=<a>]\n元素片段:\n<a>原片段</a>\n\n增大图标，缩小badge',undefined,{referencedScreenId:id});
  beforeEach(async()=>{
   localStorage.clear();useProjectStore.getState().initNewProject({name:'元素细节',deviceProfile:'mobile',createSpecimen:false});
-  id=useProjectStore.getState().addScreen({name:'外勤',htmlContent:original});
+  id=useProjectStore.getState().addScreen({name:'外勤',htmlContent:pageOriginal});
   useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'test'})),bindings:defaultBindings});
   objects=spyOn(DefaultAIEngineCore.prototype,'generateObject').mockResolvedValue({requiresPageRewrite:false,reason:'',operations});
   pipeline=spyOn(PipelineExecutor,'execute').mockResolvedValue({status:'no_html',rawResponse:''});
@@ -106,7 +107,7 @@ describe('引用元素直接副本路径',()=>{
  test('原页变化或取消丢弃迟到结果',async()=>{
   let resolve!:(value:any)=>void;objects.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));let pending!:Promise<void>;
   await act(async()=>{pending=send();});
-  act(()=>useProjectStore.getState().updateScreenHtml(id,original.replace('保持合同规则','人工更新合同规则')));
+  act(()=>useProjectStore.getState().updateScreenHtml(id,pageOriginal.replace('保持合同规则','人工更新合同规则')));
   await act(async()=>{resolve({requiresPageRewrite:false,operations});await pending;});
   expect(useProjectStore.getState().stagedScreen).toBeNull();expect(engine.messages.at(-1)?.text).toContain('变化');
   objects.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));await act(async()=>{pending=send();});act(()=>engine.abort());

@@ -1,0 +1,30 @@
+import {test,expect} from 'bun:test';
+import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
+import {MockTransport} from '../src/services/ai/engine/transport/mockTransport';
+import {DesignTaskJournal} from '../src/services/ai/designTaskJournal';
+import {buildDesignTaskContract} from '../src/services/ai/designWorkflow';
+import {LocalStorageStorage} from '../src/services/storage/projectStorage';
+import {readDesignTaskTraces} from '../src/services/storage/designTaskRepository';
+import {endpointIdentity} from '../src/services/ai/modelCapabilities';
+import {validTaskRequestTrace} from '../src/services/ai/taskRequestTrace';
+const provider={id:'trace-test',name:'fixture',protocol:'openai_compatible' as const,baseUrl:'https://example.test/v1',apiKey:'SYNTHETIC_TRACE_SECRET',isEnabled:true};
+test('durable metadata records actual transport receipts and reported usage; a damaged JSONL row is isolated',async()=>{
+ const storage=new LocalStorageStorage('trace:'+crypto.randomUUID()),contract=buildDesignTaskContract({intent:'create_screen',request:'生成资料页',deviceProfile:'mobile',frameWidth:390});
+ const journal=new DesignTaskJournal({storage,projectId:'project',contextFingerprint:'source',provider,model:'model',isCurrent:()=>true});await journal.update({phase:'started',contract});
+ const transport=new MockTransport([{events:[{type:'RequestStarted',requestId:'request-test'},{type:'TransportAttempt',attemptId:'attempt-one'},{type:'Connected',http_status:200},{type:'Delta',text:'<main>完整正文</main>'},{type:'Usage',input_tokens:12,output_tokens:7,source:'provider'},{type:'Done',finish_reason:'stop'}]}]);
+ const core=journal.wrapCore(new DefaultAIEngineCore(transport)),stream=core.streamText({provider,model:'model',provenance:{taskId:contract.taskId,stepId:'body'},messages:[{role:'user',content:'用户资料不应进入通信摘要'}],maxTokens:512});
+ await Promise.all([stream.textPromise,stream.usagePromise,stream.transportEvidencePromise]);await journal.update({phase:'result',contract,result:{html:'<main>完整正文</main>'}});
+ const path=`tasks/${contract.taskId}/attempts.jsonl`;await storage.appendLine(path,'{"broken":');
+ const result=await readDesignTaskTraces(storage,'project',contract.taskId);expect(result.ignoredRows).toBe(1);expect(result.traces.some(t=>t.stage==='capacity'&&t.capacity?.fits)).toBe(true);
+ expect(result.traces.some(t=>t.stage==='transport'&&t.attempts===1&&t.httpStatus===200&&t.closed)).toBe(true);expect(result.traces.find(t=>t.stage==='settled')?.usage).toEqual({inputTokens:12,outputTokens:7,source:'provider'});
+ const text=(await storage.readText(path))!;expect(text).not.toContain(provider.apiKey);expect(text).not.toContain('用户资料');expect(text).not.toContain('完整正文');
+ const corrupt={...result.traces[0],capacity:{inputTokens:{toString:null}}};expect(validTaskRequestTrace(corrupt)).toBe(false);
+});
+test('failed capacity preflight records zero network attempts, without replay or a fabricated invoice',async()=>{
+ const storage=new LocalStorageStorage('trace:'+crypto.randomUUID()),contract=buildDesignTaskContract({intent:'create_screen',request:'生成资料页',deviceProfile:'mobile',frameWidth:390});
+ const configured={...provider,modelCapabilities:{model:{version:1 as const,revision:'one',source:'user' as const,endpointIdentity:endpointIdentity(provider),contextWindow:4096,maxOutputTokens:512}}};
+ const journal=new DesignTaskJournal({storage,projectId:'project',contextFingerprint:'source',provider:configured,model:'model',isCurrent:()=>true});await journal.update({phase:'started',contract});let calls=0;
+ const core=journal.wrapCore(new DefaultAIEngineCore({id:'no-network',stream(){calls++;throw Error('must not send');}}));
+ expect(()=>core.streamText({provider:configured,model:'model',provenance:{taskId:contract.taskId,stepId:'body'},messages:[{role:'user',content:'必需原文'.repeat(10000)}],maxTokens:512})).toThrow('容量不足');
+ await journal.update({phase:'result',contract,result:{error:'容量不足'}});const result=await readDesignTaskTraces(storage,'project',contract.taskId);expect(calls).toBe(0);expect(result.traces.some(t=>t.capacity?.fits===false)).toBe(true);expect(result.traces.every(t=>t.costStatus==='unknown')).toBe(true);expect(result.traces.some(t=>t.attempts)).toBe(false);
+});

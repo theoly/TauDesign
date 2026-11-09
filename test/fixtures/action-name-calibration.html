@@ -1,0 +1,25 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>M4 控件校准</title><body style="margin:0;background:#020617;color:#e2e8f0"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {ScreenFrame} from '/src/components/canvas/ScreenFrame.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {neutralModernTheme} from '/src/utils/themePresets.ts';
+import {checkGenerationQuality} from '/src/services/ai/generationQuality.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import calibration from '/test/fixtures/validation/action-name-v1.json';
+const device=new URLSearchParams(location.search).get('device')==='pc'?'pc':'mobile';
+useProjectStore.getState().initNewProject({name:'M4控件独立校准',deviceProfile:device,designSystem:neutralModernTheme,createSpecimen:false});
+const fixture={device,cases:calibration.cases,report:null,current:0,requests:0};window.actionNameFixture=fixture;
+for(const method of ['streamText','generateObject'])DefaultAIEngineCore.prototype[method]=()=>{fixture.requests++;throw Error('控件校准禁止模型调用');};
+function App(){
+ const [index,setIndex]=React.useState(0);const row=calibration.cases[index],key=`name-${device}-${index}`;
+ fixture.select=i=>{if(i===index)return;fixture.current=i;fixture.report=null;setIndex(i);};
+ fixture.source=checkGenerationQuality('<main>'+row.html+'</main>',{deviceProfile:device,designSystem:neutralModernTheme});
+ const screen={id:'calibration',name:row.id,htmlContent:'<main data-nid="calroot1" class="p-4">'+row.html+'</main>',scopedCss:row.css,position:{x:0,y:0}};
+ return React.createElement(React.Fragment,null,
+  React.createElement('label',{style:{display:'block',padding:16}},'校准样例',React.createElement('select',{'aria-label':'校准样例',value:index,onChange:e=>fixture.select(Number(e.target.value)),style:{marginLeft:12,color:'#0f172a'}},calibration.cases.map((r,i)=>React.createElement('option',{key:r.id,value:i},r.id)))),
+  React.createElement('div',{style:{position:'absolute',left:24,top:80,width:device==='pc'?1440:390,height:920,transform:device==='pc'?'scale(0.7)':'none',transformOrigin:'top left'}},React.createElement(ScreenFrame,{screen,isStaged:true,lodLevel:2,renderQualityKey:key,onRenderQuality:(_id,reportKey,report)=>{if(reportKey===`name-${device}-${fixture.current}`)fixture.report={key:reportKey,...report};}})));
+}
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+</script></body></html>

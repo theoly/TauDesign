@@ -1,0 +1,509 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "body-severe",
+      "html": "<section data-nid=\"host\" style=\"display:flex;flex-direction:row;width:300px;gap:12px;align-items:flex-start;\"><div style=\"display:flex;gap:4px;flex:0 0 190px;width:190px\"><button class=\"btn\">复制</button><button class=\"btn\">采用</button></div><p data-nid=\"target\" style=\"margin:0;flex:none;width:60px;font-size:16px;line-height:22px;\">这周六西湖边有个版画展，我多了一张票，一起去看看吗？也可以按照你方便的时间安排。</p></section>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": "error",
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": false
+    },
+    {
+      "id": "body-medium",
+      "html": "<section data-nid=\"host\" style=\"display:flex;flex-direction:row;width:300px;gap:12px;align-items:flex-start;\"><div style=\"display:flex;gap:4px;flex:0 0 190px;width:190px\"><button class=\"btn\">复制</button><button class=\"btn\">采用</button></div><p data-nid=\"target\" style=\"margin:0;flex:none;width:100px;font-size:16px;line-height:22px;\">这周六西湖边有个版画展，我多了一张票，一起去看看吗？也可以按照你方便的时间安排。</p></section>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": "warning",
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "body-column",
+      "html": "<section data-nid=\"host\" style=\"display:flex;flex-direction:column;width:300px;gap:12px;align-items:flex-start;\"><div style=\"display:flex;gap:4px;flex:0 0 190px;width:190px\"><button class=\"btn\">复制</button><button class=\"btn\">采用</button></div><p data-nid=\"target\" style=\"margin:0;flex:none;width:268px;font-size:16px;line-height:22px;\">这周六西湖边有个版画展，我多了一张票，一起去看看吗？也可以按照你方便的时间安排。</p></section>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "body-wrap",
+      "html": "<section data-nid=\"host\" style=\"display:flex;flex-direction:row;width:300px;gap:12px;align-items:flex-start;flex-wrap:wrap\"><div style=\"display:flex;gap:4px;flex:0 0 190px;width:190px\"><button class=\"btn\">复制</button><button class=\"btn\">采用</button></div><p data-nid=\"target\" style=\"margin:0;flex:none;width:260px;font-size:16px;line-height:22px;\">这周六西湖边有个版画展，我多了一张票，一起去看看吗？也可以按照你方便的时间安排。</p></section>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "body-vertical",
+      "html": "<section data-nid=\"host\" style=\"display:flex;flex-direction:row;width:300px;gap:12px;align-items:flex-start;writing-mode:vertical-rl\"><div style=\"display:flex;gap:4px;flex:0 0 190px;width:190px\"><button class=\"btn\">复制</button><button class=\"btn\">采用</button></div><p data-nid=\"target\" style=\"margin:0;flex:none;width:60px;font-size:16px;line-height:22px;\">这周六西湖边有个版画展，我多了一张票，一起去看看吗？也可以按照你方便的时间安排。</p></section>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [
+        "body-intentional-layout"
+      ],
+      "noErrors": true
+    },
+    {
+      "id": "body-clamped",
+      "html": "<section data-nid=\"host\" style=\"display:flex;flex-direction:row;width:300px;gap:12px;align-items:flex-start;\"><div style=\"display:flex;gap:4px;flex:0 0 190px;width:190px\"><button class=\"btn\">复制</button><button class=\"btn\">采用</button></div><p data-nid=\"target\" style=\"margin:0;flex:none;width:60px;font-size:16px;line-height:22px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden\">这周六西湖边有个版画展，我多了一张票，一起去看看吗？也可以按照你方便的时间安排。</p></section>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [
+        "body-intentional-layout"
+      ],
+      "noErrors": true
+    },
+    {
+      "id": "body-transform",
+      "html": "<section data-nid=\"host\" style=\"display:flex;flex-direction:row;width:300px;gap:12px;align-items:flex-start;transform:scale(0.9);transform-origin:top left\"><div style=\"display:flex;gap:4px;flex:0 0 190px;width:190px\"><button class=\"btn\">复制</button><button class=\"btn\">采用</button></div><p data-nid=\"target\" style=\"margin:0;flex:none;width:60px;font-size:16px;line-height:22px;\">这周六西湖边有个版画展，我多了一张票，一起去看看吗？也可以按照你方便的时间安排。</p></section>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [
+        "body-transform"
+      ],
+      "noErrors": true
+    },
+    {
+      "id": "body-table",
+      "html": "<table style=\"width:300px\"><tr><td style=\"width:60px\"><p data-nid=\"target\">这周六西湖边有个版画展，我多了一张票，一起去看看吗？也可以按照你方便的时间安排。</p></td><td><button class=\"btn\">复制</button></td></tr></table>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [
+        "body-structured-content"
+      ],
+      "noErrors": true
+    },
+    {
+      "id": "badge-native",
+      "html": "<button class=\"notification-control\" aria-label=\"通知\"><svg data-nid=\"icon\" class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M5 3h14v18H5z\"/></svg><span data-nid=\"target\" class=\"badge-count\">3</span></button>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "badge-corner",
+      "html": "<button data-nid=\"host\" class=\"legacy-host\" aria-label=\"通知\"><svg data-nid=\"icon\" class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M5 3h14v18H5z\"/></svg><span data-nid=\"target\" class=\"badge-count\" style=\"\">3</span></button>",
+      "css": "[data-nid=\"host\"].legacy-host{position:relative;display:block;width:52px;height:52px;padding:0;margin:8px;border:0;background:var(--color-surface)} [data-nid=\"icon\"]{position:absolute;left:10px;top:10px;width:24px;height:24px} [data-nid=\"target\"].badge-count{position:absolute;left:30px;top:-2px;width:16px;height:16px;min-width:0;min-height:0;padding:0;line-height:1;box-sizing:border-box}",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [
+        "badge-corner-contact"
+      ],
+      "noErrors": true
+    },
+    {
+      "id": "badge-center",
+      "html": "<button data-nid=\"host\" class=\"legacy-host\" aria-label=\"通知\"><svg data-nid=\"icon\" class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M5 3h14v18H5z\"/></svg><span data-nid=\"target\" class=\"badge-count\" style=\"left:12px;top:12px;width:18px;height:18px\">3</span></button>",
+      "css": "[data-nid=\"host\"].legacy-host{position:relative;display:block;width:52px;height:52px;padding:0;margin:8px;border:0;background:var(--color-surface)} [data-nid=\"icon\"]{position:absolute;left:10px;top:10px;width:24px;height:24px} [data-nid=\"target\"].badge-count{position:absolute;left:30px;top:-2px;width:16px;height:16px;min-width:0;min-height:0;padding:0;line-height:1;box-sizing:border-box}",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": "warning",
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "badge-oversized",
+      "html": "<button data-nid=\"host\" class=\"legacy-host\" aria-label=\"通知\"><svg data-nid=\"icon\" class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M5 3h14v18H5z\"/></svg><span data-nid=\"target\" class=\"badge-count\" style=\"left:40px;top:-4px;height:30px\">3</span></button>",
+      "css": "[data-nid=\"host\"].legacy-host{position:relative;display:block;width:52px;height:52px;padding:0;margin:8px;border:0;background:var(--color-surface)} [data-nid=\"icon\"]{position:absolute;left:10px;top:10px;width:24px;height:24px} [data-nid=\"target\"].badge-count{position:absolute;left:30px;top:-2px;width:16px;height:16px;min-width:0;min-height:0;padding:0;line-height:1;box-sizing:border-box}",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": "warning",
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "badge-transformed",
+      "html": "<button data-nid=\"host\" class=\"legacy-host\" aria-label=\"通知\"><svg data-nid=\"icon\" style=\"transform:scale(1.2)\" class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M5 3h14v18H5z\"/></svg><span data-nid=\"target\" class=\"badge-count\" style=\"\">3</span></button>",
+      "css": "[data-nid=\"host\"].legacy-host{position:relative;display:block;width:52px;height:52px;padding:0;margin:8px;border:0;background:var(--color-surface)} [data-nid=\"icon\"]{position:absolute;left:10px;top:10px;width:24px;height:24px} [data-nid=\"target\"].badge-count{position:absolute;left:30px;top:-2px;width:16px;height:16px;min-width:0;min-height:0;padding:0;line-height:1;box-sizing:border-box}",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [
+        "badge-transform"
+      ],
+      "noErrors": true
+    },
+    {
+      "id": "badge-clear-translation",
+      "html": "<button data-nid=\"host\" class=\"legacy-host\" aria-label=\"通知\"><svg data-nid=\"icon\" class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M5 3h14v18H5z\"/></svg><span data-nid=\"target\" class=\"badge-count\" style=\"left:38px;top:-10px;transform:matrix(1,0,0,1,4,-4)\">3</span></button>",
+      "css": "[data-nid=\"host\"].legacy-host{position:relative;display:block;width:52px;height:52px;padding:0;margin:8px;border:0;background:var(--color-surface)} [data-nid=\"icon\"]{position:absolute;left:10px;top:10px;width:24px;height:24px} [data-nid=\"target\"].badge-count{position:absolute;left:30px;top:-2px;width:16px;height:16px;min-width:0;min-height:0;padding:0;line-height:1;box-sizing:border-box}",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "badge-hidden",
+      "html": "<button data-nid=\"host\" class=\"legacy-host\" aria-label=\"通知\"><svg data-nid=\"icon\" class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M5 3h14v18H5z\"/></svg><span data-nid=\"target\" class=\"badge-count\" style=\"display:none;left:12px;top:12px\">3</span></button>",
+      "css": "[data-nid=\"host\"].legacy-host{position:relative;display:block;width:52px;height:52px;padding:0;margin:8px;border:0;background:var(--color-surface)} [data-nid=\"icon\"]{position:absolute;left:10px;top:10px;width:24px;height:24px} [data-nid=\"target\"].badge-count{position:absolute;left:30px;top:-2px;width:16px;height:16px;min-width:0;min-height:0;padding:0;line-height:1;box-sizing:border-box}",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "badge-over-text",
+      "html": "<article data-nid=\"host\" class=\"card\" style=\"position:relative;width:260px;height:100px\"><p style=\"position:absolute;left:8px;top:16px;margin:0\">重要内容</p><span data-nid=\"target\" class=\"badge\" style=\"position:absolute;left:8px;top:16px\">热</span></article>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": "warning",
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "label-inline-wrap",
+      "html": "<span data-nid=\"target\" class=\"tag\" style=\"white-space:normal;width:64px\">这是允许自然多行的标签</span>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [
+        "intentional-wrap"
+      ],
+      "noErrors": true
+    },
+    {
+      "id": "label-scoped-wrap",
+      "html": "<span data-nid=\"target\" class=\"tag legacy-wrap\">这是允许自然多行的标签</span>",
+      "css": "[data-nid=\"target\"].legacy-wrap{white-space:normal;width:64px}",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [
+        "intentional-wrap"
+      ],
+      "noErrors": true
+    },
+    {
+      "id": "label-forced-nowrap",
+      "html": "<span data-nid=\"target\" class=\"tag\"><span>待跟进<br>已联系</span></span>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": "warning",
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "label-one-line-fragments",
+      "html": "<span data-nid=\"target\" class=\"tag\"><span>待跟进</span><strong>3</strong></span>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "identity-natural-lines",
+      "html": "<div style=\"width:90px\"><p data-nid=\"target\">王先生<br>骨科主任医师<br>云南大学医学院</p></div>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "inactive-controls",
+      "html": "<button data-nid=\"disabled\" disabled></button><section hidden><button data-nid=\"hidden\"></button></section>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [
+        "inactive-control"
+      ],
+      "noErrors": true
+    },
+    {
+      "id": "icon-centered",
+      "html": "<span data-nid=\"target\" class=\"icon-box\" style=\"width:44px;height:44px\"><svg data-nid=\"icon\" class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M5 3h14v18H5z\"/></svg></span>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "icon-off-center",
+      "html": "<span data-nid=\"target\" class=\"icon-box\" style=\"position:relative;width:44px;height:44px\"><svg data-nid=\"icon\" class=\"icon\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><path fill=\"currentColor\" d=\"M5 3h14v18H5z\"/></svg></span>",
+      "css": "[data-nid=\"target\"] > [data-nid=\"icon\"]{position:absolute;left:0;top:0}",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": "warning"
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "body-nested-severe",
+      "html": "<section data-nid=\"host\" style=\"display:flex;flex-direction:row;width:300px;gap:12px;align-items:flex-start;\"><div style=\"display:flex;gap:4px;flex:0 0 190px;width:190px\"><button class=\"btn\">复制</button><button class=\"btn\">采用</button></div><p data-nid=\"target\" style=\"margin:0;flex:none;width:60px;font-size:16px;line-height:22px;\"><span>这周六西湖边有个版画展，我多了一</span><strong>张票，一起去看看吗？也可以按照你方便的时间安排。</strong></p></section>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": "error",
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": false
+    },
+    {
+      "id": "body-nested-column",
+      "html": "<section data-nid=\"host\" style=\"display:flex;flex-direction:column;width:300px;gap:12px;align-items:flex-start;\"><div style=\"display:flex;gap:4px;flex:0 0 190px;width:190px\"><button class=\"btn\">复制</button><button class=\"btn\">采用</button></div><p data-nid=\"target\" style=\"margin:0;flex:none;width:268px;font-size:16px;line-height:22px;\"><span>这周六西湖边有个版画展，我多了一</span><strong>张票，一起去看看吗？也可以按照你方便的时间安排。</strong></p></section>",
+      "css": "",
+      "expected": {
+        "render_compressed_body": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null,
+        "render_unexpected_wrap": null,
+        "render_icon_off_center": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "name-profession-readable",
+      "html": "<section data-nid=\"host\" style=\"display:flex;align-items:center;width:300px;gap:8px\"><span style=\"display:block;flex:none;width:36px;height:36px;border-radius:50%;background:rgb(240,240,240)\"></span><span data-nid=\"name\" style=\"flex:none;white-space:nowrap\">王先生</span><span data-nid=\"target\" style=\"min-width:0;white-space:normal\">昆华医院骨科主治医师</span></section>",
+      "css": "",
+      "expected": {
+        "render_clipped_text": null,
+        "render_unexpected_wrap": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "name-profession-clipped",
+      "html": "<section data-nid=\"host\" style=\"display:flex;align-items:center;width:300px;gap:8px\"><span data-nid=\"target\" style=\"display:block;flex:none;width:14px;height:20px;overflow:hidden;white-space:nowrap\">王先生</span><span>昆华医院骨科主治医师</span></section>",
+      "css": "",
+      "expected": {
+        "render_clipped_text": "warning"
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "contrast-solid-pass",
+      "html": "<p data-nid=\"target\" style=\"color:rgb(0,0,0);background-color:rgb(255,255,255)\">纯色文字清晰可读</p>",
+      "css": "",
+      "expected": {
+        "render_contrast": null,
+        "render_contrast_unverified": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "contrast-solid-low",
+      "html": "<p data-nid=\"target\" style=\"color:rgb(180,180,180);background-color:rgb(255,255,255)\">纯色文字需要更清晰</p>",
+      "css": "",
+      "expected": {
+        "render_contrast": "warning",
+        "render_contrast_unverified": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "contrast-alpha-composite",
+      "html": "<section style=\"background-color:rgb(255,255,255)\"><p data-nid=\"target\" style=\"color:rgb(0,0,0);background-color:rgba(255,255,255,0.5)\">背景可合成为不透明纯色</p></section>",
+      "css": "",
+      "expected": {
+        "render_contrast": null,
+        "render_contrast_unverified": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "contrast-opacity-unknown",
+      "html": "<section style=\"opacity:0.5;background-color:rgb(255,255,255)\"><p data-nid=\"target\" style=\"color:rgb(180,180,180)\">透明组对比度需要人工核对</p></section>",
+      "css": "",
+      "expected": {
+        "render_contrast": null,
+        "render_contrast_unverified": "warning"
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "badge-icon-anchor-fullwidth",
+      "html": "<section class=\"col\"><a href=\"#messages\" class=\"notification-control\" aria-label=\"消息\" style=\"width:100%;\"><svg data-nid=\"icon\" class=\"icon\" style=\"width:28px;height:28px\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\"><path d=\"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4\"/></svg><span data-nid=\"target\" class=\"badge-count\" style=\"font-size:10px\">3</span></a></section>",
+      "css": "",
+      "expected": {
+        "render_badge_detached": null,
+        "render_badge_overlap": null,
+        "render_badge_oversized": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "badge-container-anchor-detached",
+      "html": "<section class=\"col\"><a href=\"#messages\" class=\"notification-control\" aria-label=\"消息\" style=\"width:100%;display:flex;\"><svg data-nid=\"icon\" class=\"icon\" style=\"width:28px;height:28px\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\"><path d=\"M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4\"/></svg><span data-nid=\"target\" class=\"badge-count\" style=\"font-size:10px\">3</span></a></section>",
+      "css": "",
+      "expected": {
+        "render_badge_detached": "warning",
+        "render_badge_overlap": null,
+        "render_badge_oversized": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "surface-card-explicit-brand",
+      "html": "<section class=\"card bg-primary p-4\"><p data-nid=\"target\" class=\"text-md\" style=\"color:var(--color-on-primary)\">显式品牌背景与前景必须成对生效，不能被默认表面覆盖。</p></section>",
+      "css": "",
+      "expected": {
+        "render_contrast": null,
+        "render_contrast_unverified": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "surface-sheet-card-explicit-brand",
+      "html": "<section class=\"sheet-card bg-primary p-4\"><p data-nid=\"target\" class=\"text-md\" style=\"color:var(--color-on-primary)\">显式品牌背景与前景必须成对生效，不能被默认表面覆盖。</p></section>",
+      "css": "",
+      "expected": {
+        "render_contrast": null,
+        "render_contrast_unverified": null
+      },
+      "coverage": [],
+      "noErrors": true
+    },
+    {
+      "id": "surface-panel-explicit-brand",
+      "html": "<section class=\"panel bg-primary p-4\"><p data-nid=\"target\" class=\"text-md\" style=\"color:var(--color-on-primary)\">显式品牌背景与前景必须成对生效，不能被默认表面覆盖。</p></section>",
+      "css": "",
+      "expected": {
+        "render_contrast": null,
+        "render_contrast_unverified": null
+      },
+      "coverage": [],
+      "noErrors": true
+    }
+  ]
+}

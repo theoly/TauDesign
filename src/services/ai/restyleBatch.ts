@@ -25,11 +25,11 @@ export interface RestyleApplicationResult {
   message?: string;
   validation?: RestyleOutcome['validation'];
   delivery?: RestyleOutcome['delivery'];
-  /** Exact context immediately after the synchronous commit, before asynchronous archive finalization. */
+  /** Context of the confirmed durable result, before asynchronous archive finalization. */
   appliedContextKey?: string;
 }
 
-/** Runtime capabilities; the store reports only an actual synchronous History commit. */
+/** Runtime capabilities; the store reports only a confirmed durable page/History commit. */
 export interface RestyleApplicationScope {
   signal:AbortSignal;isCurrent:()=>boolean;onCommitted:(result:RestyleApplicationResult)=>void;
 }

@@ -37,10 +37,11 @@ describe('staged candidate sidecar', () => {
     const archived = await loadStagedCandidate(id);
     expect(archived?.workflowContract?.taskId).toBe(contract.taskId);
     expect(archived?.executionRecord?.rawResponse).toBe(changed);
+    await useProjectStore.getState().saveProjectChecked();
     expect(readProject(id)).not.toContain(changed);
     store.setStagedRenderQuality(store.getStagedRenderContextKey(), { status: 'complete', findings: [], inspected: 2 });
     expect(useProjectStore.getState().stagedRenderQuality?.report.status).toBe('complete');
-    store.loadProject(readProject(id)!);
+    await store.loadProjectById(id);
     expect(useProjectStore.getState().stagedScreen).toBeNull();
     expect(useProjectStore.getState().restoreStagedCandidate(archived!, id)).toBe(true);
     expect(useProjectStore.getState().stagedScreen?.newHtml).toBe(changed);
@@ -84,8 +85,10 @@ describe('staged candidate sidecar', () => {
     store.stageScreenChange('target', changed, '新版');
     store.setStagedRenderQuality(store.getStagedRenderContextKey(), { status: 'complete', findings: [], inspected: 2 });
     await loadStagedCandidate(id);
+    await store.saveProjectChecked();
     expect(useWorkspaceStore.getState().openProject(id)).toBe(true);
-    for (let attempt = 0; attempt < 20 && !useProjectStore.getState().stagedScreen; attempt++)
+    const session=useProjectStore.getState().projectAuthoringSession;
+    for (let attempt = 0; attempt < 100 && (useProjectStore.getState().projectAuthoringSession===session||!useProjectStore.getState().stagedScreen); attempt++)
       await new Promise(resolve => setTimeout(resolve, 1));
     expect(useProjectStore.getState().stagedScreen?.newHtml).toBe(changed);
     expect(useProjectStore.getState().stagedRenderQuality).toBeNull();
@@ -93,4 +96,47 @@ describe('staged candidate sidecar', () => {
     useProjectStore.getState().discardStagedChange();
     expect(await loadStagedCandidate(id)).toBeNull();
   });
+
+  async function legacyFile(){
+    const store=useProjectStore.getState();
+    const id=store.initNewProject({name:'旧候选清理',deviceProfile:'pc',designSystem:neutralModernTheme,createSpecimen:false});
+    store.addScreen({name:'页面',htmlContent:original},'target');
+    const contract=buildDesignTaskContract({intent:'modify_screen',request:'修改文案',target:{id:'target',name:'页面',htmlContent:original},deviceProfile:'pc',frameWidth:1440,designSystem:neutralModernTheme});
+    store.stageScreenChange('target',changed,'旧候选','修改文案',contract);
+    await loadStagedCandidate(id);
+    for(let i=0;i<50&&!useProjectStore.getState().stagedProjectAssetAudit;i++)await new Promise(r=>setTimeout(r,1));
+    const old=structuredClone((await loadStagedCandidate(id))!);delete old.candidateId;delete old.inputContextFingerprint;
+    await saveStagedCandidate(id,undefined,old);
+    const loaded=(await loadStagedCandidate(id))!;expect(loaded.candidateId).toBeUndefined();expect(loaded.inputContextFingerprint).toBeUndefined();
+    return {id,old:loaded};
+  }
+  test('legacy restored candidate stays unauthorized after fresh rendering and can be permanently discarded',async()=>{
+    const {id,old}=await legacyFile();let store=useProjectStore.getState();expect(store.restoreStagedCandidate(old,id)).toBe(true);store=useProjectStore.getState();
+    expect(store.stagedScreen!.candidateId).toBeDefined();expect(store.stagedScreen!.inputContextFingerprint).toBeUndefined();
+    store.refreshStagedRender();store.setStagedRenderQuality(store.getStagedRenderContextKey(),{status:'complete',findings:[],inspected:2});
+    const past=useHistoryStore.getState().past.length;
+    for(const adopt of [store.adoptStagedChange,store.forceAdoptStagedChange,store.keepBothScreens])expect(await adopt()).toBe(false);
+    store=useProjectStore.getState();expect(store.stagedScreen!.inputContextFingerprint).toBeUndefined();expect(store.screens.target.htmlContent).toBe(original);expect(useHistoryStore.getState().past).toHaveLength(past);
+    store.discardStagedChange();expect(await loadStagedCandidate(id)).toBeNull();
+  });
+  test('discarding immediately after restoring an old no-ID candidate removes its disk file',async()=>{
+    const {id,old}=await legacyFile();const store=useProjectStore.getState();
+    expect(store.restoreStagedCandidate(old,id)).toBe(true);store.discardStagedChange();
+    expect(await loadStagedCandidate(id)).toBeNull();
+  });
+  test('discarding a restored no-ID candidate preserves a concurrent no-ID replacement with a different request',async()=>{
+    const {id,old}=await legacyFile();expect(useProjectStore.getState().restoreStagedCandidate(old,id)).toBe(true);
+    for(let i=0;i<50&&!useProjectStore.getState().stagedProjectAssetAudit;i++)await new Promise(r=>setTimeout(r,1));
+    await loadStagedCandidate(id);const replacement={...old,modificationRequest:'另外一次已授权请求'};
+    await saveStagedCandidate(id,undefined,replacement);useProjectStore.getState().discardStagedChange();
+    expect((await loadStagedCandidate(id))?.modificationRequest).toBe(replacement.modificationRequest);
+  });
+  test('discarding a restored candidate never removes a newer identified candidate',async()=>{
+    const {id,old}=await legacyFile();expect(useProjectStore.getState().restoreStagedCandidate(old,id)).toBe(true);
+    for(let i=0;i<50&&!useProjectStore.getState().stagedProjectAssetAudit;i++)await new Promise(r=>setTimeout(r,1));
+    await loadStagedCandidate(id);const replacement={...old,candidateId:'candidate-newer'};
+    await saveStagedCandidate(id,undefined,replacement);useProjectStore.getState().discardStagedChange();
+    expect((await loadStagedCandidate(id))?.candidateId).toBe(replacement.candidateId);
+  });
+
 });

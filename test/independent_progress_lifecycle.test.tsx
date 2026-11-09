@@ -191,3 +191,44 @@ test('a successful zero-call remount uses its verification window without renewi
  try{await act(async()=>{await engine.mountMessageHtml(target.id);});expect(message().toolAction).toBe('created');expect(message().taskBudget).toEqual(originalBudget);expect(message().executionActivity?.requests).toBe(0);expect(budget.snapshot()).toMatchObject({requests:0,reservedOutputTokens:0,closed:true,cancelled:false});expect(policy.mock.calls.at(-1)?.[0]).toBe(1);}
  finally{policy.mockRestore();budget.close();}
 });
+
+
+for(const action of ['force','remount'] as const)test(`stale failed result cannot ${action} after AI project context changed before clicking`,async()=>{
+ const target=await unappliedPage();
+ act(()=>useProjectStore.getState().upsertProjectDocument({id:'project-analysis',title:'AI归纳',content:'新的业务要求',source:'ai',enabled:true,createdAt:1,updatedAt:1}));
+ const state=useProjectStore.getState(),past=useHistoryStore.getState().past.length,renders=renderCheck.mock.calls.length;
+ renderCheck.mockResolvedValue({status:'complete',findings:[],inspected:5});
+ await act(async()=>{if(action==='force')await engine.forceApply(target.htmlOutput,target.id);else await engine.mountMessageHtml(target.id);});
+ expect(Object.keys(useProjectStore.getState().screens)).toEqual(['page']);expect(useProjectStore.getState().screens.page.htmlContent).toBe(state.screens.page.htmlContent);
+ expect(useProjectStore.getState().stagedScreen).toBeNull();expect(useHistoryStore.getState().past).toHaveLength(past);
+ expect(renderCheck.mock.calls.length).toBe(renders);expect(calls).toHaveLength(1);expect(htmlCalls).toHaveLength(1);
+ expect(engine.messages.find(m=>m.id===target.id)?.text).toContain('重新发起');expect(engine.isGenerating).toBe(false);
+});
+test('forceApply after discarded modification cannot silently restage old HTML with fresh authorization',async()=>{
+ const task=await begin('主按钮文字加粗',element);await answer(0,finite,task.pending);
+ const candidate=useProjectStore.getState().stagedScreen!;expect(candidate).toBeTruthy();const target=message();
+ act(()=>{useProjectStore.getState().discardStagedChange();useProjectStore.getState().updateScreen('page',{htmlContent:source.replace('查看详情','人工新文案')});});
+ const before=useProjectStore.getState().screens.page.htmlContent,past=useHistoryStore.getState().past.length;
+ await act(async()=>{await engine.forceApply(candidate.newHtml,target.id);});
+ expect(useProjectStore.getState().screens.page.htmlContent).toBe(before);expect(useProjectStore.getState().stagedScreen).toBeNull();expect(useHistoryStore.getState().past).toHaveLength(past);
+ expect(calls).toHaveLength(1);expect(htmlCalls).toHaveLength(0);expect(engine.messages.find(m=>m.id===target.id)?.text).toContain('重新发起');
+});
+
+
+test('forceApply for a current validated candidate retains the shared adoption and undo pipeline',async()=>{
+ const task=await begin('主按钮文字加粗',element);await answer(0,finite,task.pending);const target=message();
+ for(let i=0;i<50&&!useProjectStore.getState().stagedProjectAssetAudit;i++)await pause();
+ const store=useProjectStore.getState(),candidate=store.stagedScreen!;store.setStagedRenderQuality(store.getStagedRenderContextKey(),{status:'complete',findings:[],inspected:30});
+ const before=useProjectStore.getState().screens.page.htmlContent;
+ await act(async()=>{await engine.forceApply(candidate.newHtml,target.id);});
+ expect(useProjectStore.getState().stagedScreen).toBeNull();expect(useProjectStore.getState().screens.page.htmlContent).toContain('font-semibold');
+ act(()=>useHistoryStore.getState().undo());expect(useProjectStore.getState().screens.page.htmlContent).toBe(before);expect(calls).toHaveLength(1);expect(htmlCalls).toHaveLength(0);
+});
+test('an old message cannot force adoption of a different current task candidate',async()=>{
+ const task=await begin('主按钮文字加粗',element);await answer(0,finite,task.pending);const target=message(),candidate=useProjectStore.getState().stagedScreen!;
+ expect(candidate.workflowContract).toBeTruthy();
+ act(()=>useProjectStore.getState().stageScreenChange('page',candidate.newHtml,'另一项候选','另一项任务',{...candidate.workflowContract!,taskId:'different-task'}));
+ const live=useProjectStore.getState().stagedScreen!,before=useProjectStore.getState().screens.page.htmlContent,past=useHistoryStore.getState().past.length;
+ await act(async()=>{await engine.forceApply(candidate.newHtml,target.id);});
+ expect(useProjectStore.getState().stagedScreen?.candidateId).toBe(live.candidateId);expect(useProjectStore.getState().screens.page.htmlContent).toBe(before);expect(useHistoryStore.getState().past).toHaveLength(past);expect(message().text).toContain('重新发起');
+});

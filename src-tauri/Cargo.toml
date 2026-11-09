@@ -28,6 +28,8 @@ base64 = "0.22"
 reqwest = { version = "0.13", features = ["json", "stream"] }
 futures-util = "0.3"
 png = "0.17"
+fs2 = "0.4.3"
+sha2 = "0.10"
 
 # 高保真 PNG 导出 (doc/feature/high-fidelity-png-export)：
 # 走 WKWebView.createPDF 整页渲染 + CoreGraphics 栅格化，版本与 tauri/wry 依赖树保持一致

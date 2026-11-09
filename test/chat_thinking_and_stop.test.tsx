@@ -153,6 +153,7 @@ describe('ChatDrawer: AI Thinking & Collapsible Feedback & Click-to-Stop', () =>
       sendBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
+    await act(async()=>{const until=Date.now()+2000;while(!resolveStreamPromise){if(Date.now()>until)throw Error('Expected model stream was not dispatched');await new Promise(resolve=>setTimeout(resolve,0));}});
     // Submit button should now be in loading state
     const stopBtn = container.querySelector('button[title*="点击可立即停止"]');
     expect(stopBtn).not.toBeNull();

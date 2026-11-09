@@ -4,17 +4,22 @@ import { isDesktopRuntime } from '../storage/folderPicker';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 
 export const HTML_IMPORT_MENU_EVENT = 'menu:import-html';
-interface MenuBridge {
+export interface MenuBridge {
   listen: (callback: () => void) => Promise<() => void>;
   setEnabled: (enabled: boolean) => Promise<unknown>;
 }
 
 /** A native menu opens the existing import flow only after its listener is ready. */
 export function bindHtmlImportMenu(onImport: () => void, bridge?: MenuBridge): () => void {
+  return bindProjectMenu(onImport,{event:HTML_IMPORT_MENU_EVENT,command:'set_html_import_menu_enabled',label:'HTML 导入'},bridge);
+}
+
+/** All project-only native entries share the listener-before-enable lifecycle. */
+export function bindProjectMenu(onOpen:()=>void,options:{event:string;command:string;label:string},bridge?:MenuBridge):()=>void {
   if (!bridge && !isDesktopRuntime()) return () => {};
   const native = bridge ?? {
-    listen: (callback: () => void) => listen(HTML_IMPORT_MENU_EVENT, callback),
-    setEnabled: (enabled: boolean) => invoke('set_html_import_menu_enabled', { enabled })
+    listen: (callback: () => void) => listen(options.event, callback),
+    setEnabled: (enabled: boolean) => invoke(options.command, { enabled })
   };
   let disposed = false;
   let unlisten: (() => void) | undefined;
@@ -30,13 +35,13 @@ export function bindHtmlImportMenu(onImport: () => void, bridge?: MenuBridge): (
     if (enabled === previous) return;
     previous = enabled;
     pending = pending.then(async () => { if (!disposed) await native.setEnabled(enabled); })
-      .catch(error => console.warn('无法更新 HTML 导入菜单:', error));
+      .catch(error => console.warn(`无法更新${options.label}菜单:`, error));
   };
-  void native.listen(() => { if (!disposed && hasProject()) onImport(); }).then(cleanup => {
+  void native.listen(() => { if (!disposed && hasProject()) onOpen(); }).then(cleanup => {
     if (disposed) { cleanup(); return; }
     unlisten = cleanup;
     unsubscribe = useWorkspaceStore.subscribe(sync);
     sync();
-  }).catch(error => console.warn('无法注册 HTML 导入菜单:', error));
+  }).catch(error => console.warn(`无法注册${options.label}菜单:`, error));
   return () => { disposed = true; unsubscribe?.(); unlisten?.(); };
 }

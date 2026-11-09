@@ -25,13 +25,15 @@ beforeEach(async()=>{
 });
 afterEach(()=>{act(()=>root.unmount());host.remove();picker.mockRestore();runtime.mockRestore();factory.mockRestore();useProjectStore.setState(prior,true);useHistoryStore.setState(history,true);});
 const button=(text:string)=>Array.from(host.querySelectorAll('button')).find(b=>b.textContent===text)!;
-const choose=async()=>{await act(async()=>{button('从其他工程导入副本').click();});};
+const waitUntil=async(predicate:()=>boolean)=>{for(let i=0;i<500&&!predicate();i++)await act(async()=>{await new Promise(resolve=>setTimeout(resolve,1));});expect(predicate()).toBe(true);};
+const idle=()=>waitUntil(()=>!Array.from(host.querySelectorAll('button')).some(b=>b.textContent==='正在处理…'));
+const choose=async()=>{await act(async()=>{button('从其他工程导入副本').click();});await idle();};
 
 test('先展示可审阅的来源/主题/组件/资源预览，明确确认才一次写入，来源无变更',async()=>{
  const before=useHistoryStore.getState().past.length,original=await source.readText('project.json');
  await choose();expect(host.textContent).toContain('分析完成');expect(host.textContent).toContain('Token v3');expect(host.textContent).toContain('新增 1 个组件');
  expect(host.querySelector('[aria-label="设计库导入预览"]')).not.toBeNull();expect(await target.listDir('assets/images')).toEqual([]);expect(useProjectStore.getState().designLibraryBinding).toBeUndefined();
- await act(async()=>{button('确认导入项目副本').click();button('确认导入项目副本')?.click();});
+ await act(async()=>{button('确认导入项目副本').click();button('确认导入项目副本')?.click();});await idle();
  expect(useHistoryStore.getState().past.length).toBe(before+1);expect(host.textContent).toContain('可通过撤销');expect(host.textContent).toContain('核对了 1 个资源文件');
  expect(useProjectStore.getState().designLibraryBinding?.importEvidence?.files).toHaveLength(1);expect(await source.readText('project.json')).toBe(original);
 });
@@ -52,7 +54,7 @@ test('冲突预览明确显示原因，确认禁用且无文件写入',async()=>
 });
 test('确认前源更改显示重新分析，不继续提交旧预览',async()=>{
  await choose();await source.writeTextAtomic('project.json',JSON.stringify({...sourceData(),name:'新的库'}));
- await act(async()=>{button('确认导入项目副本').click();});expect(host.textContent).toContain('来源设计库已变化');expect(useProjectStore.getState().designLibraryBinding).toBeUndefined();
+ await act(async()=>{button('确认导入项目副本').click();});await idle();expect(host.textContent).toContain('来源设计库已变化');expect(useProjectStore.getState().designLibraryBinding).toBeUndefined();
 });
 test('卸载期间非协作读取返回后，不写元数据或目标文件',async()=>{
  let release!:(raw:string|null)=>void;const read=source.readText.bind(source);source.readText=()=>new Promise(resolve=>release=resolve);
@@ -61,8 +63,8 @@ test('卸载期间非协作读取返回后，不写元数据或目标文件',asy
 });
 test('写盘期间取消不提交且显示保留孤立文件的真实情况',async()=>{
  await choose();let release!:()=>void;const write=target.writeBinary.bind(target);target.writeBinary=async(path,value)=>{await write(path,value);await new Promise<void>(resolve=>release=resolve);};
- await act(async()=>{button('确认导入项目副本').click();});expect(release).toBeDefined();act(()=>button('取消导入').click());
- await act(async()=>{release();});expect(host.textContent).toContain('已取消');expect(host.textContent).toContain('未自动删除');expect(useProjectStore.getState().designLibraryBinding).toBeUndefined();
+ await act(async()=>{button('确认导入项目副本').click();});await waitUntil(()=>Boolean(release));expect(release).toBeDefined();act(()=>button('取消导入').click());
+ await act(async()=>{release();});await idle();expect(host.textContent).toContain('已取消');expect(host.textContent).toContain('未自动删除');expect(useProjectStore.getState().designLibraryBinding).toBeUndefined();
 });
 test('损坏导入诊断隔离，旧无记录绑定正常显示',()=>{
  const binding={mode:'project_copy',sourceName:'旧来源',sourceProjectId:'old',sourceDeviceProfile:'mobile',sourceFingerprint:'old',sourceTokenVersion:1,importedAt:1};
@@ -72,20 +74,20 @@ test('损坏导入诊断隔离，旧无记录绑定正常显示',()=>{
 
 test('可选固定版本参考，确认前无安装，模式锁定、更新和转副本可撤销',async()=>{
  const radios=host.querySelectorAll<HTMLInputElement>('input[type="radio"]');act(()=>radios[1].click());
- await act(async()=>button('从其他工程导入只读参考').click());expect(useProjectStore.getState().designLibraryBinding).toBeUndefined();
+ await act(async()=>button('从其他工程导入只读参考').click());await idle();expect(useProjectStore.getState().designLibraryBinding).toBeUndefined();
  expect(host.textContent).toContain('确认固定版本参考');expect(await target.listDir('assets/images')).toEqual([]);
- await act(async()=>button('确认固定版本参考').click());expect(useProjectStore.getState().designLibraryBinding?.mode).toBe('pinned_reference');
+ await act(async()=>button('确认固定版本参考').click());await idle();expect(useProjectStore.getState().designLibraryBinding?.mode).toBe('pinned_reference');
  expect(host.querySelector('fieldset')?.disabled).toBe(true);expect(host.textContent).toContain('检查并更新参考');expect(host.textContent).toContain('本地缓存可离线使用');
- await act(async()=>button('检查并更新参考').click());expect(host.textContent).toContain('替换 1 个组件');
- await act(async()=>button('确认固定版本参考').click());expect(host.textContent).toContain('固定版本只读参考');
+ await act(async()=>button('检查并更新参考').click());await idle();expect(host.textContent).toContain('替换 1 个组件');
+ await act(async()=>button('确认固定版本参考').click());await idle();expect(host.textContent).toContain('固定版本只读参考');
  act(()=>button('转为项目副本').click());expect(useProjectStore.getState().designLibraryBinding?.mode).toBe('project_copy');expect(host.querySelector('fieldset')?.disabled).toBe(false);
  act(()=>useHistoryStore.getState().undo());expect(useProjectStore.getState().designLibraryBinding?.mode).toBe('pinned_reference');expect(host.querySelector('fieldset')?.disabled).toBe(true);
 });
 
 test('只读参考预览后改选副本必须重新分析；损坏参考快照展示原因并允许显式解锁',async()=>{
- act(()=>host.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1].click());await act(async()=>button('从其他工程导入只读参考').click());
+ act(()=>host.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1].click());await act(async()=>button('从其他工程导入只读参考').click());await idle();
  act(()=>host.querySelectorAll<HTMLInputElement>('input[type="radio"]')[0].click());expect(host.querySelector('[aria-label="设计库导入预览"]')).toBeNull();
- await choose();await act(async()=>button('确认导入项目副本').click());
+ await choose();await act(async()=>button('确认导入项目副本').click());await idle();
  act(()=>useProjectStore.setState({designLibraryBinding:{...useProjectStore.getState().designLibraryBinding!,mode:'pinned_reference',referenceSnapshot:undefined}}));
  expect(host.textContent).toContain('快照缺失或无效');act(()=>button('转为项目副本').click());expect(host.textContent).not.toContain('快照缺失或无效');
 });

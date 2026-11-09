@@ -6,13 +6,15 @@ import json
 from pathlib import Path
 from playwright.async_api import async_playwright
 
-INSTALL=r'''()=>{
+INSTALL=r'''async()=>{
+ const {fileSnapshotCommand}=await import('/test/helpers/fileSnapshotFixture.ts');
  const prefix='source-authoring-fs:',meta=JSON.parse(localStorage.getItem('source-authoring-meta')||'null');
  window.__sourceFixture={...meta,writes:[],picks:0};
  window.__TAURI_INTERNALS__={invoke:async(cmd,params)=>{
   const f=window.__sourceFixture;
   if(cmd==='plugin:dialog|open'){f.picks++;return '/virtual/source.aidesign';}
   if(params?.root!=='/virtual/source.aidesign')throw Error('No fixture for native command '+cmd);
+  const snapshot=await fileSnapshotCommand(cmd,params,prefix);if(snapshot.handled){if(cmd==='project_publish_snapshot')f.writes.push(...params.changes.map(c=>c.path));return snapshot.value;}
   const rel=params.rel??'',key=prefix+rel;
   if(cmd==='project_read_text'||cmd==='project_read_binary')return localStorage.getItem(key);
   if(cmd==='project_exists')return localStorage.getItem(key)!==null;
@@ -95,7 +97,7 @@ async def main(args):
    await page.evaluate('window.__projectStore.getState().saveProjectChecked()')
    edited=await page.evaluate('''async()=>{
     const s=window.__projectStore.getState(),f=window.__sourceFixture,raw=JSON.parse(localStorage.getItem('source-authoring-fs:project.json'));
-    const {readProject}=await window.__module('/src/utils/projectRegistry.ts'),consumer=JSON.parse(readProject(f.id)),original=JSON.parse(localStorage.getItem('source-authoring-original'));
+    const {createProjectStorage}=await window.__module('/src/services/storage/projectStorage.ts'),{ProjectRepository}=await window.__module('/src/services/storage/projectRepository.ts'),consumer=await new ProjectRepository(createProjectStorage(f.id)).load(),original=JSON.parse(localStorage.getItem('source-authoring-original'));
     if(raw.components.card.version!==2||raw.designSystem.tokens.colors.primary['500']!=='#8b5cf6')throw Error('Source edits not saved');
     if(JSON.stringify(consumer.designLibraryBinding)!==JSON.stringify(original.binding)||consumer.screens.page.htmlContent!==original.html)throw Error('Consumer silently updated');
     const {useHistoryStore}=await window.__module('/src/stores/useHistoryStore.ts');useHistoryStore.getState().undo();if(window.__projectStore.getState().components.card.version!==1)throw Error('Source undo');useHistoryStore.getState().redo();if(window.__projectStore.getState().components.card.version!==2)throw Error('Source redo');
@@ -123,7 +125,7 @@ async def main(args):
    await page.reload(wait_until='networkidle');await page.wait_for_function('Boolean(window.__projectStore)');await page.evaluate(INSTALL)
    reopened=await page.evaluate('''async fixture=>{
     window.__module=async path=>import(performance.getEntriesByType('resource').map(e=>e.name).find(url=>new URL(url).pathname===path)||path);
-    const {useWorkspaceStore}=await window.__module('/src/stores/useWorkspaceStore.ts');if(!useWorkspaceStore.getState().openProject(fixture.id))throw Error('Reopen');
+    const {useWorkspaceStore}=await window.__module('/src/stores/useWorkspaceStore.ts');await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(fixture.id);
     const s=window.__projectStore.getState(),source=JSON.parse(localStorage.getItem('source-authoring-fs:project.json'));
     if(useWorkspaceStore.getState().sourceEditing||s.designLibraryBinding.mode!=='pinned_reference'||source.components.card.version!==2||s.components[Object.keys(s.components)[0]].version!==2)throw Error('Reload lost or revived source session');
     return {temporarySessionCleared:true,sourceVersion:source.components.card.version,referenceVersion:Object.values(s.components)[0].version};

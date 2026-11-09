@@ -17,6 +17,11 @@ function fixture(answers:Array<[string,string]>) {
  },async generateObject(){throw Error('unused');}};
  return {core,calls};
 }
+test('external-only page tasks do not continue or checkpoint an encoded media prefix',async()=>{
+ const bad=prefix+'<img src="data:image/png;base64,YQ==',f=fixture([[bad,'length']]);
+ const result=await streamWithContinuation(f.core,options,{externalMediaOnly:true});
+ expect(f.calls).toHaveLength(1);expect(result.errorMessage).toContain('媒体');expect(result.checkpoint).toBeUndefined();expect(result.rawResponse).toBe(bad);expect(result.usage?.outputTokens).toBe(3);
+});
 for(const reason of ['length','max_tokens','MAX_TOKENS','max_output_tokens','max-completion-tokens'])test(`portable continuation accepts ${reason} without private partial fields`,async()=>{
  const f=fixture([[prefix,reason],['<button class="btn btn-primary">查看权益</button></main></artifact>','stop']]);const chunks:string[]=[],phases:number[]=[];
  const result=await streamWithContinuation(f.core,options,{onText:t=>chunks.push(t),onContinuation:n=>phases.push(n)});

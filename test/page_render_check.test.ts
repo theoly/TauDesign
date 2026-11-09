@@ -1,3 +1,5 @@
+import {stubIndependentMediaTransport} from './helpers/independentMedia';
+stubIndependentMediaTransport();
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { PageRenderCheck } from '../src/services/ai/pageRenderCheck';
 import { createProjectStorage } from '../src/services/storage/projectStorage';
@@ -19,12 +21,12 @@ async function loadFrame(){
   throw new Error('iframe not mounted');
 }
 test('uses srcdoc with real device dimensions, CSP, tokens, chrome and L4; removes observer and surface',async()=>{
-  let disposed=0;let publish!:(report:any)=>void;const r=request();r.overrides={b:{nid:'b',declarations:{color:'var(--color-primary)'}}};
+  let disposed=0;let publish!:(report:any)=>void;const r=request();r.overrides={'a:b':{nid:'b',declarations:{color:'var(--color-primary)'}},'other:b':{nid:'b',declarations:{color:'red'}}};
   const pending=PageRenderCheck.inspect(r,createProjectStorage('render-test'),{observe:(_frame,callback)=>{publish=callback;return()=>{disposed++;};}});
   const {iframe,doc}=await loadFrame();
   expect(doc.querySelector('meta[http-equiv="Content-Security-Policy"]')?.getAttribute('content')).toContain("script-src 'none'");
   expect(doc.querySelector('style[data-taudesign-runtime="tokens"]')?.textContent).toContain('--color-primary');
-  expect(doc.querySelector('style[data-taudesign-runtime="overrides"]')?.textContent).toContain('[data-nid="b"]');
+  expect(doc.querySelector('style[data-taudesign-runtime="overrides"]')?.textContent).toContain('[data-nid="b"]');expect(doc.querySelector('style[data-taudesign-runtime="overrides"]')?.textContent).not.toContain('red');
   expect(doc.querySelector('.td-mini-title')).not.toBeNull();expect(iframe.style.width).toBe('390px');expect(iframe.style.height).not.toBe('0px');
   publish({status:'complete',findings:[],inspected:2});const result=await pending;
   expect(result.status).toBe('complete');expect(iframe.isConnected).toBe(false);expect(disposed).toBe(1);
@@ -61,13 +63,13 @@ test('render proof fingerprints the same local image/font/L4 bytes materialized 
  const image='assets/images/render.png',font=`assets/imports/fonts/${'b'.repeat(64)}.woff2`,storage=createProjectStorage(`render-${crypto.randomUUID()}`);
  await storage.writeBinary(image,btoa('image'));await storage.writeBinary(font,btoa('font'));
  const r=request();r.screen.htmlContent=`<main data-nid="a"><style>@font-face{font-family:Local;src:url('${font}')}</style><img src="${image}" alt="例图"></main>`;
- r.assets=[{id:'image',relPath:image} as never];r.overrides={a:{nid:'a',declarations:{background:`url('${image}')`}}};
+ r.assets=[{id:'image',relPath:image,type:'image',mimeType:'image/png'} as never,{id:'font',relPath:font,type:'font',mimeType:'font/woff2'} as never];r.overrides={'a:a':{nid:'a',declarations:{background:`url('${image}')`}}};
  let publish!:(report:any)=>void;
  const pending=PageRenderCheck.inspect(r,storage,{observe:(_frame,callback)=>{publish=callback;return()=>{};}});
  const {doc}=await loadFrame();
  try{
-  expect(doc.querySelector('img')!.getAttribute('src')).toContain('data:image/png;base64,');
-  expect(doc.querySelector('style[data-taudesign-runtime="overrides"]')!.textContent).toContain('data:image/png;base64,');
+  expect(doc.querySelector('img')!.getAttribute('src')).toContain('https://unit-preview.example.test/'+image);
+  expect(doc.querySelector('style[data-taudesign-runtime="overrides"]')!.textContent).toContain('https://unit-preview.example.test/'+image);
   const expected=await readProjectRenderResources(storage,[r.screen],r.assets,r.overrides);
   publish({status:'complete',findings:[],inspected:2});expect((await pending).resourceFiles).toEqual(expected.resourceFiles);
  }finally{publish({status:'complete',findings:[],inspected:2});await pending;}

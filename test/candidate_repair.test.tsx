@@ -1,3 +1,4 @@
+import {assessedFinding} from '../src/services/ai/findingPolicy';
 import {makeGuidancePacket,withGuidanceReceipts} from '../src/services/ai/designKnowledge/receipt';
 import {selectDesignRules} from '../src/services/ai/designKnowledge/selector';
 import {isCandidateValidationEvidence} from '../src/services/ai/candidateValidation';
@@ -23,7 +24,7 @@ import {useAIConfigStore} from '../src/stores/useAIConfigStore';
 import {TaskBudget} from '../src/services/ai/taskBudget';
 import * as BudgetPolicy from '../src/services/ai/taskBudgetPolicy';
 import type {AIEngineCore,StreamTextOptions} from '../src/services/ai/engine/core/types';
-const html='<main data-nid="root" class="col gap-4 p-4"><h1 data-nid="title">会员资料</h1><section data-nid="region"><button data-nid="save" class="btn btn-primary"><svg data-nid="icon" class="icon" viewBox="0 0 24 24"><path d="M1 1h8"/></svg><span data-nid="label">保存资料</span></button></section><button data-nid="other" class="btn">暂存</button></main>';
+const html='<main data-nid="root" class="col gap-4 p-4"><h1 data-nid="title">会员资料</h1><section data-nid="region"><button data-nid="save" class="btn btn-primary"><svg data-nid="icon" class="icon" viewBox="0 0 24 24" style="mask-image:url(https://fixture.example.test/bell.svg);background-color:currentColor"></svg><span data-nid="label">保存资料</span></button></section><button data-nid="other" class="btn">暂存</button></main>';
 const broken=html.replace('data-nid="save"','style="font-size:0px" data-nid="save"');
 const bad={status:'complete' as const,inspected:7,findings:[{code:'render_action_invisible_label',severity:'error' as const,nid:'save',message:'实际文案不可见',actual:'字号0',expected:'文案可见'}]};
 const good={status:'complete' as const,inspected:7,findings:[]};
@@ -149,7 +150,7 @@ for(const action of ['model','unmount'] as const)test(`${action} aborts candidat
  const factory=spyOn(CoreFactory,'createAIEngineCore').mockReturnValue(slow);useAIConfigStore.setState({getActiveProviderForRole:()=>({provider,modelId:'fixture'})});host=document.createElement('div');document.body.append(host);root=createRoot(host);
  try{await act(async()=>{root!.render(<CandidateRepairControl/>);});await act(async()=>{host.querySelector('button')!.click();await waitFor(()=>Boolean(release));});
   await act(async()=>{if(action==='model')useAIConfigStore.setState({getActiveProviderForRole:()=>({provider,modelId:'changed'})});else {root!.unmount();root=undefined;}await new Promise(resolve=>setTimeout(resolve,5));});expect(aborts).toBeGreaterThan(0);expect(useProjectStore.getState().stagedRepairStatus).toBeNull();
-  await act(async()=>{release();await new Promise(resolve=>setTimeout(resolve,5));});expect(useProjectStore.getState().stagedScreen?.candidateId).toBe(id);expect(useProjectStore.getState().stagedScreen?.newHtml).toBe(broken);expect(calls).toHaveLength(1);if(action==='model')expect(host.textContent).toContain('模型');else expect(host.childElementCount).toBe(0);
+  await act(async()=>{release();await new Promise(resolve=>setTimeout(resolve,5));});expect(useProjectStore.getState().stagedScreen?.candidateId).toBe(id);expect(useProjectStore.getState().stagedScreen?.newHtml).toBe(broken);expect(calls).toHaveLength(1);if(action==='model')expect(host.textContent).toContain('取消');else expect(host.childElementCount).toBe(0);
  }finally{await act(async()=>{release?.();await new Promise(resolve=>setTimeout(resolve,5));});factory.mockRestore();useAIConfigStore.setState(config,true);}
 });
 test('an actual repair deadline ends busy UI and consumes only the original one-attempt allowance',async()=>{
@@ -267,4 +268,26 @@ for(const corrupt of ['negative-count','fractional-count','bad-files'] as const)
  const path=`deliveries/screen-${contentFingerprint('page')}/${copy.id}.json`;await storage.writeTextAtomic(path,JSON.stringify(copy));
  const list=await new DeliveryRepository(storage,s.id).listForScreen('page');expect(list.records).toHaveLength(0);expect(list.invalidFiles).toBe(1);
  expect(await repo.get('page',copy.id)).toBeNull();await expect(repo.finish(copy,'applied')).rejects.toThrow();
+});
+
+for(const binding of [undefined,'invalid-input'] as const)test(`repair refuses restored input snapshot ${String(binding)} before any model call`,async()=>{
+ stage();const s=useProjectStore.getState(),candidate=structuredClone(s.stagedScreen!);
+ if(binding===undefined)delete candidate.inputContextFingerprint;else candidate.inputContextFingerprint=binding;
+ s.restoreStagedCandidate(candidate,s.id);publish();
+ expect(useProjectStore.getState().getStagedRepairEligibility()).toMatchObject({allowed:false});
+ expect(useProjectStore.getState().getStagedRepairEligibility().message).toContain('完整输入');
+ expect(await run()).toBe(false);expect(calls).toHaveLength(0);expect(renders).toBe(0);expect(useProjectStore.getState().screens.page.htmlContent).toBe(html);
+});
+
+test('removing a modern authorization binding cannot reenable a candidate repair request',async()=>{
+ stage();const s=useProjectStore.getState(),candidate=structuredClone(s.stagedScreen!);delete candidate.taskBindingFingerprint;
+ s.restoreStagedCandidate(candidate,s.id);publish();
+ expect(useProjectStore.getState().getStagedRepairEligibility().allowed).toBe(false);expect(await run()).toBe(false);expect(calls).toHaveLength(0);expect(renders).toBe(0);
+});
+
+test('explicit text visibility failure on a scoped control permits the existing one-call style repair',async()=>{
+ const s=useProjectStore.getState(),contract=buildDesignTaskContract({intent:'modify_screen',request:'按钮文案改为“保存资料”',target:s.screens.page,elementNid:'region',deviceProfile:'mobile',frameWidth:390,designSystem:s.designSystem});
+ const literal=assessedFinding('required-action-text','failed',{code:'required_action_text_missing',nid:'save',message:'原文不可见',actual:'字号0',expected:'保存资料'});
+ s.stageScreenChange('page',broken,'会员资料',contract.request,contract);publish({...good,findings:[literal]} as any);
+ expect(s.getStagedRepairEligibility().allowed).toBe(true);expect(await run()).toBe(true);expect(calls).toHaveLength(1);expect(useProjectStore.getState().screens.page.htmlContent).toBe(html);
 });

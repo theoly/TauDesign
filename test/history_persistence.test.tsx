@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { useProjectStore } from '../src/stores/useProjectStore';
+import { useProjectStore,waitForProjectSave } from '../src/stores/useProjectStore';
 import { useHistoryStore } from '../src/stores/useHistoryStore';
 import { useWorkspaceStore } from '../src/stores/useWorkspaceStore';
 import { defaultTheme } from '../src/utils/themePresets';
@@ -7,7 +7,7 @@ import { handleHistoryShortcut } from '../src/utils/historyShortcuts';
 import {
   HistoryRepository,
   HistorySnapshot,
-  historyKey,
+  historyKey,historyCacheKey,
   parseHistory,
   serializeHistory,
   trimHistoryForPersist,
@@ -15,6 +15,7 @@ import {
 } from '../src/services/storage/historyRepository';
 import {
   flushHistorySave,
+  flushHistorySaveChecked,
   loadHistoryForProject,
   resumeHistoryPersistence,
   scheduleHistorySave,
@@ -49,9 +50,9 @@ const entry = (id: string, label = id) => ({
   inversePatches: [{ op: 'replace' as const, path: ['screens', 'sc-1'], value: { id: 'sc-1' } }]
 });
 
-function bootstrapProject(id: string) {
+function bootstrapProject() {
+  useProjectStore.getState().initNewProject({name:'History Test Project',deviceProfile:'pc',designSystem:defaultTheme,createSpecimen:false});
   useProjectStore.setState({
-    id,
     name: 'History Test Project',
     folderPath: undefined,
     screens: {
@@ -67,14 +68,20 @@ function bootstrapProject(id: string) {
   });
   useHistoryStore.getState().restore(null);
 }
+async function waitOpened(id:string,previous:unknown){
+ const deadline=Date.now()+2000;
+ while(useProjectStore.getState().id!==id||useProjectStore.getState().projectAuthoringSession===previous||useWorkspaceStore.getState().view!=='workspace'){
+  if(Date.now()>deadline)throw Error('Expected asynchronous workspace open did not finish');await new Promise(resolve=>setTimeout(resolve,0));
+ }
+}
 
 describe('撤销/重做完备性与跨会话持久化 (History Completeness & Persistence)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     localStorage.clear();
     // 取消在途防抖写入，避免跨用例串扰
     suspendHistoryPersistence();
     resumeHistoryPersistence();
-    bootstrapProject('proj_hist_test');
+    bootstrapProject();await useProjectStore.getState().saveProjectChecked();
   });
 
   afterEach(() => {
@@ -240,7 +247,7 @@ describe('撤销/重做完备性与跨会话持久化 (History Completeness & Pe
       expect(storage.files.has('history.json')).toBe(false);
     });
 
-    test('CHK-F-09: 加载期挂起时，调度与 flush 均不落盘', () => {
+    test('CHK-F-09: 加载期挂起时，调度与 flush 均不落盘', async () => {
       const projectId = 'proj_suspend';
       useHistoryStore.getState().commit('动作 A', [], []);
 
@@ -250,13 +257,13 @@ describe('撤销/重做完备性与跨会话持久化 (History Completeness & Pe
       expect(localStorage.getItem(historyKey(projectId))).toBeNull();
 
       resumeHistoryPersistence();
-      flushHistorySave(projectId);
+      await flushHistorySaveChecked(projectId);
       expect(localStorage.getItem(historyKey(projectId))).not.toBeNull();
     });
   });
 
   describe('CHK-F-06 & CHK-F-11: 关闭工程后重新打开仍可 undo/redo (BR-HIS-02/07)', () => {
-    test('CHK-F-06: localStorage 工程重开后撤销栈、重做栈与还原点原样恢复且可继续撤销', () => {
+    test('CHK-F-06: localStorage 工程重开后撤销栈、重做栈与还原点原样恢复且可继续撤销', async () => {
       const ws = useWorkspaceStore.getState();
       ws.createProject('历史持久化工程', 'pc', defaultTheme);
       const projectId = useProjectStore.getState().id;
@@ -286,13 +293,14 @@ describe('撤销/重做完备性与跨会话持久化 (History Completeness & Pe
 
       // 关闭工程（返回工程管理页）→ 归档落盘
       useWorkspaceStore.getState().backToManager();
-      expect(localStorage.getItem(historyKey(projectId))).not.toBeNull();
+      await waitForProjectSave(projectId);
+      expect(localStorage.getItem(historyCacheKey(projectId))).not.toBeNull();
 
       // 模拟重新打开应用：历史清空后再打开同一工程
       useHistoryStore.getState().restore(null);
       expect(useHistoryStore.getState().canUndo()).toBe(false);
 
-      useWorkspaceStore.getState().openProject(projectId);
+      const previous=useProjectStore.getState().projectAuthoringSession;useWorkspaceStore.getState().openProject(projectId);await waitOpened(projectId,previous);
 
       expect(useHistoryStore.getState().past.map((h) => h.label)).toEqual(beforeClose.past);
       expect(useHistoryStore.getState().future.map((h) => h.label)).toEqual(beforeClose.future);
@@ -310,31 +318,31 @@ describe('撤销/重做完备性与跨会话持久化 (History Completeness & Pe
       expect(useProjectStore.getState().screens[screenId].htmlContent).toContain('V3');
     });
 
-    test('CHK-F-06b: 工程隔离——A 工程的历史不会出现在 B 工程', () => {
+    test('CHK-F-06b: 工程隔离——A 工程的历史不会出现在 B 工程', async () => {
       const ws = useWorkspaceStore.getState();
       ws.createProject('工程 A', 'pc', defaultTheme);
       const idA = useProjectStore.getState().id;
       useProjectStore.getState().addScreen({ name: 'A 页', htmlContent: '<main data-nid="a">A</main>' });
       useWorkspaceStore.getState().backToManager();
+      await waitForProjectSave(idA);
 
       useWorkspaceStore.getState().createProject('工程 B', 'pc', defaultTheme);
       expect(useHistoryStore.getState().past.length).toBe(0);
       expect(useHistoryStore.getState().canUndo()).toBe(false);
 
       // A 的归档未被 B 覆盖
-      const archiveA = parseHistory(localStorage.getItem(historyKey(idA)), idA);
+      const archiveA = parseHistory(localStorage.getItem(historyCacheKey(idA)), idA);
       expect(archiveA?.past.length).toBeGreaterThanOrEqual(1);
     });
 
-    test('CHK-F-11: 删除工程时历史归档一并清除', () => {
-      const projectId = 'proj_to_delete';
-      bootstrapProject(projectId);
+    test('CHK-F-11: 删除工程时历史归档一并清除', async () => {
+      const projectId = useProjectStore.getState().id;
       useHistoryStore.getState().commit('动作', [], []);
-      flushHistorySave(projectId);
-      expect(localStorage.getItem(historyKey(projectId))).not.toBeNull();
+      await flushHistorySaveChecked(projectId);
+      expect(localStorage.getItem(historyCacheKey(projectId))).not.toBeNull();
 
-      useProjectStore.getState().deleteProject(projectId);
-      expect(localStorage.getItem(historyKey(projectId))).toBeNull();
+      await useProjectStore.getState().deleteProject(projectId);
+      expect(localStorage.getItem(historyCacheKey(projectId))).toBeNull();
     });
   });
 

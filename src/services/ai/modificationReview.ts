@@ -233,7 +233,7 @@ ${options.workflowContract ? `${renderDesignTaskContract(options.workflowContrac
       // 只纠正输出协议问题；网络、授权等错误交还调用方，不重复请求。
       if (!(error instanceof SyntaxError || error instanceof ModificationAnalysisFormatError)) throw error;
       const failed=contract.designGuidance?.requests.at(-1);if(failed?.status==='failed')formatFailures.push(failed.requestId);
-      const reason = error instanceof SyntaxError ? '返回内容不是有效JSON。' : error.message;
+      const reason = error instanceof ModificationAnalysisFormatError ? error.message : '返回内容不是有效JSON。';
       if (attempt === 1) throw new Error(`分析结果纠正后仍不符合要求：${reason} 请重新分析。`);
       request.messages = [...request.messages, {
         role: 'user', content: `请纠正上次输出格式：${reason} 重新依据原页面和原始要求完整分析；严格按系统给出的JSON Schema返回summary/items。不要返回HTML或编造已执行的修改。`

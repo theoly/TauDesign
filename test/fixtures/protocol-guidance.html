@@ -1,4 +1,5 @@
 <!doctype html><html><meta charset="utf-8"><title>区块规则协议受控验收</title><body style="margin:0;background:#020617"><div id="root"></div><script type="module">
+import {requestSchema} from '/test/helpers/modelSchema.ts';
 import React from '/node_modules/.vite/deps/react.js';
 import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
 import '/src/styles/index.css';
@@ -22,7 +23,7 @@ store.addScreen({name:'资料页',htmlContent:original},'page');
 const state={device,width,original,requests:[],state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length};window.protocolGuidanceFixture=state;
 const transport=new MockTransport();
 const core=new DefaultAIEngineCore({id:'local-fixture',stream:(request,event)=>{
- const body=request.body;state.requests.push({schema:body.response_format,maxTokens:body.max_tokens,rulePresent:body.messages[0].content.includes('[LY-04@1]'),wholeHtml:body.messages[0].content.includes('返回完整 HTML')});
+ const body=request.body;state.requests.push({schema:requestSchema(request),maxTokens:body.max_tokens,rulePresent:body.messages[0].content.includes('[LY-04@1]'),wholeHtml:body.messages[0].content.includes('返回完整 HTML')});
  transport.queueResponse(JSON.stringify({nid:'region01',html:region.replace('data-nid="region01"','data-nid="region01" class="col gap-4"')}),20);
  return transport.stream(request,event);
 }});

@@ -1,3 +1,4 @@
+import {RenderEvidenceAuthority} from '../src/services/ai/evidenceIdentity';
 import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import React, { act } from 'react';
@@ -50,6 +51,7 @@ describe('durable delivery archive', () => {
     expect(result.records[0]).toMatchObject({ status: 'applied', mode: 'replace', before: { htmlContent: before }, after: { htmlContent: after },
       candidate: { modificationRequest: '修改提交文案', executionRecord: { rawResponse: 'RAW_DELIVERY_MARKER' }, validationEvidence: { render: { status: 'complete' } } } });
     expect(await loadStagedCandidate(store.id)).toBeNull();
+    await useProjectStore.getState().saveProjectChecked();
     expect(readProject(store.id)).not.toContain('RAW_DELIVERY_MARKER');
     useHistoryStore.getState().undo();
     expect(useProjectStore.getState().screens.target.htmlContent).toBe(before);
@@ -158,9 +160,10 @@ describe('durable delivery archive', () => {
     }finally{prepare.mockRestore();}
   });
 
-  test('font-only adoption archives its actual read evidence before a pending background audit',async()=>{
+  test('font-only adoption waits for its registered resource audit and archives actual read evidence',async()=>{
     const state=useProjectStore.getState(),font=`assets/imports/fonts/${'a'.repeat(64)}.woff2`,storage=createProjectStorage(state.id);
     await storage.writeBinary(font,'dGVzdA==');state.updateScreen('target',{scopedCss:`@font-face{font-family:Imported;src:url(${font})}`},'添加字体');
+    state.addAsset({id:'delivery-font',name:'Imported',type:'font',mimeType:'font/woff2',source:'upload',relPath:font,refCount:0});
     state.addScreen({name:'其它页面',htmlContent:'<main>其它页面</main>'},'other');
     const prototype=Object.getPrototypeOf(storage),actualRead=prototype.readBinary;let first=true,release!:()=>void,entered!:()=>void;
     const started=new Promise<void>(resolve=>entered=resolve);
@@ -170,10 +173,13 @@ describe('durable delivery archive', () => {
     });
     try{
       state.stageScreenChange('target',after,'字体候选');await started;await stageResourceReport();
-      expect(useProjectStore.getState().stagedProjectAssetAudit).toBeNull();expect(await state.adoptStagedChange()).toBe(true);
+      expect(useProjectStore.getState().stagedProjectAssetAudit).toBeNull();expect(await state.adoptStagedChange()).toBe(false);
+      expect(useProjectStore.getState().screens.target.htmlContent).toBe(before);release();
+      for(let i=0;i<100&&useProjectStore.getState().stagedAssetFiles?.status!=='passed';i++)await pause();
+      const applied=await state.adoptStagedChange();expect(applied,useProjectStore.getState().stagedAdoptionError??JSON.stringify(useProjectStore.getState().getStagedDeliveryReport())).toBe(true);
       const record=(await repository().listForScreen('target')).records[0];
       expect(record.candidate.validationEvidence?.projectAssets?.files.map(f=>f.relPath)).toContain(font);
-      expect(record.candidate.validationEvidence?.projectAssets?.screenCount).toBe(1);
+      expect(record.candidate.validationEvidence?.projectAssets?.screenCount).toBe(2);
     }finally{release?.();await pause();read.mockRestore();}
   });
 
@@ -184,25 +190,32 @@ describe('durable delivery archive', () => {
       if (status === 'applied') await new Promise<void>(resolve => { release = resolve; });
       await realFinish.call(this, record, status, reason);
     });
+    let pending:Promise<boolean>|undefined;
     try {
-      const pending = store.adoptStagedChange(); await pause();
+      pending = store.adoptStagedChange();
+      const deadline=Date.now()+3000;while(!release&&Date.now()<deadline)await pause();expect(release).toBeDefined();
       expect(useProjectStore.getState().stagedScreen).toBeNull();
       store.stageScreenChange('target', after.replace('确认提交', '下一版本'), '下一候选');
       const nextId = useProjectStore.getState().stagedScreen!.candidateId;
       release(); expect(await pending).toBe(true);
       expect((await loadStagedCandidate(store.id))?.candidateId).toBe(nextId);
-    } finally { finish.mockRestore(); }
+    } finally { release?.();await pending;finish.mockRestore(); }
   });
 
-  test('keep-both and force modes retain their actual outcome and guard findings', async () => {
+  test('keep-both and force modes archive valid outcomes while quality failures remain unapplied', async () => {
     const store = useProjectStore.getState();
     expect(await store.keepBothScreens()).toBe(true);
     const newId = useProjectStore.getState().screenOrder.find(id => id !== 'target')!;
     expect(useProjectStore.getState().screens.target.htmlContent).toBe(before);
     expect((await repository().listForScreen(newId)).records[0]).toMatchObject({ mode: 'keep-both', status: 'applied', after: { id: newId } });
     store.stageScreenChange('target', '<main data-nid="root0001"></main>', '强制候选', '调整布局'); ready();
+    const past=useHistoryStore.getState().past.length;
+    expect(await store.forceAdoptStagedChange()).toBe(false);
+    expect(useProjectStore.getState().screens.target.htmlContent).toBe(before);expect(useHistoryStore.getState().past).toHaveLength(past);
+    expect((await repository().listForScreen('target')).records).toHaveLength(0);
+    store.stageScreenChange('target',after,'有效强制候选','修改提交文案');ready();
     expect(await store.forceAdoptStagedChange()).toBe(true);
-    expect((await repository().listForScreen('target')).records[0]).toMatchObject({ mode: 'force-replace', candidate: { validationEvidence: { quality: { passed: false } } } });
+    expect((await repository().listForScreen('target')).records[0]).toMatchObject({mode:'force-replace',candidate:{validationEvidence:{quality:{passed:true}}}});
   });
 
   test('failed finalization retains a prepared archive; corrupt records do not hide good records', async () => {
@@ -214,7 +227,33 @@ describe('durable delivery archive', () => {
     const storage = createProjectStorage(store.id);
     await storage.writeTextAtomic(`deliveries/screen-${contentFingerprint('target')}/delivery-zzzz-broken.json`, '{bad');
     const result = await repository().listForScreen('target');
-    expect(result.records[0].status).toBe('prepared');
+    expect(result.records[0].status).toBe('applied');expect(result.records[0].reason).toContain('原子提交已确认');
+    expect(JSON.parse((await storage.readText(`deliveries/screen-${contentFingerprint('target')}/${result.records[0].id}.json`))!).status).toBe('prepared');
     expect(result.invalidFiles).toBe(1);
   });
+  for(const mode of ['replace','force-replace','keep-both'] as const)test(`checker changes after archive prepare block ${mode}; fresh checks preserve task and enable retry`,async()=>{
+    const store=useProjectStore.getState(),frozen=structuredClone(store.stagedScreen!),past=useHistoryStore.getState().past.length;let changed=false,archived:{screenId:string;id:string}|undefined;
+    const revision=spyOn(RenderEvidenceAuthority,'revision').mockImplementation(()=>changed?'archive-checker-next':'archive-checker-current');ready();
+    const original=DeliveryRepository.prototype.prepare;
+    const prepare=spyOn(DeliveryRepository.prototype,'prepare').mockImplementation(async function(record){await original.call(this,record);archived={screenId:record.after.id,id:record.id};changed=true;});
+    const adopt=()=>mode==='replace'?store.adoptStagedChange():mode==='force-replace'?store.forceAdoptStagedChange():store.keepBothScreens();
+    try{
+      expect(await adopt()).toBe(false);expect(useProjectStore.getState().screens.target.htmlContent).toBe(before);expect(useHistoryStore.getState().past).toHaveLength(past);
+      expect(archived).toBeDefined();expect((await repository().get(archived!.screenId,archived!.id))?.status).toBe('aborted');
+      expect(useProjectStore.getState().stagedScreen?.candidateId).toBe(frozen.candidateId);expect(useProjectStore.getState().stagedScreen?.inputContextFingerprint).toBe(frozen.inputContextFingerprint);expect(store.isStagedTaskCurrent()).toBe(true);
+      ready();expect(await adopt()).toBe(true);expect(useHistoryStore.getState().past).toHaveLength(past+1);
+      useHistoryStore.getState().undo();expect(useProjectStore.getState().screens.target.htmlContent).toBe(before);expect(useProjectStore.getState().screenOrder).toEqual(['target']);
+    }finally{prepare.mockRestore();revision.mockRestore();}
+  });
+
+  test('legacy missing authorization remains readable history but cannot prepare a new delivery',async()=>{
+    const store=useProjectStore.getState();expect(await store.adoptStagedChange()).toBe(true);
+    const repo=repository(),record=structuredClone((await repo.listForScreen('target')).records[0]);delete record.candidate.taskBindingFingerprint;
+    await repo.finish(record,'applied');const loaded=(await repo.get('target',record.id))!;
+    expect(loaded).toBeTruthy();expect(loaded.candidate.taskBindingFingerprint).toBeUndefined();
+    const next={...loaded,id:`delivery-${crypto.randomUUID()}`,status:'prepared' as const,preview:undefined};
+    await expect(repo.prepare(next)).rejects.toThrow('快照不完整');expect(await repo.get('target',next.id)).toBeNull();
+    expect(useProjectStore.getState().screens.target.htmlContent).toBe(after);
+  });
+
 });

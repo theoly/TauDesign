@@ -227,7 +227,7 @@ export const PropertyInspector: React.FC = () => {
         designSystem:state.designSystem,designSystemOrigin:state.designSystemOrigin,protectedNids:state.getProtectedNids(activeScreenId)});
       const candidate=await executeStructuredEdit(createAIEngineCore(),{mode:'element',binding:{provider:binding.provider,model:binding.modelId},
         contextualGuidance:useAIConfigStore.getState().autoReferenceDesignRules?{}:undefined,
-        signal:job.signal,screen,elementNid:selectedNid,request,settings:state.settings,contract,designSystem:state.designSystem,colorMode:state.settings.colorMode,
+        signal:job.signal,screen,styleOverrides:state.overrides,elementNid:selectedNid,request,settings:state.settings,contract,designSystem:state.designSystem,colorMode:state.settings.colorMode,
         protectedNids:state.getProtectedNids(activeScreenId),isCurrent:current,
         onActivity:activity=>{if(current())setPointActivity(activity);},
         onPhase:phase=>{if(current())setPointNotice(phase==='planning'?'正在梳理所选元素内的功能与交互…':'正在生成所选元素的副本修改…');}});

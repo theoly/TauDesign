@@ -52,7 +52,7 @@ async def main(args):
                 useHistoryStore.getState().redo();assert(store.getState().screens[screen.id].metadata.creationEvidence.workflow.status==='ready','redo failed');
                 const exported=buildStandaloneHtml(screen,{tokensCss:compileTokensToCss(s.designSystem.tokens,'light'),baseCss:getBaseCss(profile),screenOverrides:'',deviceProfile:profile});
                 assert(exported.includes('保存资料')&&!exported.includes('creationEvidence')&&!exported.includes('td-mini-chrome'),exported.slice(0,200));
-                store.getState().setActiveScreen(screen.id);store.getState().saveProject();
+                store.getState().setActiveScreen(screen.id);await store.getState().saveProjectChecked();
                 const storage=createProjectStorage(id),raw=await storage.readText('project.json');
                 results.push({profile,projectId:id,screenId:screen.id,workflow:e.workflow,render:e.render,exportLength:exported.length,folderDocumentAvailable:Boolean(raw)});
               }
@@ -64,7 +64,7 @@ async def main(args):
               const loaded=performance.getEntriesByType('resource').map(entry=>entry.name).find(url=>new URL(url).pathname==='/src/stores/useWorkspaceStore.ts');
               const {useWorkspaceStore}=await import(loaded);const found=[];
               for(const result of results){
-                if(!useWorkspaceStore.getState().openProject(result.projectId))throw new Error('Project reopen failed');
+                await (await import('/test/helpers/workspaceOpen.ts')).openVerifierProject(result.projectId);
                 const state=window.__projectStore.getState(),screen=state.screens[result.screenId];
                 if(screen.metadata.creationEvidence.workflow.status!=='ready')throw new Error('Creation evidence lost');
                 state.setActiveScreen(screen.id);found.push({profile:result.profile,workflow:screen.metadata.creationEvidence.workflow.plan.workflowId});

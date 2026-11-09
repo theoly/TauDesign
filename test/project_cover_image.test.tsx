@@ -43,7 +43,7 @@ describe('工程列表封面特性 (Project Cover Image - T-PCI-01 ~ T-PCI-05)',
     });
   };
 
-  test('CHK-F-01: useProjectStore 支持 setCoverImage 并在 saveProject 时同步更新注册表元信息', () => {
+  test('CHK-F-01: useProjectStore 支持 setCoverImage 并在 saveProject 完成后更新注册表元信息', async () => {
     const store = useProjectStore.getState();
     expect(store.coverImage).toBeNull();
 
@@ -52,6 +52,7 @@ describe('工程列表封面特性 (Project Cover Image - T-PCI-01 ~ T-PCI-05)',
 
     expect(useProjectStore.getState().coverImage).toBe(sampleCover);
 
+    await store.saveProjectChecked();
     // 校验注册表
     const all = listProjects();
     const currentMeta = all.find((p) => p.id === store.id);

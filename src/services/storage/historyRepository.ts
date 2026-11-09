@@ -1,5 +1,7 @@
 import { ProjectStorage } from './projectStorage';
 import { Checkpoint, HistoryEntry } from '../../types/history';
+import {createProjectStorage} from './projectStorage';
+import {prepareHistoryMedia,checkedHydrateHistoryMedia} from './historyMedia';
 
 /**
  * 撤销/重做历史的工程级归档 (BR-HIS-01 / doc/feature/history-persistence/spec.md)
@@ -11,6 +13,8 @@ import { Checkpoint, HistoryEntry } from '../../types/history';
 export const HISTORY_SCHEMA_VERSION = 1;
 export const HISTORY_FILE = 'history.json';
 export const historyKey = (projectId: string) => `ai_designer_history_${projectId}`;
+export const historyCacheKey=(projectId:string)=>`ai_designer_history_cache_${projectId}`;
+const cachedHistory=(id:string)=>localStorage.getItem(historyCacheKey(id))??localStorage.getItem(historyKey(id));
 
 /** 文件夹工程的归档预算；历史存磁盘，可以宽松些 */
 export const FOLDER_HISTORY_BUDGET = 8 * 1024 * 1024;
@@ -91,15 +95,54 @@ export const emptyHistorySnapshot = (): HistorySnapshot => ({ ...EMPTY, past: []
 
 export function readHistoryLocal(projectId: string): HistorySnapshot | null {
   try {
-    return parseHistory(localStorage.getItem(historyKey(projectId)), projectId);
+    return parseHistory(cachedHistory(projectId), projectId);
   } catch {
     return null;
   }
 }
 
+/** Encoded-media archives need asynchronous verified file reads before they become undo patches. */
+export async function readHistoryLocalChecked(projectId:string):Promise<HistorySnapshot|null>{
+ const raw=cachedHistory(projectId);if(!raw)return null;
+ return parseHistory(await checkedHydrateHistoryMedia(raw,projectId,createProjectStorage(projectId)),projectId);
+}
+export function localHistoryRequiresFiles(projectId:string):boolean{
+ try{return [2,3].includes(JSON.parse(cachedHistory(projectId)??'null')?.schemaVersion);}catch{return false;}
+}
+
+export async function prepareHistoryArchive(storage:ProjectStorage,projectId:string,snapshot:HistorySnapshot,budget=FOLDER_HISTORY_BUDGET):Promise<string>{
+ return prepareHistoryMedia({projectId,savedAt:Date.now(),...trimHistoryForPersist(snapshot,budget)},storage);
+}
+
+/** Decode the history belonging to an already-read project snapshot. */
+export async function readHistoryArchive(storage:ProjectStorage,projectId:string,raw:string|null):Promise<HistorySnapshot|null>{
+ if(!raw)return null;
+ let doc:unknown;try{doc=JSON.parse(raw);}catch{throw Error('工程历史记录损坏，原归档已保留。');}
+ const value=doc as Partial<PersistedHistory>;
+ if(!value||![1,2,3].includes(value.schemaVersion as number)||value.projectId!==projectId||!Array.isArray(value.past)||!Array.isArray(value.future)||!Array.isArray(value.checkpoints))throw Error('工程历史格式或身份不匹配，原归档已保留。');
+ return parseHistory([2,3].includes(value.schemaVersion as number)?await checkedHydrateHistoryMedia(raw,projectId,storage):raw,projectId);
+}
+
+export async function writeHistoryLocalChecked(projectId:string,snapshot:HistorySnapshot):Promise<void>{
+ const serialized=await prepareHistoryArchive(createProjectStorage(projectId),projectId,snapshot,LOCAL_HISTORY_BUDGET);
+ localStorage.setItem(historyKey(projectId),serialized);
+}
+
+const localHistoryWrites=new Map<string,Promise<void>>();
+/** Preserve event order when a binary-bearing save is still preparing its independent files. */
+export function saveHistoryLocalOrdered(projectId:string,snapshot:HistorySnapshot):Promise<void>{
+ const pending=localHistoryWrites.get(projectId),frozen=structuredClone({past:snapshot.past,future:snapshot.future,checkpoints:snapshot.checkpoints});
+ const media=/data:|<svg(?:[\s/>]|\\[nrt])/i.test(JSON.stringify(frozen));
+ if(!pending&&!media){localStorage.setItem(historyKey(projectId),serializeHistory(projectId,frozen,LOCAL_HISTORY_BUDGET));return Promise.resolve();}
+ const operation=(pending??Promise.resolve()).catch(()=>{}).then(()=>writeHistoryLocalChecked(projectId,frozen));
+ localHistoryWrites.set(projectId,operation);
+ void operation.finally(()=>{if(localHistoryWrites.get(projectId)===operation)localHistoryWrites.delete(projectId);}).catch(()=>{});
+ return operation;
+}
+
 export function writeHistoryLocal(projectId: string, snapshot: HistorySnapshot): void {
   try {
-    localStorage.setItem(historyKey(projectId), serializeHistory(projectId, snapshot, LOCAL_HISTORY_BUDGET));
+    void saveHistoryLocalOrdered(projectId,snapshot).catch(e=>console.warn('[history] 归档写入失败',e));
   } catch (e) {
     // 配额超限等写入失败只降级告警：历史丢失远不如中断用户编辑严重
     console.warn('[history] 归档写入失败', e);
@@ -109,6 +152,7 @@ export function writeHistoryLocal(projectId: string, snapshot: HistorySnapshot):
 export function deleteHistoryLocal(projectId: string): void {
   try {
     localStorage.removeItem(historyKey(projectId));
+    localStorage.removeItem(historyCacheKey(projectId));
   } catch {
     /* 残留归档无害，下次以 projectId 校验兜底 */
   }
@@ -121,15 +165,20 @@ export class HistoryRepository {
   constructor(private readonly storage: ProjectStorage, private readonly projectId: string) {}
 
   async save(snapshot: HistorySnapshot): Promise<void> {
-    const serialized=serializeHistory(this.projectId,snapshot,FOLDER_HISTORY_BUDGET);
-    const operation=(historyWrites.get(this.projectId)??Promise.resolve()).catch(()=>{}).then(()=>this.storage.writeTextAtomic(HISTORY_FILE,serialized));
+    const frozen=structuredClone({past:snapshot.past,future:snapshot.future,checkpoints:snapshot.checkpoints});
+    const operation=(historyWrites.get(this.projectId)??Promise.resolve()).catch(()=>{}).then(async()=>{
+      const serialized=await prepareHistoryArchive(this.storage,this.projectId,frozen);
+      await this.storage.writeTextAtomic(HISTORY_FILE,serialized);
+    });
     historyWrites.set(this.projectId,operation);
     try{await operation;}finally{if(historyWrites.get(this.projectId)===operation)historyWrites.delete(this.projectId);}
   }
 
   async load(): Promise<HistorySnapshot | null> {
     const raw = await this.storage.readText(HISTORY_FILE);
-    return parseHistory(raw, this.projectId);
+    if(!raw)return null;
+    let schema:unknown;try{schema=JSON.parse(raw).schemaVersion;}catch{return null;}
+    return parseHistory((schema===2||schema===3)?await checkedHydrateHistoryMedia(raw,this.projectId,this.storage):raw,this.projectId);
   }
 
   async remove(): Promise<void> {

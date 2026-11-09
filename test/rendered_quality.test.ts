@@ -1,3 +1,6 @@
+import fieldCalibration from './fixtures/validation/explicit-field-content-v1.json';
+import contentCalibration from './fixtures/validation/explicit-action-content-v1.json';
+import nameCalibration from './fixtures/validation/action-name-v1.json';
 import { afterEach, describe, expect, test } from 'bun:test';
 import { inspectRenderedQuality, observeRenderedQuality, type RenderedQualityReport } from '../src/utils/renderedQuality';
 
@@ -30,7 +33,7 @@ function fixture(html: string, extraCss = '') {
   const textLines = new Map<string, Array<{top:number;bottom:number;width:number;height:number}>>();
   doc.createRange = (() => {
     let textNode: Node;
-    return { selectNodeContents: (node:Node) => {textNode=node;}, getClientRects: () => textLines.get(textNode.parentElement?.closest('[data-nid]')?.getAttribute('data-nid') || '') || [{top:20,bottom:36,width:40,height:16}] };
+    return { selectNodeContents: (node:Node) => {textNode=node;}, getClientRects: () => textLines.get(textNode.parentElement?.closest('[data-nid]')?.getAttribute('data-nid') || '') || [{top:20,bottom:36,left:16,right:56,width:40,height:16}] };
   }) as typeof doc.createRange;
   doc.elementFromPoint = () => doc.querySelector('button') || doc.body;
   return { iframe, doc, sizes, textLines, report: () => inspectRenderedQuality(doc), codes: () => inspectRenderedQuality(doc).findings.map(f=>f.code) };
@@ -122,6 +125,8 @@ describe('真实渲染规则的几何输入',()=>{
   test('读取实际文字和祖先背景；普通小字4.5、大字3，渐变与透明组不猜测',()=>{
     const f=fixture('<p data-nid="low" style="color:rgb(180,180,180)">浅色小字</p><p data-nid="large" style="font-size:24px;color:rgb(130,130,130)">大字</p><section style="background-color:rgb(0,0,0)"><p data-nid="on-dark" style="color:rgb(255,255,255)">白字</p></section><p data-nid="gradient" style="color:rgb(180,180,180);background-image:linear-gradient(white,black)">渐变</p><section style="opacity:0.5"><p data-nid="group" style="color:rgb(180,180,180)">组透明</p></section>');
     const contrast=f.report().findings.filter(x=>x.code==='render_contrast');expect(contrast.map(x=>x.nid)).toEqual(['low']);expect(contrast[0].actual).toContain(':1');
+    const unknown=f.report().findings.filter(x=>x.code==='render_contrast_unverified');expect(unknown.map(x=>x.nid)).toEqual(['gradient','group']);
+    expect(unknown.every(x=>x.severity==='warning' && x.assessment?.status==='unverified')).toBe(true);
   });
   test('资源未稳、节点预算耗尽明确为未完成',()=>{
     const f=fixture('<p data-nid="one">一</p><p data-nid="two">二</p>');
@@ -280,4 +285,98 @@ describe('长正文被横排操作组挤窄',()=>{
   f.doc.querySelector('p')!.removeAttribute('data-nid');f.textLines.set('card',Array.from({length:7},(_,i)=>({top:20+i*22,bottom:36+i*22,width:60,height:16})));
   expect(f.codes()).toContain('render_compressed_body');
  });
+});
+
+for(const row of nameCalibration.cases)test(`M4 rendered name calibration: ${row.id}`,()=>{
+ const f=fixture('<main>'+row.html+'</main>',row.css),report=f.report();
+ const errors=report.findings.filter(f=>f.severity==='error'&&f.nid==='control');
+ expect(errors.length===0).toBe(row.render);
+ if(!row.render)expect(errors.some(f=>f.code==='render_action_invisible_label')).toBe(true);
+});
+
+for(const row of contentCalibration.cases)test(`explicit action render: ${row.id}`,()=>{
+ const f=fixture(row.html,'css' in row?row.css:undefined);
+ if(row.id==='clipped')f.sizes(f.doc.querySelector('[data-nid="control"]')!,16,20,24,24);
+ const result=inspectRenderedQuality(f.doc,{contentTask:{request:row.request,...('elementNid' in row?{elementNid:row.elementNid}:{})}});
+ const findings=result.findings.filter(f=>f.code.startsWith('required_action_text_'));
+ expect(findings.length===0).toBe(row.render);
+ if('unverified' in row&&row.unverified)expect(findings[0].assessment?.status).toBe('unverified');
+});
+
+test('scope CSS natural multiline label is intentional, not an unexpected wrap',()=>{
+ const f=fixture('<span data-nid="label" class="tag imported-wrap">自然换行的长标签</span>','.imported-wrap{white-space:normal}');
+ f.textLines.set('label',[{top:20,bottom:36,width:40,height:16},{top:40,bottom:56,width:40,height:16}]);
+ expect(f.codes()).not.toContain('render_unexpected_wrap');
+ expect(f.report().coverage?.find(item=>item.reason==='intentional-wrap')?.nids).toContain('label');
+});
+test('notification outer-corner contact is disclosed as unverified instead of certain obstruction',()=>{
+ const f=fixture('<button aria-label="通知"><svg class="icon"></svg><span data-nid="count" class="badge-count" style="position:absolute">3</span></button>');
+ f.sizes(f.doc.querySelector('button')!,16,16,52,52);f.sizes(f.doc.querySelector('svg')!,24,24,24,24);f.sizes(f.doc.querySelector('span')!,44,12,16,16);
+ expect(f.codes()).not.toContain('render_badge_overlap');
+ expect(f.report().coverage?.find(item=>item.reason==='badge-corner-contact')?.nids).toContain('count');
+});
+test('inactive controls disclose why label checking is not applicable',()=>{
+ const f=fixture('<button data-nid="inactive" disabled></button>');
+ expect(f.report().coverage?.find(item=>item.reason==='inactive-control')?.count).toBe(1);
+});
+
+test('nested inline body text is still checked for severe compression',()=>{
+ const text='这周六西湖边有个版画展，我多了一张票，一起去看看吗？';
+ const f=fixture(`<section data-nid="card" style="display:flex;flex-direction:row"><div data-nid="tools"><button>复制</button></div><p data-nid="copy"><span>${text}</span></p></section>`);
+ f.sizes(f.doc.querySelector('section')!,16,20,300,180);f.sizes(f.doc.querySelector('[data-nid="tools"]')!,16,20,190,44);f.sizes(f.doc.querySelector('p')!,216,20,60,180);f.sizes(f.doc.querySelector('p span')!,216,20,60,180);
+ f.textLines.set('copy',Array.from({length:7},(_,i)=>({top:20+i*22,bottom:36+i*22,width:60,height:16})));
+ expect(f.report().findings.find(f=>f.code==='render_compressed_body')).toMatchObject({nid:'copy',severity:'error'});
+});
+
+test('nested body measurement respects the configured inspection budget',()=>{
+ const f=fixture('<p data-nid="copy"><span>这是一段需要完整展示且不能被操作区挤压的正文</span><span>这是另一段需要完整展示的较长正文内容</span></p>');
+ const report=inspectRenderedQuality(f.doc,{maxNodes:1});expect(report.status).toBe('incomplete');
+ expect(report.reason).toContain('正文');expect(report.coverage?.some(entry=>entry.reason==='body-measure-limit')).toBe(true);
+});
+
+for(const row of fieldCalibration.cases)test(`explicit field render: ${row.id}`,()=>{
+ const f=fixture(row.html,'css' in row?row.css:undefined),report=inspectRenderedQuality(f.doc,{contentTask:{request:row.request,...('elementNid' in row?{elementNid:row.elementNid}:{})}});
+ const findings=report.findings.filter(f=>f.code.startsWith('required_field_label_'));
+ expect(findings.length===0).toBe(row.render==='pass');
+ if(row.render==='unverified')expect(findings[0].assessment?.status).toBe('unverified');
+});
+
+test('a display-contents field label can paint real text despite zero container boxes',()=>{
+ const f=fixture('<label data-nid="label" for="phone" style="display:contents"><span style="display:contents">手机号</span></label><input id="phone">');
+ for(const el of Array.from(f.doc.querySelectorAll('label,span')))f.sizes(el,0,0,0,0);
+ const report=inspectRenderedQuality(f.doc,{contentTask:{request:'字段标签文案必须为“手机号”'}});
+ expect(report.findings.filter(f=>f.code.startsWith('required_field_label_'))).toEqual([]);
+});
+
+describe('通知角标以图标主体为锚点',()=>{
+  const notification=(extra='')=>fixture('<a href="#messages" class="notification-control" '+extra+'><svg class="icon"></svg><span data-nid="count" class="badge-count" style="position:absolute">3</span></a>');
+  test('拉伸区块右上角与主体脱离时给出具体定位警告',()=>{
+    const f=notification();f.sizes(f.doc.querySelector('a')!,16,20,358,60);f.sizes(f.doc.querySelector('svg')!,180,36,28,28);f.sizes(f.doc.querySelector('span')!,354,20,16,16);
+    expect(f.report().findings.some(x=>x.code==='render_badge_detached'&&x.nid==='count'&&x.severity==='warning')).toBe(true);
+  });
+  test('数字与图标居中并排也不算右上角附着',()=>{
+    const f=notification();f.sizes(f.doc.querySelector('svg')!,30,40,28,28);f.sizes(f.doc.querySelector('span')!,62,46,16,16);
+    expect(f.codes()).toContain('render_badge_detached');
+  });
+  test('靠近图标右上外角的计数或点，即使点击区很宽也不误报',()=>{
+    const f=notification();f.sizes(f.doc.querySelector('a')!,16,20,358,60);f.sizes(f.doc.querySelector('svg')!,180,36,28,28);
+    const badge=f.doc.querySelector('span')!;f.sizes(badge,204,23,16,16);
+    expect(f.codes()).not.toContain('render_badge_detached');
+    badge.className='badge-dot';f.sizes(badge,207,31,6,6);expect(f.codes()).not.toContain('render_badge_detached');
+  });
+  test('左上角和离图标过高的角标仍会被定位',()=>{
+    const f=notification();f.sizes(f.doc.querySelector('svg')!,100,100,28,28);const badge=f.doc.querySelector('span')!;
+    f.sizes(badge,84,86,16,16);expect(f.codes()).toContain('render_badge_detached');
+    f.sizes(badge,124,40,16,16);expect(f.codes()).toContain('render_badge_detached');
+  });
+  test('卡片状态和多图标控件不猜测唯一通知主体',()=>{
+    const card=fixture('<article class="card"><svg></svg><span class="badge-count" style="position:absolute">3</span></article>');
+    card.sizes(card.doc.querySelector('svg')!,20,30,24,24);card.sizes(card.doc.querySelector('span')!,340,10,16,16);expect(card.codes()).not.toContain('render_badge_detached');
+    const f=fixture('<button><svg></svg><svg></svg><span class="badge-count" style="position:absolute">3</span></button>');
+    f.sizes(f.doc.querySelector('span')!,340,10,16,16);expect(f.codes()).not.toContain('render_badge_detached');
+  });
+  test('复杂变换仍披露不可测，不假判锚点',()=>{
+    const f=notification('style="transform:scale(1.2)"');f.sizes(f.doc.querySelector('span')!,340,10,16,16);
+    expect(f.codes()).not.toContain('render_badge_detached');expect(f.report().coverage?.some(x=>JSON.stringify(x).includes('badge-transform'))).toBe(true);
+  });
 });

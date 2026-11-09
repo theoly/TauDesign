@@ -12,7 +12,8 @@ function snapshot(screen: Screen): RestylePageSnapshot {
 export function buildRestyleDelivery(state: RestyleValidationState & {designSystemOrigin?:DesignSystemOrigin;designLibraryBinding?:DesignLibraryBinding},
   outcome: RestyleOutcome, plan: CheckedRestylePlan): RestyleDeliveryRecord {
   const {validation:_oldValidation,delivery:_oldDelivery,...execution} = outcome;
-  return structuredClone({schemaVersion:1,id:`restyle-${Date.now().toString(36)}-${crypto.randomUUID()}`,projectId:state.id,
+  const id=`restyle-${Date.now().toString(36)}-${crypto.randomUUID()}`;
+  return structuredClone({schemaVersion:1,id,publicationId:id,projectId:state.id,
     batchId:outcome.batchId,createdAt:Date.now(),status:'prepared',outcome:execution,validation:plan.validation,
     pages:plan.screens.map(screen=>({before:snapshot(state.screens[screen.id]),after:snapshot(screen)})),
     ...(plan.component ? {component:{before:state.components[plan.component.id],after:plan.component}} : {}),

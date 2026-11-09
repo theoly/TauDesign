@@ -27,7 +27,7 @@ beforeEach(()=>{
  useAIConfigStore.setState({providers:defaultProviders.map(p=>p.id==='prov-deepseek'?{...p,apiKey:'fixture'}:p),bindings:defaultBindings});
  calls=[];renderBlocked=false;holdSuggestion=false;
  DefaultAIEngineCore.prototype.streamText=function(o){calls.push(o);const planning=Boolean((o.jsonSchema?.properties as any)?.features);const targets=o.jsonSchema&&!planning?JSON.parse(o.messages.at(-1)!.content).targets:undefined;
-  const text=planning?JSON.stringify(chatPageTaskPlan):targets?JSON.stringify({labels:targets.map((t:any)=>({nid:t.nid,text:'查看权益'}))}):'<artifact title="会员中心"><main class="container-max relative"><h1 class="text-xl">会员中心</h1><button class="btn btn-primary absolute"><svg class="icon" viewBox="0 0 24 24"><path d="M1 1L2 2"/></svg><span></span></button></main></artifact>';
+  const text=planning?JSON.stringify(chatPageTaskPlan):targets?JSON.stringify({labels:targets.map((t:any)=>({nid:t.nid,text:'查看权益'}))}):'<artifact title="会员中心"><main class="container-max"><h1 class="text-xl">会员中心</h1><button class="btn btn-primary"><img class="icon" src="https://example.com/fixture-icon.svg" alt=""/><span></span></button></main></artifact>';
   if(targets&&holdSuggestion){let resolve!:(text:string)=>void;const pending=new Promise<string>(r=>resolve=r);releaseSuggestion=value=>resolve(value??text);return {textStream:(async function*(){yield await pending;})(),reasoningStream:(async function*(){})(),textPromise:pending,reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve({inputTokens:11,outputTokens:7}),finishReasonPromise:Promise.resolve('stop'),abort(){}};}
   return {textStream:(async function*(){yield text;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(text),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve({inputTokens:11,outputTokens:7}),finishReasonPromise:Promise.resolve('stop'),abort(){}};
  };
@@ -43,7 +43,7 @@ test('失败保存且不可采纳；AI建议不自动改页，确认后只改文
  expect(calls).toHaveLength(3);expect(Object.keys(useProjectStore.getState().screens)).toHaveLength(0);expect(useHistoryStore.getState().past.length).toBe(before);
  expect((card().querySelector('input') as HTMLInputElement).value).toBe('查看权益');
  await act(async()=>{button('确认文案并定点修复').click();await drain();});
- expect(calls).toHaveLength(3);const pages=Object.values(useProjectStore.getState().screens);expect(pages).toHaveLength(1);expect(pages[0].htmlContent).toContain('查看权益');expect(pages[0].htmlContent).toContain('relative');expect(pages[0].metadata?.creationEvidence?.workflow.status).toBe('ready');
+ expect(calls).toHaveLength(3);const pages=Object.values(useProjectStore.getState().screens);expect(pages).toHaveLength(1);expect(pages[0].htmlContent).toContain('查看权益');expect(pages[0].htmlContent).toContain('container-max');expect(pages[0].metadata?.creationEvidence?.workflow.status).toBe('ready');
  expect(await loadQualityDrafts(useProjectStore.getState().id)).toHaveLength(0);expect(pages[0].metadata?.creationEvidence?.contract.pageTaskPlan).toBeDefined();expect(calls.filter(c=>(c.jsonSchema?.properties as any)?.features)).toHaveLength(1);
 });
 test('重新挂载恢复失败草稿，手填修复无需模型；上下文变化拒绝旧草稿',async()=>{

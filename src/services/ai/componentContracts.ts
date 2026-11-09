@@ -1,4 +1,4 @@
-import type { ComponentDefinition } from '../../types/project';
+import type { Asset, ComponentDefinition } from '../../types/project';
 
 /** 范例只组合既有基座类；白名单仍由base.css派生。 */
 export const COMPONENT_CONTRACTS = [
@@ -8,11 +8,22 @@ export const COMPONENT_CONTRACTS = [
   { id: 'stat', rule: '统计：数字与单位整体不换行，标题独立一行；普通指标用中性色。', html: '<div class="col min-w-0 gap-1"><strong class="text-xl text-nowrap">24人</strong><span class="text-sm text-secondary">今日已跟进</span></div>' },
   { id: 'media-row', rule: '图文列表：媒体不压缩，正文列flex-1 min-w-0；地址可自然断行，详情不得隐藏数据。', html: '<article class="row items-start gap-3"><span class="icon-box flex-none"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8"/></svg></span><div class="col flex-1 min-w-0 gap-1"><h3 class="font-semibold">约见地点</h3><p class="text-sm break-words">翠湖漫咖啡·文林街店</p></div></article>' },
   { id: 'action-group', rule: '操作栏：主次按钮完整单行；整组可换行，禁止缩字或截断用户指定文案。', html: '<div class="row wrap items-center gap-2"><button class="btn btn-primary">录入双方约见后反馈</button><button class="btn btn-ghost">保留原版</button></div>' },
-  { id: 'notification', rule: '通知角标：notification-control相对定位并预留上沿，主icon水平居中，badge-count/badge-dot绝对定位附着右上角，不能遮主图标、标题或正文；禁止改为双列并排。小badge-dot表示更新、xs字号badge-count表示计数、独立badge-soft表示文字状态。超过99显示99+，aria-label保留完整数量。默认中性浅底，未读用text-primary浅底，仅紧急事项用text-danger。', html: '<button class="btn btn-ghost notification-control" aria-label="通知，3条未读"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span class="badge-count text-primary" aria-hidden="true">3</span></button>' }
+  { id: 'conversation-reading', rule: '对话建议（仅新建或已授权重排）：一次回复最多一个外层表面，三条建议用标题、正文和节间留白分组，避免每段再套卡片。移动正文text-md leading-relaxed，主正文继承正文色或使用var(--color-text-primary)，不是品牌强调色text-primary；不把整段降为text-muted；时间/来源用text-xs text-secondary。建议正文独占阅读宽度，复制/采用放段落下方，重复操作用btn-ghost/btn-outline降低视觉权重，不排成抢眼的大按钮矩阵。不缩字、不裁正文、不靠固定高度挤进首屏；旧页未授权不重组或改变采用状态。', html: '<section class="col gap-3"><header class="col gap-1"><h2 class="text-md font-semibold">咨询师建议</h2><p class="text-xs text-secondary">今天20:18 · 来源：文字咨询</p></header><div class="card p-4 col gap-4"><article class="col gap-2"><h3 class="text-md font-semibold">01 · 给自己安排短暂休息</h3><p class="text-md leading-relaxed" style="color:var(--color-text-primary)">这里展示用户授权保留的完整建议正文，独立占据阅读宽度并自然换行。</p><div class="row wrap justify-end gap-2"><button class="btn btn-ghost btn-sm">复制</button><button class="btn btn-outline btn-sm">采用</button></div></article></div></section>' },
+  { id: 'notification', rule: '通知角标：notification-control使用紧凑图标网格并预留上沿，主icon水平居中，badge-count/badge-dot绝对定位附着图标主体右上角（不是外层整行/卡片右上角），不能遮主图标、标题或正文；禁止改为双列并排。小badge-dot表示更新、xs字号badge-count表示计数、独立badge-soft表示文字状态。超过99显示99+，aria-label保留完整数量。默认中性浅底，未读用text-primary浅底，仅紧急事项用text-danger。', html: '<button class="btn btn-ghost notification-control" aria-label="通知，3条未读"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span class="badge-count text-primary" aria-hidden="true">3</span></button>' }
 ] as const;
 
-export function renderComponentContracts(includeExamples: boolean, request = ''): string {
+function externalIconExample(id:string,html:string,assets:ReadonlyArray<Pick<Asset,'name'|'relPath'>>):string|undefined {
+  const doc=new DOMParser().parseFromString(html,'text/html'),icons=Array.from(doc.querySelectorAll('svg'));
+  if(!icons.length)return html;
+  const name=id==='notification'?'bell':id==='status'?'clock':'map-pin';
+  const asset=assets.find(a=>a.name===`图标 · ${name}`&&/^assets\/icons\/[a-f0-9]{64}\.svg$/.test(a.relPath));
+  if(!asset)return;
+  for(const icon of icons){const span=doc.createElement('span');span.className='icon icon-mask';span.setAttribute('aria-hidden','true');span.style.setProperty('mask-image',`url("${asset.relPath}")`);span.style.setProperty('-webkit-mask-image',`url("${asset.relPath}")`);icon.replaceWith(span);}
+  return doc.body.innerHTML;
+}
+export function renderComponentContracts(includeExamples: boolean, request = '', externalIcons?:ReadonlyArray<Pick<Asset,'name'|'relPath'>>): string {
   const matches = [
+    /聊天|咨询师|建议正文|对话建议|conversation/i.test(request) ? 'conversation-reading' : '',
     /通知|未读|角标|徽标|badge/i.test(request) ? 'notification' : '',
     /姓名|人物|会员|约见|婚恋|客户/.test(request) ? 'person-row' : '',
     /统计|指标|数据|看板/.test(request) ? 'stat' : '',
@@ -21,8 +32,8 @@ export function renderComponentContracts(includeExamples: boolean, request = '')
     /标签|筛选/.test(request) ? 'tag-cluster' : ''
   ].filter(Boolean);
   const selected = new Set((matches.length ? matches : ['tag-cluster', 'action-group']).slice(0, 2));
-  return '### COMPONENT CONTRACTS\n' + COMPONENT_CONTRACTS.map(c =>
-    `- ${c.rule}${includeExamples && selected.has(c.id) ? `\n\`\`\`html\n${c.html}\n\`\`\`` : ''}`
+  return '### COMPONENT CONTRACTS\n' + COMPONENT_CONTRACTS.filter(c => c.id !== 'conversation-reading' || matches.includes(c.id)).map(c =>
+    `- ${c.rule}${includeExamples && selected.has(c.id) ? (()=>{const html=externalIcons===undefined?c.html:externalIconExample(c.id,c.html,externalIcons);return html?`\n\`\`\`html\n${html}\n\`\`\``:'\n图标结构示例未提供：当前未登记对应独立资源，不得猜测路径或改为内联SVG。';})() : ''}`
   ).join('\n') + '\n修改或润色只调整已授权节点，不得按范例重建原页面。';
 }
 

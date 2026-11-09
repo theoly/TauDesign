@@ -44,11 +44,13 @@ test('page delivery history exposes restyle snapshots, checked evidence and a se
   const records=(await repo().list({screenId:'a'})).records;expect(records).toHaveLength(1);
   expect(records[0].pages[0].preview?.status).toBe('ready');
   expect(JSON.stringify(records[0])).not.toContain('data:image/png;base64,');
+  await useProjectStore.getState().saveProjectChecked();
   expect(readProject(store.id)).not.toContain('"validation"');
   host=document.createElement('div');document.body.append(host);root=createRoot(host);
   await act(async()=>{root!.render(<DeliveryHistoryPanel projectId={store.id} screen={useProjectStore.getState().screens.a} revision={1}/>);await pause();});
   expect(host.textContent).toContain('重塑交付历史');
   await act(async()=>{const entry=Array.from(host!.querySelectorAll('details')).find(el=>el.querySelector(':scope > summary')?.textContent==='重塑交付历史')!;entry.open=true;entry.dispatchEvent(new Event('toggle'));await pause();});
+  for(let i=0;i<100&&!host!.textContent?.includes('页面甲');i++)await act(async()=>{await pause();});
   expect(host.textContent).toContain('页面甲');expect(host.textContent).toContain('历史证据');
 });
 
@@ -97,7 +99,8 @@ test('failed finalization reports applied with an uncertain prepared archive, an
     const result=await store.applyRestyleOutcome(proposal());expect(result).toMatchObject({applied:true,delivery:{status:'prepared'}});
     expect(result.delivery?.message).toContain('已应用');expect(useProjectStore.getState().deliveryArchiveNotice).toContain('准备记录');
     useHistoryStore.getState().undo();expect(useProjectStore.getState().screens.a.htmlContent).toBe(source);
-    expect((await repo().list()).records[0].status).toBe('prepared');
+    const listed=(await repo().list()).records[0];expect(listed.status).toBe('applied');expect(listed.reason).toContain('原子提交已确认');
+    expect(JSON.parse((await createProjectStorage(store.id).readText(`deliveries/restyle/${listed.id}.json`))!).status).toBe('prepared');
   }finally{finish.mockRestore();}
 });
 

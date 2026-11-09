@@ -1,3 +1,5 @@
+import {RenderEvidenceAuthority} from '../src/services/ai/evidenceIdentity';
+import {RestyleDeliveryRepository} from '../src/services/storage/restyleDeliveryRepository';
 import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
 import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
 import { useProjectStore } from '../src/stores/useProjectStore';
@@ -68,8 +70,12 @@ test('serious actual render findings block but warnings retain evidence and may 
   const finding={code:'render_action_invisible_label',severity:'error' as const,message:'按钮不可见',actual:'空',expected:'可见'};
   render.mockResolvedValue({...ready,findings:[finding]});
   const rejected=await useProjectStore.getState().applyRestyleOutcome(outcome());expect(rejected.applied).toBe(false);expect(rejected.message).toContain('按钮不可见');
-  render.mockResolvedValue({...ready,findings:[{...finding,severity:'warning'}]});
+  render.mockResolvedValue({...ready,findings:[{...finding,code:'render_contrast',severity:'warning'}]});
   const accepted=await useProjectStore.getState().applyRestyleOutcome(outcome());expect(accepted.applied).toBe(true);expect(accepted.validation?.pages[0].render?.findings).toHaveLength(1);
+});
+test('a required control failure cannot be reclassified as a warning during restyle',async()=>{
+ render.mockResolvedValue({...ready,findings:[{code:'render_action_invisible_label',severity:'warning',message:'非法降级',actual:'无文案',expected:'可见操作名称'}]});
+ expect((await useProjectStore.getState().applyRestyleOutcome(outcome())).applied).toBe(false);
 });
 test('all retained local files are verified before rendering and no other staged candidate is replaced',async()=>{
   const store=useProjectStore.getState();const value='<main data-nid="page" class="p-4"><img data-nid="image" src="assets/images/missing.png"></main>';
@@ -130,6 +136,7 @@ test('failure on an affected component page rejects template and all instance ch
 import {RestyleDeliveryRepository} from '../src/services/storage/restyleDeliveryRepository';
 for(const stage of ['before','render','archive'] as const)test(`restyle actual font ${stage} failure blocks before applying`,async()=>{
  const font=`assets/imports/fonts/${'a'.repeat(64)}.woff2`,state=useProjectStore.getState(),storage=createProjectStorage(state.id);
+ state.addAsset({id:'local-font',name:'字体',relPath:font,type:'font',mimeType:'font/woff2',source:'upload',refCount:1});
  state.updateScreen('a',{scopedCss:`@font-face{font-family:Imported;src:url(${font})}`},'字体设置');
  if(stage!=='before')await storage.writeBinary(font,'dGVzdA==');
  if(stage==='render')render.mockImplementation(async()=>{await storage.remove(font);return ready;});
@@ -141,9 +148,27 @@ for(const stage of ['before','render','archive'] as const)test(`restyle actual f
 
 test('uninstantiated component template resources are rechecked after archive write',async()=>{
  const state=useProjectStore.getState(),font=`assets/imports/fonts/${'a'.repeat(64)}.woff2`,storage=createProjectStorage(state.id);
+ state.addAsset({id:'local-font',name:'字体',relPath:font,type:'font',mimeType:'font/woff2',source:'upload',refCount:1});
  await storage.writeBinary(font,'dGVzdA==');const id=state.createComponent('字体组件',`<style>@font-face{font-family:F;src:url(${font})}</style><section data-nid="comp" class="p-4">组件</section>`);
  const original=useProjectStore.getState().components[id].templateHtml,target={kind:'component' as const,id,name:'字体组件',html:original},before=useHistoryStore.getState().past.length;
  const actualPrepare=RestyleDeliveryRepository.prototype.prepare;let prepared=false;
  const prepare=spyOn(RestyleDeliveryRepository.prototype,'prepare').mockImplementation(async function(record){await actualPrepare.call(this,record);prepared=true;await storage.remove(font);});
  try{const result=await state.applyRestyleOutcome(acceptRestyleResult(target,original.replace('p-4','p-6')));expect(prepared).toBe(true);expect(result.applied).toBe(false);expect(result.message).toContain('不存在');expect(useProjectStore.getState().components[id].templateHtml).toBe(original);expect(useHistoryStore.getState().past.length).toBe(before);}finally{prepare.mockRestore();}
+});
+
+for(const phase of ['render','archive'] as const)test(`checker change during ${phase} refuses restyle with no History mutation`,async()=>{
+ const before=useHistoryStore.getState().past.length,proposed=outcome();let changed=false;
+ const revision=spyOn(RenderEvidenceAuthority,'revision').mockImplementation(()=>changed?'restyle-checker-next':'restyle-checker-current');
+ const real=RestyleDeliveryRepository.prototype.prepare;
+ const prepare=phase==='archive'?spyOn(RestyleDeliveryRepository.prototype,'prepare').mockImplementation(async function(...args){await real.apply(this,args);changed=true;}):undefined;
+ if(phase==='render')render.mockImplementation(async()=>{changed=true;return ready;});
+ try{const result=await useProjectStore.getState().applyRestyleOutcome(proposed);expect(result.applied).toBe(false);expect(useProjectStore.getState().screens.a.htmlContent).toBe(source);expect(useHistoryStore.getState().past).toHaveLength(before);}
+ finally{prepare?.mockRestore();revision.mockRestore();}
+});
+
+test('direct restyle preparation refuses a changed renderer even when the caller reports unchanged input',async()=>{
+ const {prepareCheckedRestyle}=await import('../src/services/ai/restyleValidation');const state=useProjectStore.getState(),before=useHistoryStore.getState().past.length;let changed=false;
+ const revision=spyOn(RenderEvidenceAuthority,'revision').mockImplementation(()=>changed?'direct-next':'direct-current');render.mockImplementation(async()=>{changed=true;return ready;});
+ try{const result=await prepareCheckedRestyle(state,outcome(),createProjectStorage(state.id),{contextKey:restyleContextKey(state),isCurrent:()=>true});expect(result.validation.status).toBe('blocked');expect(useHistoryStore.getState().past).toHaveLength(before);}
+ finally{revision.mockRestore();}
 });

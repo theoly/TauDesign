@@ -1,4 +1,5 @@
 <!doctype html><html><meta charset="utf-8"><title>多页功能规划受控验证</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><script type="module">
+import {requestSchema} from '/test/helpers/modelSchema.ts';
 import React from '/node_modules/.vite/deps/react.js';
 import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
 import '/src/styles/index.css';
@@ -15,10 +16,11 @@ const query=new URLSearchParams(location.search),device=query.get('device')==='p
 const store=useProjectStore.getState();store.initNewProject({name:'多页功能验证',deviceProfile:device,designSystem:techBlueTheme,createSpecimen:false});
 const original='<main data-nid="old00001">保留原页</main>';store.addScreen({name:'原页',htmlContent:original},'old');
 useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'FIXTURE_SECRET'})),bindings:defaultBindings});
+await (await import('/src/services/ai/builtinMediaAssets.ts')).prepareBuiltinMediaAssets();
 const state={requests:[],pending:[],state:()=>useProjectStore.getState(),history:()=>useHistoryStore.getState(),before:useHistoryStore.getState().past.length,original};window.multiFunctionFixture=state;
 const transport=new MockTransport();
 const core=new DefaultAIEngineCore({id:'local',stream:(request,event)=>{
- const schema=request.body.response_format?.json_schema?.schema;
+ const schema=requestSchema(request);
  state.requests.push({json:!!schema,stage:schema?.properties.pages?'batch-plan':schema?'page-plan':'html',containsPlan:JSON.stringify(request.body.messages).includes('PAGE TASK PLAN')});
  let text;
  if(schema?.properties.pages)text=JSON.stringify(withMultiPageTasks(variants?{summary:'同页两种布局',pages:[{name:'方案一',requirements:['手机号登录'],links:[]},{name:'方案二',requirements:['注册资料'],links:[]}]}:{summary:'登录和注册',pages:[{name:'登录页',requirements:['手机号登录'],links:['注册页']},{name:'注册页',requirements:['注册资料'],links:[]}]}));

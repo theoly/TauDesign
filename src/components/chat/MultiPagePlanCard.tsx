@@ -4,9 +4,11 @@ import {validateVariantItems,validateMultiPageItems} from '../../services/ai/mul
 import {pageCreationContext} from '../../services/ai/pageCreationValidation';
 import {useProjectStore} from '../../stores/useProjectStore';
 import {PageTaskPlanContent} from './PageTaskPlanCard';
+import {TaskBudgetCard} from './TaskBudgetCard';
 const labels={pending:'待生成',generating:'正在生成与检查',checked:'已验收，等待统一加入',applied:'已加入画布',failed:'未通过'};
-export function MultiPagePlanCard({review,disabled,onConfirm,onCancel}:{review:MultiPageReview;disabled:boolean;onConfirm:(pages:MultiPageItem[])=>Promise<void>;onCancel:()=>void}){
+export function MultiPagePlanCard({review,disabled,onConfirm,onCancel}:{review:MultiPageReview;disabled:boolean;onConfirm:(pages:MultiPageItem[],tree?:{concurrency:1|2})=>Promise<void>;onCancel:()=>void}){
  const project=useProjectStore(),[pages,setPages]=useState<MultiPageItem[]>(()=>structuredClone(review.plan?.pages??[])),[busy,setBusy]=useState(false),lock=useRef(false);
+ const [tree,setTree]=useState(false),[concurrency,setConcurrency]=useState<1|2>(1);
  useEffect(()=>{setPages(structuredClone(review.plan?.pages??[]));},[review.plan?.id]);
  const variants=review.plan?.kind==='variants',unit=variants?'个方案':'页',item=variants?'方案':'页';
  const stale=review.status==='ready'&&review.plan?.contextFingerprint!==pageCreationContext(project);
@@ -19,6 +21,9 @@ export function MultiPagePlanCard({review,disabled,onConfirm,onCancel}:{review:M
   <h3 className="font-semibold text-slate-100">{variants?'同页方案比较':'多页面计划'}</h3>
   <p role="status" className="whitespace-pre-wrap text-slate-400">{review.message}</p>
   {review.status==='ready'&&<>
+   {review.plan?.planning.budget&&<details className="text-slate-400"><summary className="cursor-pointer">已发生的规划消耗（从批次总额度扣除）</summary><TaskBudgetCard value={review.plan.planning.budget}/></details>}
+   <label className="flex items-center gap-2 text-slate-300"><input type="checkbox" aria-label="使用共享生成树" disabled={busy||disabled} checked={tree} onChange={e=>setTree(e.target.checked)}/>使用共享结构生成（试用）</label>
+   {tree&&<div className="space-y-1 text-slate-400"><p>先生成并检查共享结构，再填写各页私有区域。失败保留任务草稿，正式页面仍须整批通过。累计申请输出仍为每页34568 Token；共享规划、继续与修复均在其中。调用次数上限为每页14次（逐页方式4次），先前规划已消耗部分会扣除。</p><label>同级并发<select aria-label="生成树同级并发" value={concurrency} disabled={busy||disabled} onChange={e=>setConcurrency(Number(e.target.value) as 1|2)} className="ml-2 rounded border border-slate-700 bg-slate-900 p-1"><option value={1}>1</option><option value={2}>2（需在模型容量中确认端点支持；未知仍为1）</option></select></label></div>}
    <p className="text-slate-500">{variants?`确认 ${pages.length} 个方案；可编辑各方案差异，至少保留2个。全部通过后并排新增，不覆盖原页，不更改项目主题。`:`确认 ${pages.length} 页；可修改页面要求与关联、移除不需要的页面。全部页面通过检查后一起加入画布。`}</p>
    <div className="max-h-[32rem] space-y-2 overflow-y-auto pr-1">
     {pages.map((page,index)=><details key={page.id} open={index===0} className="space-y-2 rounded-lg border border-slate-800 p-2">
@@ -35,7 +40,7 @@ export function MultiPagePlanCard({review,disabled,onConfirm,onCancel}:{review:M
     </details>)}
    </div>
    {(issue||stale)&&<p role="alert" className="text-amber-300">{stale?'工程或设计上下文已变化，请取消后重新规划。':issue}</p>}
-   <button type="button" disabled={disabled||busy||stale||Boolean(issue)} onClick={async()=>{if(lock.current)return;lock.current=true;setBusy(true);try{await onConfirm(structuredClone(pages));}finally{lock.current=false;setBusy(false);}}} className="rounded-lg bg-blue-600 px-3 py-2 font-medium text-white disabled:opacity-40">确认计划并生成 {pages.length} {unit}</button>
+   <button type="button" disabled={disabled||busy||stale||Boolean(issue)} onClick={async()=>{if(lock.current)return;lock.current=true;setBusy(true);try{await onConfirm(structuredClone(pages),tree?{concurrency}:undefined);}finally{lock.current=false;setBusy(false);}}} className="rounded-lg bg-blue-600 px-3 py-2 font-medium text-white disabled:opacity-40">确认计划并生成 {pages.length} {unit}</button>
   </>}
   {!!review.progress?.length&&<ol className="space-y-2">{review.progress.map((page,index)=><li key={page.itemId} className="rounded-lg border border-slate-800 p-2"><p className="break-words">{index+1}. {page.name} · <span className={page.status==='failed'?'text-red-300':page.status==='applied'?'text-emerald-300':'text-blue-300'}>{labels[page.status]}</span></p>{page.message&&<p className="mt-1 break-words text-slate-400">{page.message}</p>}</li>)}</ol>}
   {['planning','ready','running'].includes(review.status)&&<button type="button" onClick={onCancel} className="ml-2 text-slate-400 hover:text-slate-200">{variants?'取消方案任务':'取消多页面任务'}</button>}

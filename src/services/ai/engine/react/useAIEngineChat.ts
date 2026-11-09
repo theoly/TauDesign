@@ -1,3 +1,11 @@
+import {prepareTreeTaskRecovery,treeRecoveryData} from '../../treeTaskRecovery';
+import {prepareTaskRecovery,recoveryData,prepareRecoveryDraft,claimPreparedRecovery,type PreparedTaskRecovery,type PreparedDesignRecovery} from '../../designTaskRecovery';
+import {explicitlyRequestsPageRedesign} from '../../pageRedesignSource';
+import type {SavedDesignTask} from '../../../storage/designTaskRepository';
+import {DesignTaskJournal} from '../../designTaskJournal';
+import {createProjectStorage} from '../../../storage/projectStorage';
+import {getProjectPublication} from '../../../storage/projectPublication';
+import {prepareBuiltinMediaAssets} from '../../builtinMediaAssets';
 import {requiresFunctionalPlanning,requiresElementStructure} from '../../functionalModification';
 import {observeRequestActivity,initialRequestActivity,type ExecutionPhaseEvent,type PipelinePhase,type RequestActivity} from '../../requestActivity';
 import {parseReferencedElement,extractCleanUserPrompt} from '../../chatReferencePrompt';
@@ -5,7 +13,7 @@ export {parseReferencedElement,extractCleanUserPrompt} from '../../chatReference
 import type { ImageAttachment } from '../../../../types/referenceImage';
 import type { SectionedCheckpoint } from '../../sectionedGeneration';
 import {requiresPageVariantPlan,requiresMultiPagePlan,type MultiPageItem,type MultiPageReview} from '../../multiPageContract';
-import {prepareMultiPagePlan,executeMultiPagePlan,type PreparedMultiPagePlan} from '../../multiPageService';
+import {prepareMultiPagePlan,prepareRecoveredMultiPagePlan,executeMultiPagePlan,type PreparedMultiPagePlan} from '../../multiPageService';
 import { buildConversationContext } from '../context/conversationContext';
 import { referenceDevicePrompt } from '../../../../utils/referenceDevice';
 import { normalizeMobileNavigation, mobileNavigationPrompt } from '../../../../utils/mobileNavigation';
@@ -101,6 +109,8 @@ export interface ChatMessageItem {
   qualityDraftBusy?: boolean;
   qualityDraftNotice?: string;
   workflowContract?: DesignTaskContract;
+  /** Session-only original generation inputs; never reconstructed from a reopened conversation. */
+  generationInputFingerprint?: string;
   executionRecord?:import('../../designExecutionRecord').DesignExecutionRecord;
   structuredRetry?:{reviewId:string;selected:string[];extra:string;mode:'local'|'region'};
   historicalPageTask?:PageTaskHistory;
@@ -137,9 +147,12 @@ export interface ChatMessageItem {
 export interface SendMessageOptions {
   /** Explicit recovery actions; private checkpoints stay outside persisted chat messages. */
   continuationMessageId?: string;
+  recoverNewTask?:PreparedTaskRecovery;
   qualityRepair?: { value: SavedQualityDraft; labels: DraftLabel[] };
   splitSinglePage?: boolean;
   sectioned?: boolean;
+  writeStrategy?:'auto'|'atomic'|'patch';
+  wholePageRedesign?:boolean;
   /** 引用开关点亮的画框；未点亮传 null (BR-GT-02) */
   referencedScreenId?: string | null;
   /** 画布激活画框；仅在用户明确说「修改」时才作为落点 (BR-GT-03) */
@@ -235,7 +248,7 @@ export function useAIEngineChat() {
   const operationLockRef = useRef(false);
   const mountedRef=useRef(true);
   useEffect(()=>{mountedRef.current=true;return()=>{mountedRef.current=false;};},[]);
-  const pagePlansRef=useRef(new Map<string,{context:string;projectId:string;folderPath?:string;prepared?:PreparedMultiPagePlan;controller?:AbortController}>());
+  const pagePlansRef=useRef(new Map<string,{context:string;projectId:string;folderPath?:string;bindingCurrent:()=>boolean;prepared?:PreparedMultiPagePlan;controller?:AbortController}>());
   const continuationSessionsRef=useRef(new Map<string,{checkpoint?:ContinuationCheckpoint;sectionedCheckpoint?:SectionedCheckpoint;context:string;decision:ReturnType<typeof resolveGenerationTarget>;
     budget:TaskBudget;contract:DesignTaskContract;pageTaskPlan?:PageTaskSnapshot;approved?:{snapshot:ModificationSnapshot;decision:ReturnType<typeof resolveGenerationTarget>;receipt?:ModificationReviewReceipt;rulePreference?:boolean};textReferences:TextReference[]}>());
   const modificationPlansRef = useRef(new Map<string, {
@@ -351,6 +364,7 @@ export function useAIEngineChat() {
   }, [conversationKey, getConversationStore, getAttachmentStore]);
 
   const abort = () => {
+    if(getProjectPublication())return;
     if (abortControllerRef.current) {
       const targetId=activeMessageIdRef.current;
       abortControllerRef.current.abort();
@@ -377,18 +391,19 @@ export function useAIEngineChat() {
   };
 
   const cancelPagePlan=(id:string)=>{
+    if(getProjectPublication())return;
     const session=pagePlansRef.current.get(id);if(session?.controller===abortControllerRef.current)abort();else session?.controller?.abort();pagePlansRef.current.delete(id);
     setMessages(prev=>prev.map(m=>m.id===id&&m.pagePlan?.status!=='complete'?{...m,pagePlan:{...m.pagePlan,status:'cancelled',message:session?.prepared?.plan.kind==='variants'?'方案任务已取消，未加入方案。':'多页面任务已取消，未加入页面。'}}:m));
   };
-  const confirmPagePlan=async(id:string,pages:MultiPageItem[])=>{
+  const confirmPagePlan=async(id:string,pages:MultiPageItem[],generationTree?:{concurrency:1|2})=>{
     const session=pagePlansRef.current.get(id);if(!session?.prepared||isGenerating||operationLockRef.current)return;
-    if(pageCreationContext(useProjectStore.getState())!==session.context){setMessages(prev=>prev.map(m=>m.id===id?{...m,pagePlan:{...m.pagePlan,status:'blocked',message:'工程或设计上下文已变化，请重新规划。'}}:m));return;}
+    if(pageCreationContext(useProjectStore.getState())!==session.context||!session.bindingCurrent()){setMessages(prev=>prev.map(m=>m.id===id?{...m,pagePlan:{...m.pagePlan,status:'blocked',message:'工程或设计上下文已变化，请重新规划。'}}:m));return;}
     const controller=new AbortController();session.controller=controller;abortControllerRef.current=controller;activeMessageIdRef.current=id;operationLockRef.current=true;setIsGenerating(true);
     const current=()=>pagePlansRef.current.get(id)===session&&useProjectStore.getState().id===session.projectId&&useProjectStore.getState().folderPath===session.folderPath;
     const conversationStore=useProjectStore.getState().getConversationStore();
     try{
       setMessages(prev=>prev.map(m=>m.id===id?{...m,isGenerating:true,isError:false,isStopped:false,thinkingStage:1,executionActivity:undefined,executionEvents:[{phase:'preparing',at:Date.now()}],pagePlan:{...m.pagePlan,status:'running',message:session.prepared!.plan.kind==='variants'?'正在逐项生成并检查；全部通过后并排加入比较副本。':'正在逐页生成并检查；全部通过后一起加入画布。'}}:m));
-      const result=await executeMultiPagePlan(session.prepared,pages,{getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch),signal:controller.signal,isCurrent:current,onActivity:a=>publishActivity(id,controller,current,a),onPhase:p=>publishPhase(id,controller,current,p),
+      const result=await executeMultiPagePlan(session.prepared,pages,{generationTree,getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch,{isCurrent:()=>!controller.signal.aborted&&current()&&session.bindingCurrent()}),signal:controller.signal,isCurrent:()=>current()&&session.bindingCurrent(),onActivity:a=>publishActivity(id,controller,current,a),onPhase:p=>publishPhase(id,controller,current,p),
         onProgress:progress=>{if(progressOwned(controller,current))setMessages(prev=>prev.map(m=>m.id===id?{...m,pagePlan:{...m.pagePlan!,progress}}:m));}});
       if(result.status==='complete')publishPhase(id,controller,current,'created');
       if(current())setMessages(prev=>prev.map(m=>m.id===id?{...m,isGenerating:false,isError:result.status==='blocked',isStopped:result.status==='cancelled',pagePlan:{...m.pagePlan!,status:result.status,message:result.message}}:m));
@@ -411,10 +426,11 @@ export function useAIEngineChat() {
     if(options?.continuationMessageId&&!resuming)return;
     const repairing = options?.qualityRepair;
     const textReferences = resuming?.textReferences || repairing?.value.textReferences || options?.textReferences || [];
-    const requestState=useProjectStore.getState();
+    let requestState=useProjectStore.getState();
     const requestConversationStore=requestState.getConversationStore(),requestAttachmentStore=requestState.getAttachmentStore();
-    const requestScreens=requestState.screens;
-    const creationContext=pageCreationContext(requestState);
+    let requestScreens=requestState.screens;
+    let creationContext=pageCreationContext(requestState);
+    const recovered=options?.recoverNewTask?recoveryData(options.recoverNewTask):undefined;
     const recoveryContext=()=>contentFingerprint(JSON.stringify([requestState.id,creationContext,requestState.settings,requestState.overrides,requestState.components]));
     if(repairing && (repairing.value.projectId!==requestState.id || repairing.value.projectContext!==recoveryContext() || repairing.value.status!=='blocked')) {
       setMessages(prev=>prev.map(m=>m.qualityDraft?.id===repairing.value.id?{...m,qualityDraftNotice:'工程、原页或设计约束已变化，请重新生成；旧草稿仅供查看。'}:m));return;
@@ -432,7 +448,8 @@ export function useAIEngineChat() {
 
     // 生成目标单一裁决点 (BR-GT-06)：引用判定与动作判定只在这里做一次，
     // 下游 intentInterceptor / contextEnricher / toolResolver 全部消费该结果。
-    const decision = repairing?.value.decision ?? resuming?.decision ?? approved?.decision ?? resolveGenerationTarget({
+    const recoveryDecision:ReturnType<typeof resolveGenerationTarget>|undefined=recovered?{action:recovered.kind==='redesign'?'modify_screen':'create_screen',targetScreenId:recovered.kind==='redesign'?recovered.source.contract.target!.id:null,styleReferenceScreenId:recovered.source.contract.referencePageId??null,elementNid:null,referenceSource:null,reason:'用户明确选择以新任务恢复原范围的未完成设计'}:undefined;
+    const decision = recoveryDecision??repairing?.value.decision ?? resuming?.decision ?? approved?.decision ?? resolveGenerationTarget({
       rawPrompt: textToSend,
       screens:requestScreens,
       referenceToggleScreenId:
@@ -443,7 +460,7 @@ export function useAIEngineChat() {
         : null
     });
     const sections=Boolean(options?.sectioned||resuming?.sectionedCheckpoint||repairing?.value.draft.generationMode==='sections');
-    if(sections&&(decision.action!=='create_screen'||requiresMultiPagePlan(textToSend)||requiresPageVariantPlan(textToSend))){
+    if(sections&&((decision.action!=='create_screen'&&!(resuming?.contract.wholePageRedesign&&resuming.sectionedCheckpoint?.plan.version===2))||requiresMultiPagePlan(textToSend)||requiresPageVariantPlan(textToSend))){
       setMessages(prev=>[...prev,{id:`section_warn_${crypto.randomUUID()}`,sender:'assistant',text:'分区生成用于新建同一页。修改旧页请使用局部/区块修改；多页或多方案请关闭分区选项后单独规划。'}]);return;
     }
 
@@ -537,6 +554,14 @@ export function useAIEngineChat() {
       return;
     }
 
+    if(decision.action==='create_screen'&&options?.writeStrategy&&!resuming&&!repairing&&!recovered&&!options?.splitSinglePage&&!requiresMultiPagePlan(textToSend)&&!requiresPageVariantPlan(extractCleanUserPrompt(textToSend))){
+      const preparation=new AbortController();operationLockRef.current=true;abortControllerRef.current=preparation;activeMessageIdRef.current=null;setIsGenerating(true);
+      try{await prepareBuiltinMediaAssets(preparation.signal);requestState=useProjectStore.getState();requestScreens=requestState.screens;creationContext=pageCreationContext(requestState);}
+      catch(error){setMessages(prev=>[...prev,{id:'media-preflight-'+crypto.randomUUID(),sender:'assistant',isError:true,text:error instanceof Error?error.message:'独立素材准备失败，未调用模型。'}]);return;}
+      finally{operationLockRef.current=false;if(abortControllerRef.current===preparation)abortControllerRef.current=null;setIsGenerating(false);}
+      if(preparation.signal.aborted)return;
+    }
+
     const knowledgeBundle = buildProjectKnowledgeBundle(useProjectStore.getState(), textToSend, (effectiveScreenId ?? decision.styleReferenceScreenId) ?? undefined);
     const projectKnowledge = [referenceDevicePrompt(settings), mobileNavigationPrompt(settings), knowledgeBundle.content].filter(Boolean).join('\n\n');
 
@@ -551,13 +576,14 @@ export function useAIEngineChat() {
     const variants=!options?.splitSinglePage&&!decision.elementNid&&requiresPageVariantPlan(extractCleanUserPrompt(textToSend));
     if(!repairing&&!resuming&&!approved&&decision.action==='create_screen'&&(options?.splitSinglePage||variants||requiresMultiPagePlan(textToSend))){
       const id=`multi_${crypto.randomUUID()}`,controller=new AbortController();
-      const session={context:creationContext,projectId:requestState.id,folderPath:requestState.folderPath,prepared:undefined as PreparedMultiPagePlan|undefined,controller};
+      const frozenBinding=continuationBindingKey({provider:activeRole.provider,model:activeRole.modelId});
+      const session={context:creationContext,projectId:requestState.id,folderPath:requestState.folderPath,bindingCurrent:()=>{const latest=switchedToVision?getActiveProviderForRole('vision'):(getActiveProviderForRole('code')||getActiveProviderForRole('chat'));return Boolean(latest&&continuationBindingKey({provider:latest.provider,model:latest.modelId})===frozenBinding);},prepared:undefined as PreparedMultiPagePlan|undefined,controller};
       pagePlansRef.current.set(id,session);abortControllerRef.current=controller;activeMessageIdRef.current=id;operationLockRef.current=true;setIsGenerating(true);
-      const current=()=>pagePlansRef.current.get(id)===session&&!controller.signal.aborted&&pageCreationContext(useProjectStore.getState())===creationContext;
+      const current=()=>pagePlansRef.current.get(id)===session&&!controller.signal.aborted&&pageCreationContext(useProjectStore.getState())===creationContext&&session.bindingCurrent();
       setMessages(prev=>[...prev,{id:`usr_${id}`,sender:'user',text:textToSend,imageUrl:attachment?.dataUrl,textFileNames:textReferences.map(r=>r.name)},
         {id,sender:'assistant',text:'',isGenerating:true,thinkingStage:1,executionEvents:[{phase:'page-planning',at:Date.now()}],pagePlan:{status:'planning',message:variants?'正在整理同页方案差异；确认前不会生成或修改页面。':'正在整理页面清单；确认前不会生成或修改页面。'}}]);
       try{
-        const prepared=await prepareMultiPagePlan({state:requestState,request:textToSend,provider:activeRole.provider,model:activeRole.modelId,core:engineCoreRef.current,onActivity:activity=>publishActivity(id,controller,current,activity),
+        const prepared=await prepareMultiPagePlan({state:requestState,request:textToSend,provider:activeRole.provider,model:activeRole.modelId,core:engineCoreRef.current,onBudget:budget=>{if(pagePlansRef.current.get(id)===session)setMessages(prev=>prev.map(m=>m.id===id?{...m,taskBudget:budget}:m));},onActivity:activity=>publishActivity(id,controller,current,activity),
           attachment,textReferences,contextualGuidance,referencePageId:(variants?(decision.targetScreenId??decision.styleReferenceScreenId):decision.styleReferenceScreenId)??undefined,signal:controller.signal,isCurrent:current,splitFromSingle:options?.splitSinglePage});
         if(!current())throw Error('页面计划已取消或工程已变化，请重新规划。');session.prepared=prepared;publishPhase(id,controller,current,'page-plan-ready');
         setMessages(prev=>prev.map(m=>m.id===id?{...m,workflowContract:prepared.contract,pagePlan:{status:'ready',plan:prepared.plan,message:prepared.plan.summary}}:m));
@@ -573,7 +599,7 @@ export function useAIEngineChat() {
     // 具体改法已由用户授权，直接生成；宽泛诉求才整理可选择的建议。
     const modificationEntryWorkflow = modifiesExisting
       ? selectModificationEntryWorkflow(extractCleanUserPrompt(textToSend), { hasElementReference: Boolean(decision.elementNid) }) : null;
-    if (!repairing && !approved && modifiesExisting && modificationEntryWorkflow?.id === 'review-page-modification') {
+    if (!repairing && !approved && !recovered && modifiesExisting && modificationEntryWorkflow?.id === 'review-page-modification') {
       const current = useProjectStore.getState();
       const screen = current.screens[effectiveScreenId];
       const snapshot = captureModificationSnapshot(current, effectiveScreenId);
@@ -649,7 +675,7 @@ export function useAIEngineChat() {
         {id:`usr_${messageId}`,sender:'user',text:textToSend,displayText:options?.displayText || extractCleanUserPrompt(textToSend),imageUrl:attachment?.dataUrl,
           referencedElement:options?.referencedElement || parseReferencedElement(textToSend) || undefined,
           referencedScreen:{id:screen.id,name:screen.name},textFileNames:textReferences.map(file=>file.path || file.name)},
-        {id:messageId,sender:'assistant',text:'',isGenerating:true,thinkingStage:1,executionEvents:[{phase:'preparing',at:Date.now()}],
+        {id:messageId,sender:'assistant',text:'',isGenerating:true,thinkingStage:1,executionEvents:[{phase:'preparing',at:Date.now()}],generationInputFingerprint:creationContext,
           preActionSnapshot:{screenId:screen.id,screenName:screen.name,htmlContent:screen.htmlContent},originalUserPrompt:textToSend,
           originalReferencedScreenId:screen.id,originalAttachment:attachment,
           originalDecision:{action:'modify_screen',targetScreenId:screen.id,styleReferenceScreenId:null,elementNid:decision.elementNid}}
@@ -667,13 +693,12 @@ export function useAIEngineChat() {
         const candidate = await executeStructuredEdit(engineCoreRef.current,{
           contextualGuidance,
           mode:'element',binding:{provider:activeRole.provider,model:activeRole.modelId},signal:controller.signal,
-          screen,elementNid:decision.elementNid,request:canonicalRequest,settings:current.settings,contract:workflowContract,
+          screen,styleOverrides:current.overrides,elementNid:decision.elementNid,request:canonicalRequest,settings:current.settings,contract:workflowContract,
           designSystem:current.designSystem,colorMode:current.settings.colorMode,protectedNids:current.getProtectedNids(screen.id),
           isCurrent:elementCurrent,
           imageUrl:attachment?.dataUrl,attachment,textReferences,projectKnowledge:[projectKnowledge,formatTextReferences(textReferences)].filter(Boolean).join('\n\n'),
           onActivity:a=>publishActivity(messageId,controller,elementCurrent,a),
           onPhase:phase=>{publishPhase(messageId,controller,elementCurrent,phase==='planning'?'planning':'generating');if(elementCurrent())setMessages(prev=>prev.map(m=>m.id===messageId?{...m,thinkingStage:phase==='planning'?1:2,generationProgress:phase==='planning'?'正在梳理所引用元素内的功能、信息与交互…':'正在生成所引用元素的副本修改…'}:m));},
-          context:JSON.stringify({scopedCss:screen.scopedCss,overrides:Object.entries(current.overrides).filter(([key])=>key.startsWith(`${screen.id}:`))})
         });
         if (controller.signal.aborted) return;
         setMessages(prev=>prev.map(m=>m.id===messageId?{...m,workflowContract:candidate.contract,taskBudget:candidate.taskBudget}:m));
@@ -734,8 +759,9 @@ export function useAIEngineChat() {
       options?.displayText || extractCleanUserPrompt(textToSend);
 
     // Frozen plans survive explicit continuation and local repair. Legacy tasks stay legacy.
-    const inheritedTaskPlan=resuming?.pageTaskPlan??repairing?.value.draft.pageTaskSource?.pageTaskPlan;
-    const planPageTask=Boolean(inheritedTaskPlan||(!resuming&&!repairing&&(decision.action==='create_screen'||(decision.action==='modify_screen'&&!decision.elementNid&&requiresFunctionalPlanning(cleanDisplayPrompt)))));
+    const inheritedTaskPlan=resuming?.pageTaskPlan??repairing?.value.draft.pageTaskSource?.pageTaskPlan??recovered?.source.contract.pageTaskPlan;
+    const wholePageRedesign=Boolean(resuming?.contract.wholePageRedesign||!repairing&&decision.action==='modify_screen'&&!decision.elementNid&&(options?.wholePageRedesign||explicitlyRequestsPageRedesign(cleanDisplayPrompt)));
+    const planPageTask=Boolean(inheritedTaskPlan||(!resuming&&!repairing&&(decision.action==='create_screen'||(decision.action==='modify_screen'&&!decision.elementNid&&(wholePageRedesign||requiresFunctionalPlanning(cleanDisplayPrompt))))));
 
     const taskBrief = decision.action === 'create_screen' ? buildDesignBrief({ request: cleanDisplayPrompt,
       designSystem, device: settings.deviceProfile, mode: settings.colorMode,
@@ -760,6 +786,7 @@ export function useAIEngineChat() {
         text: '',
         isGenerating: true,
         designBrief: taskBrief,
+        generationInputFingerprint: creationContext,
         generationProgress:planPageTask?(inheritedTaskPlan?'正在复核原功能与交互规划…':'正在梳理用户任务、必要信息与交互状态…'):undefined,
         thinkingStage: 1, // 1: 分析需求
         executionEvents:[{phase:'preparing',at:Date.now()}],
@@ -781,7 +808,7 @@ export function useAIEngineChat() {
     setUnmatchedMentions([]);
     setLastGuardOutput(null);
 
-    const generationBudget=resuming?.budget??createChatTaskBudget(Boolean(sections));
+    const generationBudget=resuming?.budget??createChatTaskBudget(Boolean(sections||wholePageRedesign||decision.action==='create_screen'&&options?.writeStrategy==='auto'||options?.writeStrategy==='patch'));
     const bindingCurrent=()=>{
       const latest=switchedToVision?getActiveProviderForRole('vision'):(getActiveProviderForRole('code')||getActiveProviderForRole('chat'));
       return Boolean(latest&&continuationBindingKey({provider:latest.provider,model:latest.modelId})===continuationBindingKey({provider:activeRole!.provider,model:activeRole!.modelId}));
@@ -790,6 +817,9 @@ export function useAIEngineChat() {
       useProjectStore.getState().id===requestState.id&&useProjectStore.getState().folderPath===requestState.folderPath;
     const showPhase=(phase:PipelinePhase)=>{if(progressCurrent())setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,
       executionEvents:m.executionEvents?.at(-1)?.phase===phase?m.executionEvents:[...(m.executionEvents??[]),{phase,at:Date.now()}].slice(-24)}:m));};
+    const taskJournal=(decision.action==='create_screen'&&options?.writeStrategy||wholePageRedesign)&&!repairing?new DesignTaskJournal({storage:createProjectStorage(requestState.id,requestState.folderPath),projectId:requestState.id,contextFingerprint:creationContext,provider:activeRole.provider,model:activeRole.modelId,attachment,textReferences,originTaskId:recovered?.source.id,
+      ...(recovered?{recovery:{version:1 as const,kind:recovered.kind,sourceFingerprint:contentFingerprint(JSON.stringify(recovered.source)),reusedStepIds:recovered.regions?.completed.map(part=>part.id)??[],ancestors:recovered.history}}:{}),isCurrent:()=>pageCreationContext(useProjectStore.getState())===creationContext&&bindingCurrent()}):undefined;
+    let recoveryClaimed=false;
     let latestActivity:RequestActivity|undefined,repairActivity:ReturnType<typeof observeRequestActivity>|undefined;
     const reportActivity=(activity:RequestActivity)=>{if(progressCurrent()){latestActivity=activity;setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,executionActivity:activity,taskBudget:generationBudget.snapshot()}:m));}};
     try {
@@ -822,15 +852,25 @@ export function useAIEngineChat() {
         },
         provider: activeRole.provider,
         model: activeRole.modelId,
-        engineCore: engineCoreRef.current,taskBudget:generationBudget,
+        engineCore: taskJournal?taskJournal.wrapCore(engineCoreRef.current):engineCoreRef.current,taskBudget:generationBudget,
         onPhase:showPhase,
         onActivity:reportActivity,
-        contextualGuidance:!resuming&&!repairing?contextualGuidance:undefined,
+        onTaskDraft:taskJournal?async update=>{
+          await taskJournal.update(options?.recoverNewTask?prepareRecoveryDraft(options.recoverNewTask,update):update);
+          if(options?.recoverNewTask&&!recoveryClaimed){
+            try{await claimPreparedRecovery(createProjectStorage(requestState.id,requestState.folderPath),options.recoverNewTask,update.contract);recoveryClaimed=true;}
+            catch(error){await taskJournal.update(prepareRecoveryDraft(options.recoverNewTask,{...update,phase:'result',result:{error:error instanceof Error?error.message:'恢复占用失败。'}}));throw error;}
+          }
+        }:undefined,
+        recoveryData:recovered?{regions:recovered.regions,strategy:recovered.strategy,guidance:recovered.source.contract.designGuidance?.selection}:undefined,
+        contextualGuidance:!resuming&&!repairing&&!recovered?contextualGuidance:undefined,
         pageTaskPlanning:planPageTask?{snapshot:inheritedTaskPlan}:undefined,
+        wholePageRedesign,
         onTaskPlan:()=>{if(!controller.signal.aborted){setThinkingStage(2);setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,thinkingStage:2,generationProgress:repairing?'原功能规划复核通过，正在定点修复已确认文案…':inheritedTaskPlan?'原功能规划复核通过，正在继续页面设计…':'功能、信息与交互规划已完成，正在生成页面布局…'}:m));}},
         resume: resuming?.checkpoint,
         resumeContract:resuming?.contract,
         qualityRepair: repairing ? {draft:repairing.value.draft,labels:repairing.labels} : undefined,
+        writeStrategy:!resuming?options?.writeStrategy:undefined,
         sectioned: sections ? {resume:resuming?.sectionedCheckpoint} : undefined,
         onSectionProgress: message=>{if(!controller.signal.aborted)setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,generationProgress:message}:m));},
         isCurrent: sections||planPageTask ? ()=>{
@@ -903,12 +943,12 @@ export function useAIEngineChat() {
       const elapsedSeconds = Number(((Date.now() - startTime) / 1000).toFixed(1));
 
       // 失败和质量拒绝同样消耗模型用量；恢复请求的累计统计不能因早退而丢失。
-      const stoppedBeforeHtml=planPageTask&&!inheritedTaskPlan&&!output.usage&&!output.rawResponse;
+      const stoppedBeforeHtml=planPageTask&&!inheritedTaskPlan&&!output.usage&&!output.rawResponse&&!output.omittedResponseChars;
       const promptTokens = stoppedBeforeHtml?0:output.usage?.inputTokens ?? Math.max(1, Math.round(textToSend.length / 3.5));
-      const completionTokens = stoppedBeforeHtml?0:output.usage?.outputTokens ?? Math.max(1, Math.round((output.extractedHtml?.length || output.rawResponse.length || 100) / 3.5));
+      const completionTokens = stoppedBeforeHtml?0:output.usage?.outputTokens ?? Math.max(1, Math.round((output.extractedHtml?.length || output.omittedResponseChars || output.rawResponse.length || 100) / 3.5));
       let turnUsage = { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens };
       setMessages(prev => prev.map(m => m.id === assistantMsgId ? {
-        ...m, usage: turnUsage, usageNote:planPageTask&&!inheritedTaskPlan?'用量仅含页面生成与修复；业务规划未返回用量，已计入请求预算。':undefined, generationWarnings: output.warnings, elapsedSeconds,taskBudget:output.taskBudget,workflowContract:output.workflowContract
+        ...m, usage: turnUsage, usageNote:planPageTask&&!inheritedTaskPlan?'本行只含页面生成与修复；功能规划等步骤的累计用量见任务预算。':undefined, generationWarnings: output.warnings, elapsedSeconds,taskBudget:output.taskBudget,workflowContract:output.workflowContract
       } : m));
       if (controller.signal.aborted || useProjectStore.getState().id!==requestState.id || useProjectStore.getState().folderPath!==requestState.folderPath) return;
       if(!bindingCurrent()){
@@ -1111,6 +1151,7 @@ export function useAIEngineChat() {
         )
       );
 
+      if(taskJournal&&decision.action==='create_screen'){generationBudget.close();try{await taskJournal.markDelivered(generationBudget.snapshot());}catch{if(progressCurrent())setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,text:m.text+'\n页面已通过交付检查；任务完成标记保存失败，原草稿仍可在任务记录中查看。'}:m));}}
       finishOperation(assistantMsgId,controller);
       if (repairing) {
         const resolved={...repairing.value,status:'resolved' as const};
@@ -1201,6 +1242,7 @@ export function useAIEngineChat() {
         const screen = current.screens[plan.snapshot.screenId];
         const conversationStore = current.getConversationStore();
         const attachmentStore = current.getAttachmentStore();
+        const generationInputFingerprint=pageCreationContext(current);
         const confirmedBundle = buildProjectKnowledgeBundle(current, scope, screen.id);
         const confirmedKnowledge = [referenceDevicePrompt(current.settings), mobileNavigationPrompt(current.settings), confirmedBundle.content,
           formatTextReferences(plan.options?.textReferences ?? [])].filter(Boolean).join('\n\n');
@@ -1230,7 +1272,7 @@ export function useAIEngineChat() {
         workflowContract.modificationReview = receipt;
         const candidate = await executeStructuredEdit(engineCoreRef.current,{
           contextualGuidance:(plan.rulePreference??useAIConfigStore.getState().autoReferenceDesignRules)?{}:undefined,
-          mode,screen,request:scope,contract:workflowContract,settings:current.settings,designSystem:current.designSystem,colorMode:current.settings.colorMode,
+          mode,screen,styleOverrides:current.overrides,request:scope,contract:workflowContract,settings:current.settings,designSystem:current.designSystem,colorMode:current.settings.colorMode,
           signal:controller.signal,isCurrent:structuredCurrent,
           binding:binding ? {provider:binding.provider,model:binding.modelId} : undefined,
           local:localPlan ? {...localPlan,supplement:Boolean(extra.trim())} : undefined,regionNids:regionPlan?.targetNids,
@@ -1253,7 +1295,7 @@ export function useAIEngineChat() {
         setMessages(prev => {const execution=prev.find(m=>m.id===messageId);return [...prev.map(m=>m.id===messageId?{...m,isGenerating:false,executionEvents:priorExecution?.executionEvents,executionActivity:priorExecution?.executionActivity}:m),
           { id: `local_usr_${executionId}`, sender: 'user', text: scope },
           { id: `local_ast_${executionId}`, sender: 'assistant', text: resultText,thinkingStage:4,executionEvents:execution?.executionEvents,executionActivity:execution?.executionActivity, screenId: screen.id, screenName: screen.name,
-            toolAction: 'modified', qualityReport: candidate.qualityReport, workflowContract:candidate.contract,taskBudget:candidate.taskBudget, htmlOutput: candidate.html, preActionSnapshot: { screenId: screen.id, screenName: screen.name, htmlContent: screen.htmlContent },
+            toolAction: 'modified', qualityReport: candidate.qualityReport, workflowContract:candidate.contract,taskBudget:candidate.taskBudget, htmlOutput: candidate.html, generationInputFingerprint, preActionSnapshot: { screenId: screen.id, screenName: screen.name, htmlContent: screen.htmlContent },
             structuredRetry:{reviewId:messageId,selected:[...selected],extra,mode},
             originalUserPrompt: `${plan.request}\n${scope}`, originalReferencedScreenId: screen.id, originalAttachment: plan.attachment,
             originalDecision: { action: 'modify_screen', targetScreenId: screen.id, styleReferenceScreenId: null, elementNid: null } }
@@ -1280,7 +1322,7 @@ export function useAIEngineChat() {
     modificationPlansRef.current.delete(messageId);
     setMessages(prev => prev.map(m => m.id === messageId ? { ...m, modificationReview: { ...plan.analysis!, status: 'submitted' } } : m));
     const prompt = `${plan.request}\n\n[本次确认修改范围，以此为准]\n${scope}`;
-    await sendMessage(prompt, plan.attachment, { ...plan.options, displayText: `${plan.options?.displayText || extractCleanUserPrompt(plan.request)}\n\n${scope}` }, { ...plan, receipt });
+    await sendMessage(prompt, plan.attachment, { ...plan.options,wholePageRedesign:true, displayText: `${plan.options?.displayText || extractCleanUserPrompt(plan.request)}\n\n${scope}` }, { ...plan, receipt });
   };
 
   const cancelModification = (messageId: string) => {
@@ -1307,7 +1349,6 @@ export function useAIEngineChat() {
     htmlToApply: string,
     fallbackScreenId?: string | null,
     createTitle?: string,
-    forceInPlace?: boolean,
     executionOptions: {signal?:AbortSignal;isCurrent?:()=>boolean;taskBudget?:TaskBudget}={}
   ) => {
     executionOptions.taskBudget?.assertActive();
@@ -1324,7 +1365,7 @@ export function useAIEngineChat() {
       if (decided.action !== 'create_screen' && target) {
         return CanvasToolExecutor.execute({
           tool: 'modify_screen',
-          params: { screenId: target.id, title: target.name, html: htmlToApply, forceInPlace, modificationRequest: userPrompt, workflowContract: msg?.workflowContract }
+          params: { screenId: target.id, title: target.name, html: htmlToApply, modificationRequest: userPrompt, workflowContract: msg?.workflowContract }
         });
       }
       if (decided.action === 'create_screen') {
@@ -1356,7 +1397,7 @@ export function useAIEngineChat() {
       if (toolCall.tool === 'modify_screen') {
         return CanvasToolExecutor.execute({
           ...toolCall,
-          params: { ...toolCall.params, forceInPlace, modificationRequest: userPrompt, workflowContract: msg?.workflowContract }
+          params: { ...toolCall.params, modificationRequest: userPrompt, workflowContract: msg?.workflowContract }
         });
       }
       return CanvasToolExecutor.executeAsync(toolCall.tool==='create_screen'?{...toolCall,params:{...toolCall.params,workflowContract:msg?.workflowContract}}:toolCall,executionOptions);
@@ -1398,76 +1439,20 @@ export function useAIEngineChat() {
     );
   };
 
-  const forceApply = async (specificHtml?: string, msgId?: string) => {
-    if (useProjectStore.getState().stagedScreen) {
-      const projectId = useProjectStore.getState().id;
-      if (!await forceAdoptStagedChange()) return;
-      if (useProjectStore.getState().id !== projectId || useProjectStore.getState().stagedScreen) return;
-      setLastGuardOutput(null);
-      setMessages((prev) => prev.map((msg) => ({
-        ...msg,
-        isGuardRejected: false,
-        structureDiff: undefined,
-        text: msg.text ? msg.text.replace('⚠️ 结构守卫拦截', '✅ 结构守卫已强制放行并应用') : msg.text
-      })));
+  const forceApply = async (_specificHtml?: string, msgId?: string) => {
+    const sourceMsg = msgId ? messages.find(m=>m.id===msgId) : [...messages].reverse().find(m=>m.isGuardRejected);
+    const candidate=useProjectStore.getState().stagedScreen;
+    if (!candidate || (msgId && (!sourceMsg?.workflowContract || sourceMsg.workflowContract.taskId!==candidate.workflowContract?.taskId))) {
+      const notice='本次结果未应用：当前候选不存在或已被替换，不能从旧消息恢复执行权限；请重新发起修改。';
+      if(sourceMsg)setMessages(prev=>prev.map(m=>m.id===sourceMsg.id?{...m,isError:true,text:notice}:m));
       return;
     }
-
-    const sourceMsg = msgId
-      ? messages.find((m) => m.id === msgId)
-      : [...messages].reverse().find((m) => m.isGuardRejected);
-    const htmlToApply = specificHtml || sourceMsg?.htmlOutput || lastGuardOutput?.extractedHtml;
-    if (!htmlToApply) return;
-
-    const fallbackScreenId =
-      activeScreenId || (Object.keys(screens).length > 0 ? Object.keys(screens)[0] : null);
-    const result = await applyHtmlToTarget(sourceMsg, htmlToApply, fallbackScreenId, undefined, true);
-
-    if(result?.tool==='create_screen'&&!result.success){
-      if(sourceMsg)setMessages(prev=>prev.map(m=>m.id===sourceMsg.id?{...m,isError:true,text:`本次结果未应用：${result.error}`}:m));
-      return;
-    }
-    if (!result || !result.success) {
-      if (!fallbackScreenId) return;
-      stageScreenChange(
-        fallbackScreenId,
-        htmlToApply,
-        `${screens[fallbackScreenId]?.name || '画框'} (强制应用)`, sourceMsg?.originalUserPrompt, sourceMsg?.workflowContract
-      );
-    } else if (sourceMsg) {
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === sourceMsg.id
-            ? {
-                ...m,
-                isGuardRejected: false,
-                isError:false,
-                screenId: result.screenId,
-                screenName: result.screenName,
-                checkpointId: result.checkpointId,
-                toolAction:
-                  result.tool === 'create_screen'
-                    ? 'created'
-                    : result.tool === 'patch_element'
-                    ? 'patched'
-                    : 'modified'
-              }
-            : m
-        )
-      );
-    }
+    const projectId=useProjectStore.getState().id;
+    if (!await forceAdoptStagedChange()) return;
+    if (useProjectStore.getState().id!==projectId || useProjectStore.getState().stagedScreen) return;
     setLastGuardOutput(null);
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.structureDiff
-          ? {
-              ...msg,
-              structureDiff: undefined,
-              text: msg.text.replace('⚠️ 结构守卫拦截', '✅ 结构守卫已放行并应用')
-            }
-          : msg
-      )
-    );
+    setMessages(prev=>prev.map(msg=>({...msg,isGuardRejected:false,structureDiff:undefined,
+      text:msg.text?msg.text.replace('⚠️ 结构守卫拦截','✅ 结构差异已确认并通过交付检查'):msg.text})));
   };
 
   const confirmDecision = (msgId: string, decisionText: string) => {
@@ -1507,7 +1492,12 @@ export function useAIEngineChat() {
   const mountMessageHtml = async (msgId: string) => {
     const target = messages.find((m) => m.id === msgId);
     if (!target?.htmlOutput||operationLockRef.current||isGenerating) return;
-    const state=useProjectStore.getState(),controller=new AbortController(),context=pageCreationContext(state);
+    const state=useProjectStore.getState(),context=pageCreationContext(state);
+    if(target.generationInputFingerprint!==context){
+      setMessages(prev=>prev.map(m=>m.id===msgId?{...m,isError:true,text:'本次结果未应用：原生成输入已变化或缺少原输入快照；请重新发起任务，旧结果仍可查看。'}:m));
+      return;
+    }
+    const controller=new AbortController();
     const validationBudget=createSingleRequestBudget(1); // Independent zero-model verification, not renewed generation authority.
     abortControllerRef.current=controller;activeMessageIdRef.current=msgId;operationLockRef.current=true;setIsGenerating(true);
     const current=()=>pageCreationContext(useProjectStore.getState())===context;
@@ -1519,7 +1509,7 @@ export function useAIEngineChat() {
         target,
         target.htmlOutput,
         null,
-        target.screenName || '画框 (AI 补挂)',undefined,
+        target.screenName || '画框 (AI 补挂)',
         {signal:controller.signal,isCurrent:current,taskBudget:validationBudget}
       );
       if(!progressOwned(controller,sameProject))return;
@@ -1707,7 +1697,39 @@ export function useAIEngineChat() {
     }
   };
 
+  const prepareTaskRestore=async(task:SavedDesignTask)=>{
+    if(isGenerating||operationLockRef.current)throw Error('请先停止当前任务再恢复草稿。');
+    const state=useProjectStore.getState();let binding=getActiveProviderForRole('code')||getActiveProviderForRole('chat');
+    if(task.inputs?.attachment&&binding&&!supportsVision(binding.provider,binding.modelId))binding=getActiveProviderForRole('vision');
+    if(!binding||(!binding.provider.apiKey&&binding.provider.protocol!=='ollama_native'))throw Error('请先配置原任务使用的Provider与模型。');
+    const handle=await (task.generationTree?prepareTreeTaskRecovery:prepareTaskRecovery)(createProjectStorage(state.id,state.folderPath),task.id,state,binding.provider,binding.modelId);
+    if(isGenerating||operationLockRef.current)throw Error('另一个任务已经开始，未重复恢复。');
+    if(pageCreationContext(useProjectStore.getState())!==pageCreationContext(state)||useProjectStore.getState().id!==state.id||useProjectStore.getState().folderPath!==state.folderPath)throw Error('准备恢复期间工程已变化，请重新查看记录。');return handle;
+  };
+  const startPreparedTaskRestore=async(handle:PreparedDesignRecovery)=>{
+    if(handle.kind==='tree'){
+      if(isGenerating||operationLockRef.current)throw Error('请先停止当前任务。');
+      const data=treeRecoveryData(handle),state=useProjectStore.getState();let binding=getActiveProviderForRole('code')||getActiveProviderForRole('chat');
+      const vision=Boolean(data.inputs.attachment&&binding&&!supportsVision(binding.provider,binding.modelId));if(vision)binding=getActiveProviderForRole('vision');
+      if(!binding)throw Error('请先配置原任务的模型。');
+      const key=continuationBindingKey({provider:binding.provider,model:binding.modelId}),bindingCurrent=()=>{const current=vision?getActiveProviderForRole('vision'):getActiveProviderForRole('code')||getActiveProviderForRole('chat');return Boolean(current&&continuationBindingKey({provider:current.provider,model:current.modelId})===key);};
+      const prepared=await prepareRecoveredMultiPagePlan(handle,state,binding.provider,binding.modelId,engineCoreRef.current);
+      if(!mountedRef.current||isGenerating||operationLockRef.current||!bindingCurrent()||pageCreationContext(useProjectStore.getState())!==pageCreationContext(state)||useProjectStore.getState().id!==state.id||useProjectStore.getState().folderPath!==state.folderPath)throw Error('准备期间工程或其它任务已变化，请重新确认。');
+      const id='tree-recovery-'+crypto.randomUUID();pagePlansRef.current.set(id,{context:pageCreationContext(state),projectId:state.id,folderPath:state.folderPath,bindingCurrent,prepared});
+      setMessages(previous=>[...previous,{id:'user-'+id,sender:'user',text:`恢复多页设计（新任务）：${handle.request}\n复用${handle.parents}个共享父节点及${handle.leaves}个完整页面；历史已知请求${data.history.reduce((sum,row)=>sum+(row.budget?.requests??0),0)}次${data.history.some(row=>!row.budget)?'，另有历史用量未知':''}。`},{id,sender:'assistant',text:'',pagePlan:{status:'ready',plan:prepared.plan,message:'已确认新预算，正在恢复完整生成树。'}}]);
+      void confirmPagePlan(id,prepared.plan.pages,{concurrency:handle.concurrency});return;
+    }
+
+    const data=recoveryData(handle),fresh=await prepareTaskRestore(data.source);
+    if(fresh.kind==='tree')throw Error('恢复任务类型已变化，请重新选择。');
+    if(contentFingerprint(JSON.stringify(recoveryData(fresh).source))!==contentFingerprint(JSON.stringify(data.source)))throw Error('预览后的原任务已变化，请重新确认恢复。');
+    void sendMessage(data.source.request,data.attachment,{recoverNewTask:handle,textReferences:data.textReferences,writeStrategy:'auto',wholePageRedesign:data.kind==='redesign',referencedScreenId:data.kind==='redesign'?data.source.contract.target!.id:data.source.contract.referencePageId??null,activeScreenId:null,
+      displayText:`恢复草稿（新任务）：${data.source.request}\n复用${handle.reusableRegions}个完整区域；已记录历史请求${data.history.reduce((sum,row)=>sum+(row.budget?.requests??0),0)}次${data.history.some(row=>!row.budget)?'（另有历史用量未知）':''}，过去消耗保留。`}).catch(error=>setMessages(prev=>[...prev,{id:'recovery-error-'+crypto.randomUUID(),sender:'assistant',isError:true,text:error instanceof Error?error.message:'新恢复任务未能启动。'}]));
+  };
+  const recoverTask=async(task:SavedDesignTask)=>startPreparedTaskRestore(await prepareTaskRestore(task));
   return {
+    prepareTaskRestore,startPreparedTaskRestore,
+    recoverTask,
     messages,
     restoredHistoryKey,
     isGenerating,

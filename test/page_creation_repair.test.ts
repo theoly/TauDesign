@@ -1,3 +1,7 @@
+import {stubIndependentMediaTransport} from './helpers/independentMedia';
+import {resourceRenderReport} from './helpers/renderResourceProof';
+stubIndependentMediaTransport();
+import {assessedFinding} from '../src/services/ai/findingPolicy';
 import {makeGuidancePacket,withGuidanceReceipts} from '../src/services/ai/designKnowledge/receipt';
 import {selectDesignRules} from '../src/services/ai/designKnowledge/selector';
 import {TaskBudget,withTaskBudget} from '../src/services/ai/taskBudget';
@@ -21,21 +25,22 @@ import {createProjectStorage} from '../src/services/storage/projectStorage';
 import {CanvasToolExecutor} from '../src/services/tools/canvasToolExecutor';
 import {prepareMultiPagePlan,executeMultiPagePlan} from '../src/services/ai/multiPageService';
 import type {AIEngineCore,StreamTextOptions} from '../src/services/ai/engine/core/types';
-const html='<main data-nid="root" class="col gap-4 p-4"><h1 data-nid="title">会员资料</h1><button data-nid="save" class="btn btn-primary" style="font-size:0px"><svg data-nid="icon" class="icon" viewBox="0 0 24 24"><path d="M1 1h8"/></svg><span data-nid="label">保存资料</span></button></main>';
+const html='<main data-nid="root" class="col gap-4 p-4"><h1 data-nid="title">会员资料</h1><button data-nid="save" class="btn btn-primary" style="font-size:0px"><svg data-nid="icon" class="icon icon-external" data-icon-src="assets/icons/repair.svg" aria-hidden="true"></svg><span data-nid="label">保存资料</span></button></main>';
 const bad={status:'complete' as const,inspected:5,findings:[{code:'render_action_invisible_label',severity:'error' as const,nid:'save',message:'实际文案不可见',actual:'字号0',expected:'文案可见'}]};
 const good={status:'complete' as const,inspected:5,findings:[]};
 const original=PageRenderCheck.inspect;
 const provider={id:'fixture',name:'fixture',protocol:'openai_compatible',baseUrl:'https://invalid.local',apiKey:'SECRET_NEVER_STORE',isEnabled:true,models:[]} as any;
 let prior:ReturnType<typeof useProjectStore.getState>,history:ReturnType<typeof useHistoryStore.getState>,renders:number,calls:StreamTextOptions[],answer:string,finish:string,renderedHtml:string[];
 const core:AIEngineCore={async generateObject(){throw Error('No second structured abstraction');},streamText(options){calls.push(options);const text=answer;return {textStream:(async function*(){yield text;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(text),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve({inputTokens:123,outputTokens:45}),finishReasonPromise:Promise.resolve(finish),abort(){}};}};
-beforeEach(()=>{
+beforeEach(async()=>{
  prior=useProjectStore.getState();history=useHistoryStore.getState();useProjectStore.getState().initNewProject({name:'一次修复',deviceProfile:'mobile',designSystem:neutralModernTheme,createSpecimen:false});
- renders=0;calls=[];renderedHtml=[];answer=JSON.stringify({operations:[{nid:'save',type:'remove_styles',value:'font-size'}]});finish='stop';PageRenderCheck.inspect=async request=>{renders++;renderedHtml.push(request.screen.htmlContent);return structuredClone(request.screen.htmlContent.includes('font-size:0')?bad:good);};
+ const state=useProjectStore.getState(),storage=createProjectStorage(state.id);await storage.writeBinary('assets/icons/repair.svg',btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M1 1h8"/></svg>'));state.addAsset({id:'repair-icon',name:'修复测试图标',type:'svg_icon',mimeType:'image/svg+xml',source:'upload',relPath:'assets/icons/repair.svg',refCount:0});
+ renders=0;calls=[];renderedHtml=[];answer=JSON.stringify({operations:[{nid:'save',type:'remove_styles',value:'font-size'}]});finish='stop';PageRenderCheck.inspect=async(request,storage)=>{renders++;renderedHtml.push(request.screen.htmlContent);return resourceRenderReport(request,storage,structuredClone(request.screen.htmlContent.includes('font-size:0')?bad:good));};
 });
 afterEach(()=>{PageRenderCheck.inspect=original;useProjectStore.setState(prior,true);useHistoryStore.setState(history,true);});
 function task(){const s=useProjectStore.getState();return buildDesignTaskContract({intent:'create_screen',request:'新建会员资料',deviceProfile:'mobile',frameWidth:390,designSystem:s.designSystem});}
 const run=(overrides:Partial<Parameters<typeof prepareNewPageWithRepair>[4]>={},source=html,contract=task())=>prepareNewPageWithRepair(useProjectStore.getState(),{id:'new',name:'会员资料',htmlContent:source,position:{x:0,y:0}},contract,createProjectStorage(useProjectStore.getState().id),{isCurrent:()=>true,repair:{core,provider,model:'fixture'},...overrides});
-test('一次请求仅修复控件自身样式，完整重验且不写页面/History，正文SVG和其他节点不变',async()=>{
+test('一次请求仅修复控件自身样式，完整重验且不写页面/History，独立图标引用和其他节点不变',async()=>{
  const before=useHistoryStore.getState().past.length,result=await run();expect(result.status).toBe('ready');if(result.status!=='ready')return;
  expect(calls).toHaveLength(1);expect(renders).toBe(2);expect(calls[0].maxTokens).toBe(1800);expect(calls[0].jsonSchema).toBeDefined();
  const a=new DOMParser().parseFromString(renderedHtml[0],'text/html'),b=new DOMParser().parseFromString(result.screen.htmlContent,'text/html');
@@ -48,7 +53,10 @@ test('一次请求仅修复控件自身样式，完整重验且不写页面/Hist
 });
 test('没有AI上下文、已通过或只有警告均不多请求模型',async()=>{
  expect((await run({repair:undefined})).status).toBe('blocked');expect(calls).toHaveLength(0);
- PageRenderCheck.inspect=async()=>({...good,findings:[{...bad.findings[0],severity:'warning'}]});expect((await run()).status).toBe('ready');expect(calls).toHaveLength(0);
+ PageRenderCheck.inspect=async()=>({...good,findings:[{...bad.findings[0],code:'render_contrast',severity:'warning'}]});expect((await run()).status).toBe('ready');expect(calls).toHaveLength(0);
+});
+test('严重控件错误不能只修改severity降级为可采纳警告',async()=>{
+ PageRenderCheck.inspect=async()=>({...good,findings:[{...bad.findings[0],severity:'warning'}]});expect((await run()).status).toBe('blocked');expect(calls).toHaveLength(0);
 });
 for(const kind of ['unavailable','incomplete','unknown-code','missing-nid','wrong-target','protected','no-content'] as const)test(`${kind} 渲染问题不触发修复`,async()=>{
  const report=structuredClone(bad),contract=task();let source=html;
@@ -118,7 +126,7 @@ for(const failSecond of [false,true])test(`多页首屏一次修复后${failSeco
   return {...core.streamText(options),textStream:(async function*(){yield text;})(),textPromise:Promise.resolve(text)};
  }};
  const before=useHistoryStore.getState().past.length,plan=await prepareMultiPagePlan({state:useProjectStore.getState(),request:'创建两个页面',provider,model:'fixture',core:multi,isCurrent:()=>true});
- const progress:string[]=[],result=await executeMultiPagePlan(plan,plan.plan.pages,{getState:()=>useProjectStore.getState(),commit:batch=>{useProjectStore.getState().applyMultiPageCreation(batch);},onProgress:p=>progress.push(p[0]?.message??'')});
+ const progress:string[]=[],result=await executeMultiPagePlan(plan,plan.plan.pages,{getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch),onProgress:p=>progress.push(p[0]?.message??'')});
  expect(result.status).toBe(failSecond?'blocked':'complete');expect(calls.filter(c=>c.jsonSchema)).toHaveLength(1);expect(progress.some(m=>m.includes('一次受控样式修复'))).toBe(true);
  expect(useProjectStore.getState().screenOrder).toHaveLength(failSecond?0:2);expect(useHistoryStore.getState().past.length).toBe(before+(failSecond?0:1));
  if(!failSecond)expect(useProjectStore.getState().screens[result.screenIds[0]].metadata!.creationEvidence!.repair!.status).toBe('repaired');
@@ -195,4 +203,11 @@ for(const corrupt of ['negative-count','fractional-count','bad-files'] as const)
  if(corrupt==='fractional-count')initial.inspected=1.5;
  if(corrupt==='bad-files')initial.resourceFiles=[{relPath:'assets/images/source.png',fingerprint:'not-a-sha256',size:1}] as any;
  expect(isPageRepairRecord(evidence.repair)).toBe(false);expect(isPageCreationEvidence(evidence)).toBe(false);
+});
+
+test('explicit user text hidden by the control own zero font remains eligible for one style repair',async()=>{
+ const s=useProjectStore.getState(),contract=buildDesignTaskContract({intent:'create_screen',request:'按钮文案改为“保存资料”',deviceProfile:'mobile',frameWidth:390,designSystem:s.designSystem});
+ const literal=assessedFinding('required-action-text','failed',{code:'required_action_text_missing',nid:'save',message:'原文不可见',actual:'字号0',expected:'保存资料'});
+ PageRenderCheck.inspect=async request=>({...good,findings:request.screen.htmlContent.includes('font-size:0')?[literal]:[]});
+ const result=await run({},html,contract);expect(result.status).toBe('ready');expect(calls).toHaveLength(1);expect(calls[0].maxTokens).toBe(1800);
 });

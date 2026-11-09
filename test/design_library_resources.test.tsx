@@ -1,25 +1,28 @@
 import {afterEach,beforeEach,expect,spyOn,test} from 'bun:test';
 import React,{act} from 'react';
 import {createRoot,type Root} from 'react-dom/client';
-import {useScreenResources} from '../src/hooks/useScreenResources';
+import {useScreenResources,useStyleResources} from '../src/hooks/useScreenResources';
 import {ScreenFrame} from '../src/components/canvas/ScreenFrame';
 import {createProjectStorage,LocalStorageStorage} from '../src/services/storage/projectStorage';
 import {useProjectStore} from '../src/stores/useProjectStore';
 import {useHistoryStore} from '../src/stores/useHistoryStore';
 import type {Screen} from '../src/types/project';
+import {stubIndependentMediaTransport,unitMediaUrl} from './helpers/independentMedia';
+stubIndependentMediaTransport(true);
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
 const path='assets/images/lib-source-logo-a1b2c3d4.png',iconPath='assets/icons/library-symbol.svg';
 const screen:Screen={id:'screen',name:'库资源页面',position:{x:0,y:0},htmlContent:`<main><img src="${path}" alt="图标"></main>`,scopedCss:`main{background:url(${iconPath})}`};
 let prior:ReturnType<typeof useProjectStore.getState>,history:ReturnType<typeof useHistoryStore.getState>,root:Root,host:HTMLDivElement,result:ReturnType<typeof useScreenResources>;
-const Harness=({source}:{source:Screen})=>{result=useScreenResources(source);return null;};
+let styleResult:ReturnType<typeof useStyleResources>;
+const Harness=({source,usage='preview',css=''}:{source:Screen;usage?:'preview'|'export';css?:string})=>{result=useScreenResources(source,0,usage);styleResult=useStyleResources(css,0,usage);return null;};
 beforeEach(()=>{prior=useProjectStore.getState();history=useHistoryStore.getState();useProjectStore.getState().initNewProject({name:'库资源',deviceProfile:'mobile',createSpecimen:false});host=document.createElement('div');document.body.append(host);root=createRoot(host);});
 afterEach(()=>{act(()=>root.unmount());host.remove();useProjectStore.setState(prior,true);useHistoryStore.setState(history,true);});
 const register=()=>useProjectStore.setState({assets:{image:{id:'image',name:'图',relPath:path,type:'image',mimeType:'image/png',source:'upload',refCount:0},icon:{id:'icon',name:'图标',relPath:iconPath,type:'svg_icon',mimeType:'image/svg+xml',source:'upload',refCount:0}}});
 const render=async()=>{await act(async()=>{root.render(<Harness source={screen}/>);await new Promise(resolve=>setTimeout(resolve,0));});};
 test('普通页面的库图片和CSS图标按真实登记解析，源HTML/CSS不变',async()=>{
  const storage=createProjectStorage(useProjectStore.getState().id);await storage.writeBinary(path,'aW1hZ2U=');await storage.writeBinary(iconPath,'c3Zn');register();await render();
- expect(result.loading).toBe(false);expect(result.error).toBeUndefined();expect(result.screen?.htmlContent).toContain('data:image/png;base64,aW1hZ2U=');
- expect(result.screen?.scopedCss).toContain('data:image/svg+xml;base64,c3Zn');expect(screen.htmlContent).toContain(path);expect(screen.scopedCss).toContain(iconPath);
+ expect(result.loading).toBe(false);expect(result.error).toBeUndefined();expect(result.screen?.htmlContent).toContain(await unitMediaUrl(path,'aW1hZ2U='));
+ expect(result.screen?.scopedCss).toContain(await unitMediaUrl(iconPath,'c3Zn'));expect(result.screen?.htmlContent).not.toContain('data:image');expect(screen.htmlContent).toContain(path);expect(screen.scopedCss).toContain(iconPath);
 });
 test('缺文件显示真实错误；新增登记后刷新同一页面，不读取未登记路径',async()=>{
  await render();expect(result.screen?.htmlContent).toContain(path);expect(result.error).toBeUndefined();
@@ -27,13 +30,13 @@ test('缺文件显示真实错误；新增登记后刷新同一页面，不读�
  const storage=createProjectStorage(useProjectStore.getState().id);await storage.writeBinary(path,'cmVwYWly');await storage.writeBinary(iconPath,'c3Zn');
  // Changing the registration is the explicit repair signal; no body/source rewrite is needed.
  act(()=>useProjectStore.setState({assets:{...useProjectStore.getState().assets}}));await render();
- expect(result.error).toBeUndefined();expect(result.screen?.htmlContent).toContain('data:image/png;base64,cmVwYWly');
+ expect(result.error).toBeUndefined();expect(result.screen?.htmlContent).toContain(await unitMediaUrl(path,'cmVwYWly'));
 });
 test('切工程不复用旧工程已解析的资源',async()=>{
  register();const storage=createProjectStorage(useProjectStore.getState().id);await storage.writeBinary(path,'b2xk');await storage.writeBinary(iconPath,'c3Zn');await render();
- expect(result.screen?.htmlContent).toContain('b2xk');
+ expect(result.screen?.htmlContent).toContain(await unitMediaUrl(path,'b2xk'));
  await act(async()=>{useProjectStore.getState().initNewProject({name:'新工程',deviceProfile:'mobile',createSpecimen:false});register();});await render();
- expect(result.screen?.htmlContent).not.toContain('base64,b2xk');expect(result.error).toContain('资源缺失');
+ expect(result.screen?.htmlContent).not.toContain(await unitMediaUrl(path,'b2xk'));expect(result.error).toContain('资源缺失');
 });
 
 test('旧工程迟到的读取不能覆盖新工程资源',async()=>{
@@ -44,8 +47,8 @@ test('旧工程迟到的读取不能覆盖新工程资源',async()=>{
   await render();expect(result.loading).toBe(true);expect(release).toBeDefined();hold=false;
   await act(async()=>{useProjectStore.getState().initNewProject({name:'替换工程',deviceProfile:'mobile',createSpecimen:false});register();
     const storage=createProjectStorage(useProjectStore.getState().id);await storage.writeBinary(path,'bmV3');await storage.writeBinary(iconPath,'c3Zn');});await render();
-  expect(result.screen?.htmlContent).toContain('base64,bmV3');await act(async()=>{release('b2xk');await new Promise(resolve=>setTimeout(resolve,0));});
-  expect(result.screen?.htmlContent).toContain('base64,bmV3');expect(result.screen?.htmlContent).not.toContain('base64,b2xk');
+  expect(result.screen?.htmlContent).toContain(await unitMediaUrl(path,'bmV3'));await act(async()=>{release('b2xk');await new Promise(resolve=>setTimeout(resolve,0));});
+  expect(result.screen?.htmlContent).toContain(await unitMediaUrl(path,'bmV3'));expect(result.screen?.htmlContent).not.toContain(await unitMediaUrl(path,'b2xk'));
  }finally{reader.mockRestore();}
 });
 
@@ -60,7 +63,7 @@ test('画框等待资源成功后才挂载，实际文档与点选监听就绪�
   expect(release).toBeDefined();expect(Boolean(host.querySelector('iframe'))).toBe(false);expect(host.textContent).toContain('正在读取页面资源');
   await act(async()=>{release('aW1hZ2U=');await new Promise(resolve=>setTimeout(resolve,0));});
   const frame=host.querySelector('iframe')!;
-  expect(frame).not.toBeNull();expect(frame.srcdoc).toContain('data:image/png;base64,aW1hZ2U=');
+  expect(frame).not.toBeNull();expect(frame.srcdoc).toContain(await unitMediaUrl(path,'aW1hZ2U='));expect(frame.srcdoc).not.toContain('data:image');
   act(()=>{frame.contentDocument!.open();frame.contentDocument!.write(frame.srcdoc);frame.contentDocument!.close();frame.dispatchEvent(new Event('load'));});
   act(()=>{(frame.contentDocument!.querySelector('[data-nid="picture"]') as HTMLElement).click();});
   expect(useProjectStore.getState().selectedNid).toBe('picture');
@@ -74,4 +77,27 @@ test('画框等待资源成功后才挂载，实际文档与点选监听就绪�
 test('缺失画框资源显示错误占位，不挂载会破图的未解析文档',async()=>{
  register();await act(async()=>{root.render(<ScreenFrame screen={screen} lodLevel={2}/>);await new Promise(resolve=>setTimeout(resolve,0));});
  expect(Boolean(host.querySelector('iframe'))).toBe(false);expect(host.querySelector('[role="alert"]')?.textContent).toContain('资源缺失');
+});
+
+
+test('导出副本内联 HTML/来源CSS/L4，预览会话URL不进入离线交付，源页和History保持不变',async()=>{
+ const storage=createProjectStorage(useProjectStore.getState().id);await storage.writeBinary(path,'aW1hZ2U=');await storage.writeBinary(iconPath,'c3Zn');register();
+ const before=JSON.stringify(screen),beforeHistory=useHistoryStore.getState().past.length,css=`[data-nid="cover"]{background-image:url("${path}")}`;
+ await act(async()=>{root.render(<Harness source={screen} css={css}/>);await new Promise(r=>setTimeout(r,0));});
+ expect(result.screen?.htmlContent).toContain('https://unit-preview.example.test/');expect(styleResult.css).toContain('https://unit-preview.example.test/');
+ await act(async()=>{root.render(<Harness source={screen} usage="export" css={css}/>);await new Promise(r=>setTimeout(r,0));});
+ expect(result.loading||styleResult.loading).toBe(false);expect(result.error||styleResult.error).toBeUndefined();
+ expect(result.screen?.htmlContent).toContain('data:image/png;base64,aW1hZ2U=');expect(result.screen?.scopedCss).toContain('data:image/svg+xml;base64,c3Zn');expect(styleResult.css).toContain('data:image/png;base64,aW1hZ2U=');
+ expect(JSON.stringify(screen)).toBe(before);expect(useHistoryStore.getState().past.length).toBe(beforeHistory);expect(await storage.readBinary(path)).toBe('aW1hZ2U=');
+ await render();expect(result.screen?.htmlContent).not.toContain('data:image');expect(result.screen?.htmlContent).toContain('https://unit-preview.example.test/');
+});
+test('导出缺失正文或L4资源时返回错误，不将旧预览或未解析路径作为可交付结果',async()=>{
+ register();const storage=createProjectStorage(useProjectStore.getState().id);await storage.writeBinary(path,'aW1hZ2U=');await storage.writeBinary(iconPath,'c3Zn');
+ const css='main{background-image:url(assets/images/missing.png)}';
+ await act(async()=>{root.render(<Harness source={screen} usage="export" css={css}/>);await new Promise(r=>setTimeout(r,0));});
+ // Unregistered source remains untouched; registered missing paths must be hard failures.
+ act(()=>useProjectStore.getState().addAsset({id:'missing',name:'缺失',type:'image',mimeType:'image/png',source:'upload',refCount:0,relPath:'assets/images/missing.png'}));
+ await act(async()=>{await new Promise(r=>setTimeout(r,0));});expect(styleResult.error).toContain('资源缺失');
+ await storage.remove(path);act(()=>useProjectStore.setState({assets:{...useProjectStore.getState().assets}}));
+ await act(async()=>{await new Promise(r=>setTimeout(r,0));});expect(result.error).toContain('资源缺失');
 });

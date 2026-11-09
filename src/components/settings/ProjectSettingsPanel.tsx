@@ -3,6 +3,7 @@ import { FolderOpen } from 'lucide-react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { isDesktopRuntime } from '../../services/storage/folderPicker';
 import { openProjectDirectory } from '../../services/storage/projectDirectory';
+import {MediaMigrationPanel} from './MediaMigrationPanel';
 
 function ProjectDirectory({ folderPath }: { folderPath?: string }) {
   const [opening, setOpening] = useState(false);
@@ -59,6 +60,7 @@ export function ProjectSettingsPanel() {
         <p className="mt-1 text-xs text-slate-400 break-all">当前工程：{name}</p>
       </div>
       <ProjectDirectory key={JSON.stringify([id, folderPath])} folderPath={folderPath} />
+      <MediaMigrationPanel key={`media:${id}:${folderPath??''}`} />
     </div>
   );
 }

@@ -206,6 +206,7 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
 
   const contentLayout = `
       <div class="col gap-4 min-w-0">
+        <div class="row items-center gap-2 text-primary"><span class="icon-mask" aria-hidden="true" style="mask-image:radial-gradient(circle closest-side,currentColor 80%,transparent 81%);-webkit-mask-image:radial-gradient(circle closest-side,currentColor 80%,transparent 81%)"></span><span class="text-sm">蒙版尺寸与当前前景色</span></div>
         <div class="row wrap items-center gap-3">
           <div class="row items-center gap-2">
             <span class="avatar bg-primary-light text-primary">王</span>
@@ -272,7 +273,10 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
   const misc = `
     <div class="bg-decorative-surface p-4 r-md">主题装饰背景</div>
       <div class="col gap-3">
-        <div class="bg-surface-alt r-md p-3 sticky-top text-xs text-muted">sticky-top · 滚动时吸顶</div>
+        <div class="relative bg-surface-alt r-md p-3 sticky-top text-xs text-muted">
+          <span>sticky-top · 滚动时吸顶</span>
+          <span class="absolute" style="right: 8px; top: 8px;">定位层</span>
+        </div>
         <div class="r-md overflow-hidden border" style="height: 88px;">
           <img class="full-img" alt="示例图" src="data:image/svg+xml;utf8,${encodeURIComponent(
             '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="120"><rect width="400" height="120" fill="#e2e8f0"/><text x="200" y="66" font-size="14" fill="#64748b" text-anchor="middle" font-family="sans-serif">full-img 占位图</text></svg>'

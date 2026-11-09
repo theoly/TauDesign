@@ -12,8 +12,11 @@ export const WORKSPACE_KEY = 'ai_designer_workspace_v1';
 export const LEGACY_PROJECT_KEY = 'ai_designer_project_autosave_v1';
 
 export const projectKey = (id: string) => `ai_designer_project_${id}`;
+export const projectCacheKey=(id:string)=>`ai_designer_project_cache_${id}`;
 
 export interface ProjectMeta {
+  /** Managed repository is authoritative; old whole-document keys are only preview backups. */
+  storageVersion?:'managed-v1';
   id: string;
   name: string;
   deviceProfile: 'pc' | 'mobile';
@@ -78,11 +81,12 @@ export function removeMeta(id: string): void {
 
 export function readProject(id: string): string | null {
   try {
-    return localStorage.getItem(projectKey(id));
+    return localStorage.getItem(projectCacheKey(id))??localStorage.getItem(projectKey(id));
   } catch {
     return null;
   }
 }
+export function readLegacyProject(id:string):string|null{return localStorage.getItem(projectKey(id));}
 
 export function writeProject(id: string, json: string): void {
   try {
@@ -96,6 +100,7 @@ export function writeProject(id: string, json: string): void {
 export function deleteProjectData(id: string): void {
   try {
     localStorage.removeItem(projectKey(id));
+    localStorage.removeItem(projectCacheKey(id));
   } catch (e) {
     console.warn('Project delete failed', e);
   }
