@@ -348,3 +348,73 @@ describe('CHK-F-09: 提问与主题诉求经流水线时不被误判为改页 (B
     expect(toPipelineIntent(th.action)).toBe('change_theme');
   });
 });
+
+describe('CHK-F-10: 修复新建页面遇同名画框误报歧义 (BR-CS-01~04)', () => {
+  const duplicateScreens = {
+    s1: { id: 's1', name: '完善资料弹窗', htmlContent: '<main>1</main>' },
+    s2: { id: 's2', name: '完善资料弹窗', htmlContent: '<main>2</main>' },
+    other: { id: 'other', name: '个人中心', htmlContent: '<main>3</main>' }
+  };
+
+  test('长篇 PRD 正文偶遇同名画框，末尾明确要求新建页面 → 正常新建，绝不报错 needs_reference (CHK-F-02/03)', () => {
+    const rawPrompt = `| 名额 0 且有历史批次 | 状态A + 历史批次区展示（引导复购） |
+| 弱网 loading | 生成推荐 loading 超过 10s 提示可取消 |
+
+## 7. 文案红线
+
+不出现「AI 智能推荐」（用「条件严选/双向匹配」）；不承诺「保证脱单/满意」；价格必须带单位「¥98 / 3位」与有效期「30天」；微信号相关文案体现「对方同意后展示」。
+若用户未完善资料需跳转完善资料弹窗。
+按上述要求新建页面"推荐购买引导页"`;
+
+    const decision = resolveGenerationTarget({
+      rawPrompt,
+      screens: duplicateScreens,
+      activeScreenId: 'other'
+    });
+
+    expect(decision.action).toBe('create_screen');
+    expect(decision.targetScreenId).toBeNull();
+    expect(decision.reason).toContain('明确要求新建');
+  });
+
+  test('明确新建同名页面（新建页面"完善资料弹窗"）→ 正常新建，不报歧义 (CHK-F-01/04)', () => {
+    const decision = resolveGenerationTarget({
+      rawPrompt: '新建页面"完善资料弹窗"',
+      screens: duplicateScreens,
+      activeScreenId: 'other'
+    });
+
+    expect(decision.action).toBe('create_screen');
+    expect(decision.targetScreenId).toBeNull();
+  });
+
+  test('正文中包含“参考规范...”但并非参考画框，末尾新建页面 → 正常新建 (CHK-F-03)', () => {
+    const rawPrompt = '参考微信公众号格式，若用户未填写资料需弹起完善资料弹窗，按上述要求新建页面"推荐购买引导页"';
+    const decision = resolveGenerationTarget({
+      rawPrompt,
+      screens: duplicateScreens,
+      activeScreenId: 'other'
+    });
+
+    expect(decision.action).toBe('create_screen');
+    expect(decision.targetScreenId).toBeNull();
+  });
+
+  test('显式 @同名画框 或 紧随参考词引用同名画框 → 依然严格拦截为 needs_reference (CHK-F-05)', () => {
+    const atMention = resolveGenerationTarget({
+      rawPrompt: '参考 @完善资料弹窗，创建新页面',
+      screens: duplicateScreens,
+      activeScreenId: 'other'
+    });
+    expect(atMention.action).toBe('needs_reference');
+    expect(atMention.reason).toContain('存在同名页面：完善资料弹窗');
+
+    const bareRef = resolveGenerationTarget({
+      rawPrompt: '参考完善资料弹窗，创建新页面',
+      screens: duplicateScreens,
+      activeScreenId: 'other'
+    });
+    expect(bareRef.action).toBe('needs_reference');
+    expect(bareRef.reason).toContain('存在同名页面：完善资料弹窗');
+  });
+});

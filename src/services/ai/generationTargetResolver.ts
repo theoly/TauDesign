@@ -191,14 +191,40 @@ export function resolveGenerationTarget(input: GenerationTargetInput): Generatio
   }
 
   const resolution=resolveScreenReferences(rawPrompt,screens);
-  if(referenceToggleScreenId&&!screens[referenceToggleScreenId])return {...base,action:'needs_reference',reason:'引用页面已不存在，请重新选择或使用完整页面名。'};
-  if(!(referenceToggleScreenId&&screens[referenceToggleScreenId]) && (resolution.ambiguousNames.length||resolution.unmatchedNames.length))return {
-    ...base,action:'needs_reference',reason:resolution.ambiguousNames.length
-      ? `存在同名页面：${resolution.ambiguousNames.join('、')}。请使用 @页面ID 或明确启用目标页引用。`
-      : `未找到引用页面：${resolution.unmatchedNames.join('、')}。请使用现有完整页名或 @页面ID。`
-  };
-  const reference = resolveExplicitReference(rawPrompt, screens, referenceToggleScreenId);
   const command = classifyCommand(rawPrompt);
+  const reference = resolveExplicitReference(rawPrompt, screens, referenceToggleScreenId);
+
+  if(referenceToggleScreenId&&!screens[referenceToggleScreenId])return {...base,action:'needs_reference',reason:'引用页面已不存在，请重新选择或使用完整页面名。'};
+
+  // 显式引用存在歧义或未找到时，阻断并引导用户明确指定目标。
+  // 若用户明确要求新建（explicit_create），且并未显式 @ 或显式参考该画框，不阻断新建。
+  const hasQuotedRef = /(?:参考|基于|仿照|沿用|复用|读取|分析)(?:现有|原有|已有|原)?(?:页面|画框)?\s*[“「『"《]/.test(rawPrompt);
+  const hasExplicitAmbiguity =
+    resolution.ambiguousNames.length > 0 &&
+    (command.kind !== 'explicit_create' ||
+      rawPrompt.includes('@') ||
+      hasQuotedRef ||
+      Boolean(reference) ||
+      resolution.ambiguousNames.some((name) =>
+        new RegExp(
+          `(?:参考|基于|仿照|照着|沿用|复用|借鉴|根据)\\s*(?:现有|原有|已有|原)?(?:页面|画框)?\\s*[@"“「『《]?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+          'i'
+        ).test(rawPrompt)
+      ));
+
+  const hasExplicitUnmatched =
+    resolution.unmatchedNames.length > 0 &&
+    (command.kind !== 'explicit_create' || rawPrompt.includes('@') || hasQuotedRef || Boolean(reference));
+
+  if (!(referenceToggleScreenId && screens[referenceToggleScreenId]) && (hasExplicitAmbiguity || hasExplicitUnmatched)) {
+    return {
+      ...base,
+      action: 'needs_reference',
+      reason: hasExplicitAmbiguity
+        ? `存在同名页面：${resolution.ambiguousNames.join('、')}。请使用 @页面ID 或明确启用目标页引用。`
+        : `未找到引用页面：${resolution.unmatchedNames.join('、')}。请使用现有完整页名或 @页面ID。`
+    };
+  }
 
   // 2. 提问与纯主题诉求不触碰画布，沿用既有分类器
   const classified = classifyIntent(rawPrompt, Boolean(reference));

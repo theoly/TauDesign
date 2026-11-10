@@ -33,6 +33,9 @@ doc/text-layout/*
 !doc/refactor-finalization/
 doc/refactor-finalization/*
 !doc/refactor-finalization/*.md
+!doc/fix-create-screen-ambiguous-name/
+doc/fix-create-screen-ambiguous-name/*
+!doc/fix-create-screen-ambiguous-name/*.md
 node_modules/
 spike/
 AGENTS.md

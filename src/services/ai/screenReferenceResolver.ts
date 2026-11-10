@@ -1,3 +1,5 @@
+import { explicitlyRequestsPageRedesign } from './pageRedesignIntent';
+
 /** Shared exact reference matching for routing and prompt enrichment. No first-page/fuzzy fallback. */
 export interface ReferenceScreenIdentity { id:string; name:string; htmlContent:string }
 export interface ScreenReferenceResolution {
@@ -37,11 +39,29 @@ export function resolveScreenReferences(rawPrompt:string,screens:Record<string,R
   for(const m of rawPrompt.matchAll(/(?:参考|基于|仿照|沿用|复用|读取|分析)(?:现有|原有|已有|原)?(?:页面|画框)?\s*[“「『"《]([^”」』"》]+)[”」』"》]/g))add(m[1],false);
   // Limit bare-name source matching before a subsequent create command so a new title
   // cannot replace the source in “参考A，创建…B”. Mentions remain explicit anywhere.
-  const cue=text.search(/参考|基于|仿照|照着|沿用|复用|借鉴|根据/);
-  const createAfter=cue<0?-1:text.slice(cue).search(/新建|创建|生成|新增|设计一个|做一个/);
-  const end=createAfter>0?cue+createAfter:text.length;
+  // When creating a page, only bare names immediately following a reference cue before the create command count.
+  const isRedesign = explicitlyRequestsPageRedesign(text) && !/(?:根据|参考|依据|基于|按)(?:图片|附件|截图|参考图|样张|设计图|附图)/.test(text);
+  const pageCreateMatch = isRedesign ? null : text.match(/(?:创建|新建|生成|新增|设计|做)(?:一个|一张|个|张)?(?:新的?)?[^，。！？；\n]{0,24}?(?:页面|画框|页)(?!面?的?(?:标题|字号|颜色|按钮))/);
+  const createIndex=pageCreateMatch?pageCreateMatch.index!:-1;
+
   const candidates:Array<{name:string;start:number;end:number}>=[];
-  for(const name of names){if(name.length<2)continue;let from=0,index:number;while((index=text.indexOf(name,from))>=0){from=index+name.length;if(index>=end||used.some(([a,b])=>index>=a&&index<b))continue;candidates.push({name,start:index,end:index+name.length});}}
+  for(const name of names){
+    if(name.length<2)continue;
+    let from=0,index:number;
+    while((index=text.indexOf(name,from))>=0){
+      from=index+name.length;
+      if(used.some(([a,b])=>index>=a&&index<b))continue;
+      if(createIndex>=0){
+        // 在新建指令场景下：
+        // 1. 位于新建动词之后的名字是新建目标或说明，不可作为参考源
+        if(index>=createIndex)continue;
+        // 2. 位于新建动词之前的名字，必须紧随参考语义前缀才构成参考源
+        const prefix=text.slice(Math.max(0,index-24),index);
+        if(!/(?:参考|基于|仿照|照着|沿用|复用|借鉴|根据)\s*(?:现有|原有|已有|原)?(?:页面|画框)?\s*$/.test(prefix))continue;
+      }
+      candidates.push({name,start:index,end:index+name.length});
+    }
+  }
   candidates.sort((a,b)=>a.start-b.start||b.name.length-a.name.length);
   const covered:Array<[number,number]>=[];
   for(const candidate of candidates){if(covered.some(([a,b])=>candidate.start>=a&&candidate.end<=b))continue;covered.push([candidate.start,candidate.end]);add(candidate.name,false);}
