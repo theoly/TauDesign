@@ -22,7 +22,7 @@ WORKFLOWS = [
 
 def snapshot(root):
     code="import {captureDesignInputs} from './scripts/lib/designEvidenceInputs.ts';process.stdout.write(JSON.stringify(await captureDesignInputs(process.cwd(),true)));"
-    files=json.loads(subprocess.check_output(['bun','-e',code],cwd=root,text=True))
+    files=json.loads(subprocess.check_output(['pnpm','exec','tsx','-e',code],cwd=root,text=True))
     return {'fingerprint': hashlib.sha256(json.dumps(files, sort_keys=True).encode()).hexdigest(), 'files': files}
 
 

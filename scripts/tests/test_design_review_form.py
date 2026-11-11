@@ -9,7 +9,7 @@ async def run(args):
  with tempfile.TemporaryDirectory(prefix='taudesign-review-ui-') as directory:
   folder=Path(directory)
   index={'version':1,'planId':'synthetic-ui-only','pairs':[{'id':'p001','request':'<script>window.injectionExecuted=true</script>','device':'mobile','left':'a.svg','right':'b.svg','leftAvailable':False,'rightAvailable':True},{'id':'p002','request':'两份静态示例，请比较内容与层级','device':'pc','left':'a.svg','right':'b.svg'}]}
-  built=subprocess.run(['bun','-e',"import {buildBlindReviewHtml} from './src/services/ai/designKnowledge/experimentReview';let input='';for await(const chunk of process.stdin)input+=chunk;process.stdout.write(buildBlindReviewHtml(JSON.parse(input)));"],input=json.dumps(index),cwd=ROOT,text=True,capture_output=True,check=True)
+  built=subprocess.run(['pnpm','exec','tsx','-e',"import {buildBlindReviewHtml} from './src/services/ai/designKnowledge/experimentReview';let input='';for await(const chunk of process.stdin)input+=chunk;process.stdout.write(buildBlindReviewHtml(JSON.parse(input)));"],input=json.dumps(index),cwd=ROOT,text=True,capture_output=True,check=True)
   (folder/'review.html').write_text(built.stdout)
   for name in ['a.svg','b.svg']:(folder/name).write_text('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="120"><rect width="200" height="120" fill="#eee"/></svg>')
   reports=[]

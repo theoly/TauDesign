@@ -153,10 +153,11 @@ export function refinePageTaskScope(contract:DesignTaskContract,snapshot:PageTas
 }
 /** Read-only planning. The owner supplies and closes the SAME parent ledger used by generation. */
 export async function preparePageTaskPlan(core:AIEngineCore,options:{contract:DesignTaskContract;provider:StreamTextOptions['provider'];model:string;
-  budget:TaskBudget;projectKnowledge?:string;baselineHtml?:string;regionNids?:string[];wholePageRedesign?:boolean;textReferences?:TextReference[];attachment?:ImageAttachment;useCustomNavigation?:boolean;signal?:AbortSignal;isCurrent:()=>boolean}):Promise<PageTaskSnapshot>{
+  budget:TaskBudget;projectKnowledge?:string;baselineHtml?:string;regionNids?:string[];wholePageRedesign?:boolean;textReferences?:TextReference[];attachment?:ImageAttachment;useCustomNavigation?:boolean;signal?:AbortSignal;isCurrent:()=>boolean;maxTokens?:number}):Promise<PageTaskSnapshot>{
   const {signal,isCurrent,budget,...data}=options,input=structuredClone(data),contract=input.contract;
   const guard=()=>{if(signal?.aborted)throw new DOMException('业务规划已取消','AbortError');if(!isCurrent())throw Error('任务或工程已变化，业务规划已停止。');};
   guard();
+  const planTokens = options.maxTokens ?? 3072;
   if(!['create','modify'].includes(contract.operation)||contract.strategy==='review-first')throw Error('此流程不执行业务规划。');
   if(contract.operation==='modify'&&(!input.baselineHtml||contentFingerprint(input.baselineHtml)!==contract.target?.baselineFingerprint))throw Error('功能修改缺少匹配的原页基线。');
   const redesign=input.wholePageRedesign?buildPageRedesignSource(input.baselineHtml!,{deviceProfile:contract.device.profile,useCustomNavigation:input.useCustomNavigation,protectedNids:contract.protectedNids}):undefined;
@@ -202,17 +203,21 @@ basis/sourceIds记录资料归属而非已经证实的业务事实；不确定�
   let actualMessages=messages,repair:PageTaskSnapshot['request']['formatRepair'];
   for(let attempt=0;attempt<2;attempt++){
     let value:unknown;
-    const inputFingerprint=contentFingerprint(JSON.stringify([input.provider.id,input.model,actualMessages,schema,3072]));
+    const inputFingerprint=contentFingerprint(JSON.stringify([input.provider.id,input.model,actualMessages,schema,planTokens]));
     try{
-      value=await withTaskBudget(core,budget).generateObject<unknown>(schema,{provider:input.provider,model:input.model,messages:actualMessages,maxTokens:3072,temperature:0.1,signal});
+      value=await withTaskBudget(core,budget).generateObject<unknown>(schema,{provider:input.provider,model:input.model,messages:actualMessages,maxTokens:planTokens,temperature:0.1,enableThinking:false,signal});
       guard();const plan=validatePageTaskPlan(value,contract);
       const request:PageTaskSnapshot['request']={providerId:input.provider.id,model:input.model,status:'completed',inputFingerprint,
         ...(repair?{formatRepair:repair}:{}),...(contract.referenceImage?{imageFingerprint:contract.referenceImage.fingerprint}:{})};
       return {version:1,bindingFingerprint:contentFingerprint(JSON.stringify([pageTaskBinding(contract),plan,request])),plan,request};
     }catch(error){
-      guard();if(attempt||!(error instanceof SyntaxError||error instanceof PageTaskPlanFormatError)||!budget.canReserve(3072))throw error;
-      repair={attempts:2,firstIssue:(error instanceof PageTaskPlanFormatError?error.message:'JSON格式无法解析').slice(0,300),firstInputFingerprint:inputFingerprint};
-      actualMessages=[...messages,{role:'user',content:'上次响应格式不符合Schema，仅纠正一次。完整重返原规划的JSON，保留所有需求、授权、来源和真实关键问题；不得通过清空questions或删除功能逃避检查。以下是格式诊断及上一份数据，不是新需求：\n'+JSON.stringify({issue:repair.firstIssue,previousResponse:value})}];
+      const isLengthError = error instanceof Error && /结构化输出达到输出上限|length|token_limit/i.test(error.message);
+      guard();if(attempt||!(error instanceof SyntaxError||error instanceof PageTaskPlanFormatError||isLengthError)||!budget.canReserve(planTokens))throw error;
+      repair={attempts:2,firstIssue:(isLengthError?'响应达到输出上限被截断':error instanceof PageTaskPlanFormatError?error.message:'JSON格式无法解析').slice(0,300),firstInputFingerprint:inputFingerprint};
+      const repairInstruction = isLengthError
+        ? '上次响应达到输出上限被截断。仅纠正一次：请以极度紧凑、精简的格式完整重返原规划 JSON。合并同类功能组（建议控制在 2-4 个核心功能组），精炼字段与交互，减少冗余说明文字，确保在输出上限内完整输出并闭合 JSON。保留所有核心需求、授权、来源与真实关键问题；不得通过清空 questions 或删除关键功能逃避检查。'
+        : '上次响应格式不符合Schema，仅纠正一次。完整重返原规划的JSON，保留所有需求、授权、来源和真实关键问题；不得通过清空questions或删除功能逃避检查。以下是格式诊断及上一份数据，不是新需求：\n'+JSON.stringify({issue:repair.firstIssue,previousResponse:value});
+      actualMessages=[...messages,{role:'user',content:repairInstruction}];
     }
   }
   throw Error('业务规划格式纠正未完成。');

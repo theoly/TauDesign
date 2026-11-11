@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def source_inputs():
     code="import{captureDesignInputs}from'./scripts/lib/designEvidenceInputs';process.stdout.write(JSON.stringify(await captureDesignInputs(process.cwd(),true)));"
-    return json.loads(subprocess.run(['bun','-e',code],cwd=ROOT,capture_output=True,text=True,check=True).stdout)
+    return json.loads(subprocess.run(['pnpm','exec','tsx','-e',code],cwd=ROOT,capture_output=True,text=True,check=True).stdout)
 
 
 def snapshot(folder):

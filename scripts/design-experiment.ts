@@ -5,7 +5,7 @@ import {makeExperimentPlan,assertExperimentPlan,blindExperimentIndex,summarizeEx
 import {buildBlindReviewHtml} from '../src/services/ai/designKnowledge/experimentReview';
 import {captureDesignInputs,sha256} from './lib/designEvidenceInputs';
 const root=resolve(dirname(fileURLToPath(import.meta.url)),'..'),[command,flag,folder,...args]=process.argv.slice(2);
-if(!['prepare','bundle','summarize'].includes(command)||flag!=='--output'||!folder)throw Error('Usage: bun scripts/design-experiment.ts prepare|bundle|summarize --output directory [prepare: --seed number; summarize: review.json ...]; prepare reads sanitized identity JSON on stdin.');
+if(!['prepare','bundle','summarize'].includes(command)||flag!=='--output'||!folder)throw Error('Usage: pnpm exec tsx scripts/design-experiment.ts prepare|bundle|summarize --output directory [prepare: --seed number; summarize: review.json ...]; prepare reads sanitized identity JSON on stdin.');
 const out=resolve(root,folder),read=async<T,>(path:string):Promise<T>=>JSON.parse(await readFile(path,'utf8'));
 if(command==='prepare'){
  if(args.length!==2||args[0]!=='--seed')throw Error('prepare requires an explicit frozen --seed');
@@ -15,7 +15,7 @@ if(command==='prepare'){
  if(identity.sourceFingerprint!==sourceFingerprint)throw Error('Prepared runtime source fingerprint does not match current inputs.');
  const data=await read<{version:number;cases:ExperimentScenario[]}>(resolve(root,'test/fixtures/design-knowledge/generation-v1.json'));if(data.version!==1)throw Error('Unknown generation fixture version');
  const plan=makeExperimentPlan(data.cases,Number(args[1]),identity);await mkdir(out,{recursive:true});
- await writeFile(resolve(out,'input-manifest.json'),JSON.stringify({version:1,createdAt:new Date().toISOString(),sourceSha256:inputs,sourceFingerprint,planFingerprint:sha256(JSON.stringify(plan)),runtime:{bun:process.versions.bun,platform:process.platform,arch:process.arch}},null,2)+'\n',{flag:'wx'});
+ await writeFile(resolve(out,'input-manifest.json'),JSON.stringify({version:1,createdAt:new Date().toISOString(),sourceSha256:inputs,sourceFingerprint,planFingerprint:sha256(JSON.stringify(plan)),runtime:{node:process.versions.node,bun:(process.versions as any).bun,platform:process.platform,arch:process.arch}},null,2)+'\n',{flag:'wx'});
  await writeFile(resolve(out,'plan.json'),JSON.stringify(plan,null,2)+'\n',{flag:'wx'});console.log(JSON.stringify({planId:plan.id,pairs:plan.pairs.length,runs:plan.runs.length,sourceFingerprint}));
 }else{
  const plan=await read<ExperimentPlan>(resolve(out,'plan.json'));assertExperimentPlan(plan);

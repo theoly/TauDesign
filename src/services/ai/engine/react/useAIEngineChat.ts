@@ -121,6 +121,7 @@ export interface ChatMessageItem {
   taskBudget?:import('../../taskBudget').TaskBudgetSnapshot;
   modificationReview?: ModificationReviewState;
   pagePlan?:MultiPageReview;
+  pageTaskPlan?: PageTaskSnapshot;
   preActionSnapshot?: {
     screenId: string;
     screenName: string;
@@ -164,6 +165,8 @@ export interface SendMessageOptions {
   };
   displayText?: string;
   textReferences?: TextReference[];
+  /** 复用先前已梳理的功能规划快照，直接跳过 planning 阶段 */
+  reusedPageTaskPlan?: PageTaskSnapshot;
 }
 
 export function hasExplicitModifyIntent(text: string): boolean {
@@ -759,7 +762,7 @@ export function useAIEngineChat() {
       options?.displayText || extractCleanUserPrompt(textToSend);
 
     // Frozen plans survive explicit continuation and local repair. Legacy tasks stay legacy.
-    const inheritedTaskPlan=resuming?.pageTaskPlan??repairing?.value.draft.pageTaskSource?.pageTaskPlan??recovered?.source.contract.pageTaskPlan;
+    const inheritedTaskPlan=options?.reusedPageTaskPlan??resuming?.pageTaskPlan??repairing?.value.draft.pageTaskSource?.pageTaskPlan??recovered?.source.contract.pageTaskPlan;
     const wholePageRedesign=Boolean(resuming?.contract.wholePageRedesign||!repairing&&decision.action==='modify_screen'&&!decision.elementNid&&(options?.wholePageRedesign||explicitlyRequestsPageRedesign(cleanDisplayPrompt)));
     const planPageTask=Boolean(inheritedTaskPlan||(!resuming&&!repairing&&(decision.action==='create_screen'||(decision.action==='modify_screen'&&!decision.elementNid&&(wholePageRedesign||requiresFunctionalPlanning(cleanDisplayPrompt))))));
 
@@ -787,7 +790,7 @@ export function useAIEngineChat() {
         isGenerating: true,
         designBrief: taskBrief,
         generationInputFingerprint: creationContext,
-        generationProgress:planPageTask?(inheritedTaskPlan?'正在复核原功能与交互规划…':'正在梳理用户任务、必要信息与交互状态…'):undefined,
+        generationProgress:planPageTask?(inheritedTaskPlan?'已复用先前梳理的功能规划，正在生成页面…':'正在梳理用户任务、必要信息与交互状态…'):undefined,
         thinkingStage: 1, // 1: 分析需求
         executionEvents:[{phase:'preparing',at:Date.now()}],
         preActionSnapshot: preSnapshot,
@@ -866,7 +869,7 @@ export function useAIEngineChat() {
         contextualGuidance:!resuming&&!repairing&&!recovered?contextualGuidance:undefined,
         pageTaskPlanning:planPageTask?{snapshot:inheritedTaskPlan}:undefined,
         wholePageRedesign,
-        onTaskPlan:()=>{if(!controller.signal.aborted){setThinkingStage(2);setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,thinkingStage:2,generationProgress:repairing?'原功能规划复核通过，正在定点修复已确认文案…':inheritedTaskPlan?'原功能规划复核通过，正在继续页面设计…':'功能、信息与交互规划已完成，正在生成页面布局…'}:m));}},
+        onTaskPlan:(taskPlan)=>{if(!controller.signal.aborted){setThinkingStage(2);setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,thinkingStage:2,pageTaskPlan:taskPlan,workflowContract:m.workflowContract?{...m.workflowContract,pageTaskPlan:taskPlan}:undefined,generationProgress:repairing?'原功能规划复核通过，正在定点修复已确认文案…':inheritedTaskPlan?'已复用已梳理的功能规划，正在生成页面…':'功能、信息与交互规划已完成，正在生成页面布局…'}:m));}},
         resume: resuming?.checkpoint,
         resumeContract:resuming?.contract,
         qualityRepair: repairing ? {draft:repairing.value.draft,labels:repairing.labels} : undefined,
@@ -948,7 +951,8 @@ export function useAIEngineChat() {
       const completionTokens = stoppedBeforeHtml?0:output.usage?.outputTokens ?? Math.max(1, Math.round((output.extractedHtml?.length || output.omittedResponseChars || output.rawResponse.length || 100) / 3.5));
       let turnUsage = { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens };
       setMessages(prev => prev.map(m => m.id === assistantMsgId ? {
-        ...m, usage: turnUsage, usageNote:planPageTask&&!inheritedTaskPlan?'本行只含页面生成与修复；功能规划等步骤的累计用量见任务预算。':undefined, generationWarnings: output.warnings, elapsedSeconds,taskBudget:output.taskBudget,workflowContract:output.workflowContract
+        ...m, usage: turnUsage, usageNote:planPageTask&&!inheritedTaskPlan?'本行只含页面生成与修复；功能规划等步骤的累计用量见任务预算。':undefined, generationWarnings: output.warnings, elapsedSeconds,taskBudget:output.taskBudget,workflowContract:output.workflowContract,
+        pageTaskPlan: output.workflowContract?.pageTaskPlan ?? m.pageTaskPlan
       } : m));
       if (controller.signal.aborted || useProjectStore.getState().id!==requestState.id || useProjectStore.getState().folderPath!==requestState.folderPath) return;
       if(!bindingCurrent()){
@@ -1552,12 +1556,15 @@ export function useAIEngineChat() {
     }
   };
 
-  const retryTurn = (msgId: string) => {
+  const retryTurn = (msgId: string, retryOptions?: { rePlan?: boolean; withoutAttachment?: boolean }) => {
     const target = messages.find((m) => m.id === msgId);
     if (!target?.originalUserPrompt || isGenerating) return;
     if(target.structuredRetry){const retry=target.structuredRetry;void confirmModification(retry.reviewId,retry.selected,retry.extra,retry.mode);return;}
-    sendMessage(target.originalUserPrompt, target.originalAttachment, {
+    const planToReuse = (retryOptions?.rePlan || retryOptions?.withoutAttachment) ? undefined : (target.workflowContract?.pageTaskPlan ?? target.pageTaskPlan);
+    const attachmentToUse = retryOptions?.withoutAttachment ? undefined : target.originalAttachment;
+    sendMessage(target.originalUserPrompt, attachmentToUse, {
       sectioned:target.sectionedMode,
+      reusedPageTaskPlan: planToReuse,
       ...(target.originalDecision?.elementNid?{referencedElement:{nid:target.originalDecision.elementNid,tagName:'element',screenName:target.preActionSnapshot?.screenName}}:{}),
       referencedScreenId: target.originalReferencedScreenId ?? target.preActionSnapshot?.screenId ?? null
     });

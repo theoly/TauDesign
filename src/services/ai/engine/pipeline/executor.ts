@@ -233,9 +233,9 @@ export class PipelineExecutor {
     if(!resuming&&(workflowContract.operation==='create'||options.wholePageRedesign))await options.onTaskDraft?.({phase:'started',contract:workflowContract,budget:taskBudget?.snapshot()});
 
     if(options.pageTaskPlanning||options.wholePageRedesign){
-      phase('planning');
+      const planning=options.pageTaskPlanning??{};
+      if(!planning.snapshot)phase('planning');
       try{
-        const planning=options.pageTaskPlanning??{};
         if(!['create','modify'].includes(workflowContract.operation)||workflowContract.elementNid)throw Error('当前业务规划入口仅支持新建或已授权的页面功能修改。');
         if(planning.snapshot&&planning.confirmed)throw Error('业务规划不能同时指定续写快照和确认计划。');
         if((options.resume||options.sectioned?.resume||options.qualityRepair)&&!planning.snapshot)throw Error('继续任务缺少原业务规划，请重新生成。');
@@ -243,6 +243,7 @@ export class PipelineExecutor {
           bindConfirmedPageTaskPlan(workflowContract,planning.confirmed.plan,planning.confirmed.request):await preparePageTaskPlan(withTaskProvenance(engineCore,workflowContract.taskId,'functional-plan'),{
           contract:workflowContract,provider,model,budget:taskBudget!,projectKnowledge:options.projectKnowledge,baselineHtml:sourceTarget?.htmlContent,textReferences:input.textReferences,
           attachment:input.attachment,useCustomNavigation:options.useCustomNavigation,wholePageRedesign:options.wholePageRedesign,signal,
+          maxTokens: taskBudget?.canReserve(4096) ? 4096 : 3072,
           isCurrent:()=>!signal?.aborted&&(options.isCurrent?.()??true)});
         const issue=pageTaskPlanIssue(workflowContract);if(issue)throw Error(issue);
         if(signal?.aborted||options.isCurrent?.()===false)throw Error('任务或工程已变化，未使用业务规划。');

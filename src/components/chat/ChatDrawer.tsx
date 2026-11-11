@@ -1492,6 +1492,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           💡 提示：响应流在传输中断开；若完整页面尚未到达，可直接重试。
                         </div>
                       )}
+                      {(m.text?.includes('数据流传输超时') || m.text?.includes('[timeout]')) && (
+                        <div className="text-[10px] text-amber-400/90 bg-amber-950/40 p-1.5 rounded border border-amber-900/60 leading-relaxed">
+                          💡 提示：模型连续 90 秒未返回任何数据分片。若当前模型响应较慢或处理图片超时，建议在右上角指派更高效的模型；如附带了参考图，也可尝试“仅重试文字要求”。
+                        </div>
+                      )}
+                      {m.text?.includes('结构化输出达到输出上限') && (
+                        <div className="text-[10px] text-amber-400/90 bg-amber-950/40 p-1.5 rounded border border-amber-900/60 leading-relaxed">
+                          💡 提示：业务规划内容过长或模型深度思考占满输出预算导致截断。系统已优化深度思考控制与自愈纠错，点击重试将自动以紧凑模式重新生成。
+                        </div>
+                      )}
                       {!isCurrentGenerating && (
                         <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-red-900/40">
                           {m.continuationAvailable&&<button type="button" onClick={()=>engine.continueTurn(m.id)} className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px]" title="使用本次会话保留的片段继续，不重新生成已完成部分">{m.sectionedAvailable?'继续区块设计':'继续未完成设计'}</button>}
@@ -1501,10 +1511,39 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             type="button"
                             onClick={() => engine.retryTurn(m.id)}
                             className="flex items-center gap-1 px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[11px] font-medium transition cursor-pointer shadow-sm"
+                            title={Boolean(m.pageTaskPlan || m.workflowContract?.pageTaskPlan) ? '复用已完成的功能与交互规划，直接重试页面生成' : '重新发起本次请求'}
                           >
                             <RefreshCw className="w-3 h-3" />
-                            <span>{m.outputLimitReached||m.sectionedMode?'从头重新生成':'直接重试'}</span>
+                            <span>
+                              {m.outputLimitReached||m.sectionedMode
+                                ? '从头重新生成'
+                                : (m.pageTaskPlan || m.workflowContract?.pageTaskPlan)
+                                ? '直接重试 (复用规划)'
+                                : m.text?.includes('结构化输出达到输出上限')
+                                ? '直接重试 (紧凑自愈)'
+                                : '直接重试'}
+                            </span>
                           </button>
+                          {Boolean(m.pageTaskPlan || m.workflowContract?.pageTaskPlan) && !m.outputLimitReached && !m.sectionedMode && (
+                            <button
+                              type="button"
+                              onClick={() => engine.retryTurn(m.id, { rePlan: true })}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] transition cursor-pointer"
+                              title="不使用先前梳理的规划，重新分析需求并重新规划功能与交互"
+                            >
+                              <span>重新梳理规划</span>
+                            </button>
+                          )}
+                          {m.originalAttachment && (m.text?.includes('timeout') || m.text?.includes('数据流传输超时') || m.text?.includes('网络') || m.isError) && (
+                            <button
+                              type="button"
+                              onClick={() => engine.retryTurn(m.id, { withoutAttachment: true })}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] transition cursor-pointer"
+                              title="跳过参考图仅发送文字要求，排查是否由于模型解析大图超时导致假死"
+                            >
+                              <span>仅重试文字要求 (不附图)</span>
+                            </button>
+                          )}
                           {m.preActionSnapshot && (
                             <button
                               type="button"

@@ -14,7 +14,7 @@ export async function captureDesignInputs(root:string,includeTests=false){
  }
  for(const dir of ['src','scripts','src-tauri','public'])await visit(resolve(root,dir));
  if(includeTests)await visit(resolve(root,'test'));
- for(const file of await readdir(root))if(/^(?:package\.json|bun\.lock|index\.html|.*\.config\.(?:ts|js|cjs|mjs)|tsconfig.*\.json|bunfig\.toml)$/.test(file))paths.push(file);
+ for(const file of await readdir(root))if(/^(?:package\.json|pnpm-lock\.yaml|bun\.lock|index\.html|.*\.config\.(?:ts|js|cjs|mjs)|tsconfig.*\.json|bunfig\.toml)$/.test(file))paths.push(file);
  paths.push('test/fixtures/design-knowledge/generation-v1.json','test/fixtures/design-experiment.html','test/fixtures/design-native-acceptance.html');
  const entries=await Promise.all([...new Set(paths)].sort().map(async path=>[path,sha256(await readFile(resolve(root,path)))]));
  return Object.fromEntries(entries) as Record<string,string>;

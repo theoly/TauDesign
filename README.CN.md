@@ -127,7 +127,7 @@ AI 请求会将提示词及工作流采用的页面、图片或文档上下文�
 
 前端使用 React 18、TypeScript、Vite 6、Zustand 和 Immer，桌面壳使用 Tauri 2 与 Rust。
 
-安装 [Bun](https://bun.sh/docs/installation)（CI 固定为 **1.3.5**）、用于 Node 工具的 Node.js 22，以及通过 [rustup](https://rustup.rs/) 安装的 Rust stable/Cargo。桌面构建还需要对应平台的系统依赖：
+安装 Node.js 22、包管理器 [pnpm](https://pnpm.io/)（推荐 >= 12.0.0），以及通过 [rustup](https://rustup.rs/) 安装的 Rust stable/Cargo。桌面构建还需要对应平台的系统依赖：
 
 | 平台 | 环境要求 |
 | --- | --- |
@@ -140,13 +140,13 @@ AI 请求会将提示词及工作流采用的页面、图片或文档上下文�
 ### 安装与调试
 
 ```bash
-bun install --frozen-lockfile
+pnpm install --frozen-lockfile
 ```
 
 仅调试前端：
 
 ```bash
-bun run dev
+pnpm dev
 ```
 
 浏览器访问 `http://localhost:5173`。Vite 使用固定端口，若已占用需先停止原服务。浏览器模式通过 Vite 代理访问 AI，并使用存储回退；原生工程文件读写、系统对话框和原生 PNG 应在桌面模式验证。
@@ -154,7 +154,7 @@ bun run dev
 启动完整桌面应用：
 
 ```bash
-bun run tauri dev
+pnpm run tauri dev
 ```
 
 Tauri 会自动启动 Vite，请勿同时另开一个开发服务占用 5173。API 密钥在应用内配置，构建过程不需要密钥。
@@ -162,16 +162,16 @@ Tauri 会自动启动 Vite，请勿同时另开一个开发服务占用 5173。A
 ### 验证与构建
 
 ```bash
-bun test
-bun run type-check
-bun run build
+pnpm test
+pnpm run type-check
+pnpm build
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
 前端产物位于 `dist/`。在目标操作系统上构建桌面包：
 
 ```bash
-bun run tauri:build
+pnpm run tauri:build
 ```
 
 Tauri 产物位于 `src-tauri/target/release/bundle/`。如需使用下述按平台选择的默认打包格式，请运行仓库打包脚本。
@@ -181,7 +181,7 @@ Tauri 产物位于 `src-tauri/target/release/bundle/`。如需使用下述按平
 打包脚本需要 Bash 和 `jq`；Windows 请在 Git Bash 中执行。
 
 ```bash
-bun run package:desktop
+pnpm run package:desktop
 ```
 
 产物收集到 `dist-desktop/`，本地产品名称和应用版本来自 `src-tauri/tauri.conf.json`。
@@ -195,7 +195,7 @@ bun run package:desktop
 可选的 macOS 格式：
 
 ```bash
-PACKAGE_DMG=1 PACKAGE_ZIP=1 bun run package:desktop
+PACKAGE_DMG=1 PACKAGE_ZIP=1 pnpm run package:desktop
 ```
 
 `SKIP_BUILD=1` 仅收集已有产物。`PACKAGE_PLATFORM` 只覆盖平台检测，不配置交叉编译。分发签名与公证需要单独配置。

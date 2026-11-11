@@ -1,5 +1,6 @@
 /** Developer-only local evidence audit. No model/upload entry point; never changes user preferences. */
 import {readFile,writeFile} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
 import {resolve,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {assertExperimentPlan,summarizeExperiment,type ExperimentPlan,type ExperimentRun,type HumanReview} from '../src/services/ai/designKnowledge/experiment';
@@ -12,7 +13,7 @@ for(let i=0;i<args.length;i++){
  const key=args[i],value=args[++i];if(!value)throw Error('Missing argument');
  if(key==='--review')reviews.push(resolve(root,value));else if(['--experiment','--offline','--acceptance'].includes(key)&&!paths[key])paths[key]=resolve(root,value);else throw Error('Unknown or duplicate argument');
 }
-if(!paths['--experiment']||!paths['--offline']||!paths['--acceptance'])throw Error('Usage: bun scripts/check-design-rollout.ts --experiment DIR --offline DIR --acceptance DIR [--review FILE ...]');
+if(!paths['--experiment']||!paths['--offline']||!paths['--acceptance'])throw Error('Usage: pnpm exec tsx scripts/check-design-rollout.ts --experiment DIR --offline DIR --acceptance DIR [--review FILE ...]');
 const read=async<T=any>(path:string):Promise<T>=>JSON.parse(await readFile(path,'utf8'));
 const optional=async(path:string)=>{try{return await read(path);}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return {};throw error;}};
 const exp=paths['--experiment'],plan=await read<ExperimentPlan>(resolve(exp,'plan.json')),manifest=await read(resolve(exp,'input-manifest.json'));assertExperimentPlan(plan);
@@ -34,7 +35,8 @@ const summary=summarizeExperiment(plan,runs,await Promise.all(reviews.map(path=>
 const offline=await optional(resolve(paths['--offline'],'report.json')),offlineManifest=await optional(resolve(paths['--offline'],'input-manifest.json'));
 // Only evaluator/selector runtime dependencies govern the original held-out result.
 // Unused experiment/review modules may be developed afterward; never rerun or tune the held-out selector here.
-const offlinePaths=['catalog','selector','safety','types','calibration','evaluation','offlineEvaluation'].map(name=>`src/services/ai/designKnowledge/${name}.ts`).concat(['scripts/evaluate-design-offline.ts','test/fixtures/design-knowledge/relevance-v1.json','package.json','bun.lock']);
+const lockFile=existsSync(resolve(root,'pnpm-lock.yaml'))?'pnpm-lock.yaml':'bun.lock';
+const offlinePaths=['catalog','selector','safety','types','calibration','evaluation','offlineEvaluation'].map(name=>`src/services/ai/designKnowledge/${name}.ts`).concat(['scripts/evaluate-design-offline.ts','test/fixtures/design-knowledge/relevance-v1.json','package.json',lockFile]);
 let offlineCurrent=true;for(const path of offlinePaths){const actual=sha256(await readFile(resolve(root,path)));if(offline.sourceSha256?.[path]!==actual||offlineManifest.sourceSha256?.[path]!==actual)offlineCurrent=false;}
 const cal=offline.calibration?.contextual,held=offline.heldOut?.contextual;
 const offlinePassed=!!cal&&!!held&&Object.values(offlinePartitionGates(cal)).every(Boolean)&&Object.values(offlinePartitionGates(held)).every(Boolean)&&cal.rows.length===40&&held.rows.length===20&&cal.rows.every((r:any)=>r.correct)&&cal.negative.total+held.negative.total>=20&&held.negative.total>=10&&Object.values(offline.scope??{}).length===4&&Object.values(offline.scope).every((v:any)=>Array.isArray(v)&&v.length===0)&&offline.inputsUnchanged===true;

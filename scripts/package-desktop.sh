@@ -84,7 +84,7 @@ echo "🚀 Step 1: 构建 ${APP_NAME} ${VERSION} ..."
 if [ "${SKIP_BUILD:-}" = "1" ]; then
   echo "   (SKIP_BUILD=1，跳过构建)"
 else
-  bun run tauri build --bundles "$BUNDLES"
+  pnpm exec tauri build --bundles "$BUNDLES"
 fi
 
 mkdir -p "$OUT_DIR"

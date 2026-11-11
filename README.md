@@ -127,7 +127,7 @@ AI requests send your prompt and the page, image or document context included by
 
 The frontend uses React 18, TypeScript, Vite 6, Zustand and Immer. The desktop shell uses Tauri 2 and Rust.
 
-Install [Bun](https://bun.sh/docs/installation) (CI pins **1.3.5**), Node.js 22 for Node-based tooling, and Rust stable/Cargo through [rustup](https://rustup.rs/). Desktop builds also need the target platform's system dependencies:
+Install Node.js 22, [pnpm](https://pnpm.io/) (recommended >= 12.0.0), and Rust stable/Cargo through [rustup](https://rustup.rs/). Desktop builds also need the target platform's system dependencies:
 
 | Platform | Requirements |
 | --- | --- |
@@ -140,13 +140,13 @@ See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for pla
 ### Install and develop
 
 ```bash
-bun install --frozen-lockfile
+pnpm install --frozen-lockfile
 ```
 
 For frontend development:
 
 ```bash
-bun run dev
+pnpm dev
 ```
 
 Open `http://localhost:5173`. Vite uses a strict port; stop an existing server on that port first. Browser mode uses the Vite AI proxy and a fallback storage path. Validate native file storage, system dialogs and native PNG export in desktop mode.
@@ -154,7 +154,7 @@ Open `http://localhost:5173`. Vite uses a strict port; stop an existing server o
 For the complete desktop app:
 
 ```bash
-bun run tauri dev
+pnpm tauri dev
 ```
 
 Tauri starts Vite automatically; do not run a second dev server on port 5173. API credentials are configured in the app and are not required to build it.
@@ -162,16 +162,16 @@ Tauri starts Vite automatically; do not run a second dev server on port 5173. AP
 ### Validate and build
 
 ```bash
-bun test
-bun run type-check
-bun run build
+pnpm test
+pnpm run type-check
+pnpm build
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
 The frontend build goes to `dist/`. To build native desktop bundles on the target operating system:
 
 ```bash
-bun run tauri:build
+pnpm run tauri:build
 ```
 
 Tauri bundles go to `src-tauri/target/release/bundle/`. Use the packaging script below for its platform-specific defaults.
@@ -181,7 +181,7 @@ Tauri bundles go to `src-tauri/target/release/bundle/`. Use the packaging script
 The repository packaging script requires Bash and `jq`; use Git Bash on Windows.
 
 ```bash
-bun run package:desktop
+pnpm run package:desktop
 ```
 
 Artifacts are collected into `dist-desktop/`. The local product name and app version come from `src-tauri/tauri.conf.json`.
@@ -195,7 +195,7 @@ Artifacts are collected into `dist-desktop/`. The local product name and app ver
 Optional macOS formats:
 
 ```bash
-PACKAGE_DMG=1 PACKAGE_ZIP=1 bun run package:desktop
+PACKAGE_DMG=1 PACKAGE_ZIP=1 pnpm run package:desktop
 ```
 
 `SKIP_BUILD=1` collects existing artifacts. `PACKAGE_PLATFORM` overrides platform detection only; it does not configure cross-compilation. Signing and notarization require a separate distribution setup.

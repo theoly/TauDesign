@@ -43,8 +43,32 @@ export function observeRequestActivity(core:AIEngineCore,onActivity:(snapshot:Re
   const monitored:AIEngineCore={
     async generateObject<T>(schema:Record<string,unknown>,options:Omit<StreamTextOptions,'jsonSchema'>){
       const request=begin(options);
-      try{const result=await core.generateObject<T>(schema,{...options,onTransportEvidence:r=>{request.transport(r);options.onTransportEvidence?.(r);}});request.json(result);request.finish(options.signal?.aborted?'cancelled':'returned');return result;}
-      catch(error){request.finish(options.signal?.aborted?'cancelled':'failed');throw error;}
+      try{
+        const result=await core.generateObject<T>(schema,{
+          ...options,
+          onUsage:u=>{
+            if(u&&(u.outputTokens||u.reasoningTokens)){
+              const resTok=u.reasoningTokens??0,textTok=Math.max(0,u.outputTokens-resTok);
+              request.result('x'.repeat(Math.round(textTok*3.5)),resTok?'r'.repeat(Math.round(resTok*3.5)):undefined);
+            }
+            options.onUsage?.(u);
+          },
+          onTransportEvidence:r=>{
+            request.transport(r);
+            if(r.usage){
+              const resTok=r.usage.reasoningTokens??0,textTok=Math.max(0,r.usage.outputTokens-resTok);
+              request.result('x'.repeat(Math.round(textTok*3.5)),resTok?'r'.repeat(Math.round(resTok*3.5)):undefined);
+            }
+            options.onTransportEvidence?.(r);
+          }
+        });
+        request.json(result);
+        request.finish(options.signal?.aborted?'cancelled':'returned');
+        return result;
+      }catch(error){
+        request.finish(options.signal?.aborted?'cancelled':'failed');
+        throw error;
+      }
     },
     streamText(options){
       const request=begin(options);

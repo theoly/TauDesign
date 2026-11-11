@@ -36,13 +36,13 @@ def current_binding():
 
 def source_fingerprint():
     code = "import {captureDesignInputs,sha256} from './scripts/lib/designEvidenceInputs';process.stdout.write(sha256(JSON.stringify(await captureDesignInputs(process.cwd()))));"
-    return subprocess.run(['bun', '-e', code], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+    return subprocess.run(['pnpm', 'exec', 'tsx', '-e', code], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
 
 def read_plan(output):
     # Use the same plan validator/serialization as preparation; no Python JSON hash drift.
     code = "import{readFile}from'node:fs/promises';import{sha256}from'./scripts/lib/designEvidenceInputs';import{assertExperimentPlan}from'./src/services/ai/designKnowledge/experiment';const folder=process.argv[1],p=JSON.parse(await readFile(folder+'/plan.json','utf8')),m=JSON.parse(await readFile(folder+'/input-manifest.json','utf8'));assertExperimentPlan(p);if(sha256(JSON.stringify(p))!==m.planFingerprint)throw Error('Plan changed');process.stdout.write(JSON.stringify(p));"
-    return json.loads(subprocess.run(['bun', '-e', code, str(output)], cwd=ROOT, capture_output=True, text=True, check=True).stdout)
+    return json.loads(subprocess.run(['pnpm', 'exec', 'tsx', '-e', code, str(output)], cwd=ROOT, capture_output=True, text=True, check=True).stdout)
 
 
 def scrub(value, binding):
@@ -116,7 +116,7 @@ async def run(args):
                 fingerprints = await runtime_fingerprints(page)
                 identity = {'providerId': binding['provider']['id'], 'model': binding['model'], 'providerFingerprint': provider_hash, 'sourceFingerprint': source_hash, **fingerprints}
                 if not (output/'plan.json').exists():
-                    subprocess.run(['bun', 'scripts/design-experiment.ts', 'prepare', '--output', str(output), '--seed', str(args.seed)], input=json.dumps(identity), cwd=ROOT, text=True, check=True, capture_output=True)
+                    subprocess.run(['pnpm', 'exec', 'tsx', 'scripts/design-experiment.ts', 'prepare', '--output', str(output), '--seed', str(args.seed)], input=json.dumps(identity), cwd=ROOT, text=True, check=True, capture_output=True)
                 plan = read_plan(output)
                 if plan['identity'] != identity:
                     raise ValueError('Frozen identity changed; old experiment cannot resume with new inputs')
@@ -170,7 +170,7 @@ async def run(args):
                         break
                     if args.max_runs and completed >= args.max_runs:
                         break
-                subprocess.run(['bun', 'scripts/design-experiment.ts', 'bundle', '--output', str(output)], cwd=ROOT, check=True)
+                subprocess.run(['pnpm', 'exec', 'tsx', 'scripts/design-experiment.ts', 'bundle', '--output', str(output)], cwd=ROOT, check=True)
             finally:
                 await browser.close()
 

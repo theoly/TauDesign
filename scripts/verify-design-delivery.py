@@ -11,13 +11,13 @@ ROOT=Path(__file__).resolve().parents[1]
 
 def inputs(include_tests=False):
     code="import{captureDesignInputs}from'./scripts/lib/designEvidenceInputs';process.stdout.write(JSON.stringify(await captureDesignInputs(process.cwd(),"+str(include_tests).lower()+")));"
-    return json.loads(subprocess.run(['bun','-e',code],cwd=ROOT,capture_output=True,text=True,check=True).stdout)
+    return json.loads(subprocess.run(['pnpm','exec','tsx','-e',code],cwd=ROOT,capture_output=True,text=True,check=True).stdout)
 
 
 def main(args):
     output=args.output.resolve();output.mkdir(parents=True,exist_ok=False)
     before=inputs();tests=inputs(True);report={'version':1,'scope':'final-source-acceptance','sourceInputs':before,'testInputs':tests,'inputsUnchanged':False,'commands':[],'status':'running'}
-    commands=[('unit',['bun','test']),('types',['bun','run','type-check']),('build',['bun','run','build']),
+    commands=[('unit',['pnpm','test']),('types',['pnpm','run','type-check']),('build',['pnpm','run','build']),
       ('browser',['python3','scripts/verify-design-evidence.py','--output',str(output/'browser')]),
       ('native',['python3','scripts/verify-design-native.py','--project',str(args.mobile.resolve()),'--project',str(args.pc.resolve()),'--output',str(output/'native')])]
     try:

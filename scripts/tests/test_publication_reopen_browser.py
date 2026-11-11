@@ -12,7 +12,7 @@ ROOT=Path(__file__).resolve().parents[2]
 
 def inputs():
     code="import {captureDesignInputs} from './scripts/lib/designEvidenceInputs.ts'; console.log(JSON.stringify(await captureDesignInputs(process.cwd(),true)));"
-    return json.loads(subprocess.check_output(['bun','-e',code],cwd=ROOT,text=True))
+    return json.loads(subprocess.check_output(['pnpm','exec','tsx','-e',code],cwd=ROOT,text=True))
 
 async def run(args):
     args.output.mkdir(parents=True,exist_ok=False);before=inputs();rows=[]
