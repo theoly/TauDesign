@@ -60,8 +60,8 @@ export function encodeModelRequest(options: StreamTextOptions): PreparedRequest 
       model,
       messages: openAiMessages,
       ...(openAiMessages.some(m => 'partial' in m) ? { enable_thinking: false } : {}),
-      ...(options.enableThinking!==undefined&&(supportsThinkingToggle(provider,model)||isDeepSeekModel(model))?{enable_thinking:options.enableThinking}:{}),
-      ...(options.enableThinking!==undefined&&(supportsDeepSeekThinking(provider,model)||isDeepSeekModel(model))?{thinking:{type:options.enableThinking?'enabled':'disabled'}}:{}),
+      ...(options.enableThinking!==undefined&&supportsThinkingToggle(provider,model)?{enable_thinking:options.enableThinking}:{}),
+      ...(options.enableThinking!==undefined&&(supportsDeepSeekThinking(provider,model) || (isDeepSeekModel(model) && (provider.id.startsWith('prov-custom') || provider.id.includes('custom'))))?{thinking:{type:options.enableThinking?'enabled':'disabled'},enable_thinking:options.enableThinking}:{}),
       stream: true,
       temperature,
       max_tokens: maxTokens

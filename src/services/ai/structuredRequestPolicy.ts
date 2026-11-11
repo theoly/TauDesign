@@ -14,21 +14,19 @@ function officialHost(provider:AIProviderConfig,host:string):boolean{
  try{const url=new URL(provider.baseUrl);return provider.protocol==='openai_compatible'&&url.protocol==='https:'&&url.hostname===host&&!url.username&&!url.password&&!url.port&&!url.search&&!url.hash&&/^\/(?:v1\/?|v1\/chat\/completions\/?|chat\/completions\/?)?$/.test(url.pathname);}catch{return false;}
 }
 export const isDeepSeekModel = (model: string) => model.toLowerCase().includes('deepseek');
-export const supportsDeepSeekThinking = (provider: AIProviderConfig, model: string) => officialHost(provider, 'api.deepseek.com') && model === 'deepseek-flash';
+export const supportsDeepSeekThinking=(provider:AIProviderConfig,model:string)=>officialHost(provider,'api.deepseek.com')&&model==='deepseek-flash';
 /** Explicitly scoped to machine artifacts, not ordinary chat requests. */
-export function artifactThinkingOptions(provider: AIProviderConfig, model: string): { enableThinking?: boolean } {
-  return isDeepSeekModel(model) || supportsDeepSeekThinking(provider, model) || supportsThinkingToggle(provider, model) ? { enableThinking: false } : {};
+export function artifactThinkingOptions(provider:AIProviderConfig,model:string):{enableThinking?:boolean}{
+ return supportsDeepSeekThinking(provider,model)||supportsThinkingToggle(provider,model)?{enableThinking:false}:{};
 }
 /** Only verified native formats; other compatible endpoints use the explicit schema in messages. */
-export function structuredChatOptions(provider: AIProviderConfig, model: string, schema?: Record<string, unknown>, enableThinking?: boolean): Record<string, unknown> {
-  if (!schema) return {};
-  if (supportsDeepSeekThinking(provider, model) || (provider.protocol === 'openai_compatible' && isDeepSeekModel(model))) {
-    return {
-      response_format: { type: 'json_object' },
-      ...(enableThinking !== undefined ? { thinking: { type: enableThinking === true ? 'enabled' : 'disabled' } } : {})
-    };
-  }
-  if (officialHost(provider, 'api.openai.com')) return { response_format: { type: 'json_schema', json_schema: { name: 'extracted_schema', strict: true, schema } } };
-  if (supportsThinkingToggle(provider, model)) return { enable_thinking: enableThinking ?? false };
-  return {};
+export function structuredChatOptions(provider:AIProviderConfig,model:string,schema?:Record<string,unknown>,enableThinking?:boolean):Record<string,unknown>{
+ if(!schema)return {};
+ if(supportsDeepSeekThinking(provider,model))return {response_format:{type:'json_object'},thinking:{type:enableThinking===true?'enabled':'disabled'}};
+ if(officialHost(provider,'api.openai.com'))return {response_format:{type:'json_schema',json_schema:{name:'extracted_schema',strict:true,schema}}};
+ if(enableThinking!==undefined && provider.protocol==='openai_compatible' && isDeepSeekModel(model) && (provider.id.startsWith('prov-custom') || provider.id.includes('custom'))){
+   return {response_format:{type:'json_object'},thinking:{type:enableThinking===true?'enabled':'disabled'}};
+ }
+ if(supportsThinkingToggle(provider,model))return {enable_thinking:enableThinking??false};
+ return {};
 }

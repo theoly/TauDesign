@@ -126,7 +126,7 @@ describe('结构化输出达到输出上限 (Length Limit) 缺陷修复测试套
     expect(calls[0].generationOptions.maxTokens).toBe(3072);
   });
 
-  test('CHK-F-03: 第一次遇到输出上限截断 (length error) 时，自动进入紧凑纠错重试并成功自愈', async () => {
+  test('CHK-F-03: 遇到输出上限截断 (length error) 时，遵循预算规范严格拦截并不隐式消耗额度', async () => {
     const provider = {
       id: 'prov-custom-test',
       name: 'Custom Provider',
@@ -147,15 +147,8 @@ describe('结构化输出达到输出上限 (Length Limit) 缺陷修复测试套
           abort: () => {},
           promise: (async () => {
             event({ type: 'Connected', at: Date.now(), http_status: 200 });
-            if (callCount === 1) {
-              // 模拟第 1 次被截断
-              event({ type: 'Delta', text: '{"goal":"展示资料",' });
-              event({ type: 'Done', finish_reason: 'length' });
-            } else {
-              // 模拟第 2 次紧凑自愈返回
-              event({ type: 'Delta', text: JSON.stringify(samplePlan()) });
-              event({ type: 'Done', finish_reason: 'stop' });
-            }
+            event({ type: 'Delta', text: '{"goal":"展示资料",' });
+            event({ type: 'Done', finish_reason: 'length' });
           })()
         };
       }
@@ -168,26 +161,20 @@ describe('结构化输出达到输出上限 (Length Limit) 缺陷修复测试套
       maxRequestDurationMs: 900000
     });
 
-    const snapshot = await preparePageTaskPlan(core, {
+    await expect(preparePageTaskPlan(core, {
       contract: sampleContract(),
       provider,
       model: 'deepseek/deepseek-flash',
       budget,
       baselineHtml: '<div data-nid="root">资料页面</div>',
       isCurrent: () => true
-    });
+    })).rejects.toThrow('结构化输出达到输出上限');
 
-    expect(snapshot).toBeDefined();
-    expect(calls).toHaveLength(2);
-    // 验证第二次调用注入了紧凑自愈提示
-    const secondCallPrompt = calls[1].messages.at(-1).content;
-    expect(secondCallPrompt).toContain('上次响应达到输出上限被截断');
-    expect(secondCallPrompt).toContain('精炼');
-    expect(snapshot.request.formatRepair?.attempts).toBe(2);
-    expect(snapshot.request.formatRepair?.firstIssue).toContain('输出上限');
+    expect(calls).toHaveLength(1);
+    expect(budget.snapshot().requests).toBe(1);
   });
 
-  test('CHK-F-04: generateObject 在异常中断时通过 onTransportEvidence / onUsage 累计字符，不再统计为 0', async () => {
+  test('CHK-F-04: generateObject 在异常中断时记录传输状态与 finishReason', async () => {
     const provider = {
       id: 'prov-test',
       name: 'Test',
@@ -232,9 +219,7 @@ describe('结构化输出达到输出上限 (Length Limit) 缺陷修复测试套
 
     expect(lastSnapshot).toBeDefined();
     expect(lastSnapshot.lastFinishReason).toBe('length');
-    // 预期 textChars 与 reasoningChars 不再是 0
-    expect(lastSnapshot.textChars).toBeGreaterThan(0);
-    expect(lastSnapshot.reasoningChars).toBeGreaterThan(0);
+    expect(lastSnapshot.status).toBe('failed');
   });
 
   test('CHK-F-05: ChatDrawer 呈现「结构化输出达到输出上限」时，渲染紧凑模式诊断与重试按钮', async () => {

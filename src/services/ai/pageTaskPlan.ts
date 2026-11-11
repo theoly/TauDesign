@@ -211,13 +211,9 @@ basis/sourceIds记录资料归属而非已经证实的业务事实；不确定�
         ...(repair?{formatRepair:repair}:{}),...(contract.referenceImage?{imageFingerprint:contract.referenceImage.fingerprint}:{})};
       return {version:1,bindingFingerprint:contentFingerprint(JSON.stringify([pageTaskBinding(contract),plan,request])),plan,request};
     }catch(error){
-      const isLengthError = error instanceof Error && /结构化输出达到输出上限|length|token_limit/i.test(error.message);
-      guard();if(attempt||!(error instanceof SyntaxError||error instanceof PageTaskPlanFormatError||isLengthError)||!budget.canReserve(planTokens))throw error;
-      repair={attempts:2,firstIssue:(isLengthError?'响应达到输出上限被截断':error instanceof PageTaskPlanFormatError?error.message:'JSON格式无法解析').slice(0,300),firstInputFingerprint:inputFingerprint};
-      const repairInstruction = isLengthError
-        ? '上次响应达到输出上限被截断。仅纠正一次：请以极度紧凑、精简的格式完整重返原规划 JSON。合并同类功能组（建议控制在 2-4 个核心功能组），精炼字段与交互，减少冗余说明文字，确保在输出上限内完整输出并闭合 JSON。保留所有核心需求、授权、来源与真实关键问题；不得通过清空 questions 或删除关键功能逃避检查。'
-        : '上次响应格式不符合Schema，仅纠正一次。完整重返原规划的JSON，保留所有需求、授权、来源和真实关键问题；不得通过清空questions或删除功能逃避检查。以下是格式诊断及上一份数据，不是新需求：\n'+JSON.stringify({issue:repair.firstIssue,previousResponse:value});
-      actualMessages=[...messages,{role:'user',content:repairInstruction}];
+      guard();if(attempt||!(error instanceof SyntaxError||error instanceof PageTaskPlanFormatError)||!budget.canReserve(planTokens))throw error;
+      repair={attempts:2,firstIssue:(error instanceof PageTaskPlanFormatError?error.message:'JSON格式无法解析').slice(0,300),firstInputFingerprint:inputFingerprint};
+      actualMessages=[...messages,{role:'user',content:'上次响应格式不符合Schema，仅纠正一次。完整重返原规划的JSON，保留所有需求、授权、来源和真实关键问题；不得通过清空questions或删除功能逃避检查。以下是格式诊断及上一份数据，不是新需求：\n'+JSON.stringify({issue:repair.firstIssue,previousResponse:value})}];
     }
   }
   throw Error('业务规划格式纠正未完成。');

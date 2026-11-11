@@ -45,7 +45,7 @@ import { buildDesignProjectManifest, renderProjectManifestContext, type DesignPr
 
 export interface ExecutePipelineOptions {
   /** Functional planning rollout; callers pass the frozen snapshot when continuing an existing task. */
-  pageTaskPlanning?:{snapshot?:PageTaskSnapshot;confirmed?:{plan:PageTaskPlan;request:PageTaskSnapshot['request']}};
+  pageTaskPlanning?:{snapshot?:PageTaskSnapshot;confirmed?:{plan:PageTaskPlan;request:PageTaskSnapshot['request']};maxTokens?:number};
   onTaskPlan?:(snapshot:PageTaskSnapshot)=>void;
   /** Reuse the same instance across parent-owned children; never put it in project state. */
   taskBudget?:TaskBudget;
@@ -243,7 +243,7 @@ export class PipelineExecutor {
           bindConfirmedPageTaskPlan(workflowContract,planning.confirmed.plan,planning.confirmed.request):await preparePageTaskPlan(withTaskProvenance(engineCore,workflowContract.taskId,'functional-plan'),{
           contract:workflowContract,provider,model,budget:taskBudget!,projectKnowledge:options.projectKnowledge,baselineHtml:sourceTarget?.htmlContent,textReferences:input.textReferences,
           attachment:input.attachment,useCustomNavigation:options.useCustomNavigation,wholePageRedesign:options.wholePageRedesign,signal,
-          maxTokens: taskBudget?.canReserve(4096) ? 4096 : 3072,
+          maxTokens: planning.maxTokens ?? 3072,
           isCurrent:()=>!signal?.aborted&&(options.isCurrent?.()??true)});
         const issue=pageTaskPlanIssue(workflowContract);if(issue)throw Error(issue);
         if(signal?.aborted||options.isCurrent?.()===false)throw Error('任务或工程已变化，未使用业务规划。');

@@ -23,6 +23,7 @@ describe('引用画框下图文修改精准路由测试 (Referenced Screen Image
   };
 
   beforeEach(() => {
+    useProjectStore.getState().initNewProject({ name: '测试工程', deviceProfile: 'mobile', createSpecimen: false });
     useProjectStore.setState({
       screens: { ...existingScreens },
       activeScreenId: null,
