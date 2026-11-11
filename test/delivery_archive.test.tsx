@@ -59,7 +59,10 @@ describe('durable delivery archive', () => {
     useHistoryStore.getState().redo();
     expect(useProjectStore.getState().screens.target.htmlContent).toBe(after);
     host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host);
-    await act(async () => { root!.render(<DeliveryHistoryPanel projectId={store.id} screen={useProjectStore.getState().screens.target} revision={1} />); await pause(); });
+    await act(async () => { root!.render(<DeliveryHistoryPanel projectId={store.id} screen={useProjectStore.getState().screens.target} revision={1} />); });
+    for (let i = 0; i < 50 && !host.textContent?.includes('已应用'); i++) {
+      await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+    }
     expect(host.textContent).toContain('已应用');
     expect(host.textContent).toContain('修改提交文案');
     expect(host.textContent).toContain('当前 HTML/CSS 与此交付版本一致');

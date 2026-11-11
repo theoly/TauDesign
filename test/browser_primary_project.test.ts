@@ -21,8 +21,15 @@ test('legacy project and History migrate once, keep exact original keys, and sub
  localStorage.setItem(projectKey(f.id),JSON.stringify({...f.doc,name:'过期旧键'}));localStorage.setItem(historyKey(f.id),'{bad old backup');expect((await openBrowserProject(f.id))!.name).toBe('旧工程');
 });
 test('legacy source edits during publication or database failure preserve the old keys and install no partial root',async()=>{
- const f=legacy(),{browserProjectSnapshotStore}=await import('../src/services/storage/browserProjectSnapshot');await f.storage.readManagedSnapshot!();(browserProjectSnapshotStore.compareExchange as any).mockRejectedValueOnce(Error('synthetic database quota'));
- await expect(openBrowserProject(f.id)).rejects.toThrow('quota');expect((await f.storage.readManagedSnapshot!()).files['project.json']).toBeUndefined();expect(localStorage.getItem(projectKey(f.id))).toBe(f.raw);expect(localStorage.getItem(historyKey(f.id))).toBe(f.history);
+ const f=legacy(),{browserProjectSnapshotStore}=await import('../src/services/storage/browserProjectSnapshot');await f.storage.readManagedSnapshot!();
+ const origExchange=(browserProjectSnapshotStore.compareExchange as any).getMockImplementation();
+ (browserProjectSnapshotStore.compareExchange as any).mockImplementation(async(scope:string,...args:any[])=>{
+  if(scope.includes(f.id))throw Error('synthetic database quota');
+  return origExchange?origExchange(scope,...args):true;
+ });
+ try{
+  await expect(openBrowserProject(f.id)).rejects.toThrow('quota');expect((await f.storage.readManagedSnapshot!()).files['project.json']).toBeUndefined();expect(localStorage.getItem(projectKey(f.id))).toBe(f.raw);expect(localStorage.getItem(historyKey(f.id))).toBe(f.history);
+ }finally{if(origExchange)(browserProjectSnapshotStore.compareExchange as any).mockImplementation(origExchange);}
  const changed=legacy(),original=ProjectRepository.prototype.save,newRaw=JSON.stringify({...changed.doc,name:'来源已修改'}),save=spyOn(ProjectRepository.prototype,'save').mockImplementation(function(doc,options){localStorage.setItem(projectKey(changed.id),newRaw);return original.call(this,doc,options);});
  try{await expect(openBrowserProject(changed.id)).rejects.toThrow('已变化');expect((await changed.storage.readManagedSnapshot!()).files['project.json']).toBeUndefined();expect(localStorage.getItem(projectKey(changed.id))).toBe(newRaw);expect(localStorage.getItem(historyKey(changed.id))).toBe(changed.history);}finally{save.mockRestore();}
 });
