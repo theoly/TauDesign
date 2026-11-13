@@ -66,8 +66,8 @@ test('inspector functional additions use the selected container subtree and reta
 });
 test('pending finite edits expose actual call activity and an explicit Stop without changing the page',async()=>{
  let release!:(value:unknown)=>void;spy.mockImplementation(()=>new Promise(resolve=>release=resolve));await start();expect(spy).toHaveBeenCalledTimes(1);
- const summary=host.querySelector('[aria-label="应用调用摘要"]');expect(summary).not.toBeNull();expect(summary!.textContent).toContain('等待调用返回');expect(summary!.textContent).toContain('调用尝试 1 次');expect(host.querySelector('[aria-label="停止局部微调"]')).not.toBeNull();
- await act(async()=>{release(answer);await new Promise(resolve=>setTimeout(resolve,5));});expect(summary!.textContent).toContain('调用已返回');expect(summary!.textContent).toContain('进行中 0 次');expect(useProjectStore.getState().screens.page.htmlContent).toBe(html);
+ const summary=host.querySelector('[aria-label="应用调用摘要"]');expect(summary).not.toBeNull();expect(summary!.textContent).toContain('等待 AI 回复');expect(summary!.textContent).toContain('请求尝试 1 次');expect(host.querySelector('[aria-label="停止局部微调"]')).not.toBeNull();
+ await act(async()=>{release(answer);await new Promise(resolve=>setTimeout(resolve,5));});expect(summary!.textContent).toContain('已收到 AI 回复');expect(summary!.textContent).toContain('进行中 0 次');expect(useProjectStore.getState().screens.page.htmlContent).toBe(html);
 });
 test('Stop immediately admits another edit and a late old result cannot clear the new request',async()=>{
  const pending:Array<{resolve:(value:unknown)=>void}>=[];spy.mockImplementation(()=>new Promise(resolve=>pending.push({resolve})));await start();expect(pending).toHaveLength(1);

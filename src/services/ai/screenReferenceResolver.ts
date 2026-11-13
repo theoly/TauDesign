@@ -11,11 +11,43 @@ export interface ScreenReferenceResolution {
 const normalized=(value:string)=>value.trim().toLocaleLowerCase();
 const boundary=(value:string)=>!value || /^[\s，,。.!！？?；;：:、"“”「」『』《》()（）\[\]]/.test(value) || /^(的|创建|新建|生成|设计|参考|调整|修改|优化)/.test(value);
 
+interface QuotedText {name:string;start:number;end:number;unclosed?:true}
+const quotePairs:Record<string,string>={'"':'"','“':'”','「':'」','『':'』','《':'》'};
+const referenceCue=/(?:参考|基于|仿照|沿用|复用|读取|分析)(?:现有|原有|已有|原)?(?:页面|画框)?\s*$/;
+/** Tokenize top-level pairs first: a closing ASCII quote is never a new reference opener. */
+function quotedText(text:string):QuotedText[]{
+ const spans:QuotedText[]=[],stack:string[]=[];let start=-1;
+ for(let i=0;i<text.length;i++){
+  const ch=text[i];
+  if(ch==='\n'||ch==='\r'){if(stack.length)spans.push({name:text.slice(start+1,i).trim(),start,end:i,unclosed:true});stack.length=0;start=-1;continue;}
+  if(ch==='\\'&&text[i+1]!=='\n'&&text[i+1]!=='\r'){i++;continue;}
+  if(stack.length&&ch===stack.at(-1)){
+   stack.pop();if(!stack.length){spans.push({name:text.slice(start+1,i).trim(),start,end:i+1});start=-1;}continue;
+  }
+  if(quotePairs[ch]){if(!stack.length)start=i;stack.push(quotePairs[ch]);}
+ }
+ if(stack.length)spans.push({name:text.slice(start+1).trim(),start,end:text.length,unclosed:true});
+ return spans;
+}
+const cueBefore=(text:string,position:number)=>referenceCue.test(text.slice(0,position).trimEnd().slice(-32));
+const targetCueBefore=(text:string,position:number)=>/(?:参考|基于|仿照|沿用|复用|读取|分析|修改|调整|优化|润色|更新|重构|重做|改进|把|将)(?:现有|原有|已有|原)?(?:页面|画框)?\s*["“「『《]?\s*$/.test(text.slice(0,position).trimEnd().slice(-32));
+/** Shared by routing and context enrichment, including exact unknown-reference diagnostics. */
+export function quotedScreenReferences(text:string):QuotedText[]{
+ return quotedText(text).filter(span=>(span.name||span.unclosed)&&cueBefore(text,span.start));
+}
+/** Numbered page requirements describe the new UI; document titles/copy are not implicit targets. */
+function pageSpecificationStart(text:string):number{
+ const heading=/^[ \t]{0,3}(?:#{1,6}[ \t]+)?(?:\*\*)?(?:页面|page)[ \t]*[0-9一二三四五六七八九十]+[ \t]*[:：]/im.exec(text);
+ return heading&&/(?:核心功能|功能定位|交互需求|交互逻辑|页面结构)/.test(text.slice(heading.index+heading[0].length))?heading.index:-1;
+}
+
 export function resolveScreenReferences(rawPrompt:string,screens:Record<string,ReferenceScreenIdentity>):ScreenReferenceResolution {
   const result:ScreenReferenceResolution={ids:[],mentionIds:[],unmatchedNames:[],ambiguousNames:[]};
   const text=rawPrompt.toLocaleLowerCase();
   const entries=Object.entries(screens).filter(([,s])=>s.name.trim());
   const names=[...new Set(entries.map(([,s])=>normalized(s.name)))].sort((a,b)=>b.length-a.length);
+  const quotations=quotedText(rawPrompt),quotedAt=new Map(quotations.map(span=>[span.start,span]));
+  const specificationStart=pageSpecificationStart(text);
   const used:Array<[number,number]>=[];
   const add=(name:string,mention:boolean,explicitId?:string)=>{
     const matches=explicitId ? [[explicitId,screens[explicitId]] as const] : entries.filter(([,s])=>normalized(s.name)===normalized(name));
@@ -23,6 +55,7 @@ export function resolveScreenReferences(rawPrompt:string,screens:Record<string,R
     else if(matches.length>1){if(!result.ambiguousNames.includes(name))result.ambiguousNames.push(name);}
     else if(!result.unmatchedNames.includes(name))result.unmatchedNames.push(name);
   };
+  const missingQuote=()=>{const message='页名引号未闭合，请补全后重试';if(!result.unmatchedNames.includes(message))result.unmatchedNames.push(message);};
   // Parse known names first so spaces and punctuation inside the actual name are preserved.
   for(let position=0;position<text.length;position++){
     if(text[position]!=='@'||position>0&&/[\w.]/.test(text[position-1]))continue;
@@ -31,12 +64,13 @@ export function resolveScreenReferences(rawPrompt:string,screens:Record<string,R
     const name=names.find(name=>rest.startsWith(name)&&boundary(rest.slice(name.length)));
     if(id&&(!name||id.length>=name.length)){add(id,true,id);used.push([position,position+id.length+1]);continue;}
     if(name){add(name,true);used.push([position,position+name.length+1]);continue;}
-    const quoted=rest.match(/^["“「『《]([^"”」』》]+)["”」』》]/);
-    const unknown=quoted?.[1]??rest.match(/^[^\s@，,。！？?；;：:、]+/)?.[0];
-    if(unknown){add(unknown,true);used.push([position,position+unknown.length+1]);}
+    const quoted=quotedAt.get(position+1);
+    if(quoted?.unclosed){missingQuote();used.push([position,quoted.end]);continue;}
+    const unknown=quoted?.name??rest.match(/^[^\s@，,。！？?；;：:、]+/)?.[0];
+    if(unknown){add(unknown,true);used.push([position,quoted?.end??position+unknown.length+1]);}
   }
   // A quoted page after an explicit reading/reference verb is an exact reference too.
-  for(const m of rawPrompt.matchAll(/(?:参考|基于|仿照|沿用|复用|读取|分析)(?:现有|原有|已有|原)?(?:页面|画框)?\s*[“「『"《]([^”」』"》]+)[”」』"》]/g))add(m[1],false);
+  for(const span of quotations)if((span.name||span.unclosed)&&cueBefore(rawPrompt,span.start)){if(span.unclosed)missingQuote();else add(span.name,false);}
   // Limit bare-name source matching before a subsequent create command so a new title
   // cannot replace the source in “参考A，创建…B”. Mentions remain explicit anywhere.
   // When creating a page, only bare names immediately following a reference cue before the create command count.
@@ -51,6 +85,7 @@ export function resolveScreenReferences(rawPrompt:string,screens:Record<string,R
     while((index=text.indexOf(name,from))>=0){
       from=index+name.length;
       if(used.some(([a,b])=>index>=a&&index<b))continue;
+      if(specificationStart>=0&&index>=specificationStart&&!targetCueBefore(rawPrompt,index))continue;
       if(createIndex>=0){
         // 在新建指令场景下：
         // 1. 位于新建动词之后的名字是新建目标或说明，不可作为参考源

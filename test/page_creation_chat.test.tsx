@@ -51,7 +51,7 @@ test('new page success stores actual creation proof through the same chat applic
 
 test('ordinary creation stops at critical questions without HTML or History',async()=>{
  plannerQuestions=['请确认资料的可见权限'];const before=useHistoryStore.getState().checkpoints.length;await send();
- expect(plannerRequests).toBe(1);expect(requests).toBe(0);expect(host.textContent).toContain('请确认资料的可见权限');expect(host.textContent).toContain('0 tokens');expect(host.textContent).toContain('功能规划等步骤的累计用量见任务预算');expect(Object.keys(useProjectStore.getState().screens)).toEqual(['old']);expect(useHistoryStore.getState().checkpoints).toHaveLength(before);
+ expect(plannerRequests).toBe(1);expect(requests).toBe(0);expect(host.textContent).toContain('请确认资料的可见权限');expect(host.textContent).toContain('0 个用量单位');expect(host.textContent).toContain('功能规划等步骤的累计用量见任务预算');expect(Object.keys(useProjectStore.getState().screens)).toEqual(['old']);expect(useHistoryStore.getState().checkpoints).toHaveLength(before);
 });
 
 test('successful creation persists the original plan and reopens it without current-page coverage or new requests',async()=>{

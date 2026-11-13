@@ -60,7 +60,7 @@ for(const kind of ['single','restyle'] as const)test(`${kind} frozen sources rou
  const loaded=JSON.parse((await storage.readText(path))!),source=kind==='single'?loaded.candidate.workflowContract:loaded.outcome.workflowContract;
  expect(source).toEqual(contract);expect(JSON.stringify(source)).not.toContain(provider.apiKey);s.updateScreen('page',{htmlContent:after.replace('资料','后续资料')});
  const list=kind==='single'?await new DeliveryRepository(storage,s.id).listForScreen('page'):await new RestyleDeliveryRepository(storage,s.id).list();expect(list.records).toHaveLength(1);expect(list.invalidFiles).toBe(0);
- const ui=renderToStaticMarkup(<DesignGuidanceCard contract={source} historical/>);expect(ui).toContain('历史设计依据');expect(ui).toContain('返回完成');expect(ui).not.toContain(provider.apiKey);
+ const ui=renderToStaticMarkup(<DesignGuidanceCard contract={source} historical/>);expect(ui).toContain('历史设计依据');expect(ui).toContain('已收到回复');expect(ui).not.toContain(provider.apiKey);
  expect(record.status).toBe('applied');
 });
 for(const kind of ['single','restyle'] as const)for(const corrupt of ['scope','binding','cancelled','null','target','result','before','request-task','request-index'] as const)test(`${kind} rejects ${corrupt} archive sources on read and new prepare`,async()=>{
@@ -95,7 +95,7 @@ test('a repair selection with no call receipt is displayed as assembled rather t
  const {contract}=await archived('single'),packet=contract.designGuidance!;
  const trace:RepairGuidanceTrace={version:1,parentTaskId:contract.taskId,parentBindingFingerprint:packet.bindingFingerprint,parentSelectionFingerprint:ruleFingerprint(packet.selection),injectedRuleIds:packet.selection.selected.map(s=>s.rule.id),omittedRuleIds:[],requests:[]};
  expect(trace.injectedRuleIds.length).toBeGreaterThan(0);const ui=renderToStaticMarkup(<RepairGuidanceSource trace={trace}/>);
- expect(ui).not.toContain('实际注入');expect(ui).toContain('尚无实际调用回执');
+ expect(ui).not.toContain('实际注入');expect(ui).toContain('尚未记录实际请求');
 });
 
 function repairTrace(contract:ReturnType<typeof buildDesignTaskContract>):RepairGuidanceTrace{
@@ -105,13 +105,13 @@ for(const status of ['assembled','dispatched','completed','failed','cancelled'] 
  const {contract}=await archived('single'),trace=repairTrace(contract);
  trace.requests=[{requestId:`${contract.taskId}:style-repair:request-1`,parentTaskId:contract.taskId,providerId:'fixture',model:'fixture',messageFingerprint:'12345678',outputProtocol:'stream-text',injectedRuleIds:[...trace.injectedRuleIds],status}];
  const ui=renderToStaticMarkup(<RepairGuidanceSource trace={trace}/>);
- expect(ui).toContain('本次组装');expect(ui).toContain(`修复调用尝试 ${status==='assembled'?0:1} 次`);expect(ui).toContain('不表示 Provider 已确认收到');
- expect(ui.includes('调用输入记录包含')).toBe(status!=='assembled');expect(ui.includes('尚无实际调用回执')).toBe(status==='assembled');
+ expect(ui).toContain('本次准备');expect(ui).toContain(`修复请求尝试 ${status==='assembled'?0:1} 次`);expect(ui).toContain('不保证 AI 服务已收到');
+ expect(ui.includes('请求中包含')).toBe(status!=='assembled');expect(ui.includes('尚未记录实际请求')).toBe(status==='assembled');
 });
 test('a completed repair with every rule omitted records one call and zero rule inputs',async()=>{
  const {contract}=await archived('single'),trace=repairTrace(contract);trace.omittedRuleIds=[...trace.injectedRuleIds];trace.injectedRuleIds=[];
  trace.requests=[{requestId:`${contract.taskId}:style-repair:request-1`,parentTaskId:contract.taskId,providerId:'fixture',model:'fixture',messageFingerprint:'12345678',outputProtocol:'stream-text',injectedRuleIds:[],status:'completed'}];
- const ui=renderToStaticMarkup(<RepairGuidanceSource trace={trace}/>);expect(ui).toContain('调用输入记录包含 0 条规则');expect(ui).toContain('修复调用尝试 1 次');expect(ui).not.toContain('尚无实际调用回执');
+ const ui=renderToStaticMarkup(<RepairGuidanceSource trace={trace}/>);expect(ui).toContain('请求中包含 0 条规则');expect(ui).toContain('修复请求尝试 1 次');expect(ui).not.toContain('尚未记录实际请求');
 });
 test('legacy generated IDs without outputProtocol remain readable without inventing the missing field',async()=>{
  const {contract}=await archived('single');delete contract.designGuidance!.requests[0].outputProtocol;
@@ -147,7 +147,7 @@ for(const status of ['assembled','dispatched','completed','failed','cancelled'] 
  expect(Boolean(guidancePacketIssue(contract))).toBe(status!=='completed');
  const saved=captureDesignGuidanceHistory(contract,contract.request),restored=readDesignGuidanceHistory(saved,contract.request);expect(restored).toBeDefined();
  const ui=renderToStaticMarkup(<DesignGuidanceCard contract={restored!.contract} historical/>);
- expect(ui).toContain('请求记录 · 1 条');expect(ui.includes('已组装输入')).toBe(status==='assembled');expect(ui).not.toContain('实际进入请求');expect(ui).not.toContain(provider.apiKey);
+ expect(ui).toContain('请求记录 · 1 条');expect(ui.includes('已准备的输入')).toBe(status==='assembled');expect(ui).not.toContain('实际进入请求');expect(ui).not.toContain(provider.apiKey);
 });
 
 for(const device of ['mobile','pc'] as const)for(const kind of ['single','restyle'] as const)for(const legacy of [false,true])test(`${device} ${kind} ${legacy?'full-theme legacy':'current'} project and sidecars migrate unchanged, reopen as history and require fresh candidate checks`,async()=>{

@@ -1,3 +1,5 @@
+import {userFacingMessage} from '../../utils/userFacingMessage';
+import {UserFacingNotice} from '../common/UserFacingNotice';
 import {ReferenceEvidenceCard} from './ReferenceEvidenceCard';
 import {HistoricalFailureCard} from './HistoricalFailureCard';
 import {DesignTaskRecords} from './DesignTaskRecords';
@@ -90,8 +92,8 @@ function getThinkingSteps(message:ChatMessageItem):ThinkingStep[] {
   const status:ThinkingStep['status']=message.isStopped?'stopped':message.isGenerating?'active':message.isError||message.isGuardRejected?'error':'completed';
   if(message.executionEvents?.length)return message.executionEvents.map((event,index)=>({title:executionPhaseLabels[event.phase],
     description:`记录于 ${new Date(event.at).toLocaleTimeString('zh-CN')}`,status:index===message.executionEvents!.length-1?status:'completed'}));
-  return [{title:message.isGenerating?message.generationProgress??'正在执行当前请求':message.isStopped?'请求已停止':status==='error'?'本次请求未完成':'本次请求已结束',
-    description:'未记录分阶段证据；请以结果和交付检查为准。',status}];
+  return [{title:message.isGenerating?userFacingMessage(message.generationProgress??'正在执行当前请求'):message.isStopped?'请求已停止':status==='error'?'本次请求未完成':'本次请求已结束',
+    description:'暂无详细进度记录，请查看最终结果和检查说明。',status}];
 }
 
 export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
@@ -587,7 +589,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         </div>
         <button type="button" onClick={()=>setShowTaskRecords(true)} aria-label="查看设计任务记录" className="text-slate-400 hover:text-slate-200 text-[11px]">任务</button>
         <button onClick={() => onOpenSettings?.('provider')} className="text-blue-400 hover:underline text-[11px] flex-shrink-0">
-          Provider 配置
+          AI 服务设置
         </button>
       </div>
 
@@ -851,7 +853,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                     <div className="px-2 pb-1.5 flex items-center gap-1.5 text-[10px] leading-3 text-slate-400 overflow-hidden">
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
                       <span className="truncate">
-                        {m.isGenerating?m.generationProgress??executionPhaseLabels[m.executionEvents?.at(-1)?.phase??'preparing']:m.isStopped?'请求已停止':m.isError||m.isGuardRejected?'结果未应用，请查看原因':'请求已结束，请查看结果与检查记录'}
+                        {m.isGenerating?userFacingMessage(m.generationProgress??executionPhaseLabels[m.executionEvents?.at(-1)?.phase??'preparing']):m.isStopped?'请求已停止':m.isError||m.isGuardRejected?'结果未应用，请查看原因':'请求已结束，请查看结果与检查记录'}
                       </span>
                     </div>
                   )}
@@ -1162,7 +1164,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               <RequestActivityCard activity={m.executionActivity} running={m.isGenerating||m.qualityDraftBusy}/>
               {m.historicalFailure&&<HistoricalFailureCard failure={m.historicalFailure} busy={engine.isGenerating} onReuse={()=>{setInput(m.historicalFailureRequest??'');textareaRef.current?.focus();}}/>}
               {m.failureHistoryState&&<p role="status" className={`text-[10px] ${m.failureHistoryState==='failed'?'text-amber-300':'text-slate-500'}`}>{m.failureHistoryState==='saved'?'失败记录已保存到对话历史。':'失败记录未能保存，请检查工程目录与存储空间。'}</p>}
-              {m.isGenerating&&m.generationProgress&&<p role="status" className="text-[11px] leading-relaxed text-sky-300/80">{m.generationProgress}</p>}
+              {m.isGenerating&&m.generationProgress&&<div role="status" className="text-[11px] leading-relaxed text-sky-300/80"><UserFacingNotice message={m.generationProgress}/></div>}
               {m.qualityReport && <QualityReportCard report={m.qualityReport} onLocate={m.screenId && m.htmlOutput && screens[m.screenId]?.htmlContent === m.htmlOutput
                 ? nid => handleLocateAuditTarget({type:'element',screenId:m.screenId!,screenName:screens[m.screenId!]!.name,label:'检查发现',nid}) : undefined}/>}
               {m.qualityDraft && <FailedDraftCard value={m.qualityDraft} saved={m.qualityDraftSaved} busy={engine.isGenerating||m.qualityDraftBusy} notice={m.qualityDraftNotice}
@@ -1243,7 +1245,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   ) : isCurrentGenerating && !m.text ? (
                     <div className="flex items-center gap-2 text-slate-400 text-xs">
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                      <span>{m.executionEvents?.length?`${executionPhaseLabels[m.executionEvents.at(-1)!.phase]}…`:m.generationProgress??'正在执行请求，等待返回…'}</span>
+                      <span>{m.executionEvents?.length?`${executionPhaseLabels[m.executionEvents.at(-1)!.phase]}…`:userFacingMessage(m.generationProgress??'正在执行请求，等待返回…')}</span>
                     </div>
                   ) : m.qualityDraft ? null : m.htmlOutput ? (
                     (() => {
@@ -1499,7 +1501,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                         <span>操作未成功完成</span>
                       </div>
                       <div className="text-[11px] text-red-300/90 whitespace-pre-wrap leading-relaxed">
-                        {m.text}
+                        <UserFacingNotice message={m.text}/>
                       </div>
                       {m.text.includes('读取流数据异常') && (
                         <div className="text-[10px] text-red-400/80 bg-red-950/60 p-1.5 rounded border border-red-900/60">
@@ -1508,12 +1510,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       )}
                       {(m.text?.includes('数据流传输超时') || m.text?.includes('[timeout]')) && (
                         <div className="text-[10px] text-amber-400/90 bg-amber-950/40 p-1.5 rounded border border-amber-900/60 leading-relaxed">
-                          💡 提示：模型在无活动时限内未返回数据分片。若当前模型响应较慢或处理图片超时，建议在右上角指派更高效的模型；参考图已解析时可复用解析结果继续；尚未解析时，忽略图片会丢失图中未写明的细节。
+                          💡 提示：AI 长时间没有返回内容。若当前模型响应较慢或处理图片超时，建议在右上角指派更高效的模型；参考图已解析时可复用解析结果继续；尚未解析时，忽略图片会丢失图中未写明的细节。
                         </div>
                       )}
                       {m.text?.includes('结构化输出达到输出上限') && (
                         <div className="text-[10px] text-amber-400/90 bg-amber-950/40 p-1.5 rounded border border-amber-900/60 leading-relaxed">
-                          💡 提示：业务规划内容过长或模型深度思考占满输出预算导致截断。系统已优化深度思考控制与自愈纠错，点击重试将自动以紧凑模式重新生成。
+                          💡 提示：业务规划内容过长或模型思考过程过长，导致回复不完整。可点击重试，系统会尝试用更精简的方式重新生成。
                         </div>
                       )}
                       {!isCurrentGenerating && (
@@ -1534,7 +1536,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                 : (m.pageTaskPlan || m.workflowContract?.pageTaskPlan)
                                 ? '直接重试 (复用规划)'
                                 : m.text?.includes('结构化输出达到输出上限')
-                                ? '直接重试 (紧凑自愈)'
+                                ? '直接重试（精简回复）'
                                 : '直接重试'}
                             </span>
                           </button>
@@ -1610,7 +1612,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           className="mt-1 px-2.5 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded-lg text-[11px] flex items-center gap-1 transition cursor-pointer"
                         >
                           <Sparkles className="w-3 h-3" />
-                          <span>一键生成完整页面 HTML</span>
+                          <span>生成完整页面</span>
                         </button>
                       )}
                     </div>
@@ -1621,7 +1623,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               <div className="flex flex-wrap items-center gap-3 pt-1 pl-1 text-[11px] text-slate-400">
                 {m.checkpointId && (
                   <button
-                    onClick={() => alert(`已锁定 Checkpoint [${m.checkpointId}]，可在历史记录中安全撤回。`)}
+                    onClick={() => alert(`已保留这次生成前的状态，可在历史记录中恢复。`)}
                     className="flex items-center gap-1 hover:text-blue-400 transition cursor-pointer"
                     title="回到生成前状态"
                   >
@@ -1643,7 +1645,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
               {/* Single Message Token Usage */}
               {m.generationWarnings?.map((warning, index) => (
-                <div key={index} className="pl-1 pt-1 text-[10px] text-amber-300" role="status">{warning}</div>
+                <div key={index} className="pl-1 pt-1 text-[10px] text-amber-300" role="status"><UserFacingNotice message={warning}/></div>
               ))}
               {m.streamRecovered && (
                 <div className="pl-1 pt-1 text-[10px] text-amber-300" role="status">
@@ -1654,8 +1656,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               {m.usage && m.sender === 'assistant' && (
                 <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono pl-1 pt-0.5">
                   <Zap className="w-2.5 h-2.5 text-amber-400/80" />
-                  <span>{m.usage.totalTokens.toLocaleString()} tokens</span>
-                  <span className="text-slate-600">({m.usage.promptTokens.toLocaleString()} in / {m.usage.completionTokens.toLocaleString()} out)</span>
+                  <span>{m.usage.totalTokens.toLocaleString()} 个用量单位</span>
+                  <span className="text-slate-600">({m.usage.promptTokens.toLocaleString()} 输入 / {m.usage.completionTokens.toLocaleString()} 回复)</span>
                   {m.elapsedSeconds && (
                     <>
                       <span className="text-slate-700">·</span>
@@ -1903,7 +1905,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                     onClick={() => onOpenSettings?.('provider')}
                     className="underline text-amber-200 mx-1 font-medium hover:text-white"
                   >
-                    Provider 配置
+                    AI 服务设置
                   </button>
                   为 Vision 档配置 Key，或移除图片仅发送文字。
                 </span>
@@ -1939,7 +1941,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         {/* 快捷输入 (Quick Prompts) —— 点击快速插入到输入框（不提交）*/}
         <div className="mb-2 flex items-center justify-between gap-2 text-[10px] text-slate-400">
           <label className="flex items-center gap-1.5" title="自动按功能规模和容量选择生成方式。">
-            <span>生成方式</span><select aria-label="生成方式" value={writeStrategy} disabled={engine.isGenerating} onChange={e=>setWriteStrategy(e.target.value as typeof writeStrategy)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5"><option value="auto">自动选择</option><option value="atomic">主体一次写入</option><option value="patch">分区补丁（最多3区域）</option></select>
+            <span>生成方式</span><select aria-label="生成方式" value={writeStrategy} disabled={engine.isGenerating} onChange={e=>setWriteStrategy(e.target.value as typeof writeStrategy)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5"><option value="auto">自动选择</option><option value="atomic">一次生成页面</option><option value="patch">分区域生成（最多3区）</option></select>
           </label>
           <details ref={quickMenuRef} className="relative">
             <summary className="cursor-pointer list-none flex items-center gap-1 rounded border border-slate-700 px-2 py-1 hover:bg-slate-800 text-slate-300"><Sparkles className="w-3 h-3 text-amber-400" />快捷输入</summary>

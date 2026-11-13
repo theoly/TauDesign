@@ -33,7 +33,7 @@ test('controlled stalled stream shows counters and stop releases busy without ap
  await act(async()=>root.render(<RestylePanel scope="all" onClose={()=>{}}/>));
  await act(async()=>(host.querySelector('input[type="checkbox"]') as HTMLInputElement).click());
  await act(async()=>{Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('试跑单个目标'))!.click();await new Promise(r=>setTimeout(r,5));});
- expect(host.textContent).toContain('Controlled provider / fixture-model');expect(host.textContent).toContain('正文 3 字符');expect(host.textContent).toContain('推理 15 字符');expect(host.textContent).not.toContain('hidden thoughts');expect(host.textContent).not.toContain('DO_NOT_SHOW');
+ expect(host.textContent).toContain('Controlled provider / fixture-model');expect(host.textContent).toContain('回复 3 字符');expect(host.textContent).toContain('思考 15 字符');expect(host.textContent).not.toContain('hidden thoughts');expect(host.textContent).not.toContain('DO_NOT_SHOW');
  await act(async()=>{Array.from(host.querySelectorAll('button')).find(b=>b.textContent==='停止重塑')!.click();await new Promise(r=>setTimeout(r,0));});
  expect(aborted).toBe(true);expect(host.textContent).toContain('重塑已停止');expect(useProjectStore.getState().screens.s.htmlContent).toBe(before);
  expect(Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('试跑单个目标'))?.disabled).toBe(false);

@@ -1,0 +1,18 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>反馈文案隔离验收</title><body style="margin:0;background:#0f172a;color:#cbd5e1"><div id="root"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import '/src/styles/index.css';
+import {UserFacingNotice} from '/src/components/common/UserFacingNotice.tsx';
+import {RequestActivityCard} from '/src/components/chat/RequestActivityCard.tsx';
+import {TaskBudgetCard} from '/src/components/chat/TaskBudgetCard.tsx';
+import {TaskBudget} from '/src/services/ai/taskBudget.ts';
+const ledger=new TaskBudget({maxRequests:4,maxRequestedOutputTokens:32768,maxDurationMs:10000,maxRequestDurationMs:10000});ledger.reserve(8192).settle();ledger.close();
+const activity={startedAt:1000,lastActivityAt:6000,requests:2,active:0,textChars:41521,reasoningChars:62576,jsonChars:6017,status:'returned',providerId:'prov-internal-fixture',model:'qwen3.8-flash',networkAttempts:2,httpStatus:200,lastFinishReason:'length',stageId:'functional-plan',effectiveOutputTokens:3072};
+const old='SkeletonMainAtomic：完整main已取得，仍须全部交付检查。';
+createRoot(document.getElementById('root')).render(React.createElement('main',{className:'max-w-md mx-auto space-y-3 p-4 text-sm'},[
+React.createElement('h1',{key:'title',className:'text-base font-semibold text-slate-100'},'反馈提示'),
+React.createElement('div',{key:'old','data-notice':'legacy',className:'rounded-lg border border-slate-700 p-3 text-amber-200'},React.createElement(UserFacingNotice,{message:old})),
+React.createElement('div',{key:'error','data-notice':'error',className:'rounded-lg border border-rose-900 p-3 text-rose-300'},React.createElement(UserFacingNotice,{message:'生成失败：referenceImage.fields 参考图字段尚未完整覆盖：居住地。未进入页面生成。'})),
+React.createElement(RequestActivityCard,{key:'activity',activity}),React.createElement(TaskBudgetCard,{key:'budget',value:ledger.snapshot()})]));
+window.feedbackFixture={old,activity};
+</script></body></html>

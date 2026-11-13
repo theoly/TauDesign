@@ -35,20 +35,20 @@ function finish(text='这是答复。'){emit({type:'Delta',text});emit({type:'Do
 
 test('waiting beyond old timers never invents later steps, and real text/reasoning update the summary',async()=>{
  await send();await act(async()=>{await pause(1300);});
- expect(host.textContent).toContain('等待调用返回');expect(host.textContent).toContain('调用尝试 1 次');
- expect(host.textContent).toContain('调用模型生成结果');expect(host.textContent).not.toContain('检查返回内容与源码');
+ expect(host.textContent).toContain('等待 AI 回复');expect(host.textContent).toContain('请求尝试 1 次');
+ expect(host.textContent).toContain('AI 正在处理请求');expect(host.textContent).not.toContain('检查页面内容');
  expect(host.textContent).not.toContain('构建组件语义树');expect(host.textContent).not.toContain('PROGRESS_SECRET');
  expect(host.textContent).not.toContain('流式编写页面代码');
  await act(async()=>{finish('<think>比较布局</think>这是答复。');await pause(10);});
  const card=host.querySelector('[aria-label="应用调用摘要"]')!;
- expect(card.textContent).toContain('调用已返回');expect(card.textContent).toContain('进行中 0 次');
- expect(card.textContent).toContain('正文 5 字符');expect(card.textContent).toContain('推理 4 字符');
+ expect(card.textContent).toContain('已收到 AI 回复');expect(card.textContent).toContain('进行中 0 次');
+ expect(card.textContent).toContain('回复 5 字符');expect(card.textContent).toContain('思考 4 字符');
  expect(Object.keys(useProjectStore.getState().screens)).toHaveLength(0);
 });
 test('stop preserves cancelled state and rejects late text, reasoning and completion',async()=>{
  await send();const button=host.querySelector('button[title*="立即停止"]') as HTMLButtonElement;expect(button).not.toBeNull();
  await act(async()=>{button.click();await pause();});expect(abortCount).toBeGreaterThan(0);
- expect(host.textContent).toContain('调用已停止');expect(host.textContent).toContain('进行中 0 次');
+ expect(host.textContent).toContain('AI 请求已停止');expect(host.textContent).toContain('进行中 0 次');
  await act(async()=>{finish('<think>迟到推理</think>迟到正文');await pause(10);});
  expect(host.textContent).not.toContain('迟到正文');expect(host.textContent).not.toContain('迟到推理');expect(host.textContent).toContain('已中止');
 });
@@ -67,7 +67,7 @@ test('old task completion after switching projects cannot unlock or overwrite th
  });
  expect(host.querySelector('button[title*="立即停止"]')).not.toBeNull();
  expect(host.textContent).toContain('task-2');expect(host.textContent).not.toContain('OLD_MODEL');expect(host.textContent).not.toContain('OLD_RESPONSE');
- expect(host.textContent).not.toContain('OLD_REASONING');expect(host.textContent).not.toContain('检查实际渲染与交付条件');
+ expect(host.textContent).not.toContain('OLD_REASONING');expect(host.textContent).not.toContain('检查实际布局与显示效果');
  await act(async()=>{calls[1].options.onActivity?.({startedAt:Date.now(),lastActivityAt:Date.now(),requests:1,active:0,textChars:4,reasoningChars:0,jsonChars:0,status:'returned',model:'task-2'});
   calls[1].resolve({status:'answered_question',rawResponse:'新的答复。'});await pause(10);});
  expect(host.querySelector('button[title*="立即停止"]')).toBeNull();expect(host.textContent).toContain('新的答复。');

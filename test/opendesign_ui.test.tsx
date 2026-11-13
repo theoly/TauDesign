@@ -43,7 +43,7 @@ describe('OpenDesign UI/UX Specifications (§5 / CHK-OD-21~23)', () => {
     });
 
     // 检查组件正常挂载
-    expect(container.textContent).toContain('AI 原生设计助手');
+    expect(container.textContent).toContain('AI 设计助手');
   });
 
   test('CHK-OD-23: ThemeEditor displays collapsible DESIGN.md card with source badge', async () => {

@@ -114,8 +114,8 @@ describe('ChatDrawer: AI Thinking & Collapsible Feedback & Click-to-Stop', () =>
 
     // Detailed steps are now visible
     expect(container.textContent).toContain('收起');
-    expect(container.textContent).toContain('组装页面、主题与工程上下文');
-    expect(container.textContent).toContain('调用模型生成结果');
+    expect(container.textContent).toContain('整理页面资料与设计风格');
+    expect(container.textContent).toContain('AI 正在处理请求');
 
     // Click again to collapse
     act(() => {

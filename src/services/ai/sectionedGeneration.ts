@@ -114,7 +114,7 @@ export async function generateSectionedPage(core:AIEngineCore,options:StreamText
     } else if(callbacks.preplanned){
       plan=parseSectionPlan(callbacks.preplanned);
     } else {
-      callbacks.onProgress?.('正在建立同一页的公共骨架与2～6个区块计划…');
+      callbacks.onProgress?.('正在安排页面的公共布局，并分为2～6个区域…');
       if(options.messages.reduce((n,m)=>n+m.content.length,0)>90000)throw Error('分区设计上下文过大，请缩小需求或引用范围。');
       const messages=instruct(`本次明确采用同一页分区生成，最终仍是一个页面。只返回JSON title/shellHtml/sections。先生成公共骨架、全局共享样式和2～6个区块职责；不要填区块正文。骨架使用当前项目基座类、Token，保持专业布局与共同视觉层级；可包含共用页头/侧栏等有明确业务文案的内容。每区块id为section-1至section-6中不同值，骨架用空的<section data-design-slot="对应id"></section>占位，不可嵌套或重复；requirements为该区块全部业务内容和UI要求。只规划原需求功能，不写工程说明、测试说明或假数据处理承诺。Schema:${JSON.stringify(schema)}`,'plan');
       callbacks.onRequest?.(messages);
@@ -167,7 +167,7 @@ export async function generateSectionedPage(core:AIEngineCore,options:StreamText
     guard();const html=mergeSectionParts(plan,completed),title=plan.title.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
     result.rawResponse=`<artifact type="screen" title="${title}">${html}</artifact>`;result.finishReason='stop';
     result.sectioned={plan,requests,completed:completed.length,total:plan.sections.length,requestedOutputTokens:requests.reduce((n,r)=>n+r.requestedOutputTokens,0),batchRequestedOutputTokens:result.requestedOutputTokens!};
-    result.warnings.push(`已按${plan.sections.length}个受控区块合并为同一页，仍需完整交付检查。`);
+    callbacks.onProgress?.('已合并为一个完整页面，正在检查内容和布局…');
     return result;
   } catch(error){
     result.errorMessage=String(error instanceof Error?error.message:error);result.warnings.push(result.errorMessage);

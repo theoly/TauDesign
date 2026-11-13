@@ -1,3 +1,4 @@
+import {generationProgressLabel} from '../../utils/userFacingMessage';
 import {businessItems,businessDuty,validateBusinessOwners,readBusinessDuties,type BusinessDuties,type BusinessOwner} from './businessInventoryOwnership';
 import type {PageRedesignSource} from './pageRedesignSource';
 import {referenceFieldOwnership} from './referenceFieldOwnership';
@@ -42,7 +43,7 @@ export async function generateTaskPage(core:AIEngineCore,options:StreamTextOptio
  const mediaRule=input.prepareGeneratedHtml?'可复用已有外部媒体。必要的新静态SVG图表/图标可在响应中完整绘制，程序会先安全检查、生成独立文件并回填引用；最终页面不保留内联图形。禁止data URL、base64、blob，不编造媒体路径。':'媒体只使用已提供的外部资源URL/路径；禁止data URL、base64、blob或内联SVG图像。';
  const contract='\n[当前写入合同V2]公共基础设施由程序负责。仅生成当前主体/目标区域，不输出head或重复全局样式。'+mediaRule+'保留全部本次必需文案与功能。该合同覆盖前文通用整页输出的基础设施细节，安全/授权/设备/主题继续强制。';
  if(system)system.content+=contract;else messages.unshift({role:'system',content:contract});
- input.onProgress?.(`${strategy.mode}：${strategy.reason}`);
+ input.onProgress?.(generationProgressLabel(strategy.mode));
  const restoreBaseline=(result:SectionedResult):SectionedResult=>{
   if(!input.baselineHtml||result.errorMessage)return result;const artifact=extractArtifact(result.rawResponse);if(!artifact?.isComplete)return result;
   const html=mergeRedesignBody(input.baselineHtml,artifact.html);return {...result,rawResponse:`<artifact type="screen" identifier="${escapeAttribute(artifact.identifier??'screen_new')}" title="${escapeAttribute(artifact.title??input.title)}">${html}</artifact>`};
@@ -50,7 +51,7 @@ export async function generateTaskPage(core:AIEngineCore,options:StreamTextOptio
  if(strategy.mode==='SectionedPatch'){
   let composition=input.recovered?.plan.composition??input.composition,compositionResult:Awaited<ReturnType<typeof streamWithContinuation>>|undefined;
   if(!composition){
-   input.onProgress?.('正在规划最多3个目标区域的布局与功能归属…');
+   input.onProgress?.('正在安排页面布局，分成最多3个区域…');
    const validFeatureIds=input.plan.features.filter(f=>f.change!=='remove').map(f=>f.id);
    const featureSummary=input.plan.features.filter(f=>f.change!=='remove').map(f=>`${f.id}: ${f.title}`).join('；');
    const footerRule=input.device==='pc'?'PC端禁止使用CTA底栏，footer必须为flow。':'移动端若无吸底操作条footer为flow，仅在有吸底操作条时footer为cta。';
@@ -72,7 +73,7 @@ export async function generateTaskPage(core:AIEngineCore,options:StreamTextOptio
   let duties:BusinessDuties|undefined;
   let inventoryResult:Awaited<ReturnType<typeof streamWithContinuation>>|undefined;
   if(businessSource){
-   if(input.recovered){duties=readBusinessDuties(businessSource,input.recovered.plan);if(!duties)input.onProgress?.('旧任务沿用原分区职责，未补造业务归属回执；结果仍须全部验收。');}
+   if(input.recovered){duties=readBusinessDuties(businessSource,input.recovered.plan);if(!duties)input.onProgress?.('正在沿用之前的区域安排，完成后会重新检查整个页面。');}
    else{
     const items=businessItems(businessSource),ids=composition!.regions.map(region=>region.id);
     if(items.length>1200)throw Error('原业务项目超出本次规划额度，请缩小页面范围；未截断清单。');
@@ -84,7 +85,7 @@ export async function generateTaskPage(core:AIEngineCore,options:StreamTextOptio
     if(input.referenceEvidence)inventoryMessages[1].content+=renderReferenceEvidence(input.referenceEvidence);
     input.onRequest?.(inventoryMessages);
     const schema={type:'object',additionalProperties:false,required:['owners'],properties:{owners:{type:'array',minItems:ids.length,maxItems:ids.length,items:{type:'object',additionalProperties:false,required:['regionId','itemIds'],properties:{regionId:{type:'string',enum:ids},itemIds:{type:'array',items:{type:'string',enum:items.map(item=>item.id)}}}}}}};
-    input.onProgress?.(`正在核对${items.length}项原业务信息的区块归属…`);
+    input.onProgress?.(`正在安排原页面的${items.length}项内容，确保没有遗漏…`);
     inventoryResult=await streamWithContinuation(core,{...options,messages:inventoryMessages,jsonSchema:schema,maxTokens:cap,temperature:0.1,provenance:options.provenance?{...options.provenance,stepId:'business-ownership'}:undefined},{allowContinuation:false,externalMediaOnly:true,budget:{maxRequestedTokens:cap,autoContinuations:0}});
     if(inventoryResult.errorMessage||structuredOutputIssue(inventoryResult.finishReason))return {...inventoryResult,errorMessage:inventoryResult.errorMessage??'业务职责未完整返回，未开始区域写入。'};
     guard();const parsed=safeJsonParse(inventoryResult.rawResponse) as {owners:BusinessOwner[]};
@@ -98,7 +99,7 @@ export async function generateTaskPage(core:AIEngineCore,options:StreamTextOptio
   const plan=input.recovered?parseSectionPlan(input.recovered.plan):compiled;
   const pending=plan.sections.slice(input.recovered?.completed.length??0);
   const allocations=allocateOutputSteps(pending.map(section=>({id:section.id,minTokens:1024,targetTokens:4096,maxTokens:8192,minRequests:1,weight:Math.max(1,Math.ceil(section.requirements.length/1000))})),remaining,s.limits.maxRequests-s.requests,s.limits.maxRequestedOutputTokens>=34568?1800:0);
-  input.onProgress?.(`已规划${plan.sections.length}个目标区域（最多3个），总正文申请上限${allocations.reduce((n,a)=>n+a.tokens,0)} tokens。`);
+  input.onProgress?.(`页面已分为${plan.sections.length}个区域，将依次生成。`);
   const result=await generateSectionedPage(core,{...options,messages},input.contextKey,{prepareGeneratedHtml:input.prepareGeneratedHtml,preplanned:plan,isCurrent:input.isCurrent,onProgress:input.onProgress,onRequest:input.onRequest,onCheckpoint:input.onCheckpoint,initialCompleted:input.recovered?.completed,
    sectionTokenCaps:Object.fromEntries(allocations.map(a=>[a.id,a.tokens])),
    remainingOutputTokens:()=>{const s=budget.snapshot();return s.limits.maxRequestedOutputTokens-s.requestedOutputTokens;},reservedOutputTokens:s.limits.maxRequestedOutputTokens>=34568?1800:0});
@@ -126,5 +127,6 @@ export async function generateTaskPage(core:AIEngineCore,options:StreamTextOptio
  if(!onlyMain)main.replaceChildren(...Array.from(parsed.doc.body.childNodes));
  if(input.device==='pc')main.classList.add('container-max');
  parsed.doc.body.replaceChildren(main);
- return restoreBaseline({...result,rawResponse:`<artifact type="screen" identifier="${escapeAttribute(artifact?.identifier??'screen_new')}" title="${escapeAttribute(artifact?.title??input.title)}">${parsed.serialize()}</artifact>`,warnings:[...result.warnings,`${strategy.mode}：完整main已取得，仍须全部交付检查。`]});
+ input.onProgress?.('页面内容已生成，正在检查内容和布局…');
+ return restoreBaseline({...result,rawResponse:`<artifact type="screen" identifier="${escapeAttribute(artifact?.identifier??'screen_new')}" title="${escapeAttribute(artifact?.title??input.title)}">${parsed.serialize()}</artifact>`});
 }

@@ -1,3 +1,5 @@
+import {userFacingMessage} from '../../utils/userFacingMessage';
+import {UserFacingNotice} from '../common/UserFacingNotice';
 import { referenceDevicePrompt } from '../../utils/referenceDevice';
 import { normalizeMobileNavigation } from '../../utils/mobileNavigation';
 import { buildProjectKnowledgeBundle, buildProjectKnowledgeContext } from '../../services/ai/projectKnowledge';
@@ -336,32 +338,32 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
               队列：{plan.queue.filter((t) => t.kind === 'component').length} 个组件 +{' '}
               {plan.queue.filter((t) => t.kind === 'screen').length} 个画框。
               {plan.queue.some((t) => (t.protectedNids?.length ?? 0) > 0) && (
-                <> 含手动样式覆盖的节点将保持不动（被 !important 挡住，改了也不生效）。</>
+                <> 含手动样式覆盖的节点将保持不动，避免覆盖你的调整。</>
               )}
               {plan.naiveCalls > plan.estimatedCalls && (
                 <>
                   {' '}
                   组件优先策略已省下 <span className="text-emerald-400">{plan.naiveCalls - plan.estimatedCalls}</span> 次调用
-                  （组件只改定义，再走实例同步下发）。
+                  （修改一次组件，同步更新使用它的页面）。
                 </>
               )}
             </div>
           </div>
 
           {!isSingle && <div className="space-y-2 text-slate-400">
-            <p>本地预检：推荐 {assessments.filter(a=>a.assessment.recommended).length} 项，未选 {basePlan.queue.length-plan.queue.length} 项。仅检查主题绑定，不代表视觉美感已验证。</p>
+            <p>初步检查：推荐 {assessments.filter(a=>a.assessment.recommended).length} 项，未选 {basePlan.queue.length-plan.queue.length} 项。仅检查主题绑定，不代表视觉美感已验证。</p>
             {assessments.map(({target,assessment})=><label key={restyleTargetKey(target)} className="flex gap-2 items-start">
               <input type="checkbox" disabled={busy||!assessment.selectable} checked={selected.includes(restyleTargetKey(target))}
                 onChange={event=>changeSelection(restyleTargetKey(target),event.target.checked)}/>
-              <span>{target.name}：{assessment.reason}</span>
+              <span>{target.name}：{userFacingMessage(assessment.reason)}</span>
             </label>)}
           </div>}
           {progress && <div role="status" className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 space-y-1">
-            <p>{progress.targetName} · {{checking:'检查目标',waiting:'等待模型',reasoning:'接收推理',receiving:'接收正文',continuing:'续写',validating:'校验',complete:'完成',failed:'失败',cancelled:'已取消'}[progress.phase]}</p>
+            <p>{progress.targetName} · {{checking:'检查目标',waiting:'等待模型',reasoning:'AI 正在思考',receiving:'接收回复',continuing:'继续生成',validating:'检查结果',complete:'完成',failed:'失败',cancelled:'已取消'}[progress.phase]}</p>
             <p>{progress.provider} / {progress.model}</p>
             <p>耗时 {Math.floor(progress.elapsedMs/1000)} 秒 · 距最近活动 {Math.floor(progress.idleMs/1000)} 秒</p>
-            <p>正文 {progress.textChars} 字符 · 推理 {progress.reasoningChars} 字符 · 续写 {progress.continuationCount} 次</p>
-            {progress.patchGroups&&<p className="text-blue-300">样式补丁 {progress.patchGroup??0}/{progress.patchGroups} 组 · 已请求 {progress.requestCount??0} 次 · 保留原HTML，仅合并样式</p>}
+            <p>回复 {progress.textChars} 字符 · 思考 {progress.reasoningChars} 字符 · 继续生成 {progress.continuationCount} 次</p>
+            {progress.patchGroups&&<p className="text-blue-300">样式调整 {progress.patchGroup??0}/{progress.patchGroups} 组 · 已请求 {progress.requestCount??0} 次 · 保留页面内容，只调整外观</p>}
           </div>}
           {phase === 'plan' && (
             <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-xl text-amber-200 flex items-start gap-2">
@@ -396,14 +398,14 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
                     <Check className="w-3 h-3" />
                     <span>结构校验通过（节点增删为 0）</span>
                   </div>
-                  {dryOutcome.message && <div className="text-amber-300">{dryOutcome.message}</div>}
+                  {dryOutcome.message && <div className="text-amber-300"><UserFacingNotice message={dryOutcome.message??''}/></div>}
                   <pre className="max-h-40 overflow-auto bg-slate-900 p-2 rounded-lg text-[10px] text-slate-400 whitespace-pre-wrap">
                     {dryOutcome.html?.slice(0, 800)}
                   </pre>
                 </>
-              ) : dryOutcome.status==='skipped_unchanged' ? <p className="text-slate-300">{dryOutcome.message}</p> : (
+              ) : dryOutcome.status==='skipped_unchanged' ? <div className="text-slate-300"><UserFacingNotice message={dryOutcome.message??''}/></div> : (
                 <div className="text-rose-400 leading-relaxed">
-                  {dryOutcome.message ?? '试跑未通过'}
+                  <UserFacingNotice message={dryOutcome.message??'试跑未通过'}/>
                   <div className="text-slate-500 mt-1">结果已被拒绝，未做任何改动。</div>
                 </div>
               )}
@@ -427,18 +429,18 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
               {outcomes.filter(outcome => outcome.validation).map(outcome => (
                 <details key={`${outcome.target.kind}:${outcome.target.id}`} className="border-t border-slate-800 pt-2 text-slate-400">
                   <summary className="cursor-pointer">{outcome.target.name} · 验收{outcome.validation!.status === 'passed' ? '通过' : '未通过'}</summary>
-                  {outcome.validation!.message && <p className="mt-1 text-amber-300">{outcome.validation!.message}</p>}
+                  {outcome.validation!.message && <div className="mt-1 text-amber-300"><UserFacingNotice message={outcome.validation!.message}/></div>}
                   {outcome.delivery && <p className="mt-1 text-slate-500">{outcome.delivery.message ?? '交付档案已保存，可在重塑交付历史中查看。'}</p>}
                   {outcome.validation!.pages.map(page => <div key={page.id} className="mt-1">
                     <p>{page.name}：{page.render?.status === 'complete' ? `已检查 ${page.render.inspected} 个可见节点` : page.render?.reason ?? '未完成渲染检查'}</p>
-                    {page.render?.findings.map((finding,index) => <p key={index} className="text-amber-300">{finding.message}</p>)}
+                    {page.render?.findings.map((finding,index) => <div key={index} className="text-amber-300"><UserFacingNotice message={finding.message}/></div>)}
                   </div>)}
                 </details>
               ))}
             </div>
           )}
 
-          {error && <div className="text-rose-400">{error}</div>}
+          {error && <div className="text-rose-400"><UserFacingNotice message={error}/></div>}
           {!isSingle && <RestyleDeliveryHistoryPanel projectId={projectId} folderPath={folderPath} revision={deliveryArchiveRevision} notice={deliveryArchiveNotice}/>}
         </div>
 

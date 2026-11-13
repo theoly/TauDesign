@@ -1,0 +1,21 @@
+{
+  "scope": "production-notice-components-controlled-data-no-model",
+  "results": [
+    {
+      "browser": "chromium",
+      "ordinaryLanguage": true,
+      "rawDiagnosticsPreserved": true,
+      "horizontalOverflow": false,
+      "pageErrors": [],
+      "externalRequests": []
+    },
+    {
+      "browser": "webkit",
+      "ordinaryLanguage": true,
+      "rawDiagnosticsPreserved": true,
+      "horizontalOverflow": false,
+      "pageErrors": [],
+      "externalRequests": []
+    }
+  ]
+}

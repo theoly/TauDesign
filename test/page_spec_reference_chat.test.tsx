@@ -1,0 +1,44 @@
+import {afterEach,beforeEach,expect,test} from 'bun:test';
+import React,{act} from 'react';
+import {createRoot,type Root} from 'react-dom/client';
+import {aiChatDesignPrompt} from './fixtures/aiChatDesignPrompt';
+import {chatPageTaskPlan} from './fixtures/pageTaskPlan';
+import {resourceRenderReport} from './helpers/renderResourceProof';
+import {useAIEngineChat} from '../src/services/ai/engine/react/useAIEngineChat';
+import {PipelineExecutor} from '../src/services/ai/engine/pipeline/executor';
+import {PageRenderCheck} from '../src/services/ai/pageRenderCheck';
+import {useProjectStore} from '../src/stores/useProjectStore';
+import {useHistoryStore} from '../src/stores/useHistoryStore';
+import {useAIConfigStore,defaultBindings,defaultProviders} from '../src/stores/useAIConfigStore';
+import {defaultTheme} from '../src/utils/themePresets';
+import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
+import {MockTransport} from '../src/services/ai/engine/transport/mockTransport';
+const execute=PipelineExecutor.execute,inspect=PageRenderCheck.inspect;
+let project:ReturnType<typeof useProjectStore.getState>,history:ReturnType<typeof useHistoryStore.getState>,config:ReturnType<typeof useAIConfigStore.getState>,oldAct:unknown;
+let engine:ReturnType<typeof useAIEngineChat>,root:Root,host:HTMLDivElement,requests:any[];
+const Harness=()=>{engine=useAIEngineChat();return null;};
+beforeEach(async()=>{
+ project=useProjectStore.getState();history=useHistoryStore.getState();config=useAIConfigStore.getState();oldAct=(globalThis as any).IS_REACT_ACT_ENVIRONMENT;(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
+ useProjectStore.getState().initNewProject({name:'规格引用隔离测试',deviceProfile:'mobile',designSystem:defaultTheme,createSpecimen:false});
+ for(const [id,name] of [['home','仪表盘主页'],['analysis','AI 决策分析'],['chat','AI 决策对话页']])useProjectStore.getState().addScreen({name,htmlContent:`<main data-nid="old-${id}"><h1>保留原页 ${name}</h1></main>`},id);
+ useProjectStore.getState().setActiveScreen('home');
+ useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'fixture'})),bindings:defaultBindings});requests=[];
+ const transport=new MockTransport();transport.queueResponse('<artifact title="AI 决策对话页"><main class="p-4"><h1>AI 决策分析</h1><button class="btn">清空上下文</button><section class="card p-4"><p>这里显示决策建议</p><p>A选项 82% vs B选项 65%</p></section><button class="btn">帮我详细对比</button><button class="btn">换个角度分析</button><label>输入消息<textarea class="input" placeholder="请输入消息"></textarea></label><button class="btn">语音输入</button><button class="btn btn-primary">发送消息</button></main></artifact>');
+ const realCore=new DefaultAIEngineCore({id:'fixture',stream:(request,event)=>{requests.push(request);return transport.stream(request,event);}});
+ const core={streamText:realCore.streamText.bind(realCore),async generateObject<T>():Promise<T>{return structuredClone(chatPageTaskPlan) as T;}};
+ PipelineExecutor.execute=options=>execute({...options,engineCore:core});PageRenderCheck.inspect=(request,storage)=>resourceRenderReport(request,storage);
+ host=document.createElement('div');document.body.append(host);root=createRoot(host);await act(async()=>root.render(<Harness/>));
+});
+afterEach(()=>{act(()=>root.unmount());host.remove();PipelineExecutor.execute=execute;PageRenderCheck.inspect=inspect;useProjectStore.setState(project,true);useHistoryStore.setState(history,true);useAIConfigStore.setState(config,true);(globalThis as any).IS_REACT_ACT_ENVIRONMENT=oldAct;});
+test('chat accepts the full numbered specification and creates one page without modifying any existing page',async()=>{
+ const before=Object.fromEntries(Object.entries(useProjectStore.getState().screens).map(([id,s])=>[id,s.htmlContent]));
+ await act(async()=>{await engine.sendMessage(aiChatDesignPrompt);});
+ expect(engine.messages.at(-1)?.isError).not.toBe(true);expect(requests).toHaveLength(1);expect(useProjectStore.getState().screenOrder).toHaveLength(4);
+ for(const [id,html] of Object.entries(before))expect(useProjectStore.getState().screens[id].htmlContent).toBe(html);
+ expect(requests[0].messages.at(-1).content).toContain(aiChatDesignPrompt);expect(engine.messages.some(m=>m.text.includes('未找到引用页面'))).toBe(false);
+});
+test('a real unknown page reference still stops chat before any page request or mutation',async()=>{
+ const before=JSON.stringify(useProjectStore.getState().screens);
+ await act(async()=>{await engine.sendMessage('参考页面"不存在的页面"\n'+aiChatDesignPrompt);});
+ expect(requests).toHaveLength(0);expect(engine.messages.at(-1)?.text).toContain('未找到引用页面');expect(JSON.stringify(useProjectStore.getState().screens)).toBe(before);
+});

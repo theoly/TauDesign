@@ -212,7 +212,7 @@ export function hasExplicitModifyIntent(text: string): boolean {
 const WELCOME_MESSAGE: ChatMessageItem = {
   id: 'welcome',
   sender: 'assistant',
-  text: '你好！我是 AI 原生设计助手。输入页面诉求或点击下方快捷模板，我将基于当前工程的 Design Tokens 为您生成规范的 UI 画框。支持上传参考图反推设计，输入 @ 可显式引用已有画框。'
+  text: '你好！我是 AI 设计助手。说说你想设计的页面，我会结合当前项目的风格和规范生成设计稿。也可以上传参考图片，或用 @ 引用已有页面。'
 };
 
 function detectCandidateDecision(prompt: string): string | undefined {
@@ -568,7 +568,7 @@ export function useAIEngineChat() {
             {
               id: `warn_${Date.now()}`,
               sender: 'assistant',
-              text: `当前${isQuestion ? '对话' : '代码'}模型【${provName} (${modelName})】为纯文本模型，不支持多模态视觉识图。\n\n由于尚未配置可用的 Vision 视觉档位，无法解析上传的设计参考图。\n\n💡 解决方案：\n1. 点击右上角【Provider 配置】，为 Google Gemini、Claude 3.5 或 GPT-4o 等配置 API Key 并指派为 Vision 档；\n2. 或将当前模型切换为支持多模态的模型；\n3. 或移除参考设计图，仅发送文字需求。`
+              text: `当前${isQuestion ? '对话' : '代码'}模型【${provName} (${modelName})】为纯文本模型，无法识别图片。\n\n由于尚未设置可用的参考图分析模型，无法解析上传的设计参考图。\n\n💡 解决方案：\n1. 点击右上角【AI 服务设置】，为 Google Gemini、Claude 3.5 或 GPT-4o 等配置服务密钥，并将其设为参考图分析模型；\n2. 或将当前模型切换为支持多模态的模型；\n3. 或移除参考设计图，仅发送文字需求。`
             }
           ]);
           return;

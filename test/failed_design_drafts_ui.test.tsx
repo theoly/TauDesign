@@ -68,9 +68,9 @@ test('重开后手填修复继承原功能规划，零新增模型请求',async(
 });
 test('建议真实等待只计一次，返回不创建页面；一次标记先落盘并在重开后保留',async()=>{
  await send();holdSuggestion=true;await act(async()=>{button('AI建议文案（限一次）').click();await drain();});expect(calls).toHaveLength(3);
- const pending=host.querySelector('[aria-label="应用调用摘要"]')!;expect(pending.textContent).toContain('等待调用返回');expect(pending.textContent).toContain('调用尝试 1 次');expect(pending.textContent).toContain('进行中 1 次');
+ const pending=host.querySelector('[aria-label="应用调用摘要"]')!;expect(pending.textContent).toContain('等待 AI 回复');expect(pending.textContent).toContain('请求尝试 1 次');expect(pending.textContent).toContain('进行中 1 次');
  expect((await loadQualityDrafts(useProjectStore.getState().id))[0].aiAttempted).toBe(true);expect(button('AI建议文案（限一次）').disabled).toBe(true);
- await act(async()=>{releaseSuggestion();await drain();});expect(pending.textContent).toContain('调用已返回');expect(pending.textContent).toContain('进行中 0 次');expect((card().querySelector('input') as HTMLInputElement).value).toBe('查看权益');expect(Object.keys(useProjectStore.getState().screens)).toHaveLength(0);
+ await act(async()=>{releaseSuggestion();await drain();});expect(pending.textContent).toContain('已收到 AI 回复');expect(pending.textContent).toContain('进行中 0 次');expect((card().querySelector('input') as HTMLInputElement).value).toBe('查看权益');expect(Object.keys(useProjectStore.getState().screens)).toHaveLength(0);
  await act(async()=>{root.unmount();root=createRoot(host);root.render(<ChatDrawer/>);await drain();});expect(button('AI建议文案（限一次）').disabled).toBe(true);expect(calls).toHaveLength(3);
 });
 for(const changed of ['cancel','model','project'] as const)test(`${changed} during pending suggestion refuses late labels without resetting the persisted attempt`,async()=>{

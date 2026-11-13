@@ -141,7 +141,7 @@ test('a pending candidate repair exposes actual request activity without grantin
  const factory=spyOn(CoreFactory,'createAIEngineCore').mockReturnValue(slow);useAIConfigStore.setState({getActiveProviderForRole:()=>({provider,modelId:'fixture'})});host=document.createElement('div');document.body.append(host);root=createRoot(host);
  try{
   await act(async()=>{root!.render(<CandidateRepairControl/>);});await act(async()=>{host!.querySelector('button')!.click();await waitFor(()=>Boolean(release));});expect(calls).toHaveLength(1);
-  const summary=host.querySelector('[aria-label="应用调用摘要"]');expect(summary).not.toBeNull();expect(summary!.textContent).toContain('等待调用返回');expect(summary!.textContent).toContain('调用尝试 1 次');expect(await useProjectStore.getState().adoptStagedChange()).toBe(false);
+  const summary=host.querySelector('[aria-label="应用调用摘要"]');expect(summary).not.toBeNull();expect(summary!.textContent).toContain('等待 AI 回复');expect(summary!.textContent).toContain('请求尝试 1 次');expect(await useProjectStore.getState().adoptStagedChange()).toBe(false);
  }finally{await act(async()=>{release?.();await new Promise(resolve=>setTimeout(resolve,5));});factory.mockRestore();useAIConfigStore.setState(config,true);}
 });
 for(const action of ['model','unmount'] as const)test(`${action} aborts candidate repair and its late response cannot replace the original candidate`,async()=>{

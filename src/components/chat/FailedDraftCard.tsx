@@ -1,3 +1,5 @@
+import {UserFacingNotice} from '../common/UserFacingNotice';
+import {userFacingMessage} from '../../utils/userFacingMessage';
 import {parseHtmlCopy} from '../../utils/htmlDocument';
 import {draftRegionChoices,type DraftRegionRequest} from '../../services/ai/draftRegionRepair';
 import React, { useEffect, useState, useMemo } from 'react';
@@ -36,9 +38,11 @@ export function FailedDraftCard({value,saved,busy,notice,onSuggest,onRepair,onRe
   const sourceNode=(html:string|undefined,nid:string)=>{if(!html)return;const nodes=Array.from(parseHtmlCopy(html).doc.querySelectorAll('[data-nid]')).filter(el=>el.getAttribute('data-nid')===nid);return nodes.length===1?nodes[0].outerHTML:undefined;};
   const focused=useMemo(()=>{if(!focus)return;const current=sourceNode(value.draft.html,focus);if(current)return {label:'草稿节点',html:current};const original=sourceNode(baseline,focus);return original?{label:'原页面节点（草稿中未找到同一身份）',html:original}:undefined;},[focus,value.draft.html,baseline]);
   const findingRow=(f:typeof errors[number],index:number)=><div key={index} className="space-y-1 text-[11px] text-rose-200">
-    <p>{f.message} {f.nid&&<button type="button" onClick={()=>{setCode(true);setFocus(f.nid);}} className="text-blue-300 underline">定位源码 [{f.nid}]</button>}</p>
+    <div><UserFacingNotice message={f.message}/> {f.nid&&<button type="button" onClick={()=>{setCode(true);setFocus(f.nid);}} className="text-blue-300 underline">查看问题位置 [{f.nid}]</button>}</div>
+    <details data-technical-details className="text-slate-400"><summary className="cursor-pointer">查看检查详情</summary>
     {f.actual&&<p className="whitespace-pre-wrap break-words text-slate-300">当前差异：{f.actual}</p>}
     {f.expected&&<p className="break-words text-slate-500">要求：{f.expected}</p>}
+    </details>
     {f.code==='redesign_content_missing'&&f.nid&&<button type="button" disabled={locked} onClick={()=>setInstruction(v=>[v,`保留原节点 ${f.nid} 的业务文案与语义，依据原业务片段恢复，不扩大修改范围。`].filter(Boolean).join('\n').slice(0,2000))} className="text-blue-300 disabled:opacity-40">将保留要求加入局部修复</button>}
   </div>;
 
@@ -47,7 +51,7 @@ export function FailedDraftCard({value,saved,busy,notice,onSuggest,onRepair,onRe
     <p><span className="text-rose-300">{errors.length} 项阻断</span> · <span className="text-amber-300">{warnings.length} 项警告</span></p>
     <p className="text-[11px] text-slate-400">{saved?'失败草稿已保存，可重新打开查看。':'草稿尚未保存至磁盘。'} 原页面未改变，草稿不能采纳。实际排版尚未验收。</p>
     {historicalReview&&<details className="rounded border border-slate-700 p-2"><summary>已确认的逐项文案 · {historicalReview.changes.length} 项</summary>{historicalReview.changes.map(c=><p key={c.sourceNid} className="mt-2 whitespace-pre-wrap break-words">[{c.sourceNid} → {c.targetNid}] {c.before} → {c.after}</p>)}<p className="mt-1 text-slate-500">历史确认仍需当前来源和整页验收，不自动执行。</p></details>}
-    {groups.map(group=>group.items.length>1?<details key={group.code} className="rounded border border-slate-700 p-2"><summary className="cursor-pointer text-rose-200">{group.code==='redesign_content_missing'?'原业务文案待核对':group.items[0].message} · {group.items.length} 项</summary><div className="mt-2 space-y-3">{group.items.map(findingRow)}</div></details>:<div key={group.code}>{findingRow(group.items[0],0)}</div>)}
+    {groups.map(group=>group.items.length>1?<details key={group.code} className="rounded border border-slate-700 p-2"><summary className="cursor-pointer text-rose-200">{group.code==='redesign_content_missing'?'原业务文案待核对':userFacingMessage(group.items[0].message)} · {group.items.length} 项</summary><div className="mt-2 space-y-3">{group.items.map(findingRow)}</div></details>:<div key={group.code}>{findingRow(group.items[0],0)}</div>)}
     {targets.length>0&&<div className="space-y-2">
       <p className="text-[11px] text-slate-400">原文优先恢复；不明确的按钮请填写文案。AI建议须经你确认。</p>
       {targets.map(t=><label key={t.nid} className="block space-y-1 text-[11px]">

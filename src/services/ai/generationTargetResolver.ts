@@ -1,4 +1,4 @@
-import { resolveScreenReferences } from './screenReferenceResolver';
+import { resolveScreenReferences, quotedScreenReferences } from './screenReferenceResolver';
 import { requiresPageVariantPlan } from './multiPageContract';
 import { classifyIntent } from './intentClassifier';
 import { explicitlyRequestsPageRedesign } from './pageRedesignIntent';
@@ -198,7 +198,7 @@ export function resolveGenerationTarget(input: GenerationTargetInput): Generatio
 
   // 显式引用存在歧义或未找到时，阻断并引导用户明确指定目标。
   // 若用户明确要求新建（explicit_create），且并未显式 @ 或显式参考该画框，不阻断新建。
-  const hasQuotedRef = /(?:参考|基于|仿照|沿用|复用|读取|分析)(?:现有|原有|已有|原)?(?:页面|画框)?\s*[“「『"《]/.test(rawPrompt);
+  const hasQuotedRef = quotedScreenReferences(rawPrompt).length>0;
   const hasExplicitAmbiguity =
     resolution.ambiguousNames.length > 0 &&
     (command.kind !== 'explicit_create' ||

@@ -34,6 +34,6 @@ test('capacity form validates before saving and exposes limits only for roles bo
   act(()=>root.render(<ModelCapacitySettings provider={provider} model="m"/>));
   expect(host.querySelector('[aria-label="code角色输出上限"]')).not.toBeNull();expect(host.querySelector('[aria-label="chat角色输出上限"]')).toBeNull();
   fill('模型上下文窗口','1024');fill('模型最大输出','2048');click();expect(useAIConfigStore.getState().providers[0].modelCapabilities).toBeUndefined();expect(host.textContent).toContain('输出上限须小于');
-  fill('模型上下文窗口','16000');click();expect(useAIConfigStore.getState().providers[0].modelCapabilities?.m.contextWindow).toBe(16000);expect(host.textContent).toContain('仍受任务总预算');
+  fill('模型上下文窗口','16000');click();expect(useAIConfigStore.getState().providers[0].modelCapabilities?.m.contextWindow).toBe(16000);expect(host.textContent).toContain('仍受本轮总额度');
  }finally{act(()=>root.unmount());host.remove();useAIConfigStore.setState(before,true);(globalThis as any).IS_REACT_ACT_ENVIRONMENT=oldAct;if(stored===null)localStorage.removeItem('ai_designer_providers_v1');else localStorage.setItem('ai_designer_providers_v1',stored);}
 });

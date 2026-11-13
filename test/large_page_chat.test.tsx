@@ -50,12 +50,12 @@ test('explicit continue reuses remaining parent allowance and full prefix, creat
  expect(created.htmlContent).toContain('开始匹配');expect(created.htmlContent).not.toContain('TAUDESIGN_CONTINUE');expect(created.metadata?.creationEvidence?.workflow.status).toBe('ready');expect(useProjectStore.getState().screens.old.htmlContent).toContain('旧内容');
 });
 async function pendingResume(){
- pauseEarly=true;holdResume=true;await send();expect(calls).toHaveLength(2);const summary=host.querySelector('[aria-label="应用调用摘要"]')!;expect(summary.textContent).toContain('调用尝试 3 次');
+ pauseEarly=true;holdResume=true;await send();expect(calls).toHaveLength(2);const summary=host.querySelector('[aria-label="应用调用摘要"]')!;expect(summary.textContent).toContain('请求尝试 3 次');
  await act(async()=>{const resume=button('继续未完成设计');resume.click();resume.click();await new Promise(r=>setTimeout(r,20));});expect(calls).toHaveLength(3);expect(ledgers[1]).toBe(ledgers[0]);expect(ledgers[0].snapshot()).toMatchObject({requests:4,closed:false});
- const last=host.querySelectorAll('[aria-label="应用调用摘要"]')[1];expect(last.textContent).toContain('调用尝试 1 次');expect(last.textContent).toContain('进行中 1 次');expect(last.textContent).toContain('等待调用返回');return last;
+ const last=host.querySelectorAll('[aria-label="应用调用摘要"]')[1];expect(last.textContent).toContain('请求尝试 1 次');expect(last.textContent).toContain('进行中 1 次');expect(last.textContent).toContain('等待 AI 回复');return last;
 }
 test('manual continuation observes this execution separately from the original cumulative allowance',async()=>{
- const last=await pendingResume();await act(async()=>{releaseResume();await new Promise(r=>setTimeout(r,40));});expect(last.textContent).toContain('调用已返回');expect(last.textContent).toContain('进行中 0 次');expect(last.textContent).toContain('调用尝试 1 次');expect(ledgers[0].snapshot()).toMatchObject({requests:4,closed:true});expect(functionPlans).toBe(1);expect(Object.keys(useProjectStore.getState().screens)).toHaveLength(2);expect(calls).toHaveLength(3);
+ const last=await pendingResume();await act(async()=>{releaseResume();await new Promise(r=>setTimeout(r,40));});expect(last.textContent).toContain('已收到 AI 回复');expect(last.textContent).toContain('进行中 0 次');expect(last.textContent).toContain('请求尝试 1 次');expect(ledgers[0].snapshot()).toMatchObject({requests:4,closed:true});expect(functionPlans).toBe(1);expect(Object.keys(useProjectStore.getState().screens)).toHaveLength(2);expect(calls).toHaveLength(3);
 });
 for(const change of ['cancel','model','project'] as const)test(`${change} during resumed generation suppresses late output without renewing its allowance`,async()=>{
  await pendingResume();await act(async()=>{

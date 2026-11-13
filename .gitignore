@@ -81,3 +81,14 @@ doc/generated-media-processing/*
 !doc/generated-media-processing/evidence/
 doc/generated-media-processing/evidence/*
 !doc/generated-media-processing/evidence/browser-final/
+
+!doc/page-reference-quote-fix/
+doc/page-reference-quote-fix/*
+!doc/page-reference-quote-fix/*.md
+
+!doc/plain-language-feedback/
+doc/plain-language-feedback/*
+!doc/plain-language-feedback/*.md
+!doc/plain-language-feedback/evidence/
+doc/plain-language-feedback/evidence/*
+!doc/plain-language-feedback/evidence/browser/

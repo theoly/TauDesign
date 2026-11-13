@@ -19,20 +19,20 @@ function render(node:React.ReactNode){host=document.createElement('div');documen
 test('budget card distinguishes request quotas from reported or unreported usage',()=>{
   const ledger=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:8,maxDurationMs:1000,maxRequestDurationMs:1000});ledger.reserve(8).settle();ledger.close();
   const node=render(<TaskBudgetCard value={ledger.snapshot()}/>);
-  expect(node.textContent).toContain('请求 1/1');expect(node.textContent).toContain('已结束');expect(node.textContent).toContain('未报告用量');
+  expect(node.textContent).toContain('请求 1/1');expect(node.textContent).toContain('已结束');expect(node.textContent).toContain('尚未收到用量报告');
   expect(node.textContent).toContain('不等于实际消耗或费用');expect(node.textContent).not.toContain('质量通过');
 });
 test('legacy records stay quiet; malformed budget and guidance data are visible without crashing',()=>{
   const node=render(<><TaskBudgetCard value={undefined}/><DesignGuidanceCard/></>);expect(node.textContent).toBe('');
   act(()=>root!.render(<><TaskBudgetCard value={{version:1,requests:'bad'}}/><DesignGuidanceCard contract={{designGuidance:{version:1}} as any}/></>));
-  expect(node.textContent).toContain('预算记录不可用');expect(node.textContent).toContain('设计依据记录不可用');
+  expect(node.textContent).toContain('用量记录不可用');expect(node.textContent).toContain('设计依据记录不可用');
 });
 test('guidance card displays selected advice without claiming it was sent or verified',()=>{
   const contract=buildDesignTaskContract({intent:'create_screen',request:'长正文',deviceProfile:'mobile',frameWidth:390});
   contract.designGuidance=makeGuidancePacket(contract,selectDesignRules({request:'长正文',operation:'create',device:'mobile',scope:'page',maxChars:800}));
   const node=render(<DesignGuidanceCard contract={contract}/>);
   expect(node.textContent).toContain('本次设计依据');expect(node.textContent).toContain('长正文空间');
-  expect(node.textContent).toContain('尚无实际调用记录');expect(node.textContent).toContain('不表示 Provider 已确认收到');
+  expect(node.textContent).toContain('尚未记录实际请求');expect(node.textContent).toContain('不保证 AI 服务已收到');
   expect(node.querySelector('script')).toBeNull();
 });
 test('brief labels scene inference and preserves exact versus semantic content requirements',()=>{

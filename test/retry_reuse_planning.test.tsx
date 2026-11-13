@@ -200,7 +200,7 @@ test('CHK-F-04: ChatDrawer 渲染直接重试(复用规划)、重新梳理与针
   // 界面文案与诊断断言
   expect(host.textContent).toContain('直接重试 (复用规划)');
   expect(host.textContent).toContain('重新梳理规划');
-  expect(host.textContent).toContain('模型在无活动时限内未返回数据分片');
+  expect(host.textContent).toContain('AI 长时间没有返回内容');
 });
 
 test('CHK-F-05: 附带参考图超时失败时，支持【仅重试文字要求 (不附图)】通道', async () => {

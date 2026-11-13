@@ -245,7 +245,7 @@ async def verify_protocol_guidance(page,engine,device):
     await page.get_by_label('本次设计依据',exact=True).locator('summary').first.click()
     await page.get_by_label('本次设计依据',exact=True).get_by_text('请求记录 · 1 条',exact=True).click()
     await page.get_by_label('本轮预算记录',exact=True).locator('summary').click()
-    assert '调用输入记录 1 条规则' in await page.get_by_label('本次设计依据',exact=True).inner_text()
+    assert '请求中提供 1 条规则' in await page.get_by_label('本次设计依据',exact=True).inner_text()
     assert '4,096' in await page.get_by_label('本轮预算记录',exact=True).inner_text()
     frame=page.frame_locator('iframe[data-inspector-screen="page"]')
     await frame.locator('[data-nid="region01"]').wait_for()
@@ -322,7 +322,7 @@ async def verify_manual_continuation(page,engine,exhausted):
     return result
 
 async def set_rule_control(page,enabled):
-    await page.get_by_role('button',name='Provider 配置',exact=True).first.click()
+    await page.get_by_role('button',name='AI 服务设置',exact=True).first.click()
     panel=page.get_by_test_id('settings')
     control=panel.get_by_role('checkbox',name='自动参考设计规则',exact=True)
     await control.set_checked(enabled)
@@ -336,7 +336,7 @@ async def verify_guidance_reopen(page,engine,device,kind):
     await card.locator('summary').first.wait_for()
     await card.locator('summary').first.click()
     await card.get_by_text('请求记录 · 1 条',exact=True).click()
-    assert '返回完成' in await card.inner_text()
+    assert '已收到回复' in await card.inner_text()
     assert '不能直接采纳或续写' in await page.locator('body').inner_text()
     after=await page.evaluate('()=>({calls:ruleControlFixture.requests.length,history:ruleControlFixture.history().past.length,pages:Object.keys(ruleControlFixture.state().screens).length})')
     assert before==after,(before,after)
@@ -349,7 +349,7 @@ async def verify_guidance_reopen(page,engine,device,kind):
         saved=panel.get_by_label('历史设计依据',exact=True).last
         await saved.locator('summary').first.click()
         await saved.get_by_text('请求记录 · 1 条',exact=True).click()
-        assert '返回完成' in await saved.inner_text()
+        assert '已收到回复' in await saved.inner_text()
         await panel.get_by_text('已确认的分析来源',exact=True).click()
         analysis=panel.get_by_label('历史设计依据',exact=True).first
         await analysis.locator('summary').first.click()
@@ -443,7 +443,7 @@ async def verify_rule_roots(page,engine,device):
     cancelled_card=page.get_by_label('本次设计依据',exact=True).first
     await cancelled_card.locator('summary').first.click()
     await cancelled_card.get_by_text('请求记录 · 1 条',exact=True).click()
-    await page.wait_for_function('document.body.innerText.includes("已取消 · 调用输入记录")')
+    await page.wait_for_function('document.body.innerText.includes("已取消 · 请求中提供")')
     cancelled=await page.evaluate('''()=>{const f=ruleControlFixture,s=f.state();return {calls:f.requests.length,original:s.screens.page.htmlContent===f.original,candidate:!!s.stagedScreen,history:f.history().past.length-f.before};}''')
     assert cancelled=={'calls':1,'original':True,'candidate':False,'history':0},cancelled
     await page.screenshot(path=str(OUT/f'{engine}-rule-cancel-{device}.png'),full_page=True)
@@ -465,7 +465,7 @@ async def verify_guided_repair(page,engine,device):
     }''')
     assert [r['stage'] for r in result['requests']]==['plan','html','repair'],result
     activity=await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
-    assert '调用尝试 3 次' in activity and '进行中 0 次' in activity,activity
+    assert '请求尝试 3 次' in activity and '进行中 0 次' in activity,activity
     assert result['workflow']=='ready' and result['render']=='complete' and result['renderErrors']==0,result
     assert result['repair']=='repaired' and result['parentCalls']==['completed'] and result['original'],result
     trace=result['trace']
@@ -478,7 +478,7 @@ async def verify_guided_repair(page,engine,device):
     await page.get_by_text('受控样式修复 1 次（已完整复验）',exact=True).click()
     source=page.get_by_label('修复设计规则来源',exact=True)
     await source.wait_for()
-    assert '沿用原任务' in await source.inner_text() and '返回完成' in await source.inner_text()
+    assert '沿用原任务' in await source.inner_text() and '已收到回复' in await source.inner_text()
     assert 'FIXTURE_SECRET' not in await page.locator('body').inner_text()
     await page.screenshot(path=str(OUT/f'{engine}-guided-repair-{device}.png'),full_page=True)
     history=await page.evaluate('''()=>{
@@ -502,8 +502,8 @@ async def verify_legacy_history(page,engine,device):
     assert await evidence.count()==1
     await evidence.locator('summary').first.click()
     await evidence.get_by_text('请求记录 · 1 条',exact=True).click()
-    await expect(evidence).to_contain_text('返回完成')
-    await expect(evidence).to_contain_text('调用输入记录 1 条规则')
+    await expect(evidence).to_contain_text('已收到回复')
+    await expect(evidence).to_contain_text('请求中提供 1 条规则')
     plan=page.get_by_label('功能与交互规划',exact=True)
     assert await plan.count()==1
     await plan.locator('summary').first.click()
@@ -682,23 +682,23 @@ async def verify_request_activity(page,engine,device):
         await page.locator('button[title*="发送设计诉求"]').click()
     await send()
     card=page.get_by_label('应用调用摘要',exact=True).last
-    await card.get_by_text('等待调用返回',exact=False).wait_for()
+    await card.get_by_text('等待 AI 回复',exact=False).wait_for()
     # This is a negative regression past the deleted 600/1200ms timers, not a phase driver.
     await page.wait_for_timeout(1350)
     waiting=await card.inner_text()
-    assert '正文 0 字符' in waiting and '推理 0 字符' in waiting and '调用尝试 1 次' in waiting,waiting
+    assert '回复 0 字符' in waiting and '思考 0 字符' in waiting and '请求尝试 1 次' in waiting,waiting
     body=await page.locator('body').inner_text()
-    assert '检查返回内容与源码' not in body and '构建组件语义树' not in body and '流式编写页面代码' not in body and 'FIXTURE_SECRET' not in body
+    assert '检查页面内容' not in body and '构建组件语义树' not in body and '流式编写页面代码' not in body and 'FIXTURE_SECRET' not in body
     assert await page.evaluate('ruleControlFixture.requests.length')==1
     await page.screenshot(path=str(OUT/f'{engine}-request-waiting-{device}.png'),full_page=True)
     await page.evaluate('ruleControlFixture.releaseActivity()')
-    await card.get_by_text('调用已返回',exact=False).wait_for()
+    await card.get_by_text('已收到 AI 回复',exact=False).wait_for()
     returned=await card.inner_text()
-    assert '正文 7 字符' in returned and '推理 4 字符' in returned and '进行中 0 次' in returned,returned
+    assert '回复 7 字符' in returned and '思考 4 字符' in returned and '进行中 0 次' in returned,returned
     await send()
-    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('等待调用返回',exact=False).wait_for()
+    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('等待 AI 回复',exact=False).wait_for()
     await page.locator('button[title*="立即停止"]').click()
-    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('调用已停止',exact=False).wait_for()
+    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('AI 请求已停止',exact=False).wait_for()
     await page.evaluate('ruleControlFixture.releaseActivity("<think>LATE_REASONING</think>LATE_RESPONSE")')
     body=await page.locator('body').inner_text()
     assert 'LATE_RESPONSE' not in body and 'LATE_REASONING' not in body and 'FIXTURE_SECRET' not in body
@@ -718,8 +718,8 @@ async def verify_independent_activity(page,engine,device):
     await set_rule_control(page,False)
     await send('@资料页 优化页面')
     activity=page.get_by_label('应用调用摘要',exact=True).last
-    await activity.get_by_text('等待调用返回',exact=False).wait_for()
-    assert '调用尝试 1 次' in await activity.inner_text() and 'JSON 结果 0 字符' in await activity.inner_text()
+    await activity.get_by_text('等待 AI 回复',exact=False).wait_for()
+    assert '请求尝试 1 次' in await activity.inner_text() and 'JSON 结果 0 字符' in await activity.inner_text()
     assert await page.evaluate('ruleControlFixture.pendingEntries.length')==1
     await page.evaluate('ruleControlFixture.releaseEntry(0)')
     review=page.get_by_test_id('modification-review')
@@ -730,47 +730,47 @@ async def verify_independent_activity(page,engine,device):
     await page.wait_for_function('!!ruleControlFixture.state().stagedScreen')
     summaries=page.get_by_label('应用调用摘要',exact=True)
     assert await summaries.count()==2
-    assert '调用尝试 1 次' in await summaries.first.inner_text() and '调用已返回' in await summaries.first.inner_text()
-    assert '尚未调用模型' in await summaries.last.inner_text() and '调用尝试 0 次' in await summaries.last.inner_text()
+    assert '请求尝试 1 次' in await summaries.first.inner_text() and '已收到 AI 回复' in await summaries.first.inner_text()
+    assert '尚未向 AI 发送请求' in await summaries.last.inner_text() and '请求尝试 0 次' in await summaries.last.inner_text()
     assert await page.evaluate('ruleControlFixture.requests.length')==1
     await page.screenshot(path=str(OUT/f'{engine}-independent-zero-{device}.png'),full_page=True)
     await page.goto(url,wait_until='networkidle')
     explicit='[引用元素 nid="button01" 画框="资料页" 标签=<button>]\n\n主按钮文字加粗'
     await send(explicit)
-    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('等待调用返回',exact=False).wait_for()
+    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('等待 AI 回复',exact=False).wait_for()
     assert await page.get_by_test_id('modification-review').count()==0
     await page.locator('button[title*="立即停止"]').click()
-    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('调用已停止',exact=False).wait_for()
+    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('AI 请求已停止',exact=False).wait_for()
     await send(explicit)
     await page.wait_for_function('ruleControlFixture.pendingEntries.length===2')
     await page.evaluate('ruleControlFixture.releaseEntry(0,"LATE_ELEMENT_OUTPUT")')
-    assert '等待调用返回' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
+    assert '等待 AI 回复' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
     assert await page.locator('button[title*="立即停止"]').count()==1
     assert await page.evaluate('!ruleControlFixture.state().stagedScreen')
     await page.evaluate('ruleControlFixture.releaseEntry(1)')
     await page.wait_for_function('!!ruleControlFixture.state().stagedScreen')
     returned=await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
-    assert '调用已返回' in returned and '进行中 0 次' in returned
+    assert '已收到 AI 回复' in returned and '进行中 0 次' in returned
     assert 'LATE_ELEMENT_OUTPUT' not in await page.locator('body').inner_text()
     assert await page.evaluate('ruleControlFixture.requests.length')==2
     assert await page.evaluate('ruleControlFixture.history().past.length-ruleControlFixture.before')==0
     await page.screenshot(path=str(OUT/f'{engine}-independent-element-{device}.png'),full_page=True)
     await page.goto('http://127.0.0.1:5174/test/fixtures/multi-page-functions.html?device='+device+'&activity=1',wait_until='networkidle')
     await send('生成登录页、注册页两个页面')
-    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('等待调用返回',exact=False).wait_for()
+    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('等待 AI 回复',exact=False).wait_for()
     assert await page.evaluate('multiFunctionFixture.requests.length')==1
     await page.evaluate('multiFunctionFixture.release(0)')
     card=page.get_by_test_id('multi-page-plan')
     await card.get_by_role('button',name='确认计划并生成 2 页',exact=True).click()
     await page.wait_for_function('multiFunctionFixture.pending.length===2')
-    assert '调用尝试 1 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
+    assert '请求尝试 1 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
     assert '进行中 1 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
     await page.evaluate('multiFunctionFixture.release(1)')
     await page.wait_for_function('multiFunctionFixture.pending.length===3')
-    assert '调用尝试 2 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
+    assert '请求尝试 2 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
     await page.evaluate('multiFunctionFixture.release(2)')
     await page.wait_for_function('Object.keys(multiFunctionFixture.state().screens).length===3')
-    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('调用已返回',exact=False).wait_for()
+    await page.get_by_label('应用调用摘要',exact=True).last.get_by_text('已收到 AI 回复',exact=False).wait_for()
     assert '进行中 0 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
     result=await page.evaluate('''()=>({requests:multiFunctionFixture.requests.length,pages:Object.keys(multiFunctionFixture.state().screens).length,
       history:multiFunctionFixture.history().past.length-multiFunctionFixture.before,original:multiFunctionFixture.state().screens.old.htmlContent===multiFunctionFixture.original})''')
@@ -795,7 +795,7 @@ async def verify_recovery_activity(page,engine,device):
     await draft.get_by_role('button',name='AI建议文案（限一次）',exact=True).click()
     await page.wait_for_function('ruleControlFixture.pendingEntries?.length===1')
     summary=page.get_by_label('应用调用摘要',exact=True).last
-    assert '等待调用返回' in await summary.inner_text() and '调用尝试 1 次' in await summary.inner_text()
+    assert '等待 AI 回复' in await summary.inner_text() and '请求尝试 1 次' in await summary.inner_text()
     await page.locator('button[title*="立即停止"]').click()
     await page.evaluate('ruleControlFixture.releaseEntry(0)')
     assert await draft.locator('input[aria-label^="操作文案"]').input_value()==''
@@ -808,14 +808,14 @@ async def verify_recovery_activity(page,engine,device):
     await draft.get_by_role('button',name='确认文案并定点修复',exact=True).click()
     await page.wait_for_function('Object.keys(ruleControlFixture.state().screens).length===2')
     assert await page.evaluate('ruleControlFixture.requests.length')==3
-    assert '调用尝试 0 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
+    assert '请求尝试 0 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
     await page.screenshot(path=str(OUT/f'{engine}-recovery-draft-{device}.png'),full_page=True)
 
     await page.goto(base+'&remountActivity=1',wait_until='networkidle')
     await send('新建长正文说明页')
     await page.get_by_role('button',name='重新检查并挂载',exact=True).click()
     await page.wait_for_function('!!ruleControlFixture.releaseRender')
-    assert '调用尝试 0 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
+    assert '请求尝试 0 次' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
     assert await page.evaluate('Object.keys(ruleControlFixture.state().screens).length')==1
     await page.evaluate('ruleControlFixture.releaseRender()')
     await page.wait_for_function('Object.keys(ruleControlFixture.state().screens).length===2')
@@ -834,7 +834,7 @@ async def verify_recovery_activity(page,engine,device):
     await send('[引用元素 nid="button01" 画框="资料页" 标签=<button>]\n\n主按钮文字加粗')
     await page.wait_for_function('ruleControlFixture.pendingEntries?.length===1')
     await page.evaluate('ruleControlFixture.releaseRender()')
-    assert '等待调用返回' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
+    assert '等待 AI 回复' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
     assert await page.locator('button[title*="立即停止"]').count()==1
     assert await page.evaluate('Object.keys(ruleControlFixture.state().screens).length')==1
     await page.evaluate('ruleControlFixture.releaseEntry(0)')
@@ -848,7 +848,7 @@ async def verify_recovery_activity(page,engine,device):
         await page.get_by_role('button',name='继续未完成设计',exact=True).click()
         await page.wait_for_function('!!manualContinuationFixture.releaseResume')
         summary=page.get_by_label('应用调用摘要',exact=True).last
-        assert '调用尝试 1 次' in await summary.inner_text() and '进行中 1 次' in await summary.inner_text()
+        assert '请求尝试 1 次' in await summary.inner_text() and '进行中 1 次' in await summary.inner_text()
         assert '本次执行' in await summary.inner_text()
         assert await page.evaluate('manualContinuationFixture.ledgers[0]===manualContinuationFixture.ledgers[1]')
         if stop:await page.locator('button[title*="立即停止"]').click()
@@ -872,15 +872,15 @@ async def verify_variant_activity(page,engine,device):
         await page.locator('textarea[placeholder^="输入设计诉求"]').fill('给当前页面做两个方案')
         await page.locator('button[title*="发送设计诉求"]').click()
         await page.wait_for_function('multiFunctionFixture.pending.length===1')
-        await expect(page.get_by_label('应用调用摘要',exact=True).last).to_contain_text('调用尝试 1 次',timeout=5000)
+        await expect(page.get_by_label('应用调用摘要',exact=True).last).to_contain_text('请求尝试 1 次',timeout=5000)
         await page.evaluate('multiFunctionFixture.release(0)')
         await page.get_by_role('button',name='确认计划并生成 2 个方案',exact=True).click()
         await page.wait_for_function('multiFunctionFixture.pending.length===2')
-        await expect(page.get_by_label('应用调用摘要',exact=True).last).to_contain_text('调用尝试 1 次',timeout=5000)
+        await expect(page.get_by_label('应用调用摘要',exact=True).last).to_contain_text('请求尝试 1 次',timeout=5000)
         await page.evaluate('multiFunctionFixture.release(1)')
         await page.wait_for_function('multiFunctionFixture.pending.length===3')
         # Raw transport pending state can precede React's committed activity card.
-        await expect(page.get_by_label('应用调用摘要',exact=True).last).to_contain_text('调用尝试 2 次',timeout=5000)
+        await expect(page.get_by_label('应用调用摘要',exact=True).last).to_contain_text('请求尝试 2 次',timeout=5000)
         assert await page.evaluate('Object.keys(multiFunctionFixture.state().screens).length')==1
         if stop:await page.locator('button[title*="立即停止"]').click()
         await page.evaluate('multiFunctionFixture.release(2)')
@@ -888,7 +888,7 @@ async def verify_variant_activity(page,engine,device):
         else:await page.wait_for_function('Object.keys(multiFunctionFixture.state().screens).length===3')
         await expect(page.get_by_label('应用调用摘要',exact=True).last).to_contain_text('进行中 0 次',timeout=5000)
         activity=await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
-        assert '进行中 0 次' in activity and '调用尝试 2 次' in activity
+        assert '进行中 0 次' in activity and '请求尝试 2 次' in activity
         result=await page.evaluate('''()=>{const f=multiFunctionFixture,p=Object.values(f.state().screens).filter(s=>s.id!=='old');return {calls:f.requests.length,pages:p.length,
           original:f.state().screens.old.htmlContent===f.original,history:f.history().past.length-f.before,
           sameRow:p.length===2&&p[0].position.y===p[1].position.y&&p[0].position.x!==p[1].position.x,
@@ -916,7 +916,7 @@ async def verify_panel_activity(page,engine,device):
     await edit()
     await page.wait_for_function('panelOperationFixture.calls.length===1')
     summary=page.get_by_label('应用调用摘要',exact=True).last
-    assert '等待调用返回' in await summary.inner_text() and '调用尝试 1 次' in await summary.inner_text()
+    assert '等待 AI 回复' in await summary.inner_text() and '请求尝试 1 次' in await summary.inner_text()
     await page.evaluate('panelOperationFixture.select("other001")')
     await edit()
     await page.wait_for_function('panelOperationFixture.calls.length===2')
@@ -926,14 +926,14 @@ async def verify_panel_activity(page,engine,device):
     await page.evaluate('panelOperationFixture.release(1)')
     await page.wait_for_function('!!panelOperationFixture.state().stagedScreen')
     assert await page.evaluate('panelOperationFixture.state().stagedScreen.workflowContract.allowedChanges[0]')=='element:other001'
-    assert '调用已返回' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
+    assert '已收到 AI 回复' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
     await page.screenshot(path=str(OUT/f'{engine}-inspector-scope-{device}.png'))
     await page.goto(url,wait_until='networkidle')
     await edit()
     await page.wait_for_function('panelOperationFixture.calls.length===1')
     await page.get_by_role('button',name='停止局部微调',exact=True).click()
     await page.evaluate('panelOperationFixture.release(0)')
-    assert '调用已停止' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
+    assert 'AI 请求已停止' in await page.get_by_label('应用调用摘要',exact=True).last.inner_text()
     assert await page.evaluate('!panelOperationFixture.state().stagedScreen')
     await edit()
     await page.wait_for_function('panelOperationFixture.calls.length===2')
@@ -949,12 +949,12 @@ async def verify_panel_activity(page,engine,device):
     primary=page.locator('[data-control=primary]')
     await primary.get_by_role('button',name='修复一次并重新检查',exact=True).evaluate('(button)=>{button.click();button.dispatchEvent(new MouseEvent("click",{bubbles:true}));}')
     await page.wait_for_function('panelOperationFixture.calls.length===1')
-    assert '等待调用返回' in await primary.get_by_label('应用调用摘要',exact=True).inner_text()
+    assert '等待 AI 回复' in await primary.get_by_label('应用调用摘要',exact=True).inner_text()
     await page.locator('[data-control=secondary]').get_by_role('button',name='取消修复',exact=True).click()
     await page.wait_for_function('panelOperationFixture.state().stagedRepairStatus===null')
     await page.evaluate('panelOperationFixture.release(0)')
     assert await page.evaluate('panelOperationFixture.state().stagedScreen.candidateId===panelOperationFixture.candidateId')
-    assert '调用已停止' in await primary.get_by_label('应用调用摘要',exact=True).inner_text()
+    assert 'AI 请求已停止' in await primary.get_by_label('应用调用摘要',exact=True).inner_text()
     await page.evaluate('panelOperationFixture.reopen()')
     await page.wait_for_function('!!panelOperationFixture.savedRepair')
     assert await primary.get_by_role('button',name='修复一次并重新检查',exact=True).is_disabled()
@@ -1022,7 +1022,7 @@ async def verify_panel_activity(page,engine,device):
     await page.evaluate('panelOperationFixture.startDeadline()')
     await page.wait_for_function('panelOperationFixture.claimHeld')
     source=await repair_source()
-    await expect(source).to_contain_text('尚无实际调用回执',timeout=5000)
+    await expect(source).to_contain_text('尚未记录实际请求',timeout=5000)
     assert '实际注入' not in await source.inner_text()
     assert await page.evaluate('panelOperationFixture.calls.length')==0
     await page.wait_for_function('panelOperationFixture.finished',timeout=10000)
@@ -1030,7 +1030,7 @@ async def verify_panel_activity(page,engine,device):
     await page.wait_for_function('panelOperationFixture.claimWriteFinished')
     await page.evaluate('panelOperationFixture.reopen()')
     source=await repair_source()
-    await expect(source).to_contain_text('尚无实际调用回执',timeout=5000)
+    await expect(source).to_contain_text('尚未记录实际请求',timeout=5000)
     assert await page.evaluate('panelOperationFixture.calls.length')==0
     await page.screenshot(path=str(OUT/f'{engine}-repair-source-assembled-{device}.png'))
     await page.goto(url+'&candidate=1&guidance=1',wait_until='networkidle')
@@ -1040,8 +1040,8 @@ async def verify_panel_activity(page,engine,device):
     await page.evaluate('panelOperationFixture.release(0)')
     await page.wait_for_function('panelOperationFixture.state().stagedScreen.repair?.status==="repaired"')
     source=await repair_source()
-    await expect(source).to_contain_text('调用输入记录包含',timeout=5000)
-    await expect(source).to_contain_text('修复调用尝试 1 次',timeout=5000)
+    await expect(source).to_contain_text('请求中包含',timeout=5000)
+    await expect(source).to_contain_text('修复请求尝试 1 次',timeout=5000)
     provenance=await page.evaluate('''()=>{const f=panelOperationFixture,r=f.state().stagedScreen.repair.guidance;return {parentIds:f.parentRequestIds,
       repairId:r.requests[0].requestId,parent:r.parentTaskId,status:r.requests[0].status,rules:r.requests[0].injectedRuleIds,planned:f.plannedRules,calls:f.calls.length};}''')
     assert provenance['parentIds']==[provenance['parent']+':request-1'],provenance
@@ -1435,7 +1435,7 @@ async def main():
                 await page.get_by_label('本轮预算记录',exact=True).locator('summary').click()
                 text=await page.locator('body').inner_text()
                 assert '不等于实际消耗或费用' in text and 'FIXTURE_SECRET' not in text
-                assert '长正文空间' in text and '不表示 Provider 已确认收到' in text
+                assert '长正文空间' in text and '不保证 AI 服务已收到' in text
                 assert not await page.evaluate('document.documentElement.scrollWidth>innerWidth')
                 await page.screenshot(path=str(OUT/f'{engine}-cards.png'),full_page=True)
                 await page.get_by_placeholder('对选中元素提要求，如：增加内边距').fill('文字加粗')
@@ -1493,7 +1493,7 @@ async def main():
                 await page.wait_for_timeout(1250)
                 assert await page.evaluate('functionChatFixture.requests.length')==1
                 assert await page.get_by_text('梳理功能、信息与交互',exact=True).locator('xpath=../..').locator('svg.animate-spin').count()==1
-                assert await page.get_by_text('调用模型生成结果',exact=True).count()==0
+                assert await page.get_by_text('AI 正在处理请求',exact=True).count()==0
                 await page.wait_for_function('Object.keys(functionChatFixture.state().screens).length===2')
                 await page.get_by_label('功能与交互规划',exact=True).locator('summary').click()
                 await page.get_by_label('功能与交互规划',exact=True).scroll_into_view_if_needed()

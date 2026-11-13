@@ -157,7 +157,7 @@ test('guided creation repair keeps the frozen parent, bounded JSON protocol and 
   for(const id of trace.injectedRuleIds)expect(calls[0].messages[0].content).toContain(`[${id}@`);
   expect(repairGuidanceIssue(trace,contract,true)).toBeUndefined();expect(isPageCreationEvidence(JSON.parse(JSON.stringify(result.evidence)))).toBe(true);
   expect(budget.snapshot()).toMatchObject({requests:2,requestedOutputTokens:1804,reservedOutputTokens:0});
-  const ui=renderToStaticMarkup(createElement(RepairReceipt,{value:repair}));expect(ui).toContain('沿用原任务');expect(ui).toContain('返回完成');expect(ui).not.toContain(provider.apiKey);
+  const ui=renderToStaticMarkup(createElement(RepairReceipt,{value:repair}));expect(ui).toContain('沿用原任务');expect(ui).toContain('已收到回复');expect(ui).not.toContain(provider.apiKey);
   const corrupt=structuredClone(result.evidence);corrupt.repair!.guidance!.parentTaskId='another';expect(isPageCreationEvidence(corrupt)).toBe(false);
   const legacy=structuredClone(result.evidence);delete legacy.repair!.guidance;expect(isPageCreationEvidence(legacy)).toBe(true);
  }finally{budget.close();useAIConfigStore.setState(config,true);}
