@@ -38,7 +38,7 @@ async function inventory(source:ProjectStorage,check:()=>void):Promise<{paths:st
 function references(value:unknown,paths:Set<string>):void {
  if(!value||typeof value!=='object')return;
  for(const [key,item] of Object.entries(value)){
-  if((key==='relPath'||key==='path')&&typeof item==='string'&&item.startsWith('assets/'))paths.add(item);
+  if((key==='relPath'||key==='path'||key==='sourcePath')&&typeof item==='string'&&item.startsWith('assets/'))paths.add(item);
   if(key==='attachments'&&Array.isArray(item))for(const path of item)if(typeof path==='string')paths.add(path);
   references(item,paths);
  }

@@ -63,6 +63,8 @@ export interface PipelineContext {
 }
 
 export interface PipelineOutput {
+  /** Verified independent files, no binary payload; publication owns registration. */
+  generatedAssets?:import('../../../../types/project').Asset[];
   taskBudget?:import('../../taskBudget').TaskBudgetSnapshot;
   status:
     | 'applied'

@@ -52,7 +52,7 @@ export class DesignTaskJournal {
     const files=textFiles.map((f,i)=>({name:f.name,source:f.source,stepId:`input-text-${i+1}`,...(f.path?{sourcePath:f.path}:{})}));
     this.parts=textFiles.map((f,i)=>({stepId:files[i].stepId,html:f.content,complete:false}));
     let attachment:NonNullable<SavedDesignTask['inputs']>['attachment'];
-    if(this.input.attachment){const asset=await new AttachmentStore(this.input.storage).save(this.input.attachment.name,this.input.attachment.dataUrl);if(!asset)throw Error('参考图片未能独立落盘，未开始页面生成。');attachment={name:this.input.attachment.name,relPath:asset.relPath,...(this.input.attachment.region?{region:structuredClone(this.input.attachment.region)}:{})};}
+    if(this.input.attachment){const asset=await new AttachmentStore(this.input.storage).saveReference(this.input.attachment.name,this.input.attachment.dataUrl);if(!asset)throw Error('参考图片未能独立落盘，未开始页面生成。');attachment={name:this.input.attachment.name,relPath:asset.relPath,...(this.input.attachment.region?{region:structuredClone(this.input.attachment.region)}:{})};}
     this.task={version:1,id:update.contract.taskId,projectId:this.input.projectId,createdAt:Date.now(),updatedAt:Date.now(),state:'draft',request:update.contract.request,contextFingerprint:this.input.contextFingerprint,
      binding:{providerId:this.input.provider.id,model:this.input.model,endpointIdentity:endpointIdentity(this.input.provider),configurationFingerprint:await modelConfigurationFingerprint(this.input.provider,this.input.model)},contract:update.contract,
      inputs:{textFiles:files,...(attachment?{attachment}:{})},...(this.input.originTaskId?{originTaskId:this.input.originTaskId}:{}),...(this.input.recovery?{recovery:structuredClone(this.input.recovery)}:{})};

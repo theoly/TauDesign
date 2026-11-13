@@ -1,4 +1,6 @@
 import {explicitFieldLabels,inspectExplicitFieldLabels,sourceFieldLabelText} from '../services/ai/explicitFieldContent';
+import {inspectBusinessTextRendering} from '../services/ai/businessTextReview';
+import {inspectInlineForms,inspectProgressSummary} from '../services/ai/inlineFormContract';
 import type { QualityFinding } from '../services/ai/generationQuality';
 import { hasAccessibleActionName } from '../services/ai/actionIntegrity';
 import { contrastRatio } from './colorHarmony';
@@ -7,6 +9,7 @@ import type {RenderResourceFile} from '../services/storage/renderResourceSnapsho
 import { assessedFinding } from '../services/ai/findingPolicy';
 import {explicitActionTexts,inspectExplicitActionTexts,sourceActionText,type ContentTask} from '../services/ai/explicitActionContent';
 import {createRenderCoverage,type RenderCoverageEntry} from '../services/ai/renderCoverage';
+import {inspectFormPresentation} from '../services/ai/formPresentationRules';
 
 export interface RenderedQualityReport {
   status: 'pending' | 'complete' | 'incomplete' | 'unavailable';
@@ -41,8 +44,17 @@ export function inspectRenderedQuality(doc: Document, options: RenderedQualityOp
     return { status: 'unavailable', findings: [], inspected: 0, reason: '画框尚无可测量尺寸' };
   }
   const styles = new Map<Element, CSSStyleDeclaration>();
+  const inClosedDetails=(el:Element)=>{
+    for(let cur=el.parentElement;cur;cur=cur.parentElement){
+      if(!cur.matches('details:not([open])'))continue;
+      const summary=Array.from(cur.children).find(child=>child.localName==='summary');
+      if(!summary?.contains(el))return true;
+    }
+    return false;
+  };
   const css = (el: Element) => { let s = styles.get(el); if (!s) { s = win.getComputedStyle(el); styles.set(el, s); } return s; };
   const cssVisible = (el: Element) => {
+    if(inClosedDetails(el))return false;
     for (let cur: Element | null = el; cur; cur = cur.parentElement) {
       const s = css(cur);
       if (cur.hasAttribute('hidden') || s.display === 'none' || ['hidden', 'collapse'].includes(s.visibility) || Number(s.opacity || 1) === 0) return false;
@@ -147,6 +159,7 @@ export function inspectRenderedQuality(doc: Document, options: RenderedQualityOp
   const actionSelector = 'button, a[href], [role="button"], input[type="submit"], input[type="button"]';
   // Hidden containers represent inactive UI; a visible container's broken control must still be measured.
   const hiddenContainer = (el: Element) => {
+    if(inClosedDetails(el))return true;
     for (let cur = el.parentElement; cur; cur = cur.parentElement) {
       const s = css(cur);
       if (cur.hasAttribute('hidden') || s.display === 'none' || ['hidden', 'collapse'].includes(s.visibility) || Number(s.opacity || 1) === 0 || s.contentVisibility === 'hidden') return true;
@@ -194,7 +207,7 @@ export function inspectRenderedQuality(doc: Document, options: RenderedQualityOp
       }
       if (!hasLabel) {
         const named = hasAccessibleActionName(el);
-        hasLabel = Array.from(el.querySelectorAll('svg, img, .icon')).some(icon => {
+        hasLabel = Array.from(el.querySelectorAll('svg, img, .icon, .icon-mask')).some(icon => {
           if (!paintedLabel(icon, false)) return false;
           return named;
         });
@@ -373,6 +386,7 @@ export function inspectRenderedQuality(doc: Document, options: RenderedQualityOp
     if (hasText) contrast(el);
   }
   const budgetExceeded = nodes.length > maxNodes||bodyBudgetExceeded;
+  findings.push(...inspectFormPresentation(doc,maxNodes));
   const observeLiteralText=(el:Element)=>{
     const fieldLabel=el.matches('label');
     if(!paintedLabel(el,false,fieldLabel))return {text:''};
@@ -416,6 +430,8 @@ export function inspectRenderedQuality(doc: Document, options: RenderedQualityOp
   };
   findings.push(...inspectExplicitActionTexts(doc,explicitActionTexts(options.contentTask),observeLiteralText));
   findings.push(...inspectExplicitFieldLabels(doc,explicitFieldLabels(options.contentTask),observeLiteralText));
+  if(options.contentTask?.businessTextReview)findings.push(...inspectBusinessTextRendering(doc,options.contentTask.businessTextReview,observeLiteralText));
+  if(options.contentTask)findings.push(...inspectInlineForms(doc,options.contentTask.request,observeLiteralText),...inspectProgressSummary(doc,options.contentTask.request,observeLiteralText));
   const resourcesReady = options.resourcesReady !== false;
   const coverageEntries=coverage.entries();
   return { status: budgetExceeded || !resourcesReady ? 'incomplete' : 'complete', findings, inspected,...(coverageEntries.length?{coverage:coverageEntries}:{}),

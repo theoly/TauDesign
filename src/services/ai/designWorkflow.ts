@@ -37,8 +37,9 @@ function nextTaskId(): string {
 export interface ReferenceImageIdentity {
   region?: import('../../types/referenceImage').ReferenceRegion;
   name:string;fingerprint:string;
+  evidence?:import('./referenceEvidence').ReferenceEvidence;
   /** Computed from the actual outgoing current-turn message, never model output. */
-  inputReceipt?:{version:1;checkedAt:number;imageFingerprint:string;requestFingerprint:string;messageFingerprint:string;providerId:string;model:string;reusedFromTaskId?:string};
+  inputReceipt?:{version:1;checkedAt:number;imageFingerprint:string;requestFingerprint:string;messageFingerprint:string;providerId:string;model:string;reusedFromTaskId?:string;evidenceFingerprint?:string};
 }
 export interface DesignLibrarySourceIdentity {
   mode:DesignLibraryBinding['mode'];sourceProjectId:string;sourceFingerprint:string;sourceTokenVersion:number;bindingFingerprint:string;
@@ -49,6 +50,7 @@ export interface DesignTaskContract {
   pageTaskPlan?:import('./pageTaskPlan').PageTaskSnapshot;
   pageWriteStrategy?:import('./generationStrategy').PageWriteStrategy;
   wholePageRedesign?:{version:1;sourceFingerprint:string;inventoryFingerprint:string};
+  businessTextReview?:import('./businessTextReview').BusinessTextReview;
   designGuidance?: import('./designKnowledge/receipt').DesignGuidancePacket;
   generationMode?: 'sections';
   version: 1;

@@ -1,4 +1,5 @@
 import {validPageWriteStrategy} from './generationStrategy';
+import {validBusinessTextReview} from './businessTextReview';
 import {validContextManifest} from './engine/context/contextManifest';
 import {validRegionSubdivision} from './regionSubdivision';
 import type {DesignTaskContract} from './designWorkflow';
@@ -25,6 +26,7 @@ export function isTaskContractShape(value:unknown):value is DesignTaskContract {
     ['sourceId','sourceName','sourceFingerprint','tokenFingerprint'].every(k=>optional(v[k],text))&&optional(v.tokenVersion,n=>typeof n==='number'&&Number.isFinite(n)))&&
    ['sourceName','referencePageId','elementNid','knowledgeFingerprint'].every(k=>optional(c[k],text))&&
    optional(c.wholePageRedesign,v=>object(v)&&Object.keys(v).length===3&&v.version===1&&text(v.sourceFingerprint)&&text(v.inventoryFingerprint))&&
+   optional(c.businessTextReview,v=>Boolean(c.wholePageRedesign)&&validBusinessTextReview(v))&&
    optional(c.regionSubdivision,validRegionSubdivision)&&optional(c.contextManifest,validContextManifest)&&optional(c.pageWriteStrategy,validPageWriteStrategy)&&optional(c.generationMode,v=>v==='sections')&&optional(c.projectPages,strings)&&optional(c.projectPageCount,v=>typeof v==='number'&&Number.isFinite(v)&&v>=0)&&
    ['referenceImage','librarySource','multiPage','pageTaskPlan','designGuidance','modificationReview'].every(k=>optional(c[k],object))&&
    optional(c.validationPlan,v=>object(v)&&v.version===1&&text(v.workflowId)&&text(v.fingerprint)&&strings(v.stages));

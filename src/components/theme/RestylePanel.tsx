@@ -19,7 +19,7 @@ import { ModificationReviewCard } from '../chat/ModificationReviewCard';
 import {DesignGuidanceCard} from '../chat/DesignGuidanceCard';
 import { buildDesignTaskContract, buildRestyleContract, renderDesignTaskContract } from '../../services/ai/designWorkflow';
 import { RestyleDeliveryHistoryPanel } from '../inspector/RestyleDeliveryHistoryPanel';
-import {restyleThinkingOptions} from '../../services/ai/thinkingPolicy';
+import {artifactThinkingOptions as restyleThinkingOptions} from '../../services/ai/structuredRequestPolicy';
 import {createRestylePatchPlan,RESTYLE_PATCH_THRESHOLD} from '../../services/ai/restylePatches';
 import {TaskBudget} from '../../services/ai/taskBudget';
 import {createRestyleBudget} from '../../services/ai/taskBudgetPolicy';

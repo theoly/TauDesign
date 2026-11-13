@@ -7,9 +7,11 @@ import type { GenerationTarget } from '../ai/generationTargetResolver';
 import { checkGenerationSourceSafety } from '../ai/generationQuality';
 import { contentFingerprint } from '../ai/designWorkflow';
 import {validReferenceRegion,type ReferenceRegion} from '../../types/referenceImage';
+import {validBusinessTextChoice} from '../ai/businessTextReview';
 
 export interface SavedQualityDraft {
   version: 1; id: string; projectId: string; createdAt: number;
+  repairSource?:{draftId:string;fingerprint:string;nids:string[];instruction:string;textChanges?:import('../ai/businessTextReview').BusinessTextChoice[]};
   draft: FailedPageDraft; request: string; projectContext: string; decision: GenerationTarget;
   textReferences?: PipelineInput['textReferences'];
   attachment?: { name: string; relPath: string; region?: ReferenceRegion };
@@ -22,6 +24,8 @@ const rel = (id: string) => { if (!validId(id)) throw Error('草稿标识无效'
 function valid(value: SavedQualityDraft, projectId: string): boolean {
   return Boolean(value?.version===1 && value.projectId===projectId && validId(value.id) && typeof value.request==='string'
     && value.request.length<=100_000 && Number.isFinite(value.createdAt)
+    && (!value.repairSource || (validId(value.repairSource.draftId)&&typeof value.repairSource.fingerprint==='string'&&Array.isArray(value.repairSource.nids)&&value.repairSource.nids.length<=3&&value.repairSource.nids.every(n=>typeof n==='string')&&typeof value.repairSource.instruction==='string'&&value.repairSource.instruction.length<=2000&&
+      (value.repairSource.textChanges===undefined||Array.isArray(value.repairSource.textChanges)&&value.repairSource.textChanges.length<=8&&value.repairSource.textChanges.every(validBusinessTextChoice))))
     && typeof value.projectContext==='string' && ['blocked','resolved'].includes(value.status)
     && value.decision && ['create_screen','modify_screen','patch_element'].includes(value.decision.action) && typeof value.decision.reason==='string'
     && ['targetScreenId','styleReferenceScreenId','elementNid'].every(key=>(value.decision as unknown as Record<string,unknown>)[key]===null||typeof (value.decision as unknown as Record<string,unknown>)[key]==='string')

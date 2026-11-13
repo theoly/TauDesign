@@ -1,3 +1,4 @@
+import {requestOutputCap} from './modelCapabilities';
 import type {AIEngineCore,StreamTextOptions,TokenUsage} from './engine/core/types';
 
 export interface TaskBudgetLimits {
@@ -102,7 +103,7 @@ export class TaskBudget {
 export function withTaskBudget(core:AIEngineCore,budget:TaskBudget):AIEngineCore {
   const execute=<T>(options:StreamTextOptions,start:(request:StreamTextOptions)=>{value:T;done:Promise<unknown>;usage?:Promise<TokenUsage|undefined>;abort?:()=>void})=>{
     if(options.signal?.aborted){budget.cancel('生成已取消');throw budget.signal.reason;}
-    const maxTokens=options.maxTokens??8192,reservation=budget.reserve(maxTokens),controller=new AbortController();
+    const maxTokens=requestOutputCap(options.provider,options.model,options.maxTokens??8192),reservation=budget.reserve(maxTokens),controller=new AbortController();
     let rejectAbort!:(e:unknown)=>void;let usage:TokenUsage|undefined;
     const interrupted=new Promise<never>((_,reject)=>{rejectAbort=reject;});void interrupted.catch(()=>{});
     let transportAbort:(()=>void)|undefined;

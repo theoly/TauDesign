@@ -43,7 +43,7 @@ for(const wrappedInput of [false,true])test(`${wrappedInput?'wrapped':'plain'} e
 test('retry retains an options-only element reference and never reaches a whole-page pipeline',async()=>{
  await act(async()=>{await engine.sendMessage('增加邮箱输入框',undefined,reference);});
  const result=engine.messages.find(m=>m.toolAction==='modified')!;
- await act(async()=>{engine.retryTurn(result.id);await new Promise(r=>setTimeout(r,15));});
+ await act(async()=>{await engine.retryTurn(result.id);});
  expect(objects).toHaveBeenCalledTimes(4);expect(pipeline).not.toHaveBeenCalled();expect(useProjectStore.getState().stagedScreen?.workflowContract?.elementNid).toBe('card0001');expect(new Set(engine.messages.map(m=>m.id)).size).toBe(engine.messages.length);
 });
 test('pending questions and model changes block subtree delivery without new analysis or a page fallback',async()=>{

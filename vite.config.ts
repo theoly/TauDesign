@@ -84,6 +84,8 @@ function aiDevProxyPlugin(): Plugin {
 
 export default defineConfig({
   plugins: [react(), aiDevProxyPlugin()],
+  // Archived evidence and test HTML are not application entry points.
+  optimizeDeps:{entries:['index.html'],include:['react','react-dom/client']},
   build: { chunkSizeWarningLimit: 3000, },
   resolve: {
     alias: {

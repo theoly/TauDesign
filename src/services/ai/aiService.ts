@@ -20,6 +20,7 @@ export interface GenerationOptions {
   maxTokens?: number;
   temperature?: number;
   enableThinking?: boolean;
+  idleTimeoutMs?:number;
   jsonSchema?: Record<string,unknown>;
   /** Legacy callers retain the text adapter; the core receives typed reasoning events. */
   eventProtocol?: 'typed';
@@ -41,7 +42,9 @@ export class AIService {
     // 1. 全局最大总时限（兜底保护，默认 15 分钟；正常流仍受空闲心跳保护）
     const maxTimeoutMs = timeoutMs;
     // 2. 流式活跃心跳窗口（默认 90s：每次收到有效数据分片自动刷新；若连续 90s 无任何新分片则判定挂死）
-    const inactivityTimeoutMs = Math.min(timeoutMs, 90000);
+    const idleTimeout=generationOptions.idleTimeoutMs??90000;
+    if(!Number.isSafeInteger(idleTimeout)||idleTimeout<10||idleTimeout>180000)throw Error('无活动超时配置无效。');
+    const inactivityTimeoutMs = Math.min(timeoutMs, idleTimeout);
 
     let maxTimeoutId: ReturnType<typeof setTimeout> | null = null;
     let inactivityTimeoutId: ReturnType<typeof setTimeout> | null = null;

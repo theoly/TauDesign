@@ -22,7 +22,7 @@ export function projectHistoryContract(c:DesignTaskContract):DesignTaskContract 
   result.designSystemOrigin=pick(c.designSystemOrigin,['kind','sourceId','sourceName','sourceFingerprint','tokenVersion','tokenFingerprint','updatedAt']);
  }
  if(c.librarySource)result.librarySource=pick(c.librarySource,['mode','sourceProjectId','sourceFingerprint','sourceTokenVersion','bindingFingerprint']);
- if(c.referenceImage){result.referenceImage=pick(c.referenceImage,['name','fingerprint','region']);if(c.referenceImage.region)(result.referenceImage as Data).region=pick(c.referenceImage.region,['sourceFingerprint','sourceWidth','sourceHeight','x','y','width','height']);}
+ if(c.referenceImage){result.referenceImage=pick(c.referenceImage,['name','fingerprint','region','evidence']);if(c.referenceImage.region)(result.referenceImage as Data).region=pick(c.referenceImage.region,['sourceFingerprint','sourceWidth','sourceHeight','x','y','width','height']);}
  if(c.multiPage)result.multiPage=pick(c.multiPage,['version','kind','planId','planFingerprint','itemId','screenId','name','index','total','originalPageCount','pageIds','requiredTargetIds']);
  if(c.regionSubdivision){
   const scope=pick(c.regionSubdivision,['version','baselineFingerprint','roots','fragments','shellOperations','inputFingerprint']);

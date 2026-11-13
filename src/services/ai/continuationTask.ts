@@ -16,7 +16,7 @@ function scope(contract:DesignTaskContract):string {
  // The context manifest is a derived assembly receipt. The original ledger proof still
  // binds its exact old bytes, and the final contextKey rechecks current source inputs.
  const {taskId,designGuidance,modificationReview,contextManifest,...rest}=contract;
- const copy={...rest,referenceImage:rest.referenceImage?{name:rest.referenceImage.name,fingerprint:rest.referenceImage.fingerprint,region:rest.referenceImage.region}:undefined};
+ const copy={...rest,referenceImage:rest.referenceImage?{name:rest.referenceImage.name,fingerprint:rest.referenceImage.fingerprint,region:rest.referenceImage.region,...(rest.referenceImage.evidence?{evidenceFingerprint:rest.referenceImage.evidence.fingerprint}:{})}:undefined};
  const canonical=(v:unknown):unknown=>Array.isArray(v)?v.map(canonical):v&&typeof v==='object'?
   Object.fromEntries(Object.entries(v).filter(([,value])=>value!==undefined).sort(([a],[b])=>a.localeCompare(b)).map(([key,value])=>[key,canonical(value)])):v;
  return JSON.stringify(canonical(copy));

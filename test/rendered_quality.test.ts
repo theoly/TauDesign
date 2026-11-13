@@ -41,6 +41,19 @@ function fixture(html: string, extraCss = '') {
 afterEach(()=>frames.splice(0).forEach(frame=>frame.remove()));
 
 describe('真实渲染规则的几何输入',()=>{
+  test('具名icon-mask以实际可见尺寸识别，零尺寸或无名称仍拒绝',()=>{
+    const f=fixture('<button aria-label="添加照片"><span class="icon-mask"></span></button>');
+    expect(f.codes()).not.toContain('render_action_invisible_label');
+    f.sizes(f.doc.querySelector('span')!,16,20,0,0);expect(f.codes()).toContain('render_action_invisible_label');
+    f.sizes(f.doc.querySelector('span')!,16,20,20,20);f.doc.querySelector('button')!.removeAttribute('aria-label');expect(f.codes()).toContain('render_action_invisible_label');
+  });
+  test('关闭details的非summary内容属于未激活态，展开后恢复裁切检查',()=>{
+    const f=fixture('<details style="overflow-y:hidden"><summary>隐私说明</summary><p data-nid="privacy">隐私正文</p><button data-nid="inactive"></button></details>');
+    f.sizes(f.doc.querySelector('details')!,16,20,180,24);f.sizes(f.doc.querySelector('p')!,16,50,180,48);f.textLines.set('privacy',[{top:50,bottom:70,left:16,right:100,width:84,height:20}] as any);
+    expect(f.report().findings.some(x=>x.nid==='privacy')).toBe(false);
+    expect(f.report().findings.some(x=>x.nid==='inactive')).toBe(false);
+    f.doc.querySelector('details')!.setAttribute('open','');expect(f.report().findings.some(x=>x.code==='render_clipped_text'&&x.nid==='privacy')).toBe(true);
+  });
   test('通知角标压住主图标时定位警告；独立占位及隐藏角标不误报',()=>{
     const f=fixture('<button class="notification-control" aria-label="通知"><svg class="icon"></svg><span data-nid="count" class="badge-count">3</span></button>');
     const button=f.doc.querySelector('button')!, icon=f.doc.querySelector('svg')!, badge=f.doc.querySelector('span')!;

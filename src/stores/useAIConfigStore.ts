@@ -90,7 +90,7 @@ interface AIConfigState {
   
   setRoleBinding: (role: ModelRole, binding: ModelRoleBinding) => void;
   setRoleOutputLimit:(role:ModelRole,limit?:number)=>void;
-  setModelCapability:(providerId:string,model:string,values?:Pick<ModelCapabilityProfile,'contextWindow'|'maxOutputTokens'|'mediaInput'|'maxConcurrency'>)=>void;
+  setModelCapability:(providerId:string,model:string,values?:Pick<ModelCapabilityProfile,'contextWindow'|'maxOutputTokens'|'mediaInput'|'maxConcurrency'|'thinkingControl'>)=>void;
   getActiveProviderForRole: (role: ModelRole) => { provider: AIProviderConfig; modelId: string } | null;
 }
 

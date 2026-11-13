@@ -13,7 +13,7 @@ import {
 /**
  * PNG 导出编排 (doc/feature/high-fidelity-png-export/spec.md)
  *
- * 主路径走原生渲染器（导入页使用屏幕位图快照，其余页面使用 createPDF），失败自动回退旧的
+ * 主路径走原生渲染器（导入页及CSS掩码页面使用屏幕位图快照，其余页面使用 createPDF），失败自动回退旧的
  * SVG foreignObject 路径；两条都失败才报错，绝不返回空白图冒充成功 (BR-PX-05)。
  */
 
@@ -84,6 +84,19 @@ export function resolveExportHeight(
   return Math.ceil(Math.max(measured, 1));
 }
 
+/** WebKit's PDF backend can paint CSS masks as opaque boxes. Preserve them in the raster backend. */
+function requiresNativeSnapshot(screen:Screen,overrides:string):boolean {
+  if(screen.metadata?.importedHtml)return true;
+  if(typeof DOMParser==='undefined')return false;
+  const doc=new DOMParser().parseFromString(screen.htmlContent,'text/html');
+  if(doc.querySelector('.icon-mask'))return true;
+  // Inspect authored CSS only: the base stylesheet always defines .icon-mask,
+  // even on pages without icons. An unused authored mask may conservatively
+  // select snapshot, but must never rewrite the source or its resource URLs.
+  const styles=[screen.scopedCss??'',overrides,...Array.from(doc.querySelectorAll('style')).map(el=>el.textContent??''),...Array.from(doc.querySelectorAll('[style]')).map(el=>el.getAttribute('style')??'')];
+  return styles.some(css=>/(?:^|[;{])\s*(?:-webkit-)?mask(?:-image)?\s*:\s*(?!none\s*(?:[;}!]|$))/i.test(css.replace(/\/\*[\s\S]*?\*\//g,' ')));
+}
+
 export async function exportScreenPng(
   screen: Screen,
   options: PngExportOptions,
@@ -116,7 +129,7 @@ export async function exportScreenPng(
         width: options.width,
         height: cssHeight,
         scale: options.scale,
-        preferSnapshot: !!screen.metadata?.importedHtml
+        preferSnapshot: requiresNativeSnapshot(screen,options.screenOverrides)
       });
       return {
         dataUrl: result.dataUrl,

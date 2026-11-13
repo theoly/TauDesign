@@ -1,3 +1,4 @@
+import {validReferenceEvidence,renderReferenceEvidence} from './referenceEvidence';
 import type {DesignTaskContract,DesignLibrarySourceIdentity,ReferenceImageIdentity} from './designWorkflow';
 import {contentFingerprint} from './designWorkflow';
 import type {DesignLibraryBinding,ComponentDefinition} from '../../types/project';
@@ -13,7 +14,7 @@ export function creationSourceStages(id:string):WorkflowValidationStage[]{
 const fingerprint=(value:unknown)=>typeof value==='string'&&/^[a-f0-9]{8}$/.test(value);
 export function validReferenceImageIdentity(value:unknown):value is ReferenceImageIdentity{
   const v=value as ReferenceImageIdentity|undefined;
-  return Boolean(v&&typeof v.name==='string'&&v.name.trim()&&v.name.length<=200&&fingerprint(v.fingerprint)&&(v.region===undefined||validReferenceRegion(v.region)));
+  return Boolean(v&&typeof v.name==='string'&&v.name.trim()&&v.name.length<=200&&fingerprint(v.fingerprint)&&(v.region===undefined||validReferenceRegion(v.region))&&(v.evidence===undefined||validReferenceEvidence(v.evidence)&&v.evidence.image.fingerprint===v.fingerprint&&v.evidence.image.name===v.name&&JSON.stringify(v.evidence.image.region)===JSON.stringify(v.region)));
 }
 export function validLibrarySourceIdentity(value:unknown):value is DesignLibrarySourceIdentity{
   const v=value as DesignLibrarySourceIdentity|undefined;
@@ -30,6 +31,10 @@ export function recordReferenceInput(contract:DesignTaskContract,messages:Engine
   const plannedPageModification=contract.operation==='modify'&&!contract.elementNid&&Boolean(contract.pageTaskPlan&&contract.referenceImage);
   if(!creationSourceStages(contract.workflowId).includes('reference-input')&&!plannedPageModification)return;
   const image=contract.referenceImage,last=messages[messages.length-1];
+  if(image?.evidence){
+    if(!validReferenceImageIdentity(image)||!last||last.role!=='user'||last.imageUrl||!last.content.includes(contract.request)||!last.content.includes(renderReferenceEvidence(image.evidence)))return '当前请求没有携带匹配的图片解析证据，未执行生成。';
+    image.inputReceipt={version:1,checkedAt:Date.now(),imageFingerprint:image.fingerprint,requestFingerprint:contentFingerprint(contract.request),messageFingerprint:contentFingerprint(last.content),providerId,model,evidenceFingerprint:image.evidence.fingerprint};return;
+  }
   if(!validReferenceImageIdentity(image)||!last||last.role!=='user'||!last.imageUrl||typeof last.content!=='string'||!last.content.includes(contract.request))return '本轮参考图片未进入实际模型消息，未执行生成。';
   try{if(referenceImageIdentity({name:image.name,dataUrl:last.imageUrl}).fingerprint!==image.fingerprint)return '本轮实际图片与任务参考图身份不匹配，未执行生成。';}
   catch(error){return error instanceof Error?error.message:'参考图片消息无效。';}
@@ -39,9 +44,9 @@ export function recordReferenceInput(contract:DesignTaskContract,messages:Engine
 export function inspectReferenceInput(contract:DesignTaskContract):Omit<WorkflowStageCheck,'id'>{
   const image=contract.referenceImage,r=image?.inputReceipt;
   const ok=validReferenceImageIdentity(image)&&r?.version===1&&Number.isFinite(r.checkedAt)&&r.checkedAt>=0&&
-    r.imageFingerprint===image.fingerprint&&r.requestFingerprint===contentFingerprint(contract.request)&&fingerprint(r.messageFingerprint)&&
+    r.imageFingerprint===image.fingerprint&&(image.evidence?r.evidenceFingerprint===image.evidence.fingerprint:r.evidenceFingerprint===undefined)&&r.requestFingerprint===contentFingerprint(contract.request)&&fingerprint(r.messageFingerprint)&&
     typeof r.providerId==='string'&&Boolean(r.providerId)&&typeof r.model==='string'&&Boolean(r.model);
-  return {status:ok?'passed':'blocked',message:ok?r?.reusedFromTaskId?`本次复用已完成内容，沿用生成任务 ${r.reusedFromTaskId} 的参考图输入回执；未重新发送图片，不代表视觉相似度。`:`本轮图片「${image!.name}」已进入模型消息，指纹 ${image!.fingerprint}；此项仅验证输入，不代表视觉相似度。`:'缺少当前请求与参考图片一致的实际输入回执，请重新生成。'};
+  return {status:ok?'passed':'blocked',message:ok?image?.evidence?`参考图已由 ${image.evidence.parser.providerId}/${image.evidence.parser.model} 独立解析；本次生成携带匹配的结构化证据，不重复发送图片。此项不代表视觉相似度。`:r?.reusedFromTaskId?`本次复用已完成内容，沿用生成任务 ${r.reusedFromTaskId} 的参考图输入回执；未重新发送图片，不代表视觉相似度。`:`本轮图片「${image!.name}」已进入模型消息，指纹 ${image!.fingerprint}；此项仅验证输入，不代表视觉相似度。`:'缺少当前请求与参考图片一致的实际输入回执，请重新生成。'};
 }
 
 export function inspectCreationSources(contract:DesignTaskContract,state:{designLibraryBinding?:DesignLibraryBinding;components:Record<string,ComponentDefinition>},html:string):{

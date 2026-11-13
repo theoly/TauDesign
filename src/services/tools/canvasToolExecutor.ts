@@ -1,3 +1,5 @@
+import {verifyGeneratedMediaAssets} from '../ai/generatedMedia';
+import type {Asset} from '../../types/project';
 import {renderEvidenceIdentity} from '../ai/evidenceIdentity';
 import {prepareNewPageWithRepair,type PageRepairModel} from '../ai/pageCreationRepair';
 import type {PageRepairRecord} from '../ai/pageRepairRecord';
@@ -26,6 +28,7 @@ export type CanvasToolCall =
         referencedScreenId?: string;
         workflowContract?: DesignTaskContract;
         executionRecord?: DesignExecutionRecord;
+        generatedAssets?:Asset[];
       };
     }
     | {
@@ -39,6 +42,7 @@ export type CanvasToolCall =
         modificationRequest?: string;
         workflowContract?: DesignTaskContract;
         executionRecord?: DesignExecutionRecord;
+        generatedAssets?:Asset[];
       };
     }
   | {
@@ -101,7 +105,16 @@ const pendingCreations=new Set<string>();
 export class CanvasToolExecutor {
   /** The only AI creation entry. Low-level blank/specimen/duplicate store actions remain synchronous. */
   static async executeAsync(call:CanvasToolCall,options:{signal?:AbortSignal;isCurrent?:()=>boolean;repair?:PageRepairModel;taskBudget?:TaskBudget}={}):Promise<CanvasToolExecutionResult> {
-    if(call.tool!=='create_screen')return this.execute(call);
+    if(call.tool!=='create_screen'){
+      if(call.tool==='modify_screen'&&call.params.generatedAssets?.length){
+        const state=useProjectStore.getState(),context=pageCreationContext(state);
+        const guard=()=>{options.taskBudget?.assertActive();if(options.signal?.aborted||options.isCurrent?.()===false||pageCreationContext(useProjectStore.getState())!==context)throw Error('工程已变化或媒体登记已取消。');};
+        try{guard();await verifyGeneratedMediaAssets(createProjectStorage(state.id,state.folderPath),call.params.generatedAssets,guard);guard();
+          useProjectStore.getState().registerGeneratedAssets(call.params.generatedAssets,state.id,context);
+        }catch(error){return {success:false,tool:call.tool,status:'failed',error:error instanceof Error?error.message:String(error)};}
+      }
+      return this.execute(call);
+    }
     const params=structuredClone(call.params),state=useProjectStore.getState();
     const contract=params.workflowContract===undefined?buildDesignTaskContract({intent:'create_screen',request:params.title||'创建新页面',
       deviceProfile:state.settings.deviceProfile,frameWidth:state.settings.frameWidth,designSystem:state.designSystem,
@@ -117,9 +130,11 @@ export class CanvasToolExecutor {
       resolveWorkflowValidation(contract,'create').ok&&renderEvidenceIdentity(state.settings.deviceProfile)===renderIdentity&&pageCreationContext(useProjectStore.getState())===context;};
     pendingCreations.add(key);
     try {
+      if(params.generatedAssets?.length)await verifyGeneratedMediaAssets(createProjectStorage(state.id,state.folderPath),params.generatedAssets,()=>{if(!current())throw Error('媒体核对期间工程已变化。');});
       const snapshot=structuredClone({id:state.id,folderPath:state.folderPath,screens:state.screens,settings:state.settings,assets:state.assets,
         designSystem:state.designSystem,designSystemOrigin:state.designSystemOrigin,designLibraryBinding:state.designLibraryBinding,
         components:state.components,decisions:state.decisions,projectDocuments:state.projectDocuments,overrides:state.overrides});
+      for(const asset of params.generatedAssets??[]){if(snapshot.assets[asset.id]&&snapshot.assets[asset.id].relPath!==asset.relPath)throw Error('生成媒体身份冲突。');snapshot.assets[asset.id]??=asset;}
       const id=params.screenId&&!state.screens[params.screenId]?params.screenId:crypto.randomUUID();
       const name=sanitizeScreenTitle(params.title?.trim()||`画框 ${state.screenOrder.length+1}`);
       const prepare=(signal?:AbortSignal)=>prepareNewPageWithRepair(snapshot,{id,name,htmlContent:params.html,position:{x:0,y:0}},contract,
@@ -129,7 +144,7 @@ export class CanvasToolExecutor {
       if(!current())return failed(renderEvidenceIdentity(state.settings.deviceProfile)!==renderIdentity?'渲染检查依赖已变化，请重新检查后挂载。':'应用前工程已变化或创建已取消。');
       const {position:_position,...screen}=prepared.screen;
       const creationEvidence={...prepared.evidence,...(params.executionRecord?.sectioned||params.executionRecord?.draftRepair?{execution:{...structuredClone(params.executionRecord),completeHtml:prepared.screen.htmlContent}}:{})};
-      const newId=useProjectStore.getState().addScreen({...screen,metadata:{...screen.metadata,creationEvidence}},id,{referencedScreenId:params.referencedScreenId});
+      const newId=useProjectStore.getState().addScreen({...screen,metadata:{...screen.metadata,creationEvidence}},id,{referencedScreenId:params.referencedScreenId,preparedAssets:params.generatedAssets});
       const checkpointId=useHistoryStore.getState().addCheckpoint(`AI 新建页面: ${name}`,{screenId:newId,htmlContent:prepared.screen.htmlContent});
       useProjectStore.getState().panToScreen(newId);
       return {success:true,tool:'create_screen',status:'screen_created',screenId:newId,screenName:name,checkpointId,createdHtml:prepared.screen.htmlContent,repair:prepared.evidence.repair};

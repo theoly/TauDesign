@@ -9,7 +9,7 @@ import {transformDeclarations,transformStyleSheet} from '../import/htmlImportCss
 import {parseThemeBackground} from '../../utils/themeBackground';
 import {streamWithContinuation} from './boundedContinuation';
 import {structuredOutputIssue} from './structuredOutput';
-import {restyleThinkingOptions} from './thinkingPolicy';
+import {artifactThinkingOptions as restyleThinkingOptions} from './structuredRequestPolicy';
 import {inspectText} from '../../utils/textNode';
 import type {RuleSelection} from './designKnowledge/types';
 import {renderCssGuidance} from './designKnowledge/tokenWindow';

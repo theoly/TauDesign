@@ -1,3 +1,5 @@
+import {installReferenceImageDecoder,referenceObservationFixture} from './helpers/referenceImageDecoder';
+let restoreImage:()=>void;
 import {requestSchema} from './helpers/modelSchema';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import React,{act} from 'react';
@@ -18,14 +20,15 @@ const attachment={name:'参考.png',dataUrl:'data:image/png;base64,iVBORw0KGgoAA
 const realStream=DefaultAIEngineCore.prototype.streamText,inspect=PageRenderCheck.inspect;
 let root:Root,host:HTMLDivElement,engine:ReturnType<typeof useAIEngineChat>,prior:ReturnType<typeof useProjectStore.getState>,history:ReturnType<typeof useHistoryStore.getState>,config:ReturnType<typeof useAIConfigStore.getState>,actState:unknown,requests:any[],disableAtPlan:boolean,analysisRegion:boolean,holdAnalysis:boolean;
 function Harness(){engine=useAIEngineChat();return null;}
-beforeEach(async()=>{
+beforeEach(async()=>{restoreImage=installReferenceImageDecoder();
  prior=useProjectStore.getState();history=useHistoryStore.getState();config=useAIConfigStore.getState();actState=(globalThis as any).IS_REACT_ACT_ENVIRONMENT;(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;localStorage.clear();useHistoryStore.getState().restore(null);
  useProjectStore.getState().initNewProject({name:'根入口规则',deviceProfile:'pc',createSpecimen:false});useProjectStore.getState().addScreen({name:'资料页',htmlContent:original},'page');
  useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'ROOT_SYNTHETIC_SECRET'})),bindings:{...defaultBindings,vision:{role:'vision',providerId:'prov-openai',modelId:'gpt-4o'}},autoReferenceDesignRules:true});requests=[];disableAtPlan=false;analysisRegion=false;holdAnalysis=false;
  const transport=new MockTransport(),core=new DefaultAIEngineCore({id:'root-capture',stream:(request,event)=>{
   const b=request.body!,schema=requestSchema(b),raw=b.messages.at(-1).content,text=Array.isArray(raw)?raw.find(c=>c.type==='text').text:raw,system=b.messages[0].content;
   requests.push({schema,messages:b.messages,maxTokens:b.max_tokens});
-  if(schema?.properties.features){if(disableAtPlan)useAIConfigStore.getState().setAutoReferenceDesignRules(false);transport.queueResponse(JSON.stringify({...chatPageTaskPlan,features:chatPageTaskPlan.features.map(f=>({...f,...(Array.isArray(raw)?{basis:'image',sourceIds:[`image:${contentFingerprint(attachment.dataUrl)}`]}:{})}))}));}
+  if(schema?.properties.fields)transport.queueResponse(JSON.stringify({...referenceObservationFixture,fields:[],texts:['完整正文。']}));
+  else if(schema?.properties.features){if(disableAtPlan)useAIConfigStore.getState().setAutoReferenceDesignRules(false);transport.queueResponse(JSON.stringify({...chatPageTaskPlan,features:chatPageTaskPlan.features.map(f=>({...f,...(Array.isArray(raw)?{basis:'image',sourceIds:[`image:${contentFingerprint(attachment.dataUrl)}`]}:{})}))}));}
   else if(schema?.properties.pages)transport.queueResponse(JSON.stringify(withMultiPageTasks({summary:'两页长正文',pages:[{name:'正文一',requirements:['展示长正文'],links:[]},{name:'正文二',requirements:['展示长正文'],links:[]}]})));
   else if(schema?.properties.summary)transport.queueResponse(JSON.stringify({summary:'长正文可优化',items:[{title:'调整层级',reason:'信息层级不明确',change:analysisRegion?'调整长正文的完整区块层级':'主按钮文字加粗',scope:analysisRegion?'region':'local',...(analysisRegion?{targetNids:['region01']} :{}),operations:analysisRegion?[]:[{nid:'button01',type:'add_classes',value:'font-semibold'}]}]}),holdAnalysis?1000:5);
   else if(schema?.properties.nid)transport.queueResponse(JSON.stringify({nid:'region01',html:new DOMParser().parseFromString(original,'text/html').querySelector('[data-nid=region01]')!.outerHTML.replace('data-nid="region01"','data-nid="region01" class="col gap-4"')}));
@@ -38,17 +41,17 @@ beforeEach(async()=>{
  DefaultAIEngineCore.prototype.streamText=function(options){return realStream.call(core,options);};PageRenderCheck.inspect=async()=>({status:'complete',findings:[],inspected:5});
  host=document.createElement('div');document.body.append(host);root=createRoot(host);await act(async()=>root.render(<Harness/>));
 });
-afterEach(()=>{act(()=>root.unmount());host.remove();DefaultAIEngineCore.prototype.streamText=realStream;PageRenderCheck.inspect=inspect;useProjectStore.setState(prior,true);useHistoryStore.setState(history,true);useAIConfigStore.setState(config,true);(globalThis as any).IS_REACT_ACT_ENVIRONMENT=actState;});
+afterEach(()=>{restoreImage();act(()=>root.unmount());host.remove();DefaultAIEngineCore.prototype.streamText=realStream;PageRenderCheck.inspect=inspect;useProjectStore.setState(prior,true);useHistoryStore.setState(history,true);useAIConfigStore.setState(config,true);(globalThis as any).IS_REACT_ACT_ENVIRONMENT=actState;});
 for(const enabled of [false,true])test(`normal creation honors the captured opt-in (${enabled}); business planning remains facts-only`,async()=>{
  useAIConfigStore.setState({autoReferenceDesignRules:enabled});disableAtPlan=enabled;await act(async()=>{await engine.sendMessage('新建长正文说明页');});
  const page=Object.values(useProjectStore.getState().screens).find(s=>s.id!=='page')!;expect(page).toBeDefined();const packet=page.metadata!.creationEvidence!.contract.designGuidance;
  expect(Boolean(packet)).toBe(enabled);expect(requests).toHaveLength(2);expect(requests[0].messages[0].content).not.toContain('[LY-04@1]');expect(requests[1].messages[0].content.includes('[LY-04@1]')).toBe(enabled);expect(useProjectStore.getState().screens.page.htmlContent).toBe(original);
  if(enabled){expect(useAIConfigStore.getState().autoReferenceDesignRules).toBe(false);expect(packet!.requests).toHaveLength(1);expect(packet!.requests[0].status).toBe('completed');}
 });
-test('reference creation carries the root preference into actual Vision HTML with the original image and plan',async()=>{
+test('reference creation observes images once and carries the root preference into code-only HTML',async()=>{
  await act(async()=>{await engine.sendMessage('参考图片新建长正文说明页',attachment);});
- const page=Object.values(useProjectStore.getState().screens).find(s=>s.id!=='page')!;expect(page.metadata!.creationEvidence!.contract.designGuidance!.requests[0].status).toBe('completed');expect(requests).toHaveLength(2);
- expect(requests[0].messages[0].content).not.toContain('[LY-04@1]');expect(requests[1].messages[0].content).toContain('[LY-04@1]');expect(requests.every(r=>r.messages.at(-1).content.some(c=>c.type==='image_url'&&c.image_url.url===attachment.dataUrl))).toBe(true);
+ const page=Object.values(useProjectStore.getState().screens).find(s=>s.id!=='page')!;expect(page.metadata!.creationEvidence!.contract.designGuidance!.requests[0].status).toBe('completed');expect(requests).toHaveLength(3);
+ expect(requests[0].messages[0].content).not.toContain('[LY-04@1]');expect(requests[2].messages[0].content).toContain('[LY-04@1]');expect(requests[0].messages.at(-1).content.some(c=>c.type==='image_url'&&c.image_url.url===attachment.dataUrl)).toBe(true);expect(requests.slice(1).every(r=>typeof r.messages.at(-1).content==='string')).toBe(true);
 });
 test('explicit referenced button directly uses scoped finite JSON and known DOM semantics without review',async()=>{
  await act(async()=>{await engine.sendMessage('[引用元素 nid="button01" 画框="资料页" 标签=<button>]\n\n主按钮内边距增大');});

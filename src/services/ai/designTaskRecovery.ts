@@ -1,3 +1,4 @@
+import {readBusinessDuties} from './businessInventoryOwnership';
 import type {AIProviderConfig} from '../../types/provider';
 import type {ProjectStorage} from '../storage/projectStorage';
 import {readDesignTask,claimDesignTaskRecovery,type SavedDesignTask,type HistoricalTaskCost} from '../storage/designTaskRepository';
@@ -62,7 +63,9 @@ export async function prepareTaskRecovery(storage:ProjectStorage,id:string,state
  const plan=source.sectionPlan,task=source.contract.pageTaskPlan?.plan;
  if(plan?.version===2&&plan.composition&&task){
   parsePageComposition(plan.composition,task,state.settings.deviceProfile);
-  const fresh=compileSectionPlan(task,state.settings.deviceProfile,plan.title,plan.composition);
+  const business=redesign?readBusinessDuties(buildPageRedesignSource(state.screens[source.contract.target!.id].htmlContent,{deviceProfile:state.settings.deviceProfile,useCustomNavigation:state.settings.useCustomNavigation,protectedNids:source.contract.protectedNids}),plan):undefined;
+  const reference=source.contract.referenceImage?.evidence&&plan.sections.some(section=>JSON.parse(section.requirements).referenceFields!==undefined)?{evidence:source.contract.referenceImage.evidence,request:source.request}:undefined;
+  const fresh=compileSectionPlan(task,state.settings.deviceProfile,plan.title,plan.composition,reference,business);
   if(!sameSectionPlanScope(fresh,parseSectionPlan(plan)))throw Error('原分区职责或程序布局与功能合同不一致。');
   const completed=plan.sections.flatMap(section=>{const part=saved.parts.find(p=>p.stepId===section.id&&p.complete);return part?[{id:section.id,html:part.html}]:[];});
   if(completed.some((part,i)=>part.id!==plan.sections[i].id))throw Error('原完成区块不是连续前缀，不能猜测恢复位置。');

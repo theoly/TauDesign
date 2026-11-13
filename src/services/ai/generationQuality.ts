@@ -1,3 +1,5 @@
+import {referenceFieldMode,readonlyFieldLabels,nativeReferenceLabels} from './referenceFieldContract';
+import {referenceFieldCoverage} from './referenceEvidence';
 import {explicitFieldLabels,inspectExplicitFieldLabels} from './explicitFieldContent';
 import { normalizeMobileNavigation } from '../../utils/mobileNavigation';
 import type { DesignSystem } from '../../types/designSystem';
@@ -13,6 +15,8 @@ import {explicitActionTexts,inspectExplicitActionTexts,type ContentTask} from '.
 import {inspectExternalMedia} from './externalMedia';
 import {buildPageRedesignSource,inspectRedesignContent} from './pageRedesignSource';
 import {contentFingerprint} from './designWorkflow';
+import {inspectInlineForms,inspectProgressSummary} from './inlineFormContract';
+import {inspectCssTokenProperties} from './cssTokenPropertyValidation';
 
 export interface QualityFinding {
   code: string;
@@ -52,11 +56,17 @@ export function checkGenerationQuality(html: string, options: QualityOptions = {
     if (element.tagName.toLowerCase() === 'template') elements.push(...Array.from((element as HTMLTemplateElement).content.querySelectorAll('*')));
   }
   const findings: QualityFinding[] = [];
+  const oldTokenTypes=options.baselineHtml?inspectCssTokenProperties(parseHtmlCopy(options.baselineHtml).doc,options.mediaCss):[];
+  findings.push(...inspectCssTokenProperties(doc,options.mediaCss).map(finding=>oldTokenTypes.some(old=>old.nid===finding.nid&&old.actual===finding.actual)?{...finding,severity:'warning' as const,message:finding.message+' 此项已存在于原页，不以既有范围外样式问题阻断本次修改。'}:finding));
+  const userRequest=options.contentTask?.request??options.modificationRequest??'';
+  findings.push(...inspectInlineForms(doc,userRequest),...inspectProgressSummary(doc,userRequest));
+  const reference=options.contentTask?.referenceImage?.evidence;
+  if(reference&&options.contentTask?.pageTaskPlan&&!options.contentTask.multiPage){const issue=referenceFieldCoverage(reference,nativeReferenceLabels(doc,options.contentTask.request).concat(readonlyFieldLabels(doc).filter(label=>referenceFieldMode(label,options.contentTask!.request)==='readonly')),options.contentTask.request);if(issue)findings.push({code:'reference_field_missing',severity:'error',message:issue,actual:'图片字段未在有效关联的表单标签上保留',expected:'按用户要求和已解析字段完整呈现表单，不用旁文或占位符代替'});}
   if(options.wholePageRedesign)try{
     if(!options.baselineHtml)throw Error('整页重设计缺少原业务基线。');
     const source=buildPageRedesignSource(options.baselineHtml,{deviceProfile:options.deviceProfile??'pc',useCustomNavigation:options.useCustomNavigation,protectedNids:options.protectedNids});
     if(options.wholePageRedesign.version!==1||source.sourceFingerprint!==options.wholePageRedesign.sourceFingerprint||contentFingerprint(JSON.stringify(source))!==options.wholePageRedesign.inventoryFingerprint)throw Error('整页重设计的业务来源或保护范围已变化。');
-    findings.push(...inspectRedesignContent(source,html,options.modificationRequest??'',options.baselineHtml));
+    findings.push(...inspectRedesignContent(source,html,options.modificationRequest??'',options.baselineHtml,options.contentTask?.businessTextReview));
   }catch(error){findings.push({code:'redesign_source_invalid',severity:'error',actual:'基线或业务来源不匹配',expected:'当前完整业务来源清单',message:error instanceof Error?error.message:String(error)});}
   if(options.requireExternalMedia)for(const violation of inspectExternalMedia(html,options.mediaCss).violations)findings.push({
     code:violation.code,severity:'error',nid:violation.nid,actual:violation.attribute,expected:'引用独立媒体文件或已批准的HTTPS资源',

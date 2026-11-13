@@ -21,6 +21,7 @@ import { captureScreenSnippetAsDataUrl } from '../../utils/screenCapture';
 import { Copy, Edit2, Smartphone, Monitor, Image as ImageIcon, Check } from 'lucide-react';
 
 import type {ContentTask} from '../../services/ai/explicitActionContent';
+import {MediaDiagnosticsButton} from '../common/MediaDiagnosticsButton';
 interface ScreenFrameProps {
   contentTask?:ContentTask;
   screen: Screen;
@@ -75,7 +76,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
   const showGuide = settings.showViewportGuide;
 
   const resourceRevision=useProjectStore(state=>isStaged?state.stagedRenderRevision:0);
-  const { screen: renderScreen, loading: resourcesLoading, error: resourceError,resourceFiles } = useScreenResources(screen,resourceRevision);
+  const { screen: renderScreen, loading: resourcesLoading, error: resourceError,resourceFiles,retry:retryScreenResources } = useScreenResources(screen,resourceRevision);
   const imported = !!screen.metadata?.importedHtml;
   const viewport = resolveProjectViewport(settings);
   const viewportHeight = viewport.height;
@@ -106,12 +107,17 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       return `[data-nid="${ov.nid}"] { ${declarationsStr} }`;
     })
     .join('\n')));
-  const styleResources=useStyleResources(rawScreenOverrides,resourceRevision);
+  const styleResources=useStyleResources(rawScreenOverrides,resourceRevision,'preview',screen.id);
   const screenOverrides=styleResources.css;
   const renderResources=useMemo(()=>{
     try{return {files:mergeRenderResourceFiles([resourceFiles,styleResources.resourceFiles])};}
     catch(error){return {error:error instanceof Error?error.message:'资源版本不一致。'};}
   },[resourceFiles,styleResources.resourceFiles]);
+  const resourceFailure=resourceError??styleResources.error??renderResources.error;
+  const retryPageResources=()=>{
+    if(isStaged)useProjectStore.getState().refreshStagedRender('正在重新读取页面资源，请等待新的渲染检查。');
+    retryScreenResources();styleResources.retry();
+  };
 
   const backgroundCss=projectCssForScreen(screen,screenBackgroundCss(screen,settings.colorMode,screenOverrides));
   // load可能晚于样式热更新；回调始终读取当前值，避免把新版样式回滚。
@@ -194,10 +200,11 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
 
   useEffect(() => {
     const iframe = iframeRef.current;
-    if (!iframe || !frameDocument || !onRenderQuality || !renderQualityKey || !(isStaged || isActive) || lodLevel === 0 || styleResources.loading) return;
-    if(styleResources.error||renderResources.error){onRenderQuality(screen.id,renderQualityKey,{status:'unavailable',inspected:0,findings:[],reason:styleResources.error??renderResources.error});return;}
+    if (!onRenderQuality || !renderQualityKey || !(isStaged || isActive) || lodLevel === 0) return;
+    if(resourcesLoading||styleResources.loading||resourceFailure){onRenderQuality(screen.id,renderQualityKey,{status:'unavailable',inspected:0,findings:[],reason:resourceFailure??'正在读取页面资源，请等待新的渲染检查。'});return;}
+    if(!iframe||!frameDocument)return;
     return observeRenderedQuality(iframe, report => onRenderQuality(screen.id, renderQualityKey, {...report,resourceFiles:renderResources.files}),{contentTask:contentPolicy});
-  }, [screen.id, frameDocument, renderQualityKey, onRenderQuality, isStaged, isActive, lodLevel,styleResources.loading,styleResources.error,renderResources,contentPolicy]);
+  }, [screen.id, frameDocument, renderQualityKey, onRenderQuality, isStaged, isActive, lodLevel,resourcesLoading,styleResources.loading,resourceFailure,renderResources,contentPolicy]);
 
   useEffect(() => {
     const iframe = iframeRef.current;
@@ -768,7 +775,11 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       </div>
 
       {/* 原型画框卡片主体 (圆角无内嵌顶栏) */}
-      {resourceError && <p role="alert" className="mb-2 rounded-lg border border-red-800 bg-red-950 p-2 text-xs text-red-200">{resourceError}</p>}
+      {resourceFailure && <div role="alert" className="mb-2 rounded-lg border border-red-800 bg-red-950 p-2 text-xs text-red-200">
+        <p>{resourceFailure}</p>
+        <button type="button" onClick={event=>{event.stopPropagation();retryPageResources();}} className="mt-2 rounded border border-red-700 px-2 py-1 hover:bg-red-900">重试页面资源</button>
+        <MediaDiagnosticsButton/>
+      </div>}
       <div
         className={`relative w-full overflow-hidden transition-shadow duration-200 ${
           isStaged

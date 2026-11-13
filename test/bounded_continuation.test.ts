@@ -28,7 +28,7 @@ test('native capability remains narrow; natural stop and complete output never c
  }
 });
 test('bounded count/budget and repeated prefix stop without heuristic splicing',async()=>{
- const {core,calls}=engine([[prefix,'length'],[' x','length'],[' y','length']]);await streamWithContinuation(core,{...options,maxTokens:16384});expect(calls).toHaveLength(3);expect(calls.reduce((n,c)=>n+c.maxTokens!,0)).toBe(32768);
+ const {core,calls}=engine([[prefix,'length'],[' x','length'],[' y','length']]);await streamWithContinuation(core,{...options,maxTokens:16384});expect(calls).toHaveLength(3);expect(calls.reduce((n,c)=>n+c.maxTokens!,0)).toBe(24576); // qwen metadata caps each actual call at 8192.
  const e=engine([[prefix,'length'],[prefix,'length']]);expect((await streamWithContinuation(e.core,options)).errorMessage).toContain('重复');expect(e.calls).toHaveLength(2);
 });
 test('empty progress, cancellation and transport failure stop recovery',async()=>{

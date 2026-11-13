@@ -1,3 +1,4 @@
+import type {PrepareGeneratedHtml} from './generatedMedia';
 import type {AIEngineCore,EngineMessage,StreamTextOptions} from './engine/core/types';
 import {executeGenerationTree,validateGenerationTree,type GenerationNode,type GenerationTree,type GeneratedFragment} from './generationGraph';
 import {TaskBudget,withTaskBudget} from './taskBudget';
@@ -78,7 +79,7 @@ export function verifyTreeInheritance(parent:string,slot:string,page:string):voi
 }
 
 /** Same root ledger for planning, ancestors, leaf calls and repairs. No child can reset it. */
-export async function generateMultiPageTree(input:{storage:ProjectStorage;projectId:string;contextFingerprint:string;contract:DesignTaskContract;
+export async function generateMultiPageTree(input:{prepareGeneratedHtml?:PrepareGeneratedHtml;storage:ProjectStorage;projectId:string;contextFingerprint:string;contract:DesignTaskContract;
  core:AIEngineCore;request:StreamTextOptions;pages:Array<{id:string;name:string;requirements:string}>;designSystem:DesignSystem;device:'pc'|'mobile';concurrency:1|2;
  budget:TaskBudget;isCurrent:()=>boolean;onProgress?:(message:string)=>void;onTree?:(tree:GenerationTree)=>void;
  isCancelled?:()=>boolean;
@@ -114,7 +115,7 @@ export async function generateMultiPageTree(input:{storage:ProjectStorage;projec
  textFiles.forEach((file,index)=>parts.set(files[index].stepId,{stepId:files[index].stepId,html:file.content,complete:false}));
  let attachment:NonNullable<SavedDesignTask['inputs']>['attachment'];
  const image=recovery?.inputs.attachment??input.attachment;
- if(image){const saved=await new AttachmentStore(input.storage).save(image.name,image.dataUrl);if(!saved)throw Error('共享树参考图片未能独立落盘。');attachment={name:image.name,relPath:saved.relPath,...(image.region?{region:structuredClone(image.region)}:{})};}
+ if(image){const saved=await new AttachmentStore(input.storage).saveReference(image.name,image.dataUrl);if(!saved)throw Error('共享树参考图片未能独立落盘。');attachment={name:image.name,relPath:saved.relPath,...(image.region?{region:structuredClone(image.region)}:{})};}
  guard();record.inputs={textFiles:files,...(attachment?{attachment}:{})};await persist('draft');
  try{
   if(input.recovery){await claimPreparedTreeRecovery(input.storage,input.recovery,input.contract);guard();}
@@ -146,8 +147,8 @@ export async function generateMultiPageTree(input:{storage:ProjectStorage;projec
      if(record.treeCheckpoint){if(typeof leaf==='string')throw Error('共享树完整叶子未提供原任务来源，未保存可恢复检查点。');record.treeCheckpoint.leafSources=record.treeCheckpoint.leafSources.filter(source=>source.nodeId!==node.id);record.treeCheckpoint.leafSources.push({nodeId:node.id,pageId:node.pageIds[0],contract:structuredClone(leaf.contract),htmlFingerprint:contentFingerprint(html)});}
      leaves.set(node.pageIds[0],html);
     }else{
-     const messages:EngineMessage[]=[...input.request.messages,{role:'user',content:'[共享结构写入阶段，覆盖整页输出格式]只生成本节点共享布局HTML，包在单个artifact中。不得生成私有业务正文、CSS/head或系统状态栏；顶部导航遵守当前项目导航规则，不重复微信系统栏。仅使用项目白名单和外部资源，禁止data/base64/内联SVG。必须留下唯一空div，data-generation-slot='+JSON.stringify(slot)+'，子页只可填此处。'+(input.device==='mobile'?'保持移动单列。':'PC共用布局使用container-max。')+'\n'+JSON.stringify({nodeId:node.id,requirements:compiled.requirements.get(node.id),pages:input.pages.filter(p=>node.pageIds.includes(p.id)),...(parent?{readOnlyAncestor:parent.html,parentFingerprint:parent.fingerprint}:{})})}];
-     const raw=await streamWithContinuation(withTaskBudget(cappedCore(node),budget),{...input.request,messages,maxTokens:Math.min(4096,caps.get(node.id)!),provenance:{taskId:input.contract.taskId,stepId:node.id}},{allowContinuation:false,externalMediaOnly:true,budget:{maxRequestedTokens:Math.min(4096,caps.get(node.id)!),autoContinuations:0}});
+     const messages:EngineMessage[]=[...input.request.messages,{role:'user',content:'[共享结构写入阶段，覆盖整页输出格式]只生成本节点共享布局HTML，包在单个artifact中。不得生成私有业务正文、CSS/head或系统状态栏；顶部导航遵守当前项目导航规则，不重复微信系统栏。仅使用项目白名单和外部资源，禁止data/base64。'+(input.prepareGeneratedHtml?'必要的新静态SVG可完整返回，由程序编译为独立文件，最终不得内联图形。':'禁止内联SVG。')+'必须留下唯一空div，data-generation-slot='+JSON.stringify(slot)+'，子页只可填此处。'+(input.device==='mobile'?'保持移动单列。':'PC共用布局使用container-max。')+'\n'+JSON.stringify({nodeId:node.id,requirements:compiled.requirements.get(node.id),pages:input.pages.filter(p=>node.pageIds.includes(p.id)),...(parent?{readOnlyAncestor:parent.html,parentFingerprint:parent.fingerprint}:{})})}];
+     const raw=await streamWithContinuation(withTaskBudget(cappedCore(node),budget),{...input.request,messages,maxTokens:Math.min(4096,caps.get(node.id)!),provenance:{taskId:input.contract.taskId,stepId:node.id}},{prepareGeneratedHtml:input.prepareGeneratedHtml,allowContinuation:false,externalMediaOnly:true,budget:{maxRequestedTokens:Math.min(4096,caps.get(node.id)!),autoContinuations:0}});
      const terminalIssue=structuredOutputIssue(raw.finishReason);const artifact=extractArtifact(raw.rawResponse);if(raw.errorMessage||terminalIssue||!artifact?.isComplete)throw Error(raw.errorMessage??terminalIssue??'共享片段未完整返回。');validateSharedTreeFragment(artifact.html,slot,input.designSystem,input.device);
      html=parent&&parentSlot?materializeTreeSlot(parent.html,parentSlot,artifact.html):artifact.html;
     }

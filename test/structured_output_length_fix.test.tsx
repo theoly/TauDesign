@@ -1,3 +1,4 @@
+import {endpointIdentity} from '../src/services/ai/modelCapabilities';
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -66,14 +67,16 @@ describe('结构化输出达到输出上限 (Length Limit) 缺陷修复测试套
     expect(isDeepSeekModel(model)).toBe(true);
 
     const schema = { type: 'object', properties: { test: { type: 'string' } } };
-    const chatOptions = structuredChatOptions(customProvider, model, schema, false);
+    expect(structuredChatOptions(customProvider, model, schema, false)).toEqual({});
+    const configuredProvider={...customProvider,modelCapabilities:{[model]:{version:1 as const,revision:'test',source:'user' as const,endpointIdentity:endpointIdentity(customProvider),thinkingControl:'deepseek' as const}}};
+    const chatOptions = structuredChatOptions(configuredProvider, model, schema, false);
     expect(chatOptions).toMatchObject({
       response_format: { type: 'json_object' },
       thinking: { type: 'disabled' }
     });
 
     const prepared = encodeModelRequest({
-      provider: customProvider,
+      provider: configuredProvider,
       model,
       messages: [{ role: 'user', content: 'test request' }],
       jsonSchema: schema,
@@ -81,7 +84,7 @@ describe('结构化输出达到输出上限 (Length Limit) 缺陷修复测试套
     });
     const body = prepared.transportRequest.body as Record<string, unknown>;
     expect(body.thinking).toEqual({ type: 'disabled' });
-    expect(body.enable_thinking).toBe(false);
+    expect(body.enable_thinking).toBeUndefined();
   });
 
   test('CHK-F-02: preparePageTaskPlan 请求参数显式传递 enableThinking: false', async () => {

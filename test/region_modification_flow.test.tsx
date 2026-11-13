@@ -1,3 +1,4 @@
+import {installReferenceImageDecoder,referenceObservationFixture} from './helpers/referenceImageDecoder';
 import { describe, test, expect, spyOn, beforeEach, afterEach } from 'bun:test';
 import { analyzeScreenModification, getRegionModificationPlan } from '../src/services/ai/modificationReview';
 import { mergeLocalEditOperations, applyLocalCopyEdits } from '../src/services/ai/localCopyModification';
@@ -163,7 +164,8 @@ describe('区块确认到候选的真实流程',()=>{
   const staged=useProjectStore.getState().stagedScreen!;expect(staged.workflowContract?.pageTaskPlan?.plan.goal).toBe('填写邮箱资料');expect(staged.workflowContract?.allowedChanges).toEqual(['element:region']);
   const message=engine.messages.find(m=>m.structuredRetry)!;expect(message.workflowContract?.pageTaskPlan).toEqual(staged.workflowContract?.pageTaskPlan);expect(message.taskBudget).toMatchObject({requests:2,closed:true});
   const turns=await useProjectStore.getState().getConversationStore().loadRecent();expect(turns).toHaveLength(1);expect(turns[0].user.reviewRequest).toContain('优化标题区');expect(turns[0].user.text).toBe(staged.workflowContract!.request);expect(turns[0].assistant.pageTaskHistory?.contract.pageTaskPlan?.plan.goal).toBe('填写邮箱资料');
-  await act(async()=>root.unmount());root=createRoot(host);await act(async()=>{root.render(<Harness/>);await new Promise(r=>setTimeout(r,15));});
+  await act(async()=>root.unmount());root=createRoot(host);await act(async()=>{root.render(<Harness/>);});
+  for(let i=0;i<100&&!engine.messages.some(m=>m.historicalPageTask);i++)await act(async()=>{await new Promise(r=>setTimeout(r,1));});
   const restored=engine.messages.find(m=>m.historicalPageTask)!;expect(restored.workflowContract).toBeUndefined();expect(restored.structuredRetry).toBeUndefined();expect(restored.historicalPageTask?.contract.pageTaskPlan?.plan.goal).toBe('填写邮箱资料');expect(objects).toHaveBeenCalledTimes(3);
  });
  test('retry reuses original reviewed roots without a page pipeline; stale source blocks it and message IDs stay unique',async()=>{
@@ -187,17 +189,31 @@ describe('区块确认到候选的真实流程',()=>{
   await act(async()=>{await engine.confirmModification(review.id,['suggestion-1'],'增加邮箱输入框','region');});
   expect(objects).toHaveBeenCalledTimes(2);expect(useProjectStore.getState().stagedScreen).toBeNull();expect(engine.messages.find(m=>m.id===review.id)?.modificationReview?.summary).toContain('变化');
  });
- test('reference-assisted functional region sends the same image in both stages and saves only metadata/path',async()=>{
+ test('reference-assisted functional region reuses independent Vision observations and saves only metadata/path',async()=>{
+  const restoreImage=installReferenceImageDecoder();try{
   act(()=>useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'test'})),bindings:defaultBindings}));
-  const attachment={name:'资料参考.png',dataUrl:'data:image/png;base64,YQ=='};
+  const attachment={name:'资料参考.png',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='};
+  objects.mockResolvedValueOnce(referenceObservationFixture);
   await act(async()=>root.render(<Harness/>));await act(async()=>{await engine.sendMessage('修改当前页面，优化标题区',attachment,{referencedScreenId:id});});
   const review=engine.messages.find(m=>m.modificationReview?.status==='ready')!;
   const imageTask={...task,features:task.features.map(f=>({...f,basis:'image',sourceIds:[`image:${referenceImageIdentity(attachment).fingerprint}`]}))};
   objects.mockResolvedValueOnce(imageTask).mockResolvedValueOnce({nid:'region',html:functionalRegion});
   await act(async()=>{await engine.confirmModification(review.id,['suggestion-1'],'增加邮箱输入框','region');});
-  expect(objects).toHaveBeenCalledTimes(3);for(const call of objects.mock.calls.slice(1))expect(call[1].messages.at(-1)?.imageUrl).toBe(attachment.dataUrl);
+  expect(objects).toHaveBeenCalledTimes(4);expect(objects.mock.calls[0][1].messages.at(-1)?.imageUrl).toBe(attachment.dataUrl);for(const call of objects.mock.calls.slice(1))expect(call[1].messages.at(-1)?.imageUrl).toBeUndefined();
   const staged=useProjectStore.getState().stagedScreen!;expect(staged.workflowContract?.pageTaskPlan?.request.imageFingerprint).toBe(referenceImageIdentity(attachment).fingerprint);
   const turns=await useProjectStore.getState().getConversationStore().loadRecent();expect(JSON.stringify(turns)).not.toContain(attachment.dataUrl);expect(turns[0].user.attachments?.[0]).toMatch(/^assets\/images\//);
+  }finally{restoreImage();}
+ });
+ test('changing only the Vision binding during confirmed functional planning blocks its old parsed-image candidate',async()=>{
+  const restoreImage=installReferenceImageDecoder();try{
+   act(()=>useAIConfigStore.setState({providers:defaultProviders.map(p=>({...p,apiKey:'test'})),bindings:defaultBindings}));
+   const attachment={name:'资料参考.png',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg=='};
+   objects.mockResolvedValueOnce(referenceObservationFixture);await act(async()=>root.render(<Harness/>));await act(async()=>{await engine.sendMessage('修改当前页面，优化标题区',attachment,{referencedScreenId:id});});
+   const review=engine.messages.find(m=>m.modificationReview?.status==='ready')!,codeBinding=structuredClone(useAIConfigStore.getState().bindings.code);
+   objects.mockImplementationOnce(async()=>{useAIConfigStore.getState().setRoleBinding('vision',{role:'vision',providerId:'prov-openai',modelId:'gpt-4o-mini'});return task;});
+   await act(async()=>{await engine.confirmModification(review.id,['suggestion-1'],'增加邮箱输入框','region');});
+   expect(useAIConfigStore.getState().bindings.code).toEqual(codeBinding);expect(objects).toHaveBeenCalledTimes(3);expect(useProjectStore.getState().stagedScreen).toBeNull();expect(engine.messages.find(m=>m.id===review.id)?.modificationReview?.summary).toContain('变化');expect(useProjectStore.getState().screens[id].htmlContent).toBe(regionHtml);
+  }finally{restoreImage();}
  });
 });
 

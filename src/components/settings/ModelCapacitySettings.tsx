@@ -10,11 +10,12 @@ export function ModelCapacitySettings({provider,model}:{provider:AIProviderConfi
  const inferred=!current?inferKnownModelCapability(provider,model):undefined;
  const [windowText,setWindow]=useState(current?String(stored?.contextWindow??''):''),[outputText,setOutput]=useState(current?String(stored?.maxOutputTokens??''):'');
  const [media,setMedia]=useState<ModelCapabilityProfile['mediaInput']>(current?stored?.mediaInput:undefined),[notice,setNotice]=useState('');
+ const [thinking,setThinking]=useState<ModelCapabilityProfile['thinkingControl']>(current?stored?.thinkingControl:undefined);
  const [concurrency,setConcurrency]=useState<1|2>(current?stored?.maxConcurrency??1:1);
  const {bindings,setModelCapability,setRoleOutputLimit}=useAIConfigStore();
  const roles=(['code','chat','vision'] as ModelRole[]).filter(role=>bindings[role].providerId===provider.id&&bindings[role].modelId===model);
  const number=(value:string)=>value.trim()===''?undefined:Number(value);
- const save=()=>{try{const contextWindow=number(windowText),maxOutputTokens=number(outputText);setModelCapability(provider.id,model,contextWindow===undefined&&maxOutputTokens===undefined&&media===undefined&&concurrency===1?undefined:{contextWindow,maxOutputTokens,mediaInput:media,maxConcurrency:concurrency});setNotice('已保存。每次调用仍受任务总预算和各步骤上限约束。');}catch(error){setNotice(error instanceof Error?error.message:'容量保存失败。');}};
+ const save=()=>{try{const contextWindow=number(windowText),maxOutputTokens=number(outputText);setModelCapability(provider.id,model,contextWindow===undefined&&maxOutputTokens===undefined&&media===undefined&&concurrency===1&&thinking===undefined?undefined:{contextWindow,maxOutputTokens,mediaInput:media,maxConcurrency:concurrency,thinkingControl:thinking});setNotice('已保存。每次调用仍受任务总预算和各步骤上限约束。');}catch(error){setNotice(error instanceof Error?error.message:'容量保存失败。');}};
  return <details className="rounded-xl border border-slate-800 bg-slate-950/50 p-3 text-xs">
   <summary className="cursor-pointer font-semibold text-slate-300">模型容量与输出上限</summary>
   <div className="mt-3 space-y-3">
@@ -26,6 +27,9 @@ export function ModelCapacitySettings({provider,model}:{provider:AIProviderConfi
    </div>
    <label className="space-y-1 block text-slate-400">图片输入能力<select aria-label="模型图片输入能力" value={media??''} onChange={e=>setMedia(e.target.value?e.target.value as ModelCapabilityProfile['mediaInput']:undefined)} className={field}>
     <option value="">{inferred?.mediaInput ? `未手动配置（默认推断：${inferred.mediaInput}）` : '未配置（沿用现有识图判定）'}</option><option value="native-part">支持专用图片字段</option><option value="url">仅接受图片URL</option><option value="unsupported">不支持图片</option>
+   </select></label>
+   <label className="space-y-1 block text-slate-400">思考控制协议<select aria-label="模型思考控制协议" value={thinking??''} onChange={e=>setThinking(e.target.value?e.target.value as ModelCapabilityProfile['thinkingControl']:undefined)} className={field}>
+    <option value="">自动（仅已验证端点）</option><option value="deepseek">DeepSeek thinking（已确认网关支持）</option><option value="qwen">Qwen enable_thinking（已确认网关支持）</option><option value="unsupported">不支持关闭思考</option>
    </select></label>
    <p className="text-slate-500">来源：{current?stored?.source==='user'?'用户配置':stored?.source:inferred?'内置元数据推荐（未填写时自动采用）':'未记录'}。填写更大窗口不会提高单次生成或父任务的输出额度。</p>
    <label className="space-y-1 block text-slate-400">端点支持的同级请求并发<select aria-label="模型同级请求并发" value={concurrency} onChange={e=>setConcurrency(Number(e.target.value) as 1|2)} className={field}><option value={1}>1（默认；未知端点）</option><option value={2}>2（我已确认此端点支持）</option></select></label>

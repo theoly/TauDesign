@@ -1,0 +1,55 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>真实修复副本 · 隔离交付验收</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><div id="export-root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {InfiniteCanvas} from '/src/components/canvas/InfiniteCanvas.tsx';
+import {ProjectPublicationOverlay} from '/src/components/workspace/ProjectPublicationOverlay.tsx';
+import {ExportModal} from '/src/components/export/ExportModal.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {buildDesignTaskContract,contentFingerprint} from '/src/services/ai/designWorkflow.ts';
+import {buildPageRedesignSource} from '/src/services/ai/pageRedesignSource.ts';
+import {htmlImportExecutionRecord} from '/src/services/ai/designExecutionRecord.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {loadStagedCandidate} from '/src/services/storage/candidateRepository.ts';
+import {loadHistoryForProject} from '/src/services/storage/historyPersistence.ts';
+import {DeliveryRepository} from '/src/services/storage/deliveryRepository.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {resolveImportedResources} from '/src/services/import/importResources.ts';
+import {buildExportRenderDocument} from '/src/utils/pngExporter.ts';
+import {compileTokensToCss} from '/src/utils/cssCompiler.ts';
+import {getBaseCss} from '/src/styles/baseCss.ts';
+let modelCalls=0;for(const method of ['streamText','generateObject'])DefaultAIEngineCore.prototype[method]=()=>{modelCalls++;throw Error('Local delivery verification cannot call a model');};
+const params=new URL(location.href).searchParams,resume=params.get('resume'),sample=params.get('sample')||'a',target='isolated-real-page';
+let inputs;
+if(resume){
+ if(!await useProjectStore.getState().loadProjectById(resume))throw Error('Isolated project cannot reopen');
+ await loadHistoryForProject(resume);
+ const candidate=await loadStagedCandidate(resume);
+ if(candidate&&!useProjectStore.getState().restoreStagedCandidate(candidate,resume))throw Error('Persisted candidate cannot restore');
+}else{
+ inputs=await window.fixtureIO({op:'inputs',sample});
+ useProjectStore.getState().initNewProject({name:'本次本地隔离交付验证 '+sample,deviceProfile:'mobile',designSystem:inputs.context.designSystem,createSpecimen:false});
+ const s=useProjectStore.getState(),storage=createProjectStorage(s.id);
+ for(const file of inputs.files)await storage.writeBinary(file.relPath,file.bytes);
+ for(const asset of inputs.assets)s.addAsset(asset);
+ s.addScreen({name:'完善资料 '+sample,htmlContent:inputs.context.qualityOptions.baselineHtml,position:{x:0,y:0}},target);
+ s.setActiveScreen(target);s.setViewportTransform({x:20,y:160,scale:.8});
+ useHistoryStore.getState().restore(null);await s.saveProjectChecked();
+ // A fresh, local deterministic-copy contract. No old task IDs, model receipts,
+ // image permissions, or generated plans are reused as execution authorization.
+ const current=useProjectStore.getState(),request='本次本地隔离验证：按已确认需求整页重设计，载入已在本机修复的HTML副本；不调用模型。\n'+inputs.context.request+(inputs.context.visualRefinement?'\n本轮用户视觉调整：'+JSON.stringify(inputs.context.visualRefinement):'');
+ const contract=buildDesignTaskContract({intent:'modify_screen',request,target:current.screens[target],deviceProfile:'mobile',frameWidth:current.settings.frameWidth,designSystem:current.designSystem,designSystemOrigin:current.designSystemOrigin,allowedChanges:['screen:'+target]});
+ const inventory=buildPageRedesignSource(current.screens[target].htmlContent,{deviceProfile:'mobile',useCustomNavigation:false,protectedNids:contract.protectedNids});
+ contract.wholePageRedesign={version:1,sourceFingerprint:inventory.sourceFingerprint,inventoryFingerprint:contentFingerprint(JSON.stringify(inventory))};
+ current.stageScreenChange(target,inputs.repaired,'本地修复副本 '+sample,request,contract,htmlImportExecutionRecord(inputs.repaired));
+}
+let exportRoot;
+window.fixture={sample,target,resumed:Boolean(resume),models:()=>modelCalls,state:()=>useProjectStore.getState(),report:()=>useProjectStore.getState().getStagedDeliveryReport(),
+ undo:()=>useHistoryStore.getState().undo(),redo:()=>useHistoryStore.getState().redo(),history:()=>{const {past,future,checkpoints}=useHistoryStore.getState();return {past:past.length,future:future.length,checkpoints:checkpoints.length};},
+ save:()=>useProjectStore.getState().saveProjectChecked(),candidateFile:()=>{const s=useProjectStore.getState();return createProjectStorage(s.id).readText('candidates/current.json');},
+ archives:async()=>{const s=useProjectStore.getState();return (await new DeliveryRepository(createProjectStorage(s.id),s.id).listForScreen(target)).records;},
+ exportDocument:async()=>{const s=useProjectStore.getState(),screen=s.screens[target],resolved=await resolveImportedResources(screen.htmlContent,screen.scopedCss,createProjectStorage(s.id),new Set(Object.values(s.assets).map(a=>a.relPath)));return buildExportRenderDocument({...screen,...resolved},{tokensCss:compileTokensToCss(s.designSystem.tokens,s.settings.colorMode),baseCss:getBaseCss(s.settings.deviceProfile),screenOverrides:'',bgColor:'var(--color-bg)',width:390,deviceProfile:'mobile',useCustomNavigation:false,viewportHeight:844});},
+ openExport:()=>{exportRoot??=ReactDOM.createRoot(document.getElementById('export-root'));exportRoot.render(React.createElement(ExportModal,{onClose:()=>exportRoot.render(null)}));}};
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(React.Fragment,null,React.createElement(InfiniteCanvas),React.createElement(ProjectPublicationOverlay)));
+</script></body></html>

@@ -15,6 +15,3 @@ export function supportsThinkingToggle(provider:AIProviderConfig,model:string):b
  try{const u=new URL(provider.baseUrl);return u.protocol==='https:'&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&
   (/^(?:dashscope(?:-intl|-us)?\.aliyuncs\.com|[a-z0-9-]+\.(?:cn-beijing|ap-southeast-1)\.maas\.aliyuncs\.com)$/.test(u.hostname))&&/^\/(?:compatible-mode\/)?v1(?:\/chat\/completions)?\/?$/.test(u.pathname);}catch{return false;}
 }
-export function restyleThinkingOptions(provider:AIProviderConfig,model:string):{enableThinking?:boolean} {
- return supportsThinkingToggle(provider,model)?{enableThinking:false}:{};
-}

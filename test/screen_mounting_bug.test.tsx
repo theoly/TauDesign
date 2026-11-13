@@ -15,6 +15,15 @@ import { AIService } from '../src/services/ai/aiService';
 describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sync)', () => {
   let container: HTMLDivElement;
   let root: Root;
+  const waitForMountedTurn=async()=>{
+    const end=Date.now()+2000;
+    while(Date.now()<end){
+      // Flush React between observations: waiting for DOM commits inside one act blocks that commit.
+      await act(async()=>{await new Promise(resolve=>setTimeout(resolve,1));});
+      if(useProjectStore.getState().screenOrder.length===2&&!container.querySelector('button[title*="AI 正在生成中"]')&&container.textContent?.includes('设计画框已挂载至画板'))return;
+    }
+    throw Error('等待实际挂载与整轮保存完成超时');
+  };
 
   const fireChange = (el: HTMLInputElement | HTMLTextAreaElement, val: string) => {
     const nativeSetter = Object.getOwnPropertyDescriptor(
@@ -124,9 +133,7 @@ describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sy
     });
 
     // Wait for AI streaming and processing to complete
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 200));
-    });
+    await waitForMountedTurn();
 
     // VERIFY: The new screen MUST be in screens and screenOrder!
     const state = useProjectStore.getState();
@@ -183,9 +190,7 @@ describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sy
       sendBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    await act(async () => {
-      await new Promise((r) => setTimeout(r, 150));
-    });
+    await waitForMountedTurn();
 
     // Verify it automatically mounted (the primary fix)
     expect(useProjectStore.getState().screenOrder.length).toBe(2);
@@ -217,6 +222,7 @@ describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sy
     await act(async () => {
       mountBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
+    await waitForMountedTurn();
 
     // Screen is recovered!
     expect(useProjectStore.getState().screenOrder.length).toBe(2);

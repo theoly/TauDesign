@@ -1,0 +1,37 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>Independent media recovery verification</title><body style="margin:0;background:#020617"><div id="root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {ScreenFrame} from '/src/components/canvas/ScreenFrame.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+const mode=new URLSearchParams(location.search).get('mode')??'automatic';
+const fixture={starts:0,failures:mode==='manual'?2:mode==='automatic'?1:0,messages:[],reports:[]};window.mediaRecoveryFixture=fixture;
+const register=navigator.serviceWorker.register.bind(navigator.serviceWorker);let release;
+navigator.serviceWorker.register=async(...args)=>{fixture.starts++;if(fixture.failures-->0)throw new TypeError('Injected registration transport interruption');if(mode==='cancel'&&fixture.starts===1)await new Promise(resolve=>{release=resolve;});return register(...args);};
+const post=ServiceWorker.prototype.postMessage;let droppedAck=false;
+ServiceWorker.prototype.postMessage=function(data,...args){
+ fixture.messages.push({type:data?.type,paths:data?.paths});
+ if(mode==='ack'&&data?.type==='register'&&!droppedAck){
+  droppedAck=true;const relay=new MessageChannel(),transfer=args[0];
+  relay.port1.onmessage=()=>{relay.port1.close();transfer[0].close();};
+  return post.call(this,data,[relay.port2,...transfer.slice(1)]);
+ }
+ return post.call(this,data,...args);
+};
+const one='assets/icons/recovery-one.svg',two='assets/icons/recovery-two.svg';
+const store=useProjectStore.getState();store.initNewProject({name:'媒体恢复独立测试',deviceProfile:'mobile',createSpecimen:false});
+const storage=createProjectStorage(useProjectStore.getState().id);
+for(const [id,path,color] of [['one',one,'#0c8'],['two',two,'#28f']]){
+ await storage.writeBinary(path,btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><rect width="64" height="64" fill="${color}"/></svg>`));
+ store.addAsset({id,name:id,relPath:path,type:'svg_icon',mimeType:'image/svg+xml',source:'upload',refCount:0});
+}
+const source={id:'page',name:'媒体恢复页',position:{x:0,y:0},htmlContent:`<main data-nid="root" class="p-4 col gap-4"><h1 class="text-lg">独立媒体恢复</h1><img data-nid="picture" width="64" height="64" src="${one}" alt="独立图标"><p>源页面和历史保持不变</p></main>`};
+store.addScreen(source,'page');store.setActiveScreen('page');useHistoryStore.getState().restore(null);
+fixture.original=source.htmlContent;fixture.source=()=>useProjectStore.getState().screens.page.htmlContent;fixture.history=()=>useHistoryStore.getState().past.length;
+fixture.cache=async()=>{const cache=await caches.open('taudesign-preview-media-v1');return (await cache.keys()).map(request=>new URL(request.url).pathname);};
+const root=ReactDOM.createRoot(document.getElementById('root'));let change;
+function App(){const [screen,setScreen]=React.useState(source);change=()=>setScreen({...source,htmlContent:source.htmlContent.replace(one,two)});return React.createElement('div',{style:{width:390,margin:'40px'}},React.createElement(ScreenFrame,{screen,lodLevel:2,renderQualityKey:'isolated-preview',onRenderQuality:(_id,key,report)=>fixture.reports.push({key,...report})}));}
+fixture.switch=()=>change();fixture.release=()=>release?.();fixture.stop=()=>root.unmount();root.render(React.createElement(App));
+</script></body></html>

@@ -6,7 +6,7 @@ export const explicitFieldLabels=(task:ContentTask|string|undefined)=>explicitUs
 const normalize=(text:string)=>text.normalize('NFC').replace(/\s+/g,' ').trim();
 const labelable=(el:Element)=>el.matches('select,textarea')||el.matches('input')&&!['hidden','button','submit','reset','image'].includes((el.getAttribute('type')??'text').toLowerCase());
 /** Native label association only. Duplicate IDs or ambiguous implicit fields never establish a target. */
-function associatedField(label:Element):Element|undefined{
+export function associatedField(label:Element):Element|undefined{
  const id=label.getAttribute('for');
  if(id!==null){const matches=Array.from(label.ownerDocument.querySelectorAll('[id]')).filter(el=>el.getAttribute('id')===id);return id&&matches.length===1&&labelable(matches[0])?matches[0]:undefined;}
  const fields=Array.from(label.querySelectorAll('input,select,textarea')).filter(labelable);
@@ -29,3 +29,5 @@ export function inspectExplicitFieldLabels(doc:Document,requirements:ExplicitAct
   })];
  });
 }
+
+export function nativeFieldLabels(doc:Document):string[]{return Array.from(doc.querySelectorAll('label')).filter(label=>associatedField(label)).map(label=>sourceFieldLabelText(label).text);}

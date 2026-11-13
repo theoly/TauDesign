@@ -1,0 +1,19 @@
+{
+  "date": "2026-11-14",
+  "scope": "working-tree-files; includes earlier authorized changes",
+  "sha256": {
+    "src/services/ai/generatedMedia.ts": "5ddd883242e5ce08136bd9b521a8a439c260d45daf1d21c759a2786227dfe12a",
+    "src/services/ai/boundedContinuation.ts": "9eb03153b3fa1d512b07f37518971fd1f12eb660657216188c6a85f9b8f4f160",
+    "src/services/ai/pageTaskGeneration.ts": "c8d8337fc7709bbea85aeb2b1c4de498a08b9f297f545f1dda39959c116541e7",
+    "src/services/ai/sectionedGeneration.ts": "ae2a29d1c134905a588b0d7a5292d5fa3bdf2040d04990714b12ee507af48ec0",
+    "src/services/ai/engine/pipeline/executor.ts": "377af9f5a1deb122591fe2314307a7ff89d4e33a0933fcfba5f2889fb855a921",
+    "src/services/tools/canvasToolExecutor.ts": "e860685488f6163061f0593d890358ae863844219a142b0b0c7c370f18f2adae",
+    "src/stores/useProjectStore.ts": "5c764f391c58bbe8b5286574494b370bb8a59a371ea4ee8cbe32c2a5709c855c",
+    "src/services/ai/multiPageService.ts": "07fdc13824c0a8b84864bdd262b47345b93f3167f4755895ae3e9fd01032a12b",
+    "src/services/ai/multiPageTree.ts": "f40498e6a16db68395566079382c63f117f6c80c232d04e2f35ba77065d2eefc",
+    "src/services/ai/engine/react/useAIEngineChat.ts": "ca95975dfe5bb17a72b1c38cba4db97716a8e551fb59dc5e00478657bf5418b3",
+    "src/services/ai/draftRegionRepair.ts": "d351c837c3b43fd681e984775f900bf92190c32bd06cbacefdf97ca5262c0669",
+    "test/generated_media.test.ts": "029afce619f86d25678a63f51f0d8cf3a02a983bc490b664445be1f342aafa41",
+    "scripts/tests/test_generated_media_browser.py": "a2d38505a2a028c63252077816d35f536f827dc262fb0ba94b460df3bebce06c"
+  }
+}

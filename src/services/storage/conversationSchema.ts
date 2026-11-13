@@ -1,4 +1,5 @@
 import type {ConversationTurn} from './conversationStore';
+import {validConversationFailure} from './conversationFailure';
 const object=(v:unknown):v is Record<string,unknown>=>Boolean(v&&typeof v==='object'&&!Array.isArray(v));
 const strings=(v:unknown):v is string[]=>Array.isArray(v)&&v.every(s=>typeof s==='string');
 /** A malformed optional field cannot take away otherwise valid conversation text. */
@@ -12,6 +13,7 @@ export function readConversationTurn(value:unknown):ConversationTurn|null {
  if(typeof assistant.model!=='string')delete assistant.model;
  if(typeof assistant.durationMs!=='number'||!Number.isFinite(assistant.durationMs)||assistant.durationMs<0)delete assistant.durationMs;
  if(typeof assistant.aborted!=='boolean')delete assistant.aborted;
+ if(!validConversationFailure(assistant.failure))delete assistant.failure;
  if(!object(assistant.usage)||Object.values(assistant.usage).some(v=>typeof v!=='number'||!Number.isFinite(v)||v<0))delete assistant.usage;
  if(!object(t.changeSet))delete t.changeSet;
  else{

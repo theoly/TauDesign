@@ -1,0 +1,106 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>已认可B版本地采纳</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><pre id="status" style="position:fixed;bottom:0;color:white;z-index:100;pointer-events:none"></pre><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import {invoke,isTauri} from '/node_modules/@tauri-apps/api/core.js';
+import '/src/styles/index.css';
+import {ScreenFrame} from '/src/components/canvas/ScreenFrame.tsx';
+import {ProjectPublicationOverlay} from '/src/components/workspace/ProjectPublicationOverlay.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {buildDesignTaskContract,contentFingerprint} from '/src/services/ai/designWorkflow.ts';
+import {buildPageRedesignSource} from '/src/services/ai/pageRedesignSource.ts';
+import {htmlImportExecutionRecord} from '/src/services/ai/designExecutionRecord.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {ProjectRepository} from '/src/services/storage/projectRepository.ts';
+import {loadHistoryForProject} from '/src/services/storage/historyPersistence.ts';
+import {DeliveryRepository} from '/src/services/storage/deliveryRepository.ts';
+import {readPublicationCommits,matchesPublicationCommit} from '/src/services/storage/projectPublicationRecord.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+const params=new URLSearchParams(location.search),root=params.get('root'),phase=params.get('phase');
+const validRoot=/^\/private\/tmp\/taudesign-approved-b-run-[A-Za-z0-9_-]+$/;
+const target='84435b32-3edf-4779-b97e-7752ab2bc926';
+const assert=(v,m)=>{if(!v)throw Error(m);};
+const sha=async text=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(v=>v.toString(16).padStart(2,'0')).join('');
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+let modelCalls=0;for(const method of ['streamText','generateObject'])DefaultAIEngineCore.prototype[method]=()=>{modelCalls++;throw Error('Accepted B is a local HTML import; model requests prohibited');};
+const report={runtime:'real-tauri',phase,status:'running',target,models:0,events:[]};
+window.addEventListener('error',event=>{(report.runtimeErrors??=[]).push({message:event.message,stack:event.error?.stack});});
+window.addEventListener('unhandledrejection',event=>{(report.runtimeErrors??=[]).push({message:String(event.reason),stack:event.reason?.stack});});
+const history=()=>{const h=useHistoryStore.getState();return {past:h.past.length,future:h.future.length,checkpoints:h.checkpoints.length,lastPast:h.past.at(-1),lastCheckpoint:h.checkpoints.at(-1)};};
+// Target-only production frames avoid mounting other 31 old pages. These are
+// presentation positions only; the authored store keeps every original position.
+function TargetFrames(){
+ const state=useProjectStore(),source=state.screens[target],staged=state.stagedScreen;
+ const key=staged?state.getStagedRenderContextKey():'';
+ const receive=React.useCallback((id,renderKey,value)=>{if(id==='staged-screen-preview'&&renderKey===useProjectStore.getState().getStagedRenderContextKey())useProjectStore.getState().setStagedRenderQuality(renderKey,value);},[]);
+ if(!source)return null;
+ const candidate=staged?{...source,id:'staged-screen-preview',name:staged.screenName,htmlContent:staged.newHtml,position:{x:500,y:100},metadata:{...source.metadata,...(staged.navigationTitle?{navigationTitle:staged.navigationTitle}:{})}}:undefined;
+ return React.createElement(React.Fragment,null,
+  React.createElement(ScreenFrame,{screen:{...source,position:{x:50,y:100}},lodLevel:2,isComparisonTarget:Boolean(staged)}),
+  candidate&&React.createElement(ScreenFrame,{screen:candidate,lodLevel:2,isStaged:true,contentTask:staged.workflowContract,renderQualityKey:key,onRenderQuality:receive,overrideSourceScreenId:target}),
+  React.createElement(ProjectPublicationOverlay));
+}
+const note=async(name,value)=>{report.events.push({name,at:new Date().toISOString(),value});document.querySelector('#status').textContent=name;await invoke('project_write_text_atomic',{root,rel:`progress-${phase}.json`,contents:JSON.stringify(report,null,2)});};
+async function waitFor(fn,message,ms=90000){const end=Date.now()+ms;while(Date.now()<end){if(await fn())return;await sleep(150);}throw Error(message);}
+try{
+ assert(isTauri()&&validRoot.test(root)&&['apply','reopen'].includes(phase),'Real Tauri and controlled report root required');
+ const input=JSON.parse(await invoke('project_read_text',{root,rel:'input.json'}));
+ await note('input-loaded',true);
+ const folder=input.folder,accepted=await invoke('project_read_text',{root,rel:'accepted-b.html'});
+ assert(folder===input.authorizedFolder,'Project path must exactly match authorized local input');
+ assert(await sha(accepted)==='273470321a56eab7e8222579d726f099ee81a52f811017195fd8c96ff7b1a038','Accepted HTML SHA differs');
+ const storage=createProjectStorage(input.projectId,folder),doc=await new ProjectRepository(storage).load();
+ await note('project-read',true);
+ assert(doc&&doc.id===input.projectId,'Project unavailable');
+ assert(JSON.stringify(doc.designSystem)===JSON.stringify(input.designSystem),'Design system changed after source verification');
+ assert(JSON.stringify(doc.settings)===JSON.stringify(input.settings),'Device/settings changed after source verification');
+ assert(useProjectStore.getState().loadProjectDocument(doc,folder),'Fresh authoring session refused');
+ await loadHistoryForProject(input.projectId,folder);
+ await note('history-loaded',true);
+ let state=useProjectStore.getState();assert(state.projectAuthoringSession&&state.folderPath===folder,'No folder-bound authoring session');
+ report.folder=folder;report.projectId=state.id;report.historyBefore=history();
+ assert(await sha(state.screens[target].htmlContent)===(phase==='apply'?input.baselineSHA:input.acceptedSHA),'Target baseline changed; refuse overwrite');
+ state.setActiveScreen(target);const p=state.screens[target].position;state.setViewportTransform({x:50-p.x*.8,y:160-p.y*.8,scale:.8});
+ ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(TargetFrames));
+ report.renderContainer='production ScreenFrame target-only; authored positions unchanged; not full 32-page InfiniteCanvas';
+ if(phase==='apply'){
+  const request='用户本轮已明确要求完成剩余事项，并已视觉认可最新b-padded，现将该本机HTML应用到当前原目标画框。整页重设计；采用本地HTML导入，不调用模型、不复用旧任务或图片回执。认可HTML SHA-256: '+input.acceptedSHA+'。\n'+input.authorizedRequest+'\n最终用户视觉调整：'+input.visualRequest;
+  state=useProjectStore.getState();
+  const contract=buildDesignTaskContract({intent:'modify_screen',request,target:state.screens[target],deviceProfile:state.settings.deviceProfile,frameWidth:state.settings.frameWidth,designSystem:state.designSystem,designSystemOrigin:state.designSystemOrigin,protectedNids:state.getProtectedNids(target),allowedChanges:['screen:'+target]});
+  const inventory=buildPageRedesignSource(state.screens[target].htmlContent,{deviceProfile:state.settings.deviceProfile,useCustomNavigation:state.settings.useCustomNavigation,protectedNids:contract.protectedNids});
+  contract.wholePageRedesign={version:1,sourceFingerprint:inventory.sourceFingerprint,inventoryFingerprint:contentFingerprint(JSON.stringify(inventory))};
+  const execution=htmlImportExecutionRecord(accepted);
+  report.contract=contract;report.inventory={sourceFingerprint:inventory.sourceFingerprint,inventoryFingerprint:contract.wholePageRedesign.inventoryFingerprint,texts:inventory.texts.length,controls:inventory.controls.length,media:inventory.media.length,protected:inventory.protectedNodes.length};report.execution=execution;
+  assert(!contract.referenceImage&&!contract.pageTaskPlan&&!contract.provider,'Fresh local contract cannot reuse old evidence');
+  state.stageScreenChange(target,accepted,state.screens[target].name,request,contract,execution);
+  await waitFor(()=>{const s=useProjectStore.getState();report.lastGate=s.getStagedDeliveryReport();report.candidateSaved=s.stagedCandidateSaveStatus;report.dom={iframes:document.querySelectorAll('iframe').length,text:document.body.innerText.slice(0,2000)};return report.lastGate.status==='ready'&&s.stagedCandidateSaveStatus==='saved';},'Candidate did not become ready');
+  state=useProjectStore.getState();assert(state.stagedScreen.newHtml===accepted,'Candidate HTML differs from accepted B');
+  report.candidateId=state.stagedScreen.candidateId;report.gate=state.getStagedDeliveryReport();report.render=state.stagedRenderQuality?.report;report.validationEvidence=state.stagedValidationEvidence;
+  await note('candidate-ready',report.gate);
+  assert(await state.adoptStagedChange(),'Product adoption failed: '+useProjectStore.getState().stagedAdoptionError);
+  assert(useProjectStore.getState().screens[target].htmlContent===accepted&&!useProjectStore.getState().stagedScreen,'Adoption content differs');
+  report.historyAfterAdopt=history();assert(report.historyAfterAdopt.past===report.historyBefore.past+1,'Adoption must create exactly one history entry');assert(report.historyAfterAdopt.checkpoints>=report.historyBefore.checkpoints+1,'Adoption checkpoint missing');
+  await useProjectStore.getState().saveProjectChecked();
+  await note('adopted-and-saved',{htmlSHA:await sha(useProjectStore.getState().screens[target].htmlContent),history:report.historyAfterAdopt});
+ }else{
+  report.reopenedAcceptedB=true;
+  const old=await invoke('project_read_text',{root,rel:'baseline.html'});
+  useHistoryStore.getState().undo();assert(useProjectStore.getState().screens[target].htmlContent===old,'Reopened Undo did not exactly restore baseline');report.undoRestoresBaseline=true;
+  useHistoryStore.getState().redo();assert(useProjectStore.getState().screens[target].htmlContent===accepted,'Reopened Redo did not restore accepted B');report.redoRestoresAcceptedB=true;
+  await useProjectStore.getState().saveProjectChecked();report.historyAfterRedo=history();
+ }
+ const records=(await new DeliveryRepository(createProjectStorage(input.projectId,folder),input.projectId).listForScreen(target)).records;
+ const apply=phase==='reopen'?JSON.parse(await invoke('project_read_text',{root,rel:'report-apply.json'})):report;
+ const delivery=records.find(r=>r.candidate.candidateId===apply.candidateId&&r.candidate.workflowContract?.taskId===apply.contract.taskId);
+ assert(delivery?.status==='applied','This fresh candidate/task Applied delivery record missing');
+ assert(await sha(delivery.before.htmlContent)===input.baselineSHA&&await sha(delivery.after.htmlContent)===input.acceptedSHA&&delivery.resultFingerprint===contentFingerprint(accepted),'Delivery before/after/result fingerprint differs');
+ const commits=await readPublicationCommits(createProjectStorage(input.projectId,folder),input.projectId),commit=commits.find(c=>c.id===delivery.publicationId);
+ assert(await matchesPublicationCommit(commit,{id:delivery.id,kind:'candidate',screens:[delivery.after]}),'Matching atomic publication commit missing');
+ if(phase==='reopen')assert(delivery.id===apply.delivery.id,'Reopen delivery identity differs');
+ report.delivery=delivery;report.publicationCommit=commit;
+ report.finalSHA=await sha(useProjectStore.getState().screens[target].htmlContent);assert(report.finalSHA===input.acceptedSHA,'Final authored target differs');
+ report.models=modelCalls;assert(modelCalls===0,'A model request occurred');report.status='passed';
+}catch(error){report.status='failed';report.error=error instanceof Error?error.message:String(error);report.stack=error?.stack;report.models=modelCalls;}
+document.querySelector('#status').textContent=report.status+(report.error?' '+report.error:'');
+if(isTauri()&&validRoot.test(root))await invoke('project_write_text_atomic',{root,rel:`report-${phase}.json`,contents:JSON.stringify(report,null,2)});
+</script></body></html>

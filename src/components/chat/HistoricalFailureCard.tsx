@@ -1,0 +1,18 @@
+import React from 'react';
+import type {ConversationFailure} from '../../services/storage/conversationFailure';
+import {executionPhaseLabels} from '../../services/ai/requestActivity';
+export function HistoricalFailureCard({failure,busy,onReuse}:{failure:ConversationFailure;busy?:boolean;onReuse:()=>void}){
+ const phase=failure.phase&&(executionPhaseLabels[failure.phase as keyof typeof executionPhaseLabels]??failure.phase);
+ return <div className="rounded-lg border border-slate-700 bg-slate-950/70 p-2 text-[11px] text-slate-400">
+  <p>{failure.status==='cancelled'?'历史已停止记录':'历史失败记录'} · 仅供回溯，不代表当前页面或任务授权</p>
+  <details className="mt-1"><summary className="cursor-pointer">查看失败诊断</summary><div className="mt-1 space-y-1 break-words">
+   {phase&&<p>阶段：{phase}</p>}{failure.model&&<p>模型：{failure.model}</p>}
+   {failure.requests!==undefined&&<p>请求：{failure.requests}{failure.requestLimit!==undefined?` / ${failure.requestLimit}`:''} 次</p>}
+   {failure.effectiveOutputTokens!==undefined&&<p>有效输出上限：{failure.effectiveOutputTokens} tokens</p>}
+   {(failure.finishReason||failure.httpStatus)&&<p>结束：{failure.finishReason??'未记录'}{failure.httpStatus?` · HTTP ${failure.httpStatus}`:''}</p>}
+   {failure.attachmentUnavailable&&<p className="text-amber-300">原图片未能存档，复用时请重新选择附件。</p>}
+   {failure.taskId&&<p className="break-all">任务：{failure.taskId}</p>}
+  </div></details>
+  <button type="button" disabled={busy} onClick={onReuse} title="仅替换输入框文字；附件和页面引用需重新确认，不自动发送" className="mt-2 rounded border border-slate-600 px-2 py-1 text-slate-300 disabled:opacity-40">重新使用该需求</button>
+ </div>;
+}

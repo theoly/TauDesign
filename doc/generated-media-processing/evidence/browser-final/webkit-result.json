@@ -1,0 +1,76 @@
+{
+  "engine": "webkit",
+  "calls": 1,
+  "registered": 2,
+  "reopened": true,
+  "undone": true,
+  "redone": true,
+  "boxes": [
+    [
+      [
+        33,
+        105,
+        300,
+        260
+      ],
+      [
+        33,
+        421,
+        20,
+        20
+      ]
+    ],
+    [
+      [
+        33,
+        105,
+        300,
+        260
+      ],
+      [
+        33,
+        421,
+        20,
+        20
+      ]
+    ]
+  ],
+  "originalPaint": "rgb(92, 131, 116)",
+  "html": "<main class=\"p-4\"><h1>今日决策</h1><p>今日能量指数 85 分</p><section class=\"card p-4\"><svg role=\"img\" aria-label=\"五行能量分布\" width=\"300\" height=\"260\" viewBox=\"0 0 300 260\" style=\"color: var(--color-text-primary); filter: none !important; clip-path: none !important; mask: none !important; mask-size: auto !important; mask-composite: add !important; mask-mode: match-source !important;\" data-external-media=\"image\"><title>五轴雷达图</title><image href=\"assets/images/750b2ca10050cbd9440f8f8cf8784b07fb0df637aacd7e93f8f373c2e5315fe8.svg\" width=\"300\" height=\"260\" x=\"0\" y=\"0\" preserveAspectRatio=\"xMidYMid meet\"></image></svg><p>甲木 · 探险家人格</p></section><button class=\"btn btn-primary\"><svg class=\"icon\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" data-external-media=\"mask\" style=\"mask-image: url(&quot;assets/images/e3bff590a7ddf89a2e059a65160ae5ffc9a9805c3d64793d7c42cffcf6363a49.svg&quot;) !important; mask-repeat: no-repeat !important; -webkit-mask-position-x: center !important; -webkit-mask-position-y: center !important; mask-size: contain !important; background-color: currentcolor !important;\"><title>发送</title></svg><span>开始分析</span></button></main>",
+  "assets": [
+    {
+      "id": "generated-svg-750b2ca10050cbd9440f8f8cf8784b07fb0df637aacd7e93f8f373c2e5315fe8",
+      "name": "生成图形 1",
+      "relPath": "assets/images/750b2ca10050cbd9440f8f8cf8784b07fb0df637aacd7e93f8f373c2e5315fe8.svg",
+      "type": "image",
+      "mimeType": "image/svg+xml",
+      "source": "ai_generated",
+      "refCount": 1
+    },
+    {
+      "id": "generated-svg-e3bff590a7ddf89a2e059a65160ae5ffc9a9805c3d64793d7c42cffcf6363a49",
+      "name": "生成图形 2",
+      "relPath": "assets/images/e3bff590a7ddf89a2e059a65160ae5ffc9a9805c3d64793d7c42cffcf6363a49.svg",
+      "type": "image",
+      "mimeType": "image/svg+xml",
+      "source": "ai_generated",
+      "refCount": 1
+    }
+  ],
+  "render": {
+    "status": "complete",
+    "findings": [],
+    "inspected": 10,
+    "resourceFiles": [
+      {
+        "relPath": "assets/images/750b2ca10050cbd9440f8f8cf8784b07fb0df637aacd7e93f8f373c2e5315fe8.svg",
+        "sha256": "750b2ca10050cbd9440f8f8cf8784b07fb0df637aacd7e93f8f373c2e5315fe8"
+      },
+      {
+        "relPath": "assets/images/e3bff590a7ddf89a2e059a65160ae5ffc9a9805c3d64793d7c42cffcf6363a49.svg",
+        "sha256": "e3bff590a7ddf89a2e059a65160ae5ffc9a9805c3d64793d7c42cffcf6363a49"
+      }
+    ]
+  },
+  "meanPixelDifference": 0.04523504273504274
+}

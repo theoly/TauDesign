@@ -23,7 +23,7 @@ export function finalizeModelHtml(result: ContinuationResult, options: QualityOp
   const raw = artifact?.html ?? (options.allowRawFragment && result.rawResponse.trim().startsWith('<') && htmlIsComplete(result.rawResponse.trim())
     ? result.rawResponse.trim() : undefined);
   if (!raw) return { status: 'no_html', message: isOutputLimit(result.finishReason)
-    ? '模型达到输出上限，但尚未收到可续写的 HTML 片段；本次未生成页面。请拆分需求后设计，或从头重新生成。'
+    ? result.reasoningText?.trim()?'页面代码阶段仅返回推理，正文为0，达到输出上限；没有可续写的HTML。移除图片或延长超时不能解决此错误。请核对模型的思考控制协议，或选择可输出代码的模型；原页未修改。':'模型达到输出上限，但尚未收到可续写的 HTML 片段；本次未生成页面。请拆分需求后设计，或从头重新生成。'
     : '模型未输出有效的 HTML 代码块' };
   if (artifact && !artifact.isComplete) {
     const atLimit = isOutputLimit(result.finishReason);

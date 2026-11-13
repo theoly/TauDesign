@@ -1,0 +1,83 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>隔离原生媒体与PNG验收</title><body><h1>隔离原生媒体与PNG验收</h1><pre id="status">本机测试，不调用模型、不写原工程。</pre><script type="module">
+import {invoke,isTauri} from '/node_modules/@tauri-apps/api/core.js';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {ProjectRepository} from '/src/services/storage/projectRepository.ts';
+import {loadHistoryForProject,flushHistorySaveChecked} from '/src/services/storage/historyPersistence.ts';
+import {compileTokensToCss} from '/src/utils/cssCompiler.ts';
+import {getBaseCss} from '/src/styles/baseCss.ts';
+import {resolveThemeColors} from '/src/utils/semanticColors.ts';
+import {buildStandaloneHtml} from '/src/utils/exportRenderer.ts';
+import {buildExportRenderDocument,exportScreenPng} from '/src/utils/pngExporter.ts';
+import {resolveImportedResources} from '/src/services/import/importResources.ts';
+import {createMediaResourceSession} from '/src/services/storage/mediaResourceSession.ts';
+const query=new URLSearchParams(location.search),root=query.get('root'),phase=query.get('phase');
+const validRoot=/^\/private\/tmp\/taudesign-draft-native-[A-Za-z0-9_-]+$/;
+const assert=(value,message)=>{if(!value)throw Error(message);};
+const report={runtime:'real-tauri',phase,status:'running',scope:'isolated native save/reopen, independent media and actual product native PNG',exports:[],media:[]};
+async function imageFacts(dataUrl){const image=new Image();image.src=dataUrl;await image.decode();const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext('2d');context.drawImage(image,0,0);const data=context.getImageData(0,0,image.width,image.height).data,colors=new Set();for(let i=0;i<data.length;i+=4*13)colors.add(`${data[i]},${data[i+1]},${data[i+2]}`);return {width:image.width,height:image.height,sampledDistinctColors:colors.size};}
+async function photoPixels(render,pngUrl,height){
+ const iframe=document.createElement('iframe');iframe.style.cssText=`position:fixed;left:-20000px;top:0;width:390px;height:${height}px;border:0`;document.body.append(iframe);
+ try{
+  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Photo measurement load timeout')),12000);iframe.onload=()=>{clearTimeout(timer);resolve();};iframe.srcdoc=render;});
+  const doc=iframe.contentDocument;await doc.fonts.ready;const photo=doc.querySelector('img');assert(photo,'Photograph missing from native render document');await photo.decode();const box=photo.getBoundingClientRect();assert(box.width>100&&box.height>100,'Photograph has no layout size');
+  const expected=document.createElement('canvas');expected.width=photo.naturalWidth;expected.height=photo.naturalHeight;const ec=expected.getContext('2d');ec.drawImage(photo,0,0);
+  const actual=new Image();actual.src=pngUrl;await actual.decode();const canvas=document.createElement('canvas');canvas.width=actual.width;canvas.height=actual.height;const ac=canvas.getContext('2d');ac.drawImage(actual,0,0);
+  let error=0,minExpected=255,maxExpected=0,minActual=255,maxActual=0;
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){const u=(x+.5)/8,v=(y+.5)/8,e=ec.getImageData(Math.floor(u*expected.width),Math.floor(v*expected.height),1,1).data,a=ac.getImageData(Math.floor(box.x+u*box.width),Math.floor(box.y+v*box.height),1,1).data;for(let k=0;k<3;k++){error+=Math.abs(e[k]-a[k]);minExpected=Math.min(minExpected,e[k]);maxExpected=Math.max(maxExpected,e[k]);minActual=Math.min(minActual,a[k]);maxActual=Math.max(maxActual,a[k]);}}
+  const facts={samples:64,meanAbsoluteError:error/192,expectedRange:maxExpected-minExpected,actualRange:maxActual-minActual,rect:{x:box.x,y:box.y,width:box.width,height:box.height}};
+  assert(facts.expectedRange>40&&facts.actualRange>40&&facts.meanAbsoluteError<20,'Native photograph pixels do not match the source: '+JSON.stringify(facts));return {...facts,passed:true};
+ }finally{iframe.remove();}
+}
+async function maskPixels(render,pngUrl,height){
+ const iframe=document.createElement('iframe');iframe.style.cssText=`position:fixed;left:-20000px;top:0;width:390px;height:${height}px;border:0`;document.body.append(iframe);
+ try{
+  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Mask measurement timeout')),12000);iframe.onload=()=>{clearTimeout(timer);resolve();};iframe.srcdoc=render;});
+  const doc=iframe.contentDocument;await doc.fonts.ready;const image=new Image();image.src=pngUrl;await image.decode();const canvas=document.createElement('canvas');canvas.width=image.width;canvas.height=image.height;const context=canvas.getContext('2d');context.drawImage(image,0,0);const checks=[];
+  for(const icon of doc.querySelectorAll('.icon-mask')){
+   const rect=icon.getBoundingClientRect();if(rect.width<=0||rect.height<=0)continue;const color=doc.defaultView.getComputedStyle(icon).color.match(/[\d.]+/g)?.map(Number);assert(color&&color.slice(0,3).some(c=>c>70),'Mask color is outside this fixture pixel check');
+   const data=context.getImageData(Math.ceil(rect.x),Math.ceil(rect.y),Math.floor(rect.width),Math.floor(rect.height)).data;let black=0,foreground=0;
+   for(let i=0;i<data.length;i+=4){if(data[i]<45&&data[i+1]<45&&data[i+2]<45&&data[i+3]>200)black++;if(color.slice(0,3).every((c,k)=>Math.abs(data[i+k]-c)<25))foreground++;}
+   checks.push({nid:icon.getAttribute('data-nid'),unexpectedBlackPixels:black,foregroundPixels:foreground});assert(black===0&&foreground>0,'Native mask has black/empty pixels: '+JSON.stringify(checks.at(-1)));
+  }
+  assert(checks.length>=10,'Missing native mask probes');return {passed:true,icons:checks};
+ }finally{iframe.remove();}
+}
+async function nativeMediaCheck(input,storage){
+ const session=createMediaResourceSession();
+ try{for(const file of input.probeMedia??[]){
+  const bytes=await storage.readBinary(file.relPath);assert(bytes,'Media bytes missing');const url=await session.url(file.relPath,bytes,file.mimeType);assert(!/^(data|blob):/.test(url),'Preview media must remain separate');
+  if(file.mimeType.startsWith('image/')){const image=new Image();image.src=url;await image.decode();assert(image.naturalWidth>0,'Photo failed to decode');report.media.push({path:file.relPath,transport:'native-independent-url',decoded:true,width:image.naturalWidth,height:image.naturalHeight});}
+ }}finally{await session.close();}
+}
+try{
+ assert(isTauri()&&validRoot.test(root)&&['save','reopen'].includes(phase),'Only a real Tauri isolated root is accepted');
+ const input=JSON.parse(await invoke('project_read_text',{root,rel:'input.json'})),folder=root+'/project';
+ if(phase==='save'){
+  useProjectStore.getState().initNewProject({name:'隔离原生媒体导出验收',deviceProfile:'mobile',designSystem:input.designSystem,folderPath:folder,createSpecimen:false});
+  const state=useProjectStore.getState();await state.saveProjectChecked();const storage=createProjectStorage(state.id,folder);
+  for(const asset of input.assets){const bytes=await invoke('project_read_binary',{root,rel:asset.relPath});await storage.writeBinary(asset.relPath,bytes);useProjectStore.getState().addAsset(asset);}
+  for(const item of input.screens){const html=await invoke('project_read_text',{root,rel:item.inputFile});assert(!/data:(?:image|video)\//i.test(html),'Source page contains inline media');useProjectStore.getState().addScreen({name:item.name,htmlContent:html,position:{x:0,y:0}},item.id);}
+  await useProjectStore.getState().saveProjectChecked();await flushHistorySaveChecked(state.id,folder);
+  await invoke('project_write_text_atomic',{root,rel:'seed.json',contents:JSON.stringify({id:state.id,history:useHistoryStore.getState().past.length})});
+ }else{
+  const seed=JSON.parse(await invoke('project_read_text',{root,rel:'seed.json'}));const doc=await new ProjectRepository(createProjectStorage(seed.id,folder)).load();assert(doc,'Native project reopen failed');assert(useProjectStore.getState().loadProjectDocument(doc,folder),'Native project load refused');await loadHistoryForProject(seed.id,folder);assert(useHistoryStore.getState().past.length===seed.history,'History lost after process restart');report.historyReopened=true;
+ }
+ const state=useProjectStore.getState(),storage=createProjectStorage(state.id,folder);await nativeMediaCheck(input,storage);
+ for(const item of input.screens){
+  const screen=state.screens[item.id],original=await invoke('project_read_text',{root,rel:item.inputFile});assert(screen.htmlContent===original,'Saved authored HTML changed');
+  const paths=new Set(Object.values(state.assets).map(a=>a.relPath)),resolved=await resolveImportedResources(screen.htmlContent,screen.scopedCss,storage,paths),exportScreen={...screen,...resolved};
+  const options={tokensCss:compileTokensToCss(state.designSystem.tokens,'light'),baseCss:getBaseCss('mobile'),screenOverrides:'',deviceProfile:'mobile',useCustomNavigation:false,viewportHeight:844,width:390,scale:1,bgColor:resolveThemeColors(state.designSystem.tokens,'light').values.background};
+  const html=buildStandaloneHtml(exportScreen,options),render=buildExportRenderDocument(exportScreen,options);assert(!new DOMParser().parseFromString(html,'text/html').querySelector('[data-taudesign-mobile-chrome]'),'HTML includes runtime chrome');assert(new DOMParser().parseFromString(render,'text/html').querySelector('[data-taudesign-mobile-chrome="header"]'),'PNG lacks runtime chrome');
+  const png=await exportScreenPng(exportScreen,options);assert(png.engine.startsWith('native-'),'Native renderer fell back');const facts=await imageFacts(png.dataUrl);assert(facts.width===390&&facts.height>500&&facts.sampledDistinctColors>20,'Native PNG is blank or has wrong dimensions');
+  await storage.writeTextAtomic(`exports/${phase}-${item.id}.html`,html);await storage.writeTextAtomic(`exports/${phase}-${item.id}-render.html`,render);await storage.writeBinary(`exports/${phase}-${item.id}.png`,png.dataUrl.split(',')[1]);
+  const pixels=item.id==='photograph'?await photoPixels(render,png.dataUrl,png.cssHeight):undefined;
+  const masks=item.id==='accepted-b'?await maskPixels(render,png.dataUrl,png.cssHeight):undefined;
+  report.exports.push({screen:item.id,engine:png.engine,cssHeight:png.cssHeight,...facts,htmlNavigationAbsent:true,pngNavigationPresent:true,...(pixels?{photoPixels:pixels}:{}),...(masks?{maskPixels:masks}:{})});
+ }
+ report.status='passed';
+}catch(error){report.status='failed';report.error=error instanceof Error?error.message:String(error);}
+document.getElementById('status').append('\n'+JSON.stringify(report,null,2));
+if(isTauri()&&validRoot.test(root))await invoke('project_write_text_atomic',{root,rel:`report-${phase}.json`,contents:JSON.stringify(report,null,2)});
+</script></body></html>

@@ -1,4 +1,5 @@
 import {inspectText} from '../../utils/textNode';
+import {replacedInlineActions} from './inlineFormContract';
 import type { QualityFinding } from './generationQuality';
 
 const ACTIONS = 'button,a[href],[role="button"],input[type="submit"],input[type="button"]';
@@ -26,7 +27,7 @@ export function actionLabel(el: Element): string {
 const label = actionLabel;
 function primary(el: Element): boolean {
   return el.matches('.btn-primary,[type="submit"],[data-action="primary"]')
-    || [...el.classList].some(c => /(?:^|[-_])(primary|cta|submit)(?:$|[-_])/.test(c))
+    || [...el.classList].some(c => !/^(?:text|bg|border|ring|fill|stroke|outline|shadow)[-_]/i.test(c) && /(?:^|[-_])(primary|cta|submit)(?:$|[-_])/.test(c))
     || /^(提交|确认支付|立即支付|付款)/.test(label(el));
 }
 /** Supported author-name sources, distinct from visual text and full assistive-technology auditing. */
@@ -68,7 +69,7 @@ export function hasAccessibleActionName(el: Element): boolean {
   });
 }
 
-function authorizedRemoval(el: Element, request: string): boolean {
+export function authorizedRemoval(el: Element, request: string): boolean {
   const text = label(el), nid = el.getAttribute('data-nid');
   // 结构重排只授权布局，不能作为删除操作的依据；删除必须命中该操作的可读名称/身份。
   const clauses = request.split(/[\n。；;]/);
@@ -90,9 +91,12 @@ export function inspectActionIntegrity(doc: Document, original?: Document, reque
   };
   const consumed = new Set<Element>();
   const originals = Array.from(original?.querySelectorAll(ACTIONS) ?? []);
+  const replaced=original?replacedInlineActions(original,doc,request):new Set<Element>();
   const reservedNids = new Set(originals.map(el => el.getAttribute('data-nid')).filter(Boolean));
   for (const before of originals) {
-    if (hidden(before) || !label(before)) continue;
+    if (hidden(before) || !label(before) || replaced.has(before)) continue;
+    // A deliberately removed inner action must not consume the replacement page CTA.
+    if (authorizedRemoval(before, request)) continue;
     const oldLabel = label(before), nid = before.getAttribute('data-nid');
     let next = nid ? actions.find(el => !consumed.has(el) && el.getAttribute('data-nid') === nid) : undefined;
     const available = (el: Element) => !consumed.has(el) && !hidden(el)
@@ -101,7 +105,6 @@ export function inspectActionIntegrity(doc: Document, original?: Document, reque
     // 允许重排后重建一个仍有可见文案的主按钮，不能把只剩“暂存”的页误当主操作保留。
     if (!next && primary(before)) next = actions.find(el => available(el) && primary(el) && !originals.some(other => other !== before && label(other) && label(other) === label(el) && label(other) !== oldLabel));
     if (next) consumed.add(next);
-    if (authorizedRemoval(before, request)) continue;
     if (!next) {
       add(before, 'action_removed', primary(before) ? '修改结果丢失了原页面主操作。' : '修改结果未找到原操作，请核对是否在确认范围内。', oldLabel, primary(before) ? 'error' : 'warning');
     } else if (hidden(next) || !label(next)) {
@@ -111,7 +114,7 @@ export function inspectActionIntegrity(doc: Document, original?: Document, reque
     }
   }
   for (const action of actions) {
-    const icon = Array.from(action.querySelectorAll('svg,img,.icon')).some(node => !hidden(node));
+    const icon = Array.from(action.querySelectorAll('svg,img,.icon,.icon-mask')).some(node => !hidden(node));
     if (hidden(action) || !primary(action) || label(action) || (icon && hasAccessibleActionName(action))) continue;
     if (!findings.some(f => f.code === 'action_label_lost' && f.nid === (action.getAttribute('data-nid') || undefined))) {
       add(action, 'action_label_missing', '主操作按钮没有可识别的操作文案或图标名称。', icon?'图标缺少可识别的操作名称':'空按钮');

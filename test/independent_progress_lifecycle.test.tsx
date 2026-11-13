@@ -1,3 +1,4 @@
+import {waitUntil} from './helpers/waitUntil';
 import * as BudgetPolicy from '../src/services/ai/taskBudgetPolicy';
 import {TaskBudget} from '../src/services/ai/taskBudget';
 import {afterEach,beforeEach,expect,spyOn,test} from 'bun:test';
@@ -27,9 +28,9 @@ let project:ReturnType<typeof useProjectStore.getState>,history:ReturnType<typeo
 let objects:ReturnType<typeof spyOn>,streams:ReturnType<typeof spyOn>,renderCheck:ReturnType<typeof spyOn>,pipeline:ReturnType<typeof spyOn>|undefined;
 let calls:Array<{schema:Record<string,any>;options:Omit<StreamTextOptions,'jsonSchema'>;resolve:(value:any)=>void}>,htmlCalls:Array<{options:StreamTextOptions;resolve:(value:string)=>void}>,aborts:number;
 function Harness(){engine=useAIEngineChat();return null;}
-async function begin(text:string,options?:Parameters<typeof engine.sendMessage>[2]){let pending!:Promise<void>;await act(async()=>{pending=engine.sendMessage(text,undefined,options);await pause();});return {pending};}
+async function begin(text:string,options?:Parameters<typeof engine.sendMessage>[2]){let pending!:Promise<void>,settled=false;const count=calls.length+htmlCalls.length;await act(async()=>{pending=engine.sendMessage(text,undefined,options);void pending.then(()=>{settled=true;},()=>{settled=true;});await waitUntil(()=>calls.length+htmlCalls.length>count||settled);});return {pending};}
 const message=()=>engine.messages.at(-1)!;
-async function answer(index:number,value:unknown,pending?:Promise<void>){await act(async()=>{calls[index].resolve(value);if(pending)await pending;else await pause();});}
+async function answer(index:number,value:unknown,pending?:Promise<void>){const count=calls.length+htmlCalls.length;await act(async()=>{calls[index].resolve(value);if(pending)await pending;else await waitUntil(()=>calls.length+htmlCalls.length>count||!engine.isGenerating);});}
 beforeEach(async()=>{
  project=useProjectStore.getState();history=useHistoryStore.getState();config=useAIConfigStore.getState();oldAct=(globalThis as any).IS_REACT_ACT_ENVIRONMENT;(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  useHistoryStore.getState().restore(null);useProjectStore.getState().initNewProject({name:'独立入口生命周期',deviceProfile:'mobile',createSpecimen:false});useProjectStore.getState().addScreen({name:'资料页',htmlContent:source},'page');
@@ -98,7 +99,7 @@ test('zero-call confirmed edits preserve the analysis summary and release UI bef
 });
 test('confirmed region execution keeps its one JSON call separate from analysis provenance',async()=>{
  const preparing=await begin('优化当前页面',reference);await answer(0,{summary:'区块层级可优化',items:[{title:'区块间距',reason:'内部元素拥挤',change:'仅调整区块布局与间距',scope:'region',targetNids:['region01'],operations:[]}]},preparing.pending);const review=message(),before=review.executionActivity;
- let pending!:Promise<void>;await act(async()=>{pending=engine.confirmModification(review.id,[review.modificationReview!.items[0].id],'','region');await pause();});expect(calls).toHaveLength(2);expect(message().executionActivity).toMatchObject({requests:1,active:1,status:'waiting'});
+ let pending!:Promise<void>;await act(async()=>{pending=engine.confirmModification(review.id,[review.modificationReview!.items[0].id],'','region');await waitUntil(()=>calls.length===2);});expect(calls).toHaveLength(2);expect(message().executionActivity).toMatchObject({requests:1,active:1,status:'waiting'});
  await answer(1,{nid:'region01',html:'<section data-nid="region01" class="col gap-4"><h2 data-nid="title001">资料</h2><button data-nid="button01" class="btn btn-primary">查看详情</button></section>'},pending);
  expect(engine.isGenerating).toBe(false);expect(useProjectStore.getState().stagedScreen).not.toBeNull();expect(message().executionActivity).toMatchObject({requests:1,active:0,status:'returned'});expect(engine.messages.find(m=>m.id===review.id)?.executionActivity).toEqual(before);expect(message().executionEvents?.at(-1)?.phase).toBe('candidate');expect(htmlCalls).toHaveLength(0);
 });

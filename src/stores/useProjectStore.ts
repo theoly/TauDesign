@@ -1,3 +1,4 @@
+import {assertGeneratedAssetMetadata} from '../services/ai/generatedMedia';
 import {consumeAssetMetadataMigration,verifyAssetMetadataFiles,claimAssetMetadataMigration,type PreparedAssetMetadataMigration} from '../services/import/assetMetadataMigration';
 import {isPassedRender,isRenderedQualityReport} from '../services/ai/evidenceSchema';
 import {draftExecutionIssue} from '../services/ai/draftExecutionSource';
@@ -12,7 +13,7 @@ import {repairGuidanceIssue} from '../services/ai/designKnowledge/repairTrace';
 import type {PageRepairModel} from '../services/ai/controlledStyleRepair';
 import type {PageRepairRecord} from '../services/ai/pageRepairRecord';
 import {inspectDesignEntities,designEntitySummary} from '../services/ai/designEntityValidation';
-import {consumeMultiPageBatch,confirmMultiPagePublication,currentMultiPagePublication,type ReadyMultiPageBatch} from '../services/ai/multiPageService';
+import {multiPageBatchAssets,consumeMultiPageBatch,confirmMultiPagePublication,currentMultiPagePublication,type ReadyMultiPageBatch} from '../services/ai/multiPageService';
 import {assertLibraryEditable,buildLibraryReferenceSnapshot,isLibraryReference,libraryMemberLocked,libraryReferenceIssue,verifyLibraryReferenceFiles} from '../services/ai/designLibraryReference';
 import {pageCreationContext,prepareNewPage} from '../services/ai/pageCreationValidation';
 import {candidateInputIssue,candidateAuthorizationBinding} from '../services/ai/candidateInputBinding';
@@ -373,7 +374,7 @@ interface ProjectState {
   addScreen: (
     screen: (Omit<Screen, 'id' | 'position'> & { position?: { x: number; y: number } }) | Screen,
     customId?: string,
-    options?: { referencedScreenId?: string; anchorScreenId?: string; autoPan?: boolean; importSetup?: HtmlScreenImportSetup; initialOverrides?: StyleOverride[] }
+    options?: { referencedScreenId?: string; anchorScreenId?: string; autoPan?: boolean; importSetup?: HtmlScreenImportSetup; initialOverrides?: StyleOverride[]; preparedAssets?:Asset[] }
   ) => ScreenId;
   importHtmlScreen: (screen: Omit<Screen, 'id' | 'position'>, setup: HtmlScreenImportSetup, application?:HtmlImportApplication) => Promise<ScreenId>;
   applyAssetMetadataMigration:(prepared:PreparedAssetMetadataMigration,signal?:AbortSignal)=>Promise<void>;
@@ -447,6 +448,7 @@ interface ProjectState {
   // Assets (PRD §3.4.1)
   addAsset: (asset: Asset) => void;
   registerPreparedAssets:(assets:Asset[],projectId:string,context:string)=>void;
+  registerGeneratedAssets:(assets:Asset[],projectId:string,context:string)=>void;
   replaceNodeImage: (screenId: string, nid: string, asset: Asset) => boolean;
   removeAsset: (id: AssetId) => void;
   replaceAssetGlobally: (oldAssetId: string, newAssetUrl: string) => number;
@@ -1305,7 +1307,8 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
   applyMultiPageCreation: async (batch,options) => {
     const origin=get(),session=origin.projectAuthoringSession;let publishedIds:string[]=[];
     const publication=await publishProjectMutation(get,rawSet,`新增确认计划中的${batch.names.length}个页面`,()=>get().projectAuthoringSession===session&&(options?.isCurrent?.()??true)&&currentMultiPagePublication(batch,get()),()=>{
-    const state=get(),pages=consumeMultiPageBatch(batch,state),screens={...state.screens},order=[...state.screenOrder];
+    const state=get(),generated=multiPageBatchAssets(batch),pages=consumeMultiPageBatch(batch,state),screens={...state.screens},order=[...state.screenOrder],assets={...state.assets};
+    assertGeneratedAssetMetadata(generated);
     publishedIds=pages.map(page=>page.id);
     for(const page of pages){
       const layout=calculateNewScreenPosition(screens,order,{frameWidth:state.settings.frameWidth,viewportGuideHeight:state.settings.viewportGuideHeight,anchorScreenId:order.at(-1),...(page.metadata?.multiPageDelivery?.kind==='variants'&&order.at(-1)?{referencedScreenId:order.at(-1)}:{})});
@@ -1314,18 +1317,21 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
     }
     const forward:Patch[]=pages.map(page=>({op:'add',path:['screens',page.id],value:screens[page.id]}));
     const inverse:Patch[]=pages.map(page=>({op:'remove',path:['screens',page.id]}));
+    for(const asset of generated){if(assets[asset.id])throw Error('批次生成媒体身份冲突。');assets[asset.id]=asset;forward.push({op:'add',path:['assets',asset.id],value:asset});inverse.push({op:'remove',path:['assets',asset.id]});}
     for(const [id,screen] of Object.entries(state.screens))if(screens[id]!==screen){
       forward.push({op:'replace',path:['screens',id,'position'],value:screens[id].position});
       inverse.push({op:'replace',path:['screens',id,'position'],value:screen.position});
     }
     forward.push({op:'replace',path:['screenOrder'],value:order});inverse.push({op:'replace',path:['screenOrder'],value:state.screenOrder});
-    return {changes:{screens,screenOrder:order,activeScreenId:pages[0]?.id??state.activeScreenId},patches:forward,inverse,resources:mergeRenderResourceFiles(pages.map(page=>page.metadata?.creationEvidence?.render.resourceFiles??[])),publication:{id:batch.id,kind:'batch',screenIds:publishedIds}};
+    return {changes:{screens,assets,screenOrder:order,activeScreenId:pages[0]?.id??state.activeScreenId},patches:forward,inverse,resources:mergeRenderResourceFiles(pages.map(page=>page.metadata?.creationEvidence?.render.resourceFiles??[])),publication:{id:batch.id,kind:'batch',screenIds:publishedIds}};
     });
     await confirmMultiPagePublication(batch,origin.id,publication.receipt,publication.installed);if(publication.installed&&publishedIds[0])get().panToScreen(publishedIds[0]);return publishedIds;
   },
 
   addScreen: (screenData, customId, options) => {
     const setup = options?.importSetup;
+    const preparedAssets=structuredClone(options?.preparedAssets??[]);assertGeneratedAssetMetadata(preparedAssets);
+    for(const asset of preparedAssets)if(get().assets[asset.id]&&get().assets[asset.id].relPath!==asset.relPath)throw Error('生成媒体身份与已有资产冲突。');
     if (setup) {
       if(setup.designSystem)assertLibraryEditable(get());
       if (setup.projectId !== get().id) throw new Error('工程已切换，请重新导入');
@@ -1403,7 +1409,7 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
       backwardOps.push({ op: 'replace', path: ['settings'], value: get().settings });
     }
     const importedAssets = { ...get().assets };
-    for (const asset of setup?.assets ?? []) {
+    for (const asset of [...(setup?.assets ?? []),...preparedAssets]) {
       if (importedAssets[asset.id]) continue;
       forwardOps.push({ op: 'add', path: ['assets', asset.id], value: asset });
       backwardOps.push({ op: 'remove', path: ['assets', asset.id] });
@@ -1447,7 +1453,7 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
         screenOrder: [...state.screenOrder, id],
         activeScreenId: id,
         ...(options?.initialOverrides ? { overrides: { ...state.overrides, ...copiedOverrides } } : {}),
-        ...(setup ? { assets: importedAssets } : {}),
+        ...(setup||preparedAssets.length ? { assets: importedAssets } : {}),
         ...(setup?.designSystem ? { designSystem: setup.designSystem } : {}),
         ...(setup?.designSystem ? { designSystemOrigin: designSystemOriginFor(setup.designSystem, setup.designSystemOrigin ?? {
           kind: 'html_import' as const, sourceId: screenData.metadata?.importedHtml?.workflow?.sourceFingerprint,
@@ -2255,6 +2261,14 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
     return true;
   },
 
+  registerGeneratedAssets:(assets,projectId,context)=>{
+    const state=get();if(state.id!==projectId||pageCreationContext(state)!==context)throw Error('工程已变化，未登记生成媒体。');
+    assertGeneratedAssetMetadata(assets);
+    for(const asset of assets)if(state.assets[asset.id]&&state.assets[asset.id].relPath!==asset.relPath)throw Error('生成媒体身份冲突。');
+    const added=structuredClone(assets.filter(asset=>!state.assets[asset.id]));if(!added.length)return;
+    useHistoryStore.getState().commit('准备生成的独立媒体',added.map(asset=>({op:'add' as const,path:['assets',asset.id],value:asset})),added.map(asset=>({op:'remove' as const,path:['assets',asset.id]})));
+    set({assets:{...state.assets,...Object.fromEntries(added.map(asset=>[asset.id,asset]))}});get().saveProject();
+  },
   registerPreparedAssets:(assets,projectId,context)=>{
     const state=get();if(state.id!==projectId||pageCreationContext(state)!==context)throw Error('素材准备期间工程已变化。');
     if(assets.length>48||new Set(assets.map(a=>a.id)).size!==assets.length||assets.some(a=>state.assets[a.id]||!/^assets\/icons\/[a-f0-9]{64}\.svg$/.test(a.relPath)||a.source!=='builtin'))throw Error('预置素材身份无效。');

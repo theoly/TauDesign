@@ -7,8 +7,8 @@ export function createRestyleBudget(targets:ReadonlyArray<{html:string}>):TaskBu
   return new TaskBudget({maxRequests:Math.max(1,targets.reduce((n,t)=>n+(t.html.length>RESTYLE_PATCH_THRESHOLD?16:3),0)),
     maxRequestedOutputTokens:32768*count,maxDurationMs:600000*count,maxRequestDurationMs:600000});
 }
-export function createPlanningBudget():TaskBudget {
-  return new TaskBudget({maxRequests:2,maxRequestedOutputTokens:8192,maxDurationMs:1800000,maxRequestDurationMs:900000});
+export function createPlanningBudget(withReference=false):TaskBudget {
+  return new TaskBudget({maxRequests:withReference?3:2,maxRequestedOutputTokens:withReference?12288:8192,maxDurationMs:1800000,maxRequestDurationMs:900000});
 }
 export function createMultiPageBudget(count:number,tree=false,planning?:TaskBudgetSnapshot):TaskBudget {
   if(!Number.isInteger(count)||count<1||count>8)throw Error('批次页面数量无效。');

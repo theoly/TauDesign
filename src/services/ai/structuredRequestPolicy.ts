@@ -1,4 +1,5 @@
 import type {AIProviderConfig} from '../../types/provider';
+import {resolveModelCapability} from './modelCapabilities';
 import {supportsThinkingToggle} from './thinkingPolicy';
 
 /** Schema must reach the model even when its endpoint has no native schema protocol. */
@@ -15,18 +16,31 @@ function officialHost(provider:AIProviderConfig,host:string):boolean{
 }
 export const isDeepSeekModel = (model: string) => model.toLowerCase().includes('deepseek');
 export const supportsDeepSeekThinking=(provider:AIProviderConfig,model:string)=>officialHost(provider,'api.deepseek.com')&&model==='deepseek-flash';
+/** Tencent's documented OpenAI and Token Plan routes, not arbitrary compatible gateways.
+ * https://cloud.tencent.com/document/product/1823/132248
+ * https://cloud.tencent.com/document/product/1823/130119
+ */
+export function supportsTokenHubThinking(provider:AIProviderConfig,model:string):boolean{
+ const models=new Set(['deepseek/deepseek-flash','deepseek-v4-flash-202605','deepseek/deepseek-v4-flash-0731','deepseek/deepseek-v4-flash',
+  'deepseek-v4-pro-202606','deepseek/deepseek-v4-pro-0813','deepseek/deepseek-v4-pro','deepseek-v4.1-flash-1017','deepseek-v4.1-flash','deepseek-v4-pro-0813','deepseek-v4-pro','deepseek/deepseek-v4-flash-vision-exp']);
+ if(!models.has(model)||provider.protocol!=='openai_compatible')return false;
+ try{const u=new URL(provider.baseUrl);return u.protocol==='https:'&&['tokenhub.tencentmaas.com','tokenhub-intl.tencentmaas.com'].includes(u.hostname)&&!u.username&&!u.password&&!u.port&&!u.search&&!u.hash&&/^\/(?:v1|plan\/v3)(?:\/chat\/completions)?\/?$/.test(u.pathname);}catch{return false;}
+}
+export function thinkingWireFormat(provider:AIProviderConfig,model:string):'deepseek'|'qwen'|undefined{
+ const explicit=resolveModelCapability(provider,model)?.thinkingControl;
+ if(provider.protocol!=='openai_compatible')return undefined;
+ if(explicit!==undefined)return explicit==='unsupported'?undefined:explicit;
+ return supportsDeepSeekThinking(provider,model)||supportsTokenHubThinking(provider,model)?'deepseek':supportsThinkingToggle(provider,model)?'qwen':undefined;
+}
 /** Explicitly scoped to machine artifacts, not ordinary chat requests. */
 export function artifactThinkingOptions(provider:AIProviderConfig,model:string):{enableThinking?:boolean}{
- return supportsDeepSeekThinking(provider,model)||supportsThinkingToggle(provider,model)?{enableThinking:false}:{};
+ return thinkingWireFormat(provider,model)?{enableThinking:false}:{};
 }
 /** Only verified native formats; other compatible endpoints use the explicit schema in messages. */
 export function structuredChatOptions(provider:AIProviderConfig,model:string,schema?:Record<string,unknown>,enableThinking?:boolean):Record<string,unknown>{
  if(!schema)return {};
- if(supportsDeepSeekThinking(provider,model))return {response_format:{type:'json_object'},thinking:{type:enableThinking===true?'enabled':'disabled'}};
+ if(thinkingWireFormat(provider,model)==='deepseek')return {response_format:{type:'json_object'},thinking:{type:enableThinking===true?'enabled':'disabled'}};
  if(officialHost(provider,'api.openai.com'))return {response_format:{type:'json_schema',json_schema:{name:'extracted_schema',strict:true,schema}}};
- if(enableThinking!==undefined && provider.protocol==='openai_compatible' && isDeepSeekModel(model) && (provider.id.startsWith('prov-custom') || provider.id.includes('custom'))){
-   return {response_format:{type:'json_object'},thinking:{type:enableThinking===true?'enabled':'disabled'}};
- }
- if(supportsThinkingToggle(provider,model))return {enable_thinking:enableThinking??false};
+ if(thinkingWireFormat(provider,model)==='qwen')return {enable_thinking:enableThinking??false};
  return {};
 }

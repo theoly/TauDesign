@@ -7,6 +7,7 @@ import { getBaseCss } from '../../styles/baseCss';
 import { buildStandaloneHtml, buildArtifactManifest } from '../../utils/exportRenderer';
 import { exportScreenPng, PngExportEngine } from '../../utils/pngExporter';
 import { useScreenResources, useStyleResources } from '../../hooks/useScreenResources';
+import {MediaDiagnosticsButton} from '../common/MediaDiagnosticsButton';
 import {
   dataUrlToBytes,
   saveExportFile,
@@ -64,7 +65,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
     .join('\n');
 
   // Export owns an in-memory copy: temporary preview URLs never enter offline deliverables.
-  const styleResources=useStyleResources(authoredOverrides,0,'export');
+  const styleResources=useStyleResources(authoredOverrides,0,'export',selectedScreenId);
   const screenOverrides=styleResources.css;
   const loadingResources=pageResources.loading||styleResources.loading;
   const resourceError=pageResources.error||styleResources.error;
@@ -211,7 +212,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
 
         <div className="p-6 space-y-4 overflow-y-auto text-xs">
           {loadingResources && <p className="text-xs text-blue-300">正在读取页面资源…</p>}
-          {resourceError && <p role="alert" className="rounded-lg bg-red-950/40 p-3 text-xs text-red-200">{resourceError}</p>}
+          {resourceError && <div role="alert" className="rounded-lg bg-red-950/40 p-3 text-xs text-red-200">
+            <p>{resourceError}</p>
+            <button type="button" onClick={()=>{pageResources.retry();styleResources.retry();}} className="mt-2 rounded border border-red-700 px-2 py-1 hover:bg-red-900">重新读取导出资源</button>
+            <MediaDiagnosticsButton/>
+          </div>}
           {saveResult && !exportError && (
             saveResult.status === 'canceled' ? (
               <div

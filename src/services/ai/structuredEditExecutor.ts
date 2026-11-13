@@ -1,3 +1,5 @@
+import type {DesignTaskJournal} from './designTaskJournal';
+import {prepareReferenceEvidence,withReferenceEvidence,type ReferenceProcessing} from './referenceEvidence';
 import {buildScopedPageContext} from './engine/context/scopedPageContext';
 import {choosePageWriteStrategy} from './generationStrategy';
 import {withTaskProvenance} from './taskProvenance';
@@ -34,6 +36,7 @@ import type {TextReference} from './textFileContext';
 import type {ImageAttachment} from '../../types/referenceImage';
 
 export interface StructuredEditOptions {
+  referenceProcessing?:ReferenceProcessing;journal?:DesignTaskJournal;
   mode:'element'|'local'|'region';
   screen:{id:string;name:string;htmlContent:string;scopedCss?:string};styleOverrides?:Record<string,StyleOverride>;request:string;contract:DesignTaskContract;
   settings:Pick<ProjectSettings,'deviceProfile'|'frameWidth'|'useCustomNavigation'>;
@@ -56,11 +59,15 @@ class Interrupted extends Error {constructor(readonly status:'cancelled'|'stale'
 
 /** All structured edit entry points share this read-only executor. Staging, History and persistence stay in their existing owners. */
 export async function executeStructuredEdit(core:AIEngineCore|undefined,options:StructuredEditOptions):Promise<StructuredEditResult> {
-  const observer=core&&options.onActivity?observeRequestActivity(core,options.onActivity,()=>!options.signal?.aborted&&options.isCurrent()):undefined;
-  try{return await executeStructuredEditTask(observer?.core??core,options);}finally{observer?.stop();}
+  const journalCore=core&&options.journal?options.journal.wrapCore(core):core;
+  const observer=journalCore&&options.onActivity?observeRequestActivity(journalCore,options.onActivity,()=>!options.signal?.aborted&&options.isCurrent()):undefined;
+  try{await options.journal?.update({phase:'started',contract:options.contract,budget:options.taskBudget?.snapshot()});
+    const result=await executeStructuredEditTask(observer?.core??journalCore,options);
+    await options.journal?.update({phase:'result',contract:result.contract,budget:result.taskBudget,result:result.status==='ready'?{html:result.html}:{error:result.message,cancelled:result.status==='cancelled'}});return result;
+  }finally{observer?.stop();}
 }
 async function executeStructuredEditTask(core:AIEngineCore|undefined,options:StructuredEditOptions):Promise<StructuredEditResult> {
-  const {signal,isCurrent,taskBudget,onPhase,onActivity,...data}=options;
+  const {signal,isCurrent,taskBudget,onPhase,onActivity,referenceProcessing,journal,...data}=options;
   let budget=taskBudget,ownsBudget=false;
   const input=structuredClone(data),contract=input.contract;
   core=core?withTaskProvenance(core,contract.taskId,'structured-edit'):undefined;
@@ -109,13 +116,15 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
     const protocol=structural?'fragment-json':'finite-json';
     if(contract.designGuidance&&(!needsModel||(contract.designGuidance.protocol??'finite-json')!==protocol))throw new Error('设计规则快照与当前结构化输出协议不匹配。');
     const subdivided=structural&&regionNeedsSubdivision(html,requested as string[]);
-    if(functional&&contract.pageTaskPlan){
-      const issue=pageTaskPlanIssue(contract);if(issue)throw Error(issue);
-      if(contract.pageTaskPlan.request.providerId!==input.binding!.provider.id||contract.pageTaskPlan.request.model!==input.binding!.model)throw Error('功能规划使用的模型已变化。');
-      if(contract.pageTaskPlan.plan.questions.length)throw Error(`区块功能规划有待确认的问题：${contract.pageTaskPlan.plan.questions.join('；')}`);
-    }
     if(needsModel&&!budget){const count=structural?requested.length:1;const perRequest=structural?4096:input.mode==='element'?2048:1800;
-      budget=subdivided?createChatTaskBudget(true):functional?createChatTaskBudget():new TaskBudget({maxRequests:count,maxRequestedOutputTokens:count*perRequest,maxDurationMs:count*900000,maxRequestDurationMs:900000});ownsBudget=true;}
+      budget=subdivided?createChatTaskBudget(true):input.attachment&&referenceProcessing?createChatTaskBudget():functional?createChatTaskBudget():new TaskBudget({maxRequests:count,maxRequestedOutputTokens:count*perRequest,maxDurationMs:count*900000,maxRequestDurationMs:900000});ownsBudget=true;}
+    if(input.attachment&&referenceProcessing&&needsModel){
+      guard();
+      const evidence=await prepareReferenceEvidence(core!,{attachment:input.attachment,processing:referenceProcessing,budget:budget!,taskId:contract.taskId,signal,isCurrent});guard();
+      contract.referenceImage={...referenceImageIdentity(input.attachment),evidence};
+      await journal?.update({phase:'started',contract,budget:budget?.snapshot()});
+      core=withReferenceEvidence(core!,evidence);
+    }
     if(subdivided){
       if(contract.regionSubdivision)throw Error('不能直接恢复磁盘中的旧细分权限，请按当前原页重新发起任务。');
       guard();onPhase?.('planning');
@@ -150,7 +159,7 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
         selectTokenGuidance(compileTokensToCss(input.designSystem.tokens,input.colorMode),query);
       contract.designGuidance=makeGuidancePacket(contract,selection,protocol);
     }
-    guard();if(needsModel)onPhase?.('editing');
+    guard();await journal?.update({phase:'started',contract,budget:budget?.snapshot()});if(needsModel)onPhase?.('editing');
     const evidenceCore=contract.designGuidance?withGuidanceReceipts(core!,contract,contract.designGuidance):core;
     const requestCore=budget?withTaskBudget(evidenceCore!,budget):evidenceCore;
     // Guard every request, including each region. A non-cooperating model cannot return a stale partial result.
@@ -177,7 +186,7 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
     const guidanceIssue=guidancePacketIssue(contract);
     if(guidanceIssue)throw new Error(guidanceIssue);
     const safe=checkGenerationSourceSafety(candidate.html,mediaPolicy);
-    const qualityReport=checkGenerationQuality(candidate.html,{...mediaPolicy,deviceProfile:input.settings.deviceProfile,useCustomNavigation:input.settings.useCustomNavigation,
+    const qualityReport=checkGenerationQuality(candidate.html,{...mediaPolicy,contentTask:contract,deviceProfile:input.settings.deviceProfile,useCustomNavigation:input.settings.useCustomNavigation,
       designSystem:input.designSystem,baselineHtml:html,protectedNids,preserveNids:!structural,modificationRequest:input.request,formRuleRoots:requested as string[]});
     // Region validation treats even removed secondary operations as errors; do not downgrade its findings.
     for(const finding of candidate.qualityReport.findings)if(finding.severity==='error')qualityReport.findings.push(finding);

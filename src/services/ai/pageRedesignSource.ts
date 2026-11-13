@@ -1,9 +1,13 @@
+import {compileBusinessTextEdits} from './businessTextEdits';
+import {inspectBusinessTextReview,type BusinessTextReview} from './businessTextReview';
+import {replacedInlineEntryNids} from './inlineFormContract';
 import {parseHtmlCopy} from '../../utils/htmlDocument';
 import {normalizeMobileNavigation} from '../../utils/mobileNavigation';
 import {inspectExternalMedia,assertExternalMedia} from './externalMedia';
 import {contentFingerprint} from './designWorkflow';
 import type {QualityFinding} from './generationQuality';
 import {authorizedFormChanges,matchesFormAttribute} from './formBehaviorChanges';
+import {actionLabel,authorizedRemoval} from './actionIntegrity';
 export {explicitlyRequestsPageRedesign} from './pageRedesignIntent';
 
 export interface PageRedesignSource {
@@ -63,16 +67,23 @@ function permitsAttribute(control:PageRedesignSource['controls'][number],rule:st
  return Boolean(aliases[rule]&&request.split(/[。；;\n]/).some(clause=>!/(?:不要|不能|不得|禁止|无需|不改|勿|\b(?:not|never)\b)/i.test(clause)&&/(?:设置|设为|改为|改成|调整|取消|删除|移除|默认|\b(?:set|change|update|remove)\b)/i.test(clause)&&aliases[rule].test(clause)&&(names.some(name=>clause.includes(name))||Boolean(control.nid&&clause.includes(`nid="${control.nid}"`)))));
 }
 /** Reflow is authorized independently of business deletion. Does not claim visual/semantic perfection. */
-export function inspectRedesignContent(source:PageRedesignSource,html:string,request:string,baselineHtml?:string):QualityFinding[]{
+export function inspectRedesignContent(source:PageRedesignSource,html:string,request:string,baselineHtml?:string,review?:BusinessTextReview):QualityFinding[]{
  const {doc}=parseHtmlCopy(html);for(const el of Array.from(doc.querySelectorAll('script,style')))el.remove();
  const inventory=buildPageRedesignSource(html,{deviceProfile:'pc',useCustomNavigation:true}),visible=normalized([...inventory.texts.map(t=>t.text),...inventory.controls.flatMap(c=>Object.entries(c.attributes).filter(([key])=>['value','alt','aria-label','title','placeholder'].includes(key)).map(([,value])=>value))].join(' '));
  const findings:QualityFinding[]=[];
+ const reviewed=new Set<string>();
+ if(review){
+  try{if(!baselineHtml)throw Error('文案确认缺少原页面基线。');const issues=inspectBusinessTextReview(source,baselineHtml,html,review);findings.push(...issues);for(const c of review.changes)if(!issues.some(f=>f.nid===c.targetNid))reviewed.add(c.sourceNid);}
+  catch(error){findings.push({code:'redesign_text_review_invalid',severity:'error',message:error instanceof Error?error.message:'文案确认无效。',actual:'原文或确认来源不匹配',expected:'重新核对具体原文与目标节点'});}
+ }
  const consumed=new Set<Element>();
  const changes=baselineHtml?authorizedFormChanges(parseHtmlCopy(baselineHtml).doc.body,request):[];
  const rules=['required','readonly','disabled','multiple','type','min','max','minlength','maxlength','step','pattern','checked','selected','name','value','aria-required','aria-readonly','aria-disabled','aria-multiselectable'];
  for(const control of source.controls.filter(row=>['input','textarea','select','option'].includes(row.tag))){
   const candidates=allElements(doc).filter(el=>el.localName===control.tag&&!consumed.has(el));
-  const next=(control.nid?candidates.find(el=>el.getAttribute('data-nid')===control.nid):undefined)??(control.attributes.id?candidates.find(el=>el.id===control.attributes.id):undefined)??candidates.find(el=>control.attributes.name&&el.getAttribute('name')===control.attributes.name&&(!['radio','checkbox'].includes(control.attributes.type)||el.getAttribute('value')===control.attributes.value))??(control.tag==='option'?candidates.find(el=>(control.attributes.value!==undefined?el.getAttribute('value')===control.attributes.value:normalized(el.textContent??'')===normalized(control.label??''))&&(!control.ownerSelect?.nid&&!control.ownerSelect?.name||control.ownerSelect.nid&&el.closest('select')?.getAttribute('data-nid')===control.ownerSelect.nid||control.ownerSelect.name&&el.closest('select')?.getAttribute('name')===control.ownerSelect.name)):undefined)??(!control.nid&&!control.attributes.id&&!control.attributes.name?candidates.find(el=>Object.entries(control.attributes).every(([key,value])=>el.getAttribute(key)===value)):undefined);
+  const labelMatches=control.label?candidates.filter(el=>el.getAttribute('aria-label')&&normalized(el.getAttribute('aria-label')!)===normalized(control.label!)&&(el.getAttribute('type')??'text')===(control.attributes.type??'text')&&Object.entries(control.attributes).every(([key,value])=>el.getAttribute(key)===value)):[];
+  const uniqueSource=control.label&&source.controls.filter(row=>row.tag===control.tag&&row.label&&normalized(row.label)===normalized(control.label!)&&(row.attributes.type??'text')===(control.attributes.type??'text')).length===1;
+  const next=(control.nid?candidates.find(el=>el.getAttribute('data-nid')===control.nid):undefined)??(control.attributes.id?candidates.find(el=>el.id===control.attributes.id):undefined)??candidates.find(el=>control.attributes.name&&el.getAttribute('name')===control.attributes.name&&(!['radio','checkbox'].includes(control.attributes.type)||el.getAttribute('value')===control.attributes.value))??(control.tag==='option'?candidates.find(el=>(control.attributes.value!==undefined?el.getAttribute('value')===control.attributes.value:normalized(el.textContent??'')===normalized(control.label??''))&&(!control.ownerSelect?.nid&&!control.ownerSelect?.name||control.ownerSelect.nid&&el.closest('select')?.getAttribute('data-nid')===control.ownerSelect.nid||control.ownerSelect.name&&el.closest('select')?.getAttribute('name')===control.ownerSelect.name)):undefined)??(!control.nid&&!control.attributes.id&&!control.attributes.name?candidates.find(el=>Object.entries(control.attributes).every(([key,value])=>el.getAttribute(key)===value)):undefined)??(uniqueSource&&labelMatches.length===1?labelMatches[0]:undefined);
   if(!next){if(![control.label,control.attributes.name,control.attributes.id].some(name=>name&&permitted(name,control.nid,request,true)))findings.push({code:'redesign_control_missing',severity:'error',nid:control.nid,message:'整页重设计遗漏了原有表单控件。',actual:control.tag,expected:'保留表单控件或明确授权功能删除'});continue;}
   consumed.add(next);
   for(const rule of rules){
@@ -83,7 +94,22 @@ export function inspectRedesignContent(source:PageRedesignSource,html:string,req
    findings.push({code:'redesign_form_rule_changed',severity:'error',nid:control.nid,message:'整页重设计改动了未经授权的表单规则或预填信息。',actual:rule,expected:'保留原规则，功能调整按明确请求授权'});
   }
  }
- for(const item of source.texts){if(!normalized(item.text)||visible.includes(normalized(item.text))||permitted(item.text.trim(),item.nid,request))continue;
+ const baseline=baselineHtml?parseHtmlCopy(baselineHtml).doc:undefined;
+ const replacedEntries=baseline?replacedInlineEntryNids(baseline,doc,request):new Set<string>();
+ const primarySelector='button.btn-primary,button[data-action="primary"],button[type="submit"],input[type="submit"]';
+ const oldPrimary=baseline?Array.from(baseline.querySelectorAll(primarySelector)).filter(el=>!authorizedRemoval(el,request)):[];
+ const newPrimary=Array.from(doc.querySelectorAll(primarySelector));
+ const approvedPrimaryLabel=request.split(/[。；;\n]/).flatMap(clause=>{
+  if(/不要|不能|不得|禁止|不改|勿|never|\bnot\b/i.test(clause))return [];
+  const match=/(?:主按钮|主操作按钮|主CTA)(?:的)?(?:文案|文字)(?:设置|设为|改为|改成|修改为|替换为)[“「"]([^”」"]{1,160})[”」"]/.exec(clause);
+  return match?[match[1]]:[];
+ });
+ const explicitEdits=compileBusinessTextEdits(source.texts,request);
+ const editApplied=(edit:typeof explicitEdits[number])=>{const nodes=Array.from(doc.querySelectorAll('[data-nid]')).filter(el=>el.getAttribute('data-nid')===edit.nid);return nodes.length===1?normalized(nodes[0].textContent??'')===normalized(edit.after):nodes.length===0&&visible.includes(normalized(edit.after));};
+ for(const edit of explicitEdits){if(!editApplied(edit))findings.push({code:'redesign_text_change_missing',severity:'error',nid:edit.nid,message:'未落实用户明确确认的新业务文案。',actual:edit.before,expected:edit.after});}
+ for(const item of source.texts){if(item.nid&&(reviewed.has(item.nid)||replacedEntries.has(item.nid))||explicitEdits.some(edit=>edit.nid===item.nid&&editApplied(edit)))continue;if(!normalized(item.text)||visible.includes(normalized(item.text))||permitted(item.text.trim(),item.nid,request))continue;
+  const originalNode=item.nid&&baseline?Array.from(baseline.querySelectorAll('[data-nid]')).find(el=>el.getAttribute('data-nid')===item.nid):undefined;
+  if(oldPrimary.length===1&&newPrimary.length===1&&originalNode&&oldPrimary[0].contains(originalNode)&&approvedPrimaryLabel.length===1&&actionLabel(newPrimary[0])===approvedPrimaryLabel[0])continue;
   findings.push({code:'redesign_content_missing',severity:'error',nid:item.nid,message:'整页重设计遗漏了未经授权删除或改写的原业务文案。',actual:item.text.slice(0,200),expected:'保留完整业务信息；文字变更必须有明确授权'});
  }
  const refs=new Set(inspectExternalMedia(html).references.map(ref=>ref.url));

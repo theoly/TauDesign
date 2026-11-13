@@ -3,7 +3,7 @@ import {isTaskBudgetSnapshot} from '../../services/ai/taskBudget';
 export function TaskBudgetCard({value,label='本轮'}:{value:unknown;label?:string}) {
   if(value===undefined)return null;
   if(!isTaskBudgetSnapshot(value))return <p role="status" className="my-2 text-xs text-amber-300">预算记录不可用，请以本次执行结果为准。</p>;
-  return <details className="my-2 rounded-lg border border-slate-700 bg-slate-900 p-3 text-xs text-slate-400" aria-label={`${label}预算记录`}>
+  return <details className="my-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-[11px] leading-4 text-slate-400" aria-label={`${label}预算记录`}>
     <summary className="cursor-pointer">{label}预算 · 请求 {value.requests}/{value.limits.maxRequests} · {value.cancelled?'已停止':value.closed?'已结束':'阶段记录'}</summary>
     <dl className="mt-2 space-y-1 break-words">
       <div><dt className="inline">累计申请输出：</dt><dd className="inline">{value.requestedOutputTokens.toLocaleString()} / {value.limits.maxRequestedOutputTokens.toLocaleString()} Token</dd></div>

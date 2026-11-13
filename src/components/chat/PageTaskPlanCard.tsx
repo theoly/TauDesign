@@ -9,7 +9,7 @@ export function PageTaskPlanCard({contract}:{contract?:DesignTaskContract}) {
   const issue=pageTaskPlanIssue(contract);
   if(issue)return <p role="status" className="my-2 text-xs text-amber-300">业务规划记录不可用：{issue}</p>;
   const plan=contract.pageTaskPlan!.plan;
-  return <details aria-label="功能与交互规划" className="my-2 space-y-2 rounded-lg border border-slate-700 bg-slate-900 p-3 text-xs text-slate-300">
+  return <details aria-label="功能与交互规划" className="my-1 space-y-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-[11px] leading-4 text-slate-300">
     <summary className="cursor-pointer">功能与交互规划 · {plan.features.length} 项功能</summary>
     {contract.pageTaskPlan!.request.planSource&&<p className="text-slate-500">规划来自已确认的多页计划；本页生成复用该规划，未增加规划请求。</p>}
     <PageTaskPlanContent plan={plan}/>

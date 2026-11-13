@@ -1,3 +1,6 @@
+import {prepareReferenceEvidence,withReferenceEvidence,type ReferenceProcessing} from './referenceEvidence';
+import type {ImageAttachment} from '../../types/referenceImage';
+import {referenceImageIdentity} from './workflowSources';
 import {observeRequestActivity,type RequestActivity} from './requestActivity';
 import { mobileNavigationPrompt, normalizeMobileNavigation } from '../../utils/mobileNavigation';
 import type { ProjectDocumentEntry } from '../../types/projectDocument';
@@ -160,6 +163,7 @@ export async function analyzeScreenModification(core:AIEngineCore,options:Parame
 async function analyzeScreenModificationTask(core: AIEngineCore, options: {
   provider: StreamTextOptions['provider']; model: string; signal?: AbortSignal;
   html: string; name: string; request: string; designSystem: DesignSystem;
+  referenceProcessing?:ReferenceProcessing;attachment?:ImageAttachment;
   mode: 'light' | 'dark'; elementNid?: string | null; imageUrl?: string;
   deviceProfile?: DeviceProfile; frameWidth?: number; useCustomNavigation?: boolean;
   protectedNids?: string[]; allowText?: boolean;
@@ -178,7 +182,7 @@ async function analyzeScreenModificationTask(core: AIEngineCore, options: {
   };
   guard();
   // Freeze data independently of AbortSignal/functions and of caller-owned mutable objects.
-  const { signal: _signal, isCurrent: _current,onContract,onActivity, ...input } = options;
+  const { signal: _signal, isCurrent: _current,onContract,onActivity,referenceProcessing, ...input } = options;
   options = { ...structuredClone(input), signal };
   const contract = options.workflowContract ?? buildDesignTaskContract({ intent: 'modify_screen', reviewRequired: true,
     request: options.request, target: { id: 'analysis-target', name: options.name, htmlContent: options.html },
@@ -218,7 +222,9 @@ ${options.workflowContract ? `${renderDesignTaskContract(options.workflowContrac
   };
   let raw: unknown;
   let attempts = 0;
-  const budget=createPlanningBudget(),evidenceCore=contract.designGuidance?withGuidanceReceipts(core,contract,contract.designGuidance):core,budgetedCore=withTaskBudget(evidenceCore,budget),formatFailures:string[]=[];
+  const budget=createPlanningBudget(Boolean(options.attachment&&referenceProcessing));
+  try{if(options.attachment&&referenceProcessing){const evidence=await prepareReferenceEvidence(core,{attachment:options.attachment,processing:referenceProcessing,budget,taskId:contract.taskId,signal,isCurrent});guard();contract.referenceImage={...referenceImageIdentity(options.attachment),evidence};core=withReferenceEvidence(core,evidence);}}catch(error){budget.close();throw error;}
+  const evidenceCore=contract.designGuidance?withGuidanceReceipts(core,contract,contract.designGuidance):core,budgetedCore=withTaskBudget(evidenceCore,budget),formatFailures:string[]=[];
   try {
   for (let attempt = 0; attempt < 2; attempt++) {
     guard();

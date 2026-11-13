@@ -3,6 +3,8 @@ export interface ModelCapabilityProfile {
   version:1;revision:string;endpointIdentity:string;source:'user'|'verified'|'metadata';
   contextWindow?:number;maxOutputTokens?:number;
   mediaInput?:'native-part'|'url'|'file-upload'|'unsupported';mediaUploadUrl?:string;
+  /** Explicit gateway wire format; never inferred from a custom Provider ID. */
+  thinkingControl?:'deepseek'|'qwen'|'unsupported';
   /** Explicit endpoint/model capacity; unknown endpoints remain serial. */
   maxConcurrency?:1|2;
   /** No provider supports resumable POST by inference. */
@@ -19,6 +21,7 @@ export function validModelCapability(value:unknown):value is ModelCapabilityProf
  const v=value as ModelCapabilityProfile|undefined;
  const cap=(n:unknown)=>n===undefined||typeof n==='number'&&Number.isSafeInteger(n)&&n>=256&&n<=10_000_000;
  return Boolean(v&&v.version===1&&typeof v.revision==='string'&&v.revision.length>0&&v.revision.length<100&&typeof v.endpointIdentity==='string'&&/^endpoint-[a-f0-9]+$/.test(v.endpointIdentity)&&['user','verified','metadata'].includes(v.source)&&cap(v.contextWindow)&&cap(v.maxOutputTokens)&&(!v.contextWindow||!v.maxOutputTokens||v.maxOutputTokens<v.contextWindow)&&
+  (v.thinkingControl===undefined||['deepseek','qwen','unsupported'].includes(v.thinkingControl))&&
   (v.mediaInput===undefined||['native-part','url','file-upload','unsupported'].includes(v.mediaInput))&&(v.maxConcurrency===undefined||v.maxConcurrency===1||v.maxConcurrency===2)&&(v.resumableEvents===undefined||v.resumableEvents===false)&&
   (v.mediaUploadUrl===undefined||typeof v.mediaUploadUrl==='string'&&/^https:\/\//.test(v.mediaUploadUrl)));
 }

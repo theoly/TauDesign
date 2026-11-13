@@ -1,3 +1,10 @@
+import {createGeneratedMediaProcessor} from '../../generatedMedia';
+import type {ProjectStorage} from '../../../storage/projectStorage';
+import type {ProjectSettings} from '../../../../types/project';
+import {repairDraftRegions,type DraftRegionRequest} from '../../draftRegionRepair';
+import {prepareBusinessTextReview} from '../../businessTextReview';
+import {renderExplicitUiRequirements} from '../../inlineFormContract';
+import {prepareReferenceEvidence,renderReferenceEvidence,type ReferenceProcessing} from '../../referenceEvidence';
 import {requestOutputCap} from '../../modelCapabilities';
 import type {TaskDraftUpdate} from '../../designTaskJournal';
 import {withTaskProvenance} from '../../taskProvenance';
@@ -44,6 +51,8 @@ import {resolveWorkflowValidation} from '../../workflowValidation';
 import { buildDesignProjectManifest, renderProjectManifestContext, type DesignProjectManifest } from '../../projectManifest';
 
 export interface ExecutePipelineOptions {
+  generatedMedia?:{storage:ProjectStorage;settings:ProjectSettings;assets?:import('../../../../types/project').Asset[];isCurrent?:()=>boolean};
+  referenceProcessing?:ReferenceProcessing;
   /** Functional planning rollout; callers pass the frozen snapshot when continuing an existing task. */
   pageTaskPlanning?:{snapshot?:PageTaskSnapshot;confirmed?:{plan:PageTaskPlan;request:PageTaskSnapshot['request']};maxTokens?:number};
   onTaskPlan?:(snapshot:PageTaskSnapshot)=>void;
@@ -90,7 +99,7 @@ export interface ExecutePipelineOptions {
   resume?: ContinuationCheckpoint;
   /** Same task and parent ledger as the checkpoint; never select a new rule packet. */
   resumeContract?: import('../../designWorkflow').DesignTaskContract;
-  qualityRepair?: { draft: FailedPageDraft; labels: DraftLabel[] };
+  qualityRepair?: { draft: FailedPageDraft; labels: DraftLabel[]; region?:DraftRegionRequest };
   onContinuation?: (attempt: number, mode: 'native' | 'portable') => void;
   writeStrategy?:PageWriteStrategy['requested'];
   /** Explicit whole-page request or confirmed page mode, never inferred from a local edit. */
@@ -106,16 +115,23 @@ export interface ExecutePipelineOptions {
 
 export class PipelineExecutor {
   public static async execute(options: ExecutePipelineOptions): Promise<PipelineOutput> {
+    if(options.qualityRepair)options={...options,qualityRepair:structuredClone(options.qualityRepair)};
     const activity=options.onActivity?observeRequestActivity(options.engineCore,options.onActivity,()=>!options.signal?.aborted&&options.isCurrent?.()!==false):undefined;
     try{
-      const output=await PipelineExecutor.executeTask({...options,engineCore:activity?.core??options.engineCore});
-      if((output.workflowContract?.operation==='create'||options.wholePageRedesign&&output.workflowContract?.operation==='modify')&&options.onTaskDraft)await options.onTaskDraft({phase:'result',contract:output.workflowContract,budget:output.taskBudget,
+      const processor=options.generatedMedia&&options.designSystem?createGeneratedMediaProcessor({...options.generatedMedia,designSystem:options.designSystem,signal:options.signal,isCurrent:()=>options.isCurrent?.()!==false&&options.generatedMedia?.isCurrent?.()!==false,onProgress:options.onSectionProgress}):undefined;
+      const output=await PipelineExecutor.executeTask({...options,prepareGeneratedHtml:processor?.prepare,engineCore:activity?.core??options.engineCore});
+      if(processor&&output.extractedHtml){
+        try{output.generatedAssets=await processor.collect(output.extractedHtml);}
+        catch(error){output.status='error';output.errorMessage=error instanceof Error?error.message:String(error);delete output.extractedHtml;delete output.stagedScreen;
+          if(output.executionRecord){output.executionRecord={...output.executionRecord,errorMessage:output.errorMessage};delete output.executionRecord.completeHtml;}}
+      }
+      if(output.workflowContract&&['create','modify'].includes(output.workflowContract.operation)&&options.onTaskDraft)await options.onTaskDraft({phase:'result',contract:output.workflowContract,budget:output.taskBudget,
         plan:output.sectionedCheckpoint?.plan,completed:output.sectionedCheckpoint?.completed,prefix:output.continuationCheckpoint?.prefix??output.sectionedCheckpoint?.active?.prefix,
         result:{html:output.extractedHtml,error:output.errorMessage,...(options.signal?.aborted?{cancelled:true}:{})}});
       return output;
     }finally{activity?.stop();}
   }
-  private static async executeTask(options:ExecutePipelineOptions):Promise<PipelineOutput>{
+  private static async executeTask(options:ExecutePipelineOptions & {prepareGeneratedHtml?:import('../../generatedMedia').PrepareGeneratedHtml}):Promise<PipelineOutput>{
     const phase=(value:PipelinePhase)=>{if(!options.signal?.aborted&&options.isCurrent?.()!==false){try{options.onPhase?.(value);}catch{console.warn('[pipeline] 阶段显示回调失败');}}};
     phase('preparing');
     const {
@@ -171,7 +187,7 @@ export class PipelineExecutor {
         fingerprint: options.designSystemOrigin?.tokenFingerprint ?? contentFingerprint(JSON.stringify(designSystem.tokens)) }] : [])
     ];
     let referenceImage:ReturnType<typeof referenceImageIdentity>|undefined;
-    if((intentResult.intent==='create_screen'||(intentResult.intent==='modify_screen'&&options.pageTaskPlanning))&&input.attachment){
+    if((intentResult.intent==='create_screen'||(intentResult.intent==='modify_screen'&&(options.pageTaskPlanning||options.referenceProcessing)))&&input.attachment){
       try{referenceImage=referenceImageIdentity(input.attachment);}catch(error){return {status:'error',rawResponse:'',errorMessage:error instanceof Error?error.message:'参考图片无效。'};}
     }
     if(intentResult.intent==='create_screen'&&(((requiresMultiPagePlan(input.rawPrompt)||requiresPageVariantPlan(input.rawPrompt))&&!options.multiPage)||(options.multiPage&&!validMultiPageScope(options.multiPage))))return {status:'error',rawResponse:'',errorMessage:'多页面或多方案需求请先确认对应计划，再逐项生成。'};
@@ -185,9 +201,11 @@ export class PipelineExecutor {
       designSystemOrigin: options.designSystemOrigin, projectManifest, protectedNids,
       knowledgeSources, knowledgeFingerprint: options.knowledgeFingerprint
     });
+    const previousImage=options.resumeContract?.referenceImage??options.qualityRepair?.draft.referenceImage;
+    if(previousImage?.evidence&&workflowContract.referenceImage?.fingerprint===previousImage.fingerprint)workflowContract.referenceImage.evidence=structuredClone(previousImage.evidence);
     if(options.sectioned)workflowContract.generationMode='sections';
     if(resuming&&options.resumeContract?.pageWriteStrategy)workflowContract.pageWriteStrategy=structuredClone(options.resumeContract.pageWriteStrategy);
-    const taskBudget=options.taskBudget??((options.pageTaskPlanning||options.wholePageRedesign)?createChatTaskBudget(Boolean(options.sectioned||options.wholePageRedesign)):
+    const taskBudget=options.taskBudget??((options.pageTaskPlanning||options.wholePageRedesign||options.referenceProcessing)?createChatTaskBudget(Boolean(options.sectioned||options.wholePageRedesign)):
       options.contextualGuidance&&!options.qualityRepair?new TaskBudget({maxRequests:16,maxRequestedOutputTokens:32768,maxDurationMs:900000,maxRequestDurationMs:900000}):undefined);
     if(taskBudget&&!resuming&&!taskBudget.snapshot().closed&&!taskBudget.signal.aborted)taskBudget.registerTask(workflowContract.taskId);
     let generationResult: SectionedResult | undefined;
@@ -200,7 +218,7 @@ export class PipelineExecutor {
         errorMessage: output.errorMessage,
         qualityReport: output.qualityReport,
         warnings: output.warnings
-      }), ...((options.sectioned||generationResult.sectioned)?{source:'sectioned-model' as const,rawResponse:'',sectioned:generationResult.sectioned}: {}) }, ...(options.qualityRepair ? {executionRecord:{source:'local-edit' as const,rawResponse:'',completeHtml:output.extractedHtml,continuationCount:0,warnings:output.warnings??[],qualityReport:output.qualityReport,
+      }), ...((options.sectioned||generationResult.sectioned)?{source:'sectioned-model' as const,rawResponse:'',sectioned:generationResult.sectioned}: {}) }, ...(options.qualityRepair&&!options.qualityRepair.region ? {executionRecord:{source:'local-edit' as const,rawResponse:'',completeHtml:output.extractedHtml,continuationCount:0,warnings:output.warnings??[],qualityReport:output.qualityReport,
         localEdit:{mode:'local' as const,targetNids:options.qualityRepair.labels.map(l=>l.nid),operationCount:options.qualityRepair.labels.length},
         sectioned:options.qualityRepair.draft.sectioned,
         draftRepair:{sourceFingerprint:options.qualityRepair.draft.fingerprint,sourceTaskId:options.qualityRepair.draft.sourceTaskId,confirmedLabels:structuredClone(options.qualityRepair.labels),
@@ -220,6 +238,8 @@ export class PipelineExecutor {
       if(options.writeStrategy==='atomic')choosePageWriteStrategy({estimatedHtmlBytes:new TextEncoder().encode(sourceTarget.htmlContent).length,requested:'atomic'});
     }catch(error){return attachContract({status:'error',rawResponse:'',errorMessage:error instanceof Error?error.message:String(error)});}
 
+    let explicitUiRequirements='';
+    if(['create','modify'].includes(workflowContract.operation))try{explicitUiRequirements=renderExplicitUiRequirements(input.rawPrompt);}catch(error){return attachContract({status:'error',rawResponse:'',errorMessage:error instanceof Error?error.message:'明确UI要求存在冲突。'});}
     // If change_theme, return early with proposal
     if (intentResult.intent === 'change_theme') {
       return attachContract({
@@ -230,7 +250,17 @@ export class PipelineExecutor {
       });
     }
 
-    if(!resuming&&(workflowContract.operation==='create'||options.wholePageRedesign))await options.onTaskDraft?.({phase:'started',contract:workflowContract,budget:taskBudget?.snapshot()});
+    if(!resuming&&(['create','modify'].includes(workflowContract.operation)))await options.onTaskDraft?.({phase:'started',contract:workflowContract,budget:taskBudget?.snapshot()});
+
+    if(input.attachment&&options.referenceProcessing&&!resuming&&!options.qualityRepair){
+      try{
+        phase('reference-observation');
+        if(!taskBudget)throw Error('图片解析缺少父任务预算。');
+        const evidence=await prepareReferenceEvidence(engineCore,{attachment:input.attachment,processing:options.referenceProcessing,budget:taskBudget,taskId:workflowContract.taskId,signal,isCurrent:options.isCurrent});
+        if(!workflowContract.referenceImage)workflowContract.referenceImage=referenceImageIdentity(input.attachment);
+        workflowContract.referenceImage.evidence=evidence;
+      }catch(error){return attachContract({status:'error',rawResponse:'',errorMessage:error instanceof Error?error.message:'参考图解析失败。'});}
+    }
 
     if(options.pageTaskPlanning||options.wholePageRedesign){
       const planning=options.pageTaskPlanning??{};
@@ -267,7 +297,7 @@ export class PipelineExecutor {
       catch(error){return attachContract({status:'error',rawResponse:'',errorMessage:error instanceof Error?error.message:'原续写任务已失效。'});}
     }
 
-    if(workflowContract.operation==='create'||options.wholePageRedesign)await options.onTaskDraft?.({phase:'started',contract:workflowContract,budget:taskBudget?.snapshot()});
+    if(['create','modify'].includes(workflowContract.operation))await options.onTaskDraft?.({phase:'started',contract:workflowContract,budget:taskBudget?.snapshot()});
 
     // 2. System Prompt 组装 (ISSUE-015)
     // 意图在第 1 步才确定，故 Prompt 必须在此处构建，才能保住 T-AE-10 的
@@ -311,7 +341,8 @@ export class PipelineExecutor {
         })
       : `${baseSystemPrompt}\n${mobileNavigationPrompt(navigationPolicy)}`;
 
-    const routedSystemPrompt = `${systemPrompt}\n\n${renderProjectManifestContext(projectManifest)}\n\n${renderDesignTaskContract(workflowContract)}`;
+    const mediaContract=options.prepareGeneratedHtml?'\n[自动媒体编译阶段]优先复用已有独立图标。必要的新静态SVG图表/图标可完整输出，程序会安全检查并外置为独立文件，之后再验收；此条仅覆盖响应阶段内联SVG限制，最终页面仅保留独立引用。禁止data URL/base64/blob及编造素材路径；不将UI或图表当作整页位图。':'';
+    const routedSystemPrompt = `${systemPrompt}${mediaContract}\n\n${renderProjectManifestContext(projectManifest)}\n\n${renderDesignTaskContract(workflowContract)}${explicitUiRequirements}`;
 
     // 3. Context Enrichment (ISSUE-011 + ISSUE-012 + D18 + D20)
     const enriched = enrichContext({
@@ -322,7 +353,7 @@ export class PipelineExecutor {
       deviceProfile,
       frameWidth,
       baseSystemPrompt: routedSystemPrompt,
-      attachment: input.attachment,
+      attachment: workflowContract.referenceImage?.evidence?undefined:input.attachment,
       textReferences: input.textReferences,
       projectKnowledge: options.projectKnowledge,
       designRules,
@@ -337,8 +368,9 @@ export class PipelineExecutor {
 
     if(enriched.referenceErrors.length)return attachContract({status:'error',rawResponse:'',errorMessage:enriched.referenceErrors.join('；')+'。本次未生成或修改任何页面。'});
     workflowContract.contextManifest=enriched.contextManifest;
-    if(workflowContract.operation==='create'||options.wholePageRedesign)await options.onTaskDraft?.({phase:'started',contract:workflowContract,budget:taskBudget?.snapshot()});
+    if(['create','modify'].includes(workflowContract.operation))await options.onTaskDraft?.({phase:'started',contract:workflowContract,budget:taskBudget?.snapshot()});
 
+    if(workflowContract.referenceImage?.evidence){const last=enriched.messages.at(-1);if(!last||last.role!=='user')return attachContract({status:'error',rawResponse:'',errorMessage:'图片证据缺少当前用户请求。'});delete last.imageUrl;last.content+=renderReferenceEvidence(workflowContract.referenceImage.evidence);}
     const originalReference=options.qualityRepair?.draft.referenceImage;
     if(options.qualityRepair && workflowContract.referenceImage && originalReference?.inputReceipt && originalReference.fingerprint===workflowContract.referenceImage.fingerprint && options.qualityRepair.draft.sourceTaskId) {
       workflowContract.referenceImage.inputReceipt={...originalReference.inputReceipt,reusedFromTaskId:options.qualityRepair.draft.sourceTaskId};
@@ -372,6 +404,10 @@ export class PipelineExecutor {
     };
 
     if(options.qualityRepair){const issue=draftGuidanceIssue(options.qualityRepair.draft);if(issue)return attachContract({status:'error',rawResponse:'',errorMessage:issue});}
+    if(options.qualityRepair){
+      const origin=options.qualityRepair.draft.pageTaskSource??options.qualityRepair.draft.guidanceSource;
+      if(origin?.pageWriteStrategy){workflowContract.pageWriteStrategy=structuredClone(origin.pageWriteStrategy);workflowContract.generationMode=origin.generationMode;}
+    }
     const frozenSelection=workflowContract.designGuidance?.selection??options.qualityRepair?.draft.guidanceSource?.designGuidance?.selection;
     const artifactOptions=['create','modify'].includes(workflowContract.operation)?artifactThinkingOptions(provider,model):{};
     const baseContextKey = contentFingerprint(JSON.stringify([input, Object.entries(sourceScreens).sort(([a],[b])=>a.localeCompare(b)).map(([id,s])=>[id,s.name,s.htmlContent,s.scopedCss]), options.overrides, deviceProfile, frameWidth, options.referenceDevice,
@@ -392,25 +428,32 @@ export class PipelineExecutor {
       const {draft,labels} = options.qualityRepair;
       if (draft.contextKey !== contextKey || draft.bindingKey !== continuationBindingKey({provider,model})) return attachContract({status:'error',rawResponse:'',usage:{inputTokens:0,outputTokens:0},errorMessage:'草稿的工程、原页或模型上下文已变化，请重新生成。'});
       try {
-        const html = repairDraftLabels(draft, labels, qualityOptions);
+        const previous=(draft.pageTaskSource??draft.guidanceSource)?.businessTextReview;
+        const choices=options.qualityRepair.region?.textChanges??[];
+        if(!Array.isArray(choices))throw Error('逐项文案确认格式无效。');
+        if(previous||choices.length){
+          if(!workflowContract.wholePageRedesign||!qualityOptions.baselineHtml)throw Error('业务文案逐项确认仅适用于当前整页重设计基线。');
+          workflowContract.businessTextReview=prepareBusinessTextReview(buildPageRedesignSource(qualityOptions.baselineHtml,{deviceProfile,useCustomNavigation:options.useCustomNavigation,protectedNids}),qualityOptions.baselineHtml,draft,options.qualityRepair.region?.nids??[],choices,previous);
+        }
+        const html = options.qualityRepair.region ? await repairDraftRegions(requestCore,{provider,model,messages:enriched.messages,signal,...artifactOptions},draft,options.qualityRepair.region,protectedNids??[],messages=>{const issue=recordReferenceInput(workflowContract,messages,provider.id,model);if(issue)throw Error(issue);},qualityOptions.baselineHtml,workflowContract.businessTextReview,options.prepareGeneratedHtml) : repairDraftLabels(draft, labels, qualityOptions);
         const title = (draft.title??'修复后的页面').replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
-        recovered = {rawResponse:`<artifact type="screen" title="${title}">${html}</artifact>`,warnings:['已按用户确认文案定点修复，未重新请求整页生成。'],usage:{inputTokens:0,outputTokens:0},finishReason:'stop',continuationCount:0};
-      } catch (error) { return attachContract({status:'rejected_by_quality',rawResponse:'',usage:{inputTokens:0,outputTokens:0},failedDraft:draft,qualityReport:draft.quality,errorMessage:String(error instanceof Error?error.message:error)}); }
+        recovered = {rawResponse:`<artifact type="screen" title="${title}">${html}</artifact>`,warnings:[options.qualityRepair.region?'已修复所选草稿区块，其他区域保留，仍须完整验收。':'已按用户确认文案定点修复，未重新请求整页生成。'],usage:options.qualityRepair.region?undefined:{inputTokens:0,outputTokens:0},finishReason:'stop',continuationCount:0};
+      } catch (error) { return attachContract({status:'rejected_by_quality',rawResponse:'',usage:options.qualityRepair.region?undefined:{inputTokens:0,outputTokens:0},failedDraft:draft,qualityReport:draft.quality,errorMessage:String(error instanceof Error?error.message:error)}); }
     } else if(workflowContract.pageWriteStrategy&&workflowContract.pageTaskPlan&&!resuming){
-      try{recovered=await generateTaskPage(requestCore,{provider,model,messages:enriched.messages,signal,...artifactOptions},{recovered:options.recoveryData?.regions,request:workflowContract.request,strategy:workflowContract.pageWriteStrategy,plan:workflowContract.pageTaskPlan.plan,device:deviceProfile,title:options.multiPage?.name??options.designBrief?.goal?.slice(0,20)??workflowContract.pageTaskPlan.plan.goal.slice(0,20),contextKey,budget:taskBudget!,isCurrent:options.isCurrent,onProgress:options.onSectionProgress,onRequest:messages=>{const issue=recordReferenceInput(workflowContract,messages,provider.id,model);if(issue)throw Error(issue);},onCheckpoint:options.onTaskDraft?async(plan,completed)=>{await options.onTaskDraft!({phase:'regions',contract:workflowContract,budget:taskBudget?.snapshot(),plan,completed});}:undefined});}
+      try{recovered=await generateTaskPage(requestCore,{provider,model,messages:enriched.messages,signal,...artifactOptions},{prepareGeneratedHtml:options.prepareGeneratedHtml,businessSource:options.wholePageRedesign&&sourceTarget?buildPageRedesignSource(sourceTarget.htmlContent,{deviceProfile,useCustomNavigation:options.useCustomNavigation,protectedNids}):undefined,referenceEvidence:workflowContract.referenceImage?.evidence,recovered:options.recoveryData?.regions,request:workflowContract.request,strategy:workflowContract.pageWriteStrategy,plan:workflowContract.pageTaskPlan.plan,device:deviceProfile,title:options.multiPage?.name??options.designBrief?.goal?.slice(0,20)??workflowContract.pageTaskPlan.plan.goal.slice(0,20),contextKey,budget:taskBudget!,isCurrent:options.isCurrent,onProgress:options.onSectionProgress,onRequest:messages=>{const issue=recordReferenceInput(workflowContract,messages,provider.id,model);if(issue)throw Error(issue);},onCheckpoint:options.onTaskDraft?async(plan,completed)=>{await options.onTaskDraft!({phase:'regions',contract:workflowContract,budget:taskBudget?.snapshot(),plan,completed});}:undefined});}
       catch(error){return attachContract({status:'error',rawResponse:'',errorMessage:error instanceof Error?error.message:String(error)});}
     } else if(options.sectioned) {
       recovered=await generateSectionedPage(requestCore,{provider,model,messages:enriched.messages,signal,...artifactOptions},contextKey,
-        {...(taskBudget?{remainingOutputTokens:()=>{const s=taskBudget.snapshot();return s.limits.maxRequestedOutputTokens-s.requestedOutputTokens;},reservedOutputTokens:taskBudget.snapshot().limits.maxRequestedOutputTokens>=32768+1800?1800:0}:{}),resume:options.sectioned.resume,isCurrent:options.isCurrent,onProgress:options.onSectionProgress,onRequest:messages=>{const issue=recordReferenceInput(workflowContract,messages,provider.id,model);if(issue)throw Error(issue);},onCheckpoint:options.onTaskDraft?async(plan,completed)=>{await options.onTaskDraft!({phase:'regions',contract:workflowContract,budget:taskBudget?.snapshot(),plan,completed});}:undefined});
+        {prepareGeneratedHtml:options.prepareGeneratedHtml,...(taskBudget?{remainingOutputTokens:()=>{const s=taskBudget.snapshot();return s.limits.maxRequestedOutputTokens-s.requestedOutputTokens;},reservedOutputTokens:taskBudget.snapshot().limits.maxRequestedOutputTokens>=32768+1800?1800:0}:{}),resume:options.sectioned.resume,isCurrent:options.isCurrent,onProgress:options.onSectionProgress,onRequest:messages=>{const issue=recordReferenceInput(workflowContract,messages,provider.id,model);if(issue)throw Error(issue);},onCheckpoint:options.onTaskDraft?async(plan,completed)=>{await options.onTaskDraft!({phase:'regions',contract:workflowContract,budget:taskBudget?.snapshot(),plan,completed});}:undefined});
     } else recovered = await streamWithContinuation(requestCore, {
       provider, model, messages: enriched.messages,
       ...artifactOptions,
       maxTokens: intentResult.intent === 'modify_screen' && (enriched.targetScreen?.htmlContent.length ?? 0) > 12000 ? 16384 : 8192,
       signal
-    }, { onText: onStreamDelta, onReasoning: onReasoningDelta, allowContinuation: intentResult.intent !== 'question',externalMediaOnly:intentResult.intent!=='question',
-      resume: options.resume, onContinuation: options.onContinuation,
+    }, { prepareGeneratedHtml:options.prepareGeneratedHtml,onText: onStreamDelta, onReasoning: onReasoningDelta, allowContinuation: intentResult.intent !== 'question',externalMediaOnly:intentResult.intent!=='question',
+      resume: options.resume, onContinuation: options.onContinuation,canRequest:tokens=>taskBudget?.canReserve(tokens)??true,
       contextKey });
-    if(options.wholePageRedesign&&sourceTarget&&!recovered.errorMessage){
+    if(options.wholePageRedesign&&sourceTarget&&!options.qualityRepair&&!recovered.errorMessage){
       const artifact=extractArtifact(recovered.rawResponse);
       if(artifact?.isComplete)try{
         const html=mergeRedesignBody(screens[sourceTarget.id].htmlContent,artifact.html),escape=(value:string)=>value.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');

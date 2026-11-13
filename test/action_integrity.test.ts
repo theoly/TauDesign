@@ -17,6 +17,21 @@ import { finalizeModelHtml } from '../src/services/ai/modelHtmlResult';
 const before = '<main data-nid="root"><section data-nid="sheet"><p data-nid="detail">合同核销规则</p></section><footer data-nid="footer"><button data-nid="save" class="btn">暂存</button><button data-nid="submit" class="btn btn-primary"><img class="icon" src="https://example.com/fixture-icon.svg" alt=""/><span data-nid="label">提交并核销 1 次合同约见权益</span></button></footer></main>';
 const blank = '<main data-nid="root"><section data-nid="sheet"><p data-nid="detail">合同核销规则</p></section><footer data-nid="footer"><button data-nid="save" class="btn">暂存</button><button data-nid="submit" class="btn btn-primary"><img class="icon" src="https://example.com/fixture-icon.svg" alt=""/><span data-nid="label"></span></button></footer></main>';
 const shortened = before.replace('提交并核销 1 次合同约见权益', '提交并核销权益');
+test('已授权删除的内部保存不占用保留的新主按钮',()=>{
+ const original='<main><button data-nid="inner" class="btn-primary">保存</button><footer><button data-nid="main" class="btn-primary">先去完善</button></footer></main>';
+ const html='<main><footer><button data-nid="newmain" class="btn-primary">保存并完善</button></footer></main>',request='去掉其内部独立“保存”按钮；将底部主按钮文案改为“保存并完善”';
+ const quality=checkGenerationQuality(html,{baselineHtml:original,modificationRequest:request});
+ expect(quality.findings.filter(f=>f.severity==='error')).toEqual([]);
+ expect(checkGenerationQuality('<main></main>',{baselineHtml:original,modificationRequest:request}).findings.some(f=>f.severity==='error'&&f.nid==='main')).toBe(true);
+});
+test('颜色类不代表主操作，带名称的 icon-mask 保留语义，真正空白主操作仍阻断', () => {
+  const secondary='<main><button data-nid="photo" class="text-primary" aria-label="添加照片"><span class="icon-mask"></span></button><button class="btn-primary">保存</button></main>';
+  expect(checkGenerationQuality(secondary).findings.some(f=>f.code==='action_label_missing'&&f.nid==='photo')).toBe(false);
+  const named='<main><button data-nid="photo" class="btn-primary" aria-label="添加照片"><span class="icon-mask"></span></button></main>';
+  expect(checkGenerationQuality(named).findings.some(f=>f.code==='action_label_missing')).toBe(false);
+  const empty='<main><button data-nid="save" class="btn-primary"></button></main>';
+  expect(checkGenerationQuality(empty).findings.some(f=>f.code==='action_label_missing'&&f.nid==='save')).toBe(true);
+});
 const context = (prompt: string): PipelineContext => ({ input: { rawPrompt: prompt, activeScreenId: 's1' }, intent: 'modify_screen', intentReason: 'test', hasExplicitStructuralChangeIntent: false,
   targetScreen: { id: 's1', name: '回访', htmlContent: before, isSkeleton: false }, referencedScreens: [], unmatchedMentions: [], activeRules: [], activeDecisions: [], assembledMessages: [], estimatedChars: 0, isContextTrimmed: false, warnings: [] });
 

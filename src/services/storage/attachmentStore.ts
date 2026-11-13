@@ -1,3 +1,4 @@
+import {sha256,referenceBytes} from '../../utils/referenceImagePreparation';
 import { ProjectStorage } from './projectStorage';
 import type { Asset } from '../../types/project';
 import { parseImageInfoFromDataUrl } from '../../utils/md5';
@@ -37,6 +38,14 @@ export function approxBytes(base64: string): number {
 
 export class AttachmentStore {
   constructor(private readonly storage: ProjectStorage) {}
+
+  async saveReference(name:string,dataUrl:string):Promise<Asset|null>{
+    try{const info=referenceBytes(dataUrl),hash=await sha256(info.bytes),relPath=`assets/images/${hash}.${info.ext}`;await this.storage.ensureDir('assets/images');
+      if(!await this.storage.exists(relPath))await this.storage.writeBinary(relPath,dataUrl.slice(dataUrl.indexOf(',')+1));
+      const actual=await this.storage.readBinary(relPath);if(actual===null||await sha256(referenceBytes(`data:${info.mime};base64,${actual}`).bytes)!==hash)throw Error('参考图片内容校验失败');
+      return {id:`asset_sha256_${hash}`,name,type:'image',mimeType:info.mime,source:'upload',relPath,refCount:0};
+    }catch(error){console.warn('[reference] 独立图片保存失败',error);return null;}
+  }
 
   /**
    * 落盘一张附件，按内容二进制 MD5 命名并去重。

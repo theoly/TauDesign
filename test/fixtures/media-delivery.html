@@ -1,0 +1,51 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>独立照片交付验收</title><body style="margin:0;background:#020617"><div id="root" style="height:100vh"></div><div id="export-root"></div><script type="module">
+import React from '/node_modules/.vite/deps/react.js';
+import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+import '/src/styles/index.css';
+import {InfiniteCanvas} from '/src/components/canvas/InfiniteCanvas.tsx';
+import {ProjectPublicationOverlay} from '/src/components/workspace/ProjectPublicationOverlay.tsx';
+import {ExportModal} from '/src/components/export/ExportModal.tsx';
+import {useProjectStore} from '/src/stores/useProjectStore.ts';
+import {useHistoryStore} from '/src/stores/useHistoryStore.ts';
+import {buildDesignTaskContract} from '/src/services/ai/designWorkflow.ts';
+import {htmlImportExecutionRecord} from '/src/services/ai/designExecutionRecord.ts';
+import {createProjectStorage} from '/src/services/storage/projectStorage.ts';
+import {loadStagedCandidate} from '/src/services/storage/candidateRepository.ts';
+import {loadHistoryForProject} from '/src/services/storage/historyPersistence.ts';
+import {DeliveryRepository} from '/src/services/storage/deliveryRepository.ts';
+import {DefaultAIEngineCore} from '/src/services/ai/engine/core/aiEngineCore.ts';
+import {setTextByNid} from '/src/utils/textNode.ts';
+import {resolveImportedResources} from '/src/services/import/importResources.ts';
+import {buildExportRenderDocument} from '/src/utils/pngExporter.ts';
+import {compileTokensToCss} from '/src/utils/cssCompiler.ts';
+import {getBaseCss} from '/src/styles/baseCss.ts';
+let modelCalls=0;for(const method of ['streamText','generateObject'])DefaultAIEngineCore.prototype[method]=()=>{modelCalls++;throw Error('Photo delivery verification cannot call a model');};
+const target='photo-delivery-page',params=new URL(location.href).searchParams,resume=params.get('resume');
+if(resume){
+ if(!await useProjectStore.getState().loadProjectById(resume))throw Error('Isolated photo project cannot reopen');
+ await loadHistoryForProject(resume);const candidate=await loadStagedCandidate(resume);
+ if(candidate&&!useProjectStore.getState().restoreStagedCandidate(candidate,resume))throw Error('Persisted photo candidate cannot restore');
+}else{
+ const input=await window.fixtureIO({op:'photo-input'}),file=input.file;
+ if(file.mimeType!=='image/png'||!file.relPath.startsWith('assets/images/')||input.excluded.includes('photo'))throw Error('Invalid photo-only fixture');
+ useProjectStore.getState().initNewProject({name:'本次本地独立照片交付',deviceProfile:'mobile',createSpecimen:false});
+ let s=useProjectStore.getState();await createProjectStorage(s.id).writeBinary(file.relPath,file.bytes);
+ s.addAsset({id:'photo-'+file.sha256,name:'非敏感本机海岸摄影素材',type:'image',mimeType:file.mimeType,source:'upload',relPath:file.relPath,refCount:1});
+ const baseline=`<main data-nid="mediar01" class="col gap-4 p-4"><h1 data-nid="mediat01" class="text-xl">本地摄影素材</h1><p data-nid="mediap01" class="text-sm text-secondary">本机标准海岸摄影素材，仅作隔离技术验收。</p><figure data-nid="mediaf01" class="card col gap-3 p-3"><img data-nid="mediai01" class="full-img" width="356" height="356" src="${file.relPath}" alt="非敏感海岸摄影素材"><figcaption data-nid="mediac01" class="text-sm text-secondary">照片来源：macOS 标准 Big Sur Coastline 壁纸缩略图。</figcaption></figure><button data-nid="mediaa01" class="btn btn-primary w-full">确认照片</button></main>`;
+ s.addScreen({name:'独立照片交付验证',htmlContent:baseline,position:{x:0,y:0}},target);s.setActiveScreen(target);s.setViewportTransform({x:20,y:160,scale:.8});
+ useHistoryStore.getState().restore(null);await s.saveProjectChecked();
+ s=useProjectStore.getState();const request='将标题“本地摄影素材”改为“独立照片交付验证”；保持照片、图注和按钮及其属性不变。仅本次本地确定性修改，不调用模型。';
+ const replacement=setTextByNid(s.screens[target].htmlContent,'mediat01','独立照片交付验证');
+ const contract=buildDesignTaskContract({intent:'modify_screen',request,target:s.screens[target],deviceProfile:'mobile',frameWidth:s.settings.frameWidth,designSystem:s.designSystem,designSystemOrigin:s.designSystemOrigin,allowedChanges:['screen:'+target]});
+ s.stageScreenChange(target,replacement,'照片本地复制修改',request,contract,htmlImportExecutionRecord(replacement));
+}
+let exportRoot;
+window.fixture={target,state:()=>useProjectStore.getState(),models:()=>modelCalls,report:()=>useProjectStore.getState().getStagedDeliveryReport(),undo:()=>useHistoryStore.getState().undo(),redo:()=>useHistoryStore.getState().redo(),save:()=>useProjectStore.getState().saveProjectChecked(),
+ candidateFile:()=>{const s=useProjectStore.getState();return createProjectStorage(s.id).readText('candidates/current.json');},
+ snapshot:()=>{const s=useProjectStore.getState();return createProjectStorage(s.id).readManagedSnapshot();},
+ photoBytes:()=>{const s=useProjectStore.getState(),asset=Object.values(s.assets).find(a=>a.mimeType==='image/png');return createProjectStorage(s.id).readBinary(asset.relPath);},
+ archives:async()=>{const s=useProjectStore.getState();return (await new DeliveryRepository(createProjectStorage(s.id),s.id).listForScreen(target)).records;},
+ exportDocument:async()=>{const s=useProjectStore.getState(),screen=s.screens[target],resolved=await resolveImportedResources(screen.htmlContent,screen.scopedCss,createProjectStorage(s.id),new Set(Object.values(s.assets).map(a=>a.relPath)));return buildExportRenderDocument({...screen,...resolved},{tokensCss:compileTokensToCss(s.designSystem.tokens,s.settings.colorMode),baseCss:getBaseCss(s.settings.deviceProfile),screenOverrides:'',bgColor:'var(--color-bg)',width:390,deviceProfile:'mobile',useCustomNavigation:false,viewportHeight:844});},
+ openExport:()=>{exportRoot??=ReactDOM.createRoot(document.getElementById('export-root'));exportRoot.render(React.createElement(ExportModal,{onClose:()=>exportRoot.render(null)}));}};
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(React.Fragment,null,React.createElement(InfiniteCanvas),React.createElement(ProjectPublicationOverlay)));
+</script></body></html>

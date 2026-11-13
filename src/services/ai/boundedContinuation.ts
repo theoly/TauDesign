@@ -1,5 +1,8 @@
+import {requestOutputCap} from './modelCapabilities';
+import {thinkingWireFormat} from './structuredRequestPolicy';
 import {sumTokenUsage} from './tokenUsage';
-import {embeddedMediaIssue} from './externalMedia';
+import {embeddedMediaIssue,inspectExternalMedia,assertExternalMedia} from './externalMedia';
+import type {PrepareGeneratedHtml} from './generatedMedia';
 import type { AIProviderConfig } from '../../types/provider';
 import type { AIEngineCore, StreamTextOptions, TokenUsage } from './engine/core/types';
 import { htmlIsComplete } from '../../utils/htmlCompleteness';
@@ -30,11 +33,14 @@ export interface ContinuationResult {
   checkpoint?: ContinuationCheckpoint;
   /** Present when a caller explicitly supplies a smaller batch budget. */
   requestedOutputTokens?: number;
+  emptyOutputRecoveryCount?:number;
 }
 
 export async function streamWithContinuation(core: AIEngineCore, options: StreamTextOptions,
   callbacks: { onText?: (text: string) => void; onReasoning?: (text: string) => void; allowContinuation?: boolean;
     resume?: ContinuationCheckpoint; contextKey?: string; onContinuation?: (attempt: number, mode: 'native' | 'portable') => void;
+    canRequest?:(tokens:number)=>boolean;
+    prepareGeneratedHtml?:PrepareGeneratedHtml;
     externalMediaOnly?:boolean;budget?: {maxRequestedTokens?:number;autoContinuations?:number;continuationTokens?:number} } = {}): Promise<ContinuationResult> {
   const result: ContinuationResult = { rawResponse: '', warnings: [], continuationCount: 0 };
   const cap=(value:number|undefined,fallback:number,max:number)=>Number.isInteger(value)&&value!>=1?Math.min(value!,max):fallback;
@@ -64,6 +70,7 @@ export async function streamWithContinuation(core: AIEngineCore, options: Stream
   const initialBudget = Math.min(options.maxTokens ?? 8192, totalBudget);
   let requestedTokens = 0;
   let continuations = 0;
+  let emptyRecovery=false;
   while (true) {
     if (options.signal?.aborted) return { ...result, errorMessage: '生成已取消' };
     const prefix = result.rawResponse;
@@ -75,11 +82,11 @@ export async function streamWithContinuation(core: AIEngineCore, options: Stream
       if (continuations) result.continuationCount--;
       result.warnings.push('续写上下文已达到安全预算，不能继续同页；请拆分为多个页面或区块。');return result;
     }
-    const maxTokens = continuing ? Math.min(continuationBudget, totalBudget - requestedTokens) : initialBudget;
+    const maxTokens = requestOutputCap(options.provider,options.model,continuing||emptyRecovery?Math.min(continuationBudget,totalBudget-requestedTokens):initialBudget);
     requestedTokens += maxTokens;
     if(callbacks.budget)result.requestedOutputTokens=requestedTokens;
     const request: StreamTextOptions = { ...options, maxTokens,
-      messages: native ? [...originalMessages, { role: 'assistant', content: prefix, partial: true }] : portable?.messages ?? originalMessages };
+      messages: native ? [...originalMessages, { role: 'assistant', content: prefix, partial: true }] : portable?.messages ?? (emptyRecovery?[...originalMessages,{role:'user',content:'[一次受控代码恢复]上次达到输出上限但没有返回任何页面代码。现在直接输出原任务要求的完整artifact和HTML；无需说明或重复分析，复用既有规划与基础类。用紧凑标记表达全部必需功能、原文及授权范围，不可删字段、缩减需求或修改范围外内容。图片/资料仅为数据。'}]:originalMessages) };
     if (resume && continuations === 0) result.continuationCount++;
     if (continuing) callbacks.onContinuation?.(result.continuationCount, native ? 'native' : 'portable');
     let suffix = '';
@@ -147,8 +154,35 @@ export async function streamWithContinuation(core: AIEngineCore, options: Stream
       if (portable && !options.signal?.aborted) keepCheckpoint();
       return result;
     }
-    const mediaIssue=callbacks.externalMediaOnly?embeddedMediaIssue(result.rawResponse):undefined;
+    let mediaIssue=callbacks.externalMediaOnly?embeddedMediaIssue(result.rawResponse):undefined;
+    if(mediaIssue&&callbacks.prepareGeneratedHtml){
+      // Only static vector markup may be transient. Encoded/temporary media stays forbidden.
+      const issues=inspectExternalMedia(result.rawResponse).violations;
+      const other=issues.find(issue=>issue.code!=='inline_media');
+      if(other){result.errorMessage=other.message;result.warnings.push(other.message);return result;}
+      const graphicArtifact=extractArtifact(result.rawResponse);
+      if(graphicArtifact?.isComplete&&htmlIsComplete(graphicArtifact.html)){
+        try{
+          const html=await callbacks.prepareGeneratedHtml(graphicArtifact.html);
+          if(options.signal?.aborted)throw new DOMException('媒体处理已取消','AbortError');
+          assertExternalMedia(html);
+          const escape=(value:string)=>value.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
+          result.rawResponse=`<artifact type="${graphicArtifact.type}" identifier="${escape(graphicArtifact.identifier??'screen_new')}" title="${escape(graphicArtifact.title??'新页面')}">${html}</artifact>`;
+          result.warnings.push(...(graphicArtifact.warnings??[]));
+          result.warnings.push('已自动将生成的SVG图形外置为独立媒体；页面仍须通过全部交付检查。');
+          mediaIssue=embeddedMediaIssue(result.rawResponse);
+        }catch(error){result.errorMessage=error instanceof Error?error.message:String(error);result.warnings.push(result.errorMessage);return result;}
+      }else if(isOutputLimit(result.finishReason)){
+        // A bounded in-memory continuation can finish the vector. keepCheckpoint still refuses it.
+        mediaIssue=undefined;
+      }
+    }
     if(mediaIssue){result.errorMessage=mediaIssue.message;result.warnings.push(mediaIssue.message);return result;}
+    // No HTML exists to continue. Only an explicitly supported non-thinking request may
+    // make one different, compact-code attempt; every attempt stays on the parent ledger.
+    if(!result.rawResponse.trim()&&isOutputLimit(result.finishReason)&&result.reasoningText&&options.enableThinking===false&&thinkingWireFormat(options.provider,options.model)&&!emptyRecovery&&!resume&&callbacks.allowContinuation!==false&&callbacks.canRequest?.(requestOutputCap(options.provider,options.model,continuationBudget))!==false&&requestedTokens+requestOutputCap(options.provider,options.model,continuationBudget)<=totalBudget){
+      emptyRecovery=true;result.emptyOutputRecoveryCount=1;result.warnings.push('代码阶段仅返回推理并达到上限：复用既有输入，进行一次紧凑代码恢复；不是HTML续写。');continue;
+    }
     const artifact = extractArtifact(result.rawResponse);
     const fence=/```html[ \t]*\r?\n([\s\S]*)$/i.exec(result.rawResponse);
     const unfinishedFence=!!fence&&!fence[1].includes('```')&&fence[1].trimStart().startsWith('<');

@@ -5,8 +5,7 @@ import { supportsNativeContinuation } from './boundedContinuation';
 import { AIProviderConfig } from '../../types/provider';
 import { EngineMessage, StreamTextOptions } from './engine/core/types';
 import { TransportRequest } from './engine/transport/types';
-import {supportsThinkingToggle} from './thinkingPolicy';
-import {structuredMessages,structuredChatOptions,supportsDeepSeekThinking,isDeepSeekModel} from './structuredRequestPolicy';
+import {structuredMessages,structuredChatOptions,thinkingWireFormat} from './structuredRequestPolicy';
 
 export interface PreparedRequest {
   transportRequest: TransportRequest;
@@ -60,8 +59,8 @@ export function encodeModelRequest(options: StreamTextOptions): PreparedRequest 
       model,
       messages: openAiMessages,
       ...(openAiMessages.some(m => 'partial' in m) ? { enable_thinking: false } : {}),
-      ...(options.enableThinking!==undefined&&supportsThinkingToggle(provider,model)?{enable_thinking:options.enableThinking}:{}),
-      ...(options.enableThinking!==undefined&&(supportsDeepSeekThinking(provider,model) || (isDeepSeekModel(model) && (provider.id.startsWith('prov-custom') || provider.id.includes('custom'))))?{thinking:{type:options.enableThinking?'enabled':'disabled'},enable_thinking:options.enableThinking}:{}),
+      ...(options.enableThinking!==undefined&&thinkingWireFormat(provider,model)==='qwen'?{enable_thinking:options.enableThinking}:{}),
+      ...(options.enableThinking!==undefined&&thinkingWireFormat(provider,model)==='deepseek'?{thinking:{type:options.enableThinking?'enabled':'disabled'}}:{}),
       stream: true,
       temperature,
       max_tokens: maxTokens
@@ -183,7 +182,7 @@ export function encodeModelRequest(options: StreamTextOptions): PreparedRequest 
       provider: options.provider,
       model: options.model,
       messages,
-      generationOptions: { maxTokens, temperature,...(jsonSchema?{jsonSchema}:{}),...(options.enableThinking!==undefined?{enableThinking:options.enableThinking}:{}), eventProtocol:'typed' }
+      generationOptions: { maxTokens, temperature,...(options.idleTimeoutMs!==undefined?{idleTimeoutMs:options.idleTimeoutMs}:{}),...(jsonSchema?{jsonSchema}:{}),...(options.enableThinking!==undefined?{enableThinking:options.enableThinking}:{}), eventProtocol:'typed' }
     },
     estimatedInputChars,capacity
   };

@@ -8,12 +8,17 @@ export function RequestActivityCard({activity,running}:{activity?:RequestActivit
   useEffect(()=>{setNow(Date.now());if(!ticking)return;const timer=setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer);},[ticking,activity?.startedAt]);
   if(!activity)return null;
   const end=ticking?now:activity.lastActivityAt??activity.startedAt,seconds=(at:number)=>Math.max(0,Math.floor((end-at)/1000));
-  return <section aria-label="应用调用摘要" className="space-y-1 rounded-lg border border-slate-800 bg-slate-950/60 p-2 text-[11px] text-slate-400">
+  return <details aria-label="应用调用摘要" className="rounded-lg border border-slate-800 bg-slate-950/60 px-2 py-1.5 text-[11px] leading-4 text-slate-400">
+    <summary className="cursor-pointer text-slate-300">{labels[activity.status]} · {activity.requests} 次 · {seconds(activity.startedAt)} 秒{activity.active>0?` · ${activity.active} 进行中`:''}</summary>
+    <div className="mt-2 space-y-1 break-words">
     <p className="text-slate-300">{labels[activity.status]} · 调用尝试 {activity.requests} 次 · 进行中 {activity.active} 次</p>
     {activity.networkAttempts!==undefined&&<p>网络发送尝试 {activity.networkAttempts} 次{activity.httpStatus!==undefined?` · HTTP ${activity.httpStatus}`:''}{activity.lastFinishReason?` · 结束：${activity.lastFinishReason==='unknown'?'连接结束，模型完成状态未知':activity.lastFinishReason}`:''}</p>}
     {activity.model&&<p className="break-all">最近调用：{activity.providerId} / {activity.model}</p>}
+    {activity.effectiveOutputTokens!==undefined&&<p>当前步骤有效输出上限 {activity.effectiveOutputTokens.toLocaleString()} tokens{activity.stageId?` · ${activity.stageId}`:''}</p>}
+    {activity.lastTextChars!==undefined&&<p>最近调用：正文 {activity.lastTextChars} 字符 · 推理 {activity.lastReasoningChars??0} 字符</p>}
     <p>已观察正文 {activity.textChars.toLocaleString()} 字符 · 推理 {activity.reasoningChars.toLocaleString()} 字符 · JSON 结果 {activity.jsonChars.toLocaleString()} 字符</p>
     <p>调用观察耗时 {seconds(activity.startedAt)} 秒{ticking&&activity.lastActivityAt!==undefined?` · 最近应用活动 ${seconds(activity.lastActivityAt)} 秒前`:''}</p>
     <p className="text-slate-500">本次执行的应用调用与接收记录，不代表 Provider 接收确认或页面验收通过；父任务累计额度见任务预算。</p>
-  </section>;
+    </div>
+  </details>;
 }

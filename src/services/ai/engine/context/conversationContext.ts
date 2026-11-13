@@ -5,7 +5,7 @@ interface ConversationEntry {
   displayText?:string;
   screenName?:string;
   htmlOutput?:string;
-  isGenerating?:boolean;
+  isGenerating?:boolean;isError?:boolean;
 }
 /** Retain recent language context; page snapshots, never historical generated HTML, are authoritative. */
 export function buildConversationContext(entries:ConversationEntry[]):EngineMessage[] {
@@ -14,6 +14,7 @@ export function buildConversationContext(entries:ConversationEntry[]):EngineMess
   for(const entry of [...entries].reverse()){
     if(entry.isGenerating||history.length>=8||remaining<=0)continue;
     let content=entry.displayText||entry.text;
+    if(entry.sender==='assistant'&&entry.isError){if(history.some(m=>m.content==='上一轮执行失败，未应用结果；本次按冻结要求及当前页面来源处理。'))continue;content='上一轮执行失败，未应用结果；本次按冻结要求及当前页面来源处理。';}
     if(entry.sender==='assistant'&&(entry.htmlOutput||content.includes('<artifact'))){
       content=entry.screenName?`上一轮已处理页面：${entry.screenName}`:'上一轮已返回页面设计；以当前页面快照为准。';
     }

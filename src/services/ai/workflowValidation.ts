@@ -11,6 +11,7 @@ import {analyzePipelineIntent} from './engine/pipeline/interceptors/intentInterc
 import {guidancePacketIssue} from './designKnowledge/receipt';
 import {pageTaskPlanIssue} from './pageTaskPlan';
 import {isTaskContractShape} from './taskContractShape';
+import {buildPageRedesignSource} from './pageRedesignSource';
 
 export interface WorkflowValidationPlan {version:1;workflowId:string;fingerprint:string;stages:WorkflowValidationStage[]}
 export interface WorkflowStageCheck {id:WorkflowValidationStage;status:'passed'|'blocked'|'pending';message:string}
@@ -77,6 +78,24 @@ export function isWorkflowValidationReport(value:unknown):value is WorkflowValid
 
 /** Recompute structure authorization against the actual baseline; stored model diagnostics are never proof. */
 export function inspectWorkflowStructure(contract:DesignTaskContract,baseline:string,html:string,policy:MobileNavigationPolicy):{passed:boolean;message:string} {
+  // Reflow permission belongs to a complete, current page inventory, never to a
+  // boolean carried by the model or an element-scoped modification.
+  const redesign=contract.wholePageRedesign;
+  if(redesign!==undefined){
+    if(contract.operation!=='modify'||contract.strategy!=='candidate-copy'||!contract.target||contract.elementNid||
+      contract.allowedChanges.length!==1||contract.allowedChanges[0]!==`screen:${contract.target.id}`||
+      contract.target.baselineFingerprint!==contentFingerprint(baseline)||
+      policy.deviceProfile!==undefined&&policy.deviceProfile!==contract.device.profile||
+      !redesign||redesign.version!==1||Object.keys(redesign).length!==3)
+      return {passed:false,message:'整页重设计授权与当前页面、设备或修改范围不匹配。'};
+    try{
+      const source=buildPageRedesignSource(baseline,{...policy,deviceProfile:contract.device.profile,protectedNids:contract.protectedNids});
+      if(source.sourceFingerprint!==redesign.sourceFingerprint||contentFingerprint(JSON.stringify(source))!==redesign.inventoryFingerprint)
+        return {passed:false,message:'整页重设计的业务来源或保护范围已变化。'};
+    }catch{
+      return {passed:false,message:'整页重设计业务清单无法核验，请重新确认来源及保护范围。'};
+    }
+  }
   const before=normalizeMobileNavigation(baseline,policy).html,after=normalizeMobileNavigation(html,policy).html;
   if(contract.operation==='restyle'){
     const diff=compareStructure(before,after);return {passed:diff.ok,message:diff.reason??'纯润色元素树检查通过。'};
@@ -99,7 +118,7 @@ export function inspectWorkflowStructure(contract:DesignTaskContract,baseline:st
   }
   const input={rawPrompt:contract.request,activeScreenId:contract.target!.id,decision:{intent:'modify_screen' as const,targetScreenId:contract.target!.id,reason:'合同已裁决'}};
   const analysis=analyzePipelineIntent(input);
-  const check=checkStructureIntegrity({input,intent:'modify_screen',intentReason:'合同已裁决',hasExplicitStructuralChangeIntent:analysis.hasExplicitStructuralChangeIntent,
+  const check=checkStructureIntegrity({input,intent:'modify_screen',intentReason:'合同已裁决',hasExplicitStructuralChangeIntent:analysis.hasExplicitStructuralChangeIntent||Boolean(redesign),wholePageRedesign:Boolean(redesign),
     targetScreen:{id:contract.target!.id,name:contract.target!.name,htmlContent:before,isSkeleton:false},referencedScreens:[],unmatchedMentions:[],
     activeRules:[],activeDecisions:[],assembledMessages:[],estimatedChars:0,isContextTrimmed:false,warnings:[]},after);
   return {passed:check.passed,message:check.reason??'页面结构符合本次授权。'};

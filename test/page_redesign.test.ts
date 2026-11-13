@@ -1,5 +1,16 @@
+import {fixtureBusinessOwners} from './helpers/businessOwners';
+import {saveQualityDraft,loadQualityDrafts} from '../src/services/storage/qualityDraftRepository';
+import {parseHtmlCopy} from '../src/utils/htmlDocument';
 import {expect,test} from 'bun:test';
 import {buildPageRedesignSource,inspectRedesignContent,mergeRedesignBody,explicitlyRequestsPageRedesign} from '../src/services/ai/pageRedesignSource';
+test('唯一同名且属性完整的复选框可匹配重建节点，丢失规则或候选歧义仍阻断',()=>{
+ const baseline='<main><input data-nid="old" type="checkbox" checked aria-label="同意展示微信号"></main>';
+ const source=buildPageRedesignSource(baseline,{deviceProfile:'pc'});
+ const next='<main><input data-nid="new" type="checkbox" checked aria-label="同意展示微信号"></main>';
+ expect(inspectRedesignContent(source,next,'调整布局',baseline).some(f=>f.code==='redesign_control_missing')).toBe(false);
+ expect(inspectRedesignContent(source,next.replace(' checked',''),'调整布局',baseline).some(f=>f.severity==='error')).toBe(true);
+ expect(inspectRedesignContent(source,next.replace('</main>','<input type="checkbox" checked aria-label="同意展示微信号"></main>'),'调整布局',baseline).some(f=>f.code==='redesign_control_missing')).toBe(true);
+});
 import {PipelineExecutor,type ExecutePipelineOptions} from '../src/services/ai/engine/pipeline/executor';
 import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
 import {MockTransport} from '../src/services/ai/engine/transport/mockTransport';
@@ -35,11 +46,11 @@ function fixture(size=50000){
  const options:ExecutePipelineOptions={input:{rawPrompt:'保留全部业务信息，重新设计整页',activeScreenId:'source',decision:{intent:'modify_screen',targetScreenId:'source',reason:'用户明确要求整页重设计'}},provider,model:'test',engineCore:core,screens:{source:{id:'source',name:'资料页',htmlContent:html,scopedCss:'.source-field{padding:17px}'}},overrides:{'source:save':{nid:'save',declarations:{height:'44px'}}},protectedNids:['save'],deviceProfile:'mobile',frameWidth:390,baseSystemPrompt:'本地合成测试',wholePageRedesign:true,writeStrategy:'auto'};
  return {html,transport,calls,options};
 }
-function queue(f:ReturnType<typeof fixture>,body=pieces){f.transport.queueResponse(JSON.stringify(plan),1);f.transport.queueResponse(JSON.stringify(composition),1);body.forEach(piece=>f.transport.queueResponse(artifact(piece),1));}
+function queue(f:ReturnType<typeof fixture>,body=pieces){f.transport.queueResponse(JSON.stringify(plan),1);f.transport.queueResponse(JSON.stringify(composition),1);f.transport.queueResponse(JSON.stringify(fixtureBusinessOwners(f.html)),1);body.forEach(piece=>f.transport.queueResponse(artifact(piece),1));}
 
 for(const size of [30000,50000,100000])test(`${size}-character layout redesign uses full business inventory, three planned patches and baseline-owned head`,async()=>{
  const f=fixture(size);queue(f);const result=await PipelineExecutor.execute(f.options);if(result.status!=='staged_side_by_side')throw Error(`调用${f.calls.length}次：${result.errorMessage}`);expect(result.status).toBe('staged_side_by_side');
- expect(f.calls).toHaveLength(5);expect(result.taskBudget?.requests).toBe(5);expect(result.workflowContract?.pageWriteStrategy?.mode).toBe('SectionedPatch');expect(result.workflowContract?.wholePageRedesign?.sourceFingerprint).toBe(contentFingerprint(f.html));expect(result.sectionedCheckpoint).toBeUndefined();
+ expect(f.calls).toHaveLength(6);expect(result.taskBudget?.requests).toBe(6);expect(result.workflowContract?.pageWriteStrategy?.mode).toBe('SectionedPatch');expect(result.workflowContract?.wholePageRedesign?.sourceFingerprint).toBe(contentFingerprint(f.html));expect(result.sectionedCheckpoint).toBeUndefined();
  const sent=JSON.stringify(f.calls);expect(sent).not.toContain('legacy-layout-legacy-layout');expect(sent).toContain('complete-business-inventory');expect(sent).toContain('source-field');expect(sent).toContain('44px');
  const before=new DOMParser().parseFromString(f.html,'text/html'),after=new DOMParser().parseFromString(result.extractedHtml!,'text/html');expect(before.head.isEqualNode(after.head)).toBe(true);expect(after.body.getAttribute('data-source')).toBe('baseline');expect(after.body.className).toBe('original');for(let i=1;i<=7;i++)expect(after.body.textContent).toContain(`业务信息${i}`);expect(after.querySelector('[data-nid="save"]')?.outerHTML).toBe(before.querySelector('[data-nid="save"]')?.outerHTML);expect(f.options.screens.source.htmlContent).toBe(f.html);
  expect(validContextManifest(result.workflowContract?.contextManifest)).toBe(true);const records=result.workflowContract!.contextManifest!.sources;expect(records.find(row=>row.id==='source')?.status).toBe('summary');expect(records.find(row=>row.id==='source:business')).toMatchObject({required:true,status:'full'});expect(capturePageTaskHistory(result.workflowContract,f.options.input.rawPrompt)).toBeDefined();
@@ -91,9 +102,39 @@ test('node ids mentioned as preservation notes do not turn confirmed whole-page 
 });
 
 test('a failed region preserves only completed work and continues within the same original ledger',async()=>{
- const f=fixture(),budget=createChatTaskBudget(true);f.options.taskBudget=budget;f.options.pageTaskPlanning={};f.transport.queueResponse(JSON.stringify(plan),1);f.transport.queueResponse(JSON.stringify(composition),1);f.transport.queueResponse(artifact(pieces[0]),1);
+ const f=fixture(),budget=createChatTaskBudget(true);f.options.taskBudget=budget;f.options.pageTaskPlanning={};f.transport.queueResponse(JSON.stringify(plan),1);f.transport.queueResponse(JSON.stringify(composition),1);f.transport.queueResponse(JSON.stringify(fixtureBusinessOwners(f.html)),1);f.transport.queueResponse(artifact(pieces[0]),1);
  f.transport.enqueueScenario({events:[{type:'Error',kind:'network_error',message:'temporary'}],delayMs:1});
- const failed=await PipelineExecutor.execute(f.options);expect(failed.status).toBe('error');expect(failed.sectionedCheckpoint?.completed).toHaveLength(1);expect(failed.workflowContract?.contextManifest).toBeDefined();expect(budget.snapshot().requests).toBe(4);
+ const failed=await PipelineExecutor.execute(f.options);expect(failed.status).toBe('error');expect(failed.sectionedCheckpoint?.completed).toHaveLength(1);expect(failed.workflowContract?.contextManifest).toBeDefined();expect(budget.snapshot().requests).toBe(5);
  f.transport.queueResponse(artifact(pieces[1]),1);f.transport.queueResponse(artifact(pieces[2]),1);
- const continued=await PipelineExecutor.execute({...f.options,writeStrategy:undefined,sectioned:{resume:failed.sectionedCheckpoint},resumeContract:failed.workflowContract,pageTaskPlanning:{snapshot:failed.workflowContract!.pageTaskPlan}});budget.close();expect(continued.status).toBe('staged_side_by_side');if(continued.status!=='staged_side_by_side')throw Error(continued.errorMessage);expect(budget.snapshot().requests).toBe(6);expect(f.calls).toHaveLength(6);expect(continued.extractedHtml).toContain('source-identity');expect(continued.extractedHtml).toContain('业务信息7');
+ const continued=await PipelineExecutor.execute({...f.options,writeStrategy:undefined,sectioned:{resume:failed.sectionedCheckpoint},resumeContract:failed.workflowContract,pageTaskPlanning:{snapshot:failed.workflowContract!.pageTaskPlan}});budget.close();expect(continued.status).toBe('staged_side_by_side');if(continued.status!=='staged_side_by_side')throw Error(continued.errorMessage);expect(budget.snapshot().requests).toBe(7);expect(f.calls).toHaveLength(7);expect(continued.extractedHtml).toContain('source-identity');expect(continued.extractedHtml).toContain('业务信息7');
+});
+
+test('唯一主按钮明确重命名按确认的新文案核验，不扩展其它文本删除授权',()=>{
+ const old='<main><h1 data-nid="title">保留标题</h1><button data-nid="cta" class="btn-primary">先去完善</button></main>';
+ const source=buildPageRedesignSource(old,{deviceProfile:'pc'}),next='<main><h1 data-nid="title">保留标题</h1><button class="btn-primary">保存并完善</button></main>';
+ expect(inspectRedesignContent(source,next,'将主按钮文案改为“保存并完善”',old)).toEqual([]);
+ expect(inspectRedesignContent(source,next,'不要将主按钮文案改为“保存并完善”',old).some(f=>f.code==='redesign_content_missing')).toBe(true);
+ expect(inspectRedesignContent(source,next.replace('保留标题','别的标题'),'将主按钮文案改为“保存并完善”',old).some(f=>f.nid==='title')).toBe(true);
+});
+
+test('整页分区草稿逐项确认文案后只修复一个区域，合同随失败重开和候选复验保留',async()=>{
+ const f=fixture(),body=[...pieces];f.html=f.html.replace('业务信息4</p>','原有进度摘要</p>');f.options.screens.source.htmlContent=f.html;
+ // Give the original business text a stable identity, independent of its reconstructed target.
+ f.html=f.html.replace('<p>原有进度摘要</p>','<p data-nid="oldhint">原有进度摘要</p>');f.options.screens.source.htmlContent=f.html;
+ body[1]=body[1].replace('业务信息4</p>','新进度摘要</p>').replace('<p>新进度摘要</p>','<p data-nid="newhint">新进度摘要</p>');queue(f,body);
+ const first=await PipelineExecutor.execute(f.options);expect(first.status).toBe('rejected_by_quality');const draft=first.failedDraft!,original=draft.html;
+ const region=parseHtmlCopy(draft.html).doc.querySelector('[data-nid="newhint"]')!.parentElement!.getAttribute('data-nid')!;
+ const change={sourceNid:'oldhint',targetNid:'newhint',before:'原有进度摘要',after:'新进度摘要'};
+ const nextOptions={...f.options,pageTaskPlanning:{snapshot:first.workflowContract!.pageTaskPlan},qualityRepair:{draft,labels:[],region:{nids:[region],instruction:'按逐项确认保留新的进度摘要，其他内容保持。',textChanges:[change]}}};
+ const failed=await PipelineExecutor.execute({...nextOptions,engineCore:{...f.options.engineCore,generateObject:async()=>({nid:region,html:`<section data-nid="${region}"><h2>功能4</h2><p data-nid="newhint">错误摘要</p></section>`})} as any});
+ if(failed.status==='error')throw Error(failed.errorMessage);expect(failed.status).toBe('rejected_by_quality');expect(failed.workflowContract?.businessTextReview?.changes).toHaveLength(1);
+ expect(failed.qualityReport?.findings.some(i=>i.code==='redesign_text_review_not_applied')).toBe(true);
+ const projectId='review-'+crypto.randomUUID(),saved={version:1 as const,id:'draft-'+crypto.randomUUID(),projectId,createdAt:Date.now(),draft:failed.failedDraft!,request:f.options.input.rawPrompt,projectContext:'synthetic',decision:{action:'modify_screen' as const,targetScreenId:'source',styleReferenceScreenId:null,elementNid:null,referenceSource:null,reason:'test'},status:'blocked' as const};
+ await saveQualityDraft(saved);expect((await loadQualityDrafts(projectId))[0].draft.pageTaskSource!.businessTextReview).toEqual(failed.workflowContract!.businessTextReview);
+ let invalidCalls=0;const invalid=await PipelineExecutor.execute({...nextOptions,qualityRepair:{...nextOptions.qualityRepair,region:{...nextOptions.qualityRepair.region,textChanges:[{...change,targetNid:'save'}]}},engineCore:{generateObject:async()=>{invalidCalls++;throw Error('不应调用');}} as any});expect(invalid.status).toBe('rejected_by_quality');expect(invalidCalls).toBe(0);
+ const loaded=(await loadQualityDrafts(projectId))[0];const again=await PipelineExecutor.execute({...nextOptions,qualityRepair:{draft:loaded.draft,labels:[],region:{nids:[region],instruction:'恢复已确认的新进度摘要。'}},engineCore:{generateObject:async()=>({nid:region,html:parseHtmlCopy(draft.html).doc.querySelector(`[data-nid="${region}"]`)!.outerHTML})} as any});expect(again.status).toBe('staged_side_by_side');expect(again.workflowContract?.businessTextReview).toEqual(failed.workflowContract!.businessTextReview);
+ let calls=0;const fixed=await PipelineExecutor.execute({...nextOptions,engineCore:{generateObject:async(_schema:any,o:any)=>{calls++;expect(JSON.stringify(o.messages)).toContain('confirmedTextChanges');const el=parseHtmlCopy(draft.html).doc.querySelector(`[data-nid="${region}"]`)!;return {nid:region,html:el.outerHTML};},streamText:()=>{throw Error('不应重新生成整页');}} as any});
+ if(fixed.status!=='staged_side_by_side')throw Error(fixed.errorMessage);expect(calls).toBe(1);expect(draft.html).toBe(original);expect(fixed.workflowContract?.request).toBe(first.workflowContract?.request);
+ expect(checkGenerationQuality(fixed.extractedHtml!,{baselineHtml:f.html,protectedNids:['save'],deviceProfile:'mobile',contentTask:fixed.workflowContract,wholePageRedesign:fixed.workflowContract!.wholePageRedesign}).passed).toBe(true);
+ const changed=fixed.extractedHtml!.replace('新进度摘要','另一段文案');expect(checkGenerationQuality(changed,{baselineHtml:f.html,protectedNids:['save'],deviceProfile:'mobile',contentTask:fixed.workflowContract,wholePageRedesign:fixed.workflowContract!.wholePageRedesign}).passed).toBe(false);
 });

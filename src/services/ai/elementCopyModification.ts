@@ -1,4 +1,5 @@
 import { mobileNavigationPrompt } from '../../utils/mobileNavigation';
+import {SCOPED_FORM_PRESENTATION_RULES} from './formPresentationRules';
 import type { AIEngineCore, StreamTextOptions } from './engine/core/types';
 import type { DesignSystem } from '../../types/designSystem';
 import { applyLocalCopyEdits } from './localCopyModification';
@@ -36,7 +37,7 @@ export async function generateElementCopyEdits(core: AIEngineCore, options: {
   }};
   const result = await core.generateObject<{requiresPageRewrite:boolean;reason:string;operations:unknown}>(schema,{
     provider:options.provider,model:options.model,signal:options.signal,maxTokens:2048,temperature:0.1,messages:[
-      {role:'system',content:`${mobileNavigationPrompt({ deviceProfile: options.device, useCustomNavigation: options.useCustomNavigation })}\n直接执行用户明确要求，不再分析或列建议，不生成HTML。只返回JSON Schema指定操作对象：${JSON.stringify(schema)}。
+      {role:'system',content:`${mobileNavigationPrompt({ deviceProfile: options.device, useCustomNavigation: options.useCustomNavigation })}\n${SCOPED_FORM_PRESENTATION_RULES}\n直接执行用户明确要求，不再分析或列建议，不生成HTML。只返回JSON Schema指定操作对象：${JSON.stringify(schema)}。
 仅修改授权nid（引用根及子树），保留结构、业务文字、数量、链接、aria与组件元数据。${allowText ? 'set_text只改用户明确要求的纯文本。' : '本轮禁止set_text，样式需求不得修改文案或数量。'}
 add_classes/remove_classes仅使用基座白名单；set_styles的value为CSS声明列表（如width:28px;height:28px），remove_styles为属性名列表（如width;height）。仅允许width/height及min/max、font-size/line-height、padding/margin及四边、position/top/right/bottom/left、display/align-items/justify-content/gap/flex-shrink/transform:none。字号不能小于8px。颜色通过Token基座类，禁止URL、脚本、任意属性、!important、全局样式。每个属性仅设置或移除一次，最多12项操作。
 font-size只用8到96px或现有font-size Token，不用相对单位或calc。width/height/max-width/max-height只能用正尺寸、非零尺寸Token或auto/none，不用零尺寸或calc。

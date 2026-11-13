@@ -1,3 +1,4 @@
+import {waitUntil} from './helpers/waitUntil';
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
@@ -143,7 +144,7 @@ describe('局部模式选择与实际接线', () => {
     let resolve!:(value:any)=>void;
     objects.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
     let pending!:Promise<void>;
-    await act(async()=>{pending=engine.confirmModification(next.id,['suggestion-1'],'同时加粗','local');});
+    await act(async()=>{pending=engine.confirmModification(next.id,['suggestion-1'],'同时加粗','local');await waitUntil(()=>typeof resolve==='function');});
     act(()=>useProjectStore.getState().updateScreenHtml(id,original+'<p>人工更新</p>'));
     await act(async()=>{resolve({requiresPageRewrite:false,reason:'',operations:[{nid:'title',type:'add_classes',value:'font-bold'}]});await pending;});
     expect(useProjectStore.getState().stagedScreen).toBeNull();

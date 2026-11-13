@@ -1,6 +1,6 @@
 import {expect,test} from 'bun:test';
 import {prepareModelRequest} from '../src/services/ai/engine/core/protocolAdapter';
-import {restyleThinkingOptions} from '../src/services/ai/thinkingPolicy';
+import {artifactThinkingOptions as restyleThinkingOptions} from '../src/services/ai/structuredRequestPolicy';
 const provider={id:'ali',name:'Ali',protocol:'openai_compatible' as const,baseUrl:'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',apiKey:'test',isEnabled:true};
 test('restyle-only thinking switch survives both request body and legacy proxy options',()=>{
  const policy=restyleThinkingOptions(provider,'qwen3.8-flash');expect(policy).toEqual({enableThinking:false});

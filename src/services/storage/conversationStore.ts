@@ -46,7 +46,7 @@ export interface ConversationTurn {
     /** Original broad review request; text remains the exact confirmed execution scope. */
     reviewRequest?:string;
     /** Display provenance only; restoration never enables a reference or execution decision. */
-    reference?:{screen:{id:string;name:string};element:{nid:string;tagName:string}};
+    reference?:{screen:{id:string;name:string};element?:{nid:string;tagName:string}};
     /** 附件只存 relPath，绝不存 base64 原文 (T-AE-32) */
     attachments?: string[];
     /** 本轮读取过的文本资料名称/路径，不重复存储正文。 */
@@ -61,6 +61,7 @@ export interface ConversationTurn {
     usage?: { inputTokens?: number; outputTokens?: number };
     durationMs?: number;
     aborted?: boolean;
+    failure?:import('./conversationFailure').ConversationFailure;
   };
   intent?: string;
   changeSet?: ChangeSet;
@@ -128,13 +129,17 @@ export class ConversationStore {
   appendTurn(turn: ConversationTurn): Promise<boolean> {
     try{const copy=structuredClone(turn);return enqueue(this.storage,()=>this.append(copy));}catch{return Promise.resolve(false);}
   }
-  private async append(turn:ConversationTurn):Promise<boolean>{
+  appendTurnIfAbsent(turn:ConversationTurn):Promise<boolean>{
+    try{const copy=structuredClone(turn);return enqueue(this.storage,()=>this.append(copy,true));}catch{return Promise.resolve(false);}
+  }
+  private async append(turn:ConversationTurn,unique=false):Promise<boolean>{
     try {
       if(!readConversationTurn(turn))return false;
       const shard = shardIdFor(turn.ts);
       await this.storage.ensureDir(CONV_DIR);
       // Recover before append, so the newly appended turn is not counted twice.
       const index = await this.readIndex();
+      if(unique)for(const month of new Set([shard,...index.shards.map(row=>row.shard)]))if((await this.storage.readAllLines(shardPath(month))).some(line=>this.parse(line)?.turnId===turn.turnId))return true;
       await this.storage.appendLine(shardPath(shard), JSON.stringify(turn));
       const existing = index.shards.find((s) => s.shard === shard);
       if (existing) {
@@ -253,7 +258,7 @@ export class ConversationStore {
       const summaries = lines
         .map((l) => this.parse(l))
         .filter((t): t is ConversationTurn => t !== null)
-        .map((t) =>
+        .map((t) => t.assistant.failure?JSON.stringify(t):
           JSON.stringify({
             turnId: t.turnId,
             ts: t.ts,

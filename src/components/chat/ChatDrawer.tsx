@@ -1,3 +1,5 @@
+import {ReferenceEvidenceCard} from './ReferenceEvidenceCard';
+import {HistoricalFailureCard} from './HistoricalFailureCard';
 import {DesignTaskRecords} from './DesignTaskRecords';
 import {UnfinishedDesignNotice} from './UnfinishedDesignNotice';
 import {OPEN_DESIGN_TASKS_EVENT} from '../../services/desktop/designTaskMenu';
@@ -97,6 +99,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   const [showTaskRecords,setShowTaskRecords]=useState(false);
   const [taskRecordsRevision,setTaskRecordsRevision]=useState(0);
   const [writeStrategy,setWriteStrategy]=useState<'auto'|'atomic'|'patch'>('auto');
+  const quickMenuRef = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => { if (quickMenuRef.current && !quickMenuRef.current.contains(event.target as Node)) quickMenuRef.current.open = false; };
+    const closeEscape = (event: KeyboardEvent) => { if (event.key === 'Escape' && quickMenuRef.current?.open) { quickMenuRef.current.open = false; quickMenuRef.current.querySelector('summary')?.focus(); } };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeEscape);
+    return () => { document.removeEventListener('pointerdown', closeOutside); document.removeEventListener('keydown', closeEscape); };
+  }, []);
   const [showMentionMenu, setShowMentionMenu] = useState(false);
   const [attachedImage, setAttachedImage] = useState<ImageAttachment | null>(null);
   const originalReference = useRef<ImageAttachment | null>(null), cropTicket=useRef(0);
@@ -560,7 +570,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   }, [activeStreamText]);
 
   return (
-    <div className="w-[340px] shrink-0 h-full bg-slate-900 border-r border-slate-800 flex flex-col z-20 select-text">
+    <div data-testid="ai-chat-panel" className="w-[390px] shrink-0 h-full bg-slate-900 border-r border-slate-800 flex flex-col z-20 select-text">
       {/* Header */}
       <div className="p-3 border-b border-slate-800 flex items-center justify-between text-xs">
         <div className="flex items-center gap-1.5 min-w-0">
@@ -789,15 +799,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
               {/* Collapsible Thinking & Feedback Accordion (PRD §3.2) */}
               {m.sender === 'assistant' && (m.thinkingStage !== undefined && m.thinkingStage > 0) && (
-                <div className="rounded-xl border border-slate-800 bg-slate-950/80 overflow-hidden text-xs transition-all shadow-sm">
+                <div className="rounded-lg border border-slate-800 bg-slate-950/80 overflow-hidden text-[11px] leading-4 transition-all shadow-sm">
                   {/* Summary Header */}
                   <button
                     type="button"
                     onClick={() => toggleThinkingExpand(m.id)}
-                    className="w-full px-3 py-2 flex items-center justify-between hover:bg-slate-900/80 transition text-left cursor-pointer group select-none"
+                    aria-expanded={isExpanded}
+                    className="w-full px-2 py-1.5 flex items-center justify-between hover:bg-slate-900/80 transition text-left cursor-pointer group select-none"
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-5 h-5 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <div className="w-4 h-4 rounded bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
                         {isCurrentGenerating ? (
                           <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
                         ) : m.isStopped ? (
@@ -837,7 +848,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
                   {/* Collapsed Brief Preview */}
                   {!isExpanded && (
-                    <div className="px-3 pb-2 pt-0.5 flex items-center gap-1.5 text-[10px] text-slate-400 overflow-hidden">
+                    <div className="px-2 pb-1.5 flex items-center gap-1.5 text-[10px] leading-3 text-slate-400 overflow-hidden">
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
                       <span className="truncate">
                         {m.isGenerating?m.generationProgress??executionPhaseLabels[m.executionEvents?.at(-1)?.phase??'preparing']:m.isStopped?'请求已停止':m.isError||m.isGuardRejected?'结果未应用，请查看原因':'请求已结束，请查看结果与检查记录'}
@@ -847,7 +858,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
                   {/* Expanded Detailed Steps & Feedback */}
                   {isExpanded && (
-                    <div className="p-3 pt-1 border-t border-slate-800/80 space-y-2.5 bg-slate-900/40">
+                    <div className="p-2 pt-1.5 border-t border-slate-800/80 space-y-2 bg-slate-900/40">
                       <div className="space-y-2">
                         {thinkingSteps.map((step, idx) => (
                           <div key={idx} className="flex items-start gap-2 text-[11px]">
@@ -1147,12 +1158,15 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               <PageTaskPlanCard contract={m.workflowContract??m.historicalPageTask?.contract}/>
               <PageTaskCoverageCard contract={m.workflowContract} html={m.htmlOutput}/>
               <TaskBudgetCard value={m.taskBudget}/>
+              <ReferenceEvidenceCard evidence={m.referenceEvidence??m.workflowContract?.referenceImage?.evidence} reused={m.referenceReused} busy={engine.isGenerating} onCorrect={text=>engine.retryTurn(m.id,{referenceCorrection:text})}/>
               <RequestActivityCard activity={m.executionActivity} running={m.isGenerating||m.qualityDraftBusy}/>
+              {m.historicalFailure&&<HistoricalFailureCard failure={m.historicalFailure} busy={engine.isGenerating} onReuse={()=>{setInput(m.historicalFailureRequest??'');textareaRef.current?.focus();}}/>}
+              {m.failureHistoryState&&<p role="status" className={`text-[10px] ${m.failureHistoryState==='failed'?'text-amber-300':'text-slate-500'}`}>{m.failureHistoryState==='saved'?'失败记录已保存到对话历史。':'失败记录未能保存，请检查工程目录与存储空间。'}</p>}
               {m.isGenerating&&m.generationProgress&&<p role="status" className="text-[11px] leading-relaxed text-sky-300/80">{m.generationProgress}</p>}
               {m.qualityReport && <QualityReportCard report={m.qualityReport} onLocate={m.screenId && m.htmlOutput && screens[m.screenId]?.htmlContent === m.htmlOutput
                 ? nid => handleLocateAuditTarget({type:'element',screenId:m.screenId!,screenName:screens[m.screenId!]!.name,label:'检查发现',nid}) : undefined}/>}
               {m.qualityDraft && <FailedDraftCard value={m.qualityDraft} saved={m.qualityDraftSaved} busy={engine.isGenerating||m.qualityDraftBusy} notice={m.qualityDraftNotice}
-                onSuggest={()=>engine.suggestQualityTurn(m.id)} onRepair={labels=>engine.repairQualityTurn(m.id,labels)} onRegenerate={()=>engine.retryTurn(m.id)}/>}
+                onSuggest={()=>engine.suggestQualityTurn(m.id)} onRepair={(labels,region)=>engine.repairQualityTurn(m.id,labels,region)} onRegenerate={()=>engine.retryTurn(m.id)}/>}
               {m.creationRepairNotice&&<p role="status" className="rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-2 text-[11px] leading-relaxed text-emerald-300">{m.creationRepairNotice}</p>}
 
               {/* Text / Result Bubble */}
@@ -1494,7 +1508,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       )}
                       {(m.text?.includes('数据流传输超时') || m.text?.includes('[timeout]')) && (
                         <div className="text-[10px] text-amber-400/90 bg-amber-950/40 p-1.5 rounded border border-amber-900/60 leading-relaxed">
-                          💡 提示：模型连续 90 秒未返回任何数据分片。若当前模型响应较慢或处理图片超时，建议在右上角指派更高效的模型；如附带了参考图，也可尝试“仅重试文字要求”。
+                          💡 提示：模型在无活动时限内未返回数据分片。若当前模型响应较慢或处理图片超时，建议在右上角指派更高效的模型；参考图已解析时可复用解析结果继续；尚未解析时，忽略图片会丢失图中未写明的细节。
                         </div>
                       )}
                       {m.text?.includes('结构化输出达到输出上限') && (
@@ -1539,11 +1553,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                               type="button"
                               onClick={() => engine.retryTurn(m.id, { withoutAttachment: true })}
                               className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] transition cursor-pointer"
-                              title="跳过参考图仅发送文字要求，排查是否由于模型解析大图超时导致假死"
+                              title={m.referenceEvidence||m.workflowContract?.referenceImage?.evidence?'保留已解析的字段、布局及功能规划，后续代码请求不重复发送图片':'放弃尚未解析的图片内容，仅按文字重新设计；不会保留图中未写明的细节'}
                             >
-                              <span>仅重试文字要求 (不附图)</span>
+                              <span>{m.referenceEvidence||m.workflowContract?.referenceImage?.evidence?'继续生成（保留图片解析）':'忽略图片，按文字重新设计'}</span>
                             </button>
                           )}
+                          {m.originalAttachment&&Boolean(m.referenceEvidence||m.workflowContract?.referenceImage?.evidence)&&<button type="button" onClick={()=>engine.retryTurn(m.id,{reparseReference:true})} className="px-2.5 py-1 rounded-lg border border-slate-700 text-slate-200 text-[11px]" title="重新观察原图并重新规划，不使用旧解析缓存">重新解析参考图</button>}
                           {m.preActionSnapshot && (
                             <button
                               type="button"
@@ -1922,7 +1937,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         )}
 
         {/* 快捷输入 (Quick Prompts) —— 点击快速插入到输入框（不提交）*/}
-        <div className="mb-2">
+        <div className="mb-2 flex items-center justify-between gap-2 text-[10px] text-slate-400">
+          <label className="flex items-center gap-1.5" title="自动按功能规模和容量选择生成方式。">
+            <span>生成方式</span><select aria-label="生成方式" value={writeStrategy} disabled={engine.isGenerating} onChange={e=>setWriteStrategy(e.target.value as typeof writeStrategy)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5"><option value="auto">自动选择</option><option value="atomic">主体一次写入</option><option value="patch">分区补丁（最多3区域）</option></select>
+          </label>
+          <details ref={quickMenuRef} className="relative">
+            <summary className="cursor-pointer list-none flex items-center gap-1 rounded border border-slate-700 px-2 py-1 hover:bg-slate-800 text-slate-300"><Sparkles className="w-3 h-3 text-amber-400" />快捷输入</summary>
+        <div className="absolute bottom-full right-0 mb-2 z-30 w-[300px] max-w-[calc(100vw-2rem)] rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl">
           {/* Header row: title and settings config button */}
           <div className="flex items-center justify-between pb-1 text-[10px] text-slate-400 font-medium">
             <div className="flex items-center gap-1">
@@ -1932,7 +1953,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             </div>
             <button
               type="button"
-              onClick={() => onOpenSettings?.('quick_prompts')}
+              onClick={() => { if (quickMenuRef.current) quickMenuRef.current.open = false; onOpenSettings?.('quick_prompts'); }}
               className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-slate-400 hover:text-blue-300 hover:bg-slate-800 rounded border border-dashed border-slate-700 hover:border-blue-500/50 transition"
               title="自定义与配置快捷输入"
             >
@@ -1962,10 +1983,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             ))}
           </div>
         </div>
-
-        <label className="mb-2 flex items-center gap-1.5 text-[10px] text-slate-400" title="自动按功能规模和容量选择：普通主体一次写入，4–6区块先规划再一次写入，复杂页最多3个目标区域补丁；全部检查通过后仍交付同一页。">
-          <span>生成方式</span><select aria-label="生成方式" value={writeStrategy} disabled={engine.isGenerating} onChange={e=>setWriteStrategy(e.target.value as typeof writeStrategy)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5"><option value="auto">自动选择</option><option value="atomic">主体一次写入</option><option value="patch">分区补丁（最多3区域）</option></select>
-        </label>
+          </details>
+        </div>
         <div className="relative flex items-center gap-1.5">
           <button
             type="button"

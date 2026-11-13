@@ -1,3 +1,4 @@
+import type {PrepareGeneratedHtml} from './generatedMedia';
 import type {PageComposition} from './pageComposition';
 import {sumTokenUsage} from './tokenUsage';
 import {assertExternalMedia,embeddedMediaIssue} from './externalMedia';
@@ -69,7 +70,7 @@ export function mergeSectionParts(plan:SectionPlan,parts:Array<{id:string;html:s
     seen.add(part.id);
     if(/^\s*(?:<!doctype|<html(?:\s|>))/i.test(part.html))throw Error('区块不能重新开始完整页面。');
     const fragment=parseHtmlCopy(part.html);
-    if(fragment.doc.querySelector('style,link,title,head > *,[data-design-slot]'))throw Error('区块不得重定义全局样式或声明其它插槽。');
+    if(fragment.doc.querySelector('style,link,head > *,[data-design-slot]')||Array.from(fragment.doc.querySelectorAll('title')).some(el=>el.namespaceURI!=='http://www.w3.org/2000/svg'))throw Error('区块不得重定义全局样式或声明其它插槽。');
     assignIds(fragment.doc,used);
     const slot=Array.from(copy.doc.querySelectorAll('[data-design-slot]')).find(el=>el.getAttribute('data-design-slot')===part.id);
     if(!slot)throw Error('区块对应插槽不存在。');
@@ -80,7 +81,7 @@ export function mergeSectionParts(plan:SectionPlan,parts:Array<{id:string;html:s
 }
 const checkpointFingerprint=(value:Omit<SectionedCheckpoint,'fingerprint'>)=>contentFingerprint(JSON.stringify(value));
 
-export async function generateSectionedPage(core:AIEngineCore,options:StreamTextOptions,contextKey:string,callbacks:{preplanned?:SectionPlan;sectionTokenCaps?:Record<string,number>;remainingOutputTokens?:()=>number;reservedOutputTokens?:number;resume?:SectionedCheckpoint;isCurrent?:()=>boolean;onProgress?:(message:string)=>void;onRequest?:(messages:EngineMessage[])=>void;onCheckpoint?:(plan:SectionPlan,completed:Array<{id:string;html:string}>)=>Promise<void>;initialCompleted?:Array<{id:string;html:string}>}={}):Promise<SectionedResult> {
+export async function generateSectionedPage(core:AIEngineCore,options:StreamTextOptions,contextKey:string,callbacks:{prepareGeneratedHtml?:PrepareGeneratedHtml;preplanned?:SectionPlan;sectionTokenCaps?:Record<string,number>;remainingOutputTokens?:()=>number;reservedOutputTokens?:number;resume?:SectionedCheckpoint;isCurrent?:()=>boolean;onProgress?:(message:string)=>void;onRequest?:(messages:EngineMessage[])=>void;onCheckpoint?:(plan:SectionPlan,completed:Array<{id:string;html:string}>)=>Promise<void>;initialCompleted?:Array<{id:string;html:string}>}={}):Promise<SectionedResult> {
   const result:SectionedResult={rawResponse:'',warnings:[],continuationCount:0,usage:{inputTokens:0,outputTokens:0},requestedOutputTokens:0};
   const bindingKey=continuationBindingKey(options),resume=callbacks.resume;
   let plan:SectionPlan|undefined,completed:Array<{id:string;html:string}>=[],active:ContinuationCheckpoint|undefined;
@@ -135,9 +136,9 @@ export async function generateSectionedPage(core:AIEngineCore,options:StreamText
       callbacks.onProgress?.(`正在生成区块 ${index+1}/${plan.sections.length}：${section.name}；已完成 ${completed.length} 块…`);
       const reference=parseHtmlCopy(plan.shellHtml);
       for(const node of Array.from(reference.doc.querySelectorAll('[data-design-slot],[data-nid]'))){node.removeAttribute('data-design-slot');node.removeAttribute('data-nid');}
-      const messages=instruct(`只生成同一页面的本区块内容，以一个完整artifact包裹HTML片段，禁止解释。不要输出其它区块、公共骨架或全局style/link，不要输出data-design-slot或复制公共data-nid。区块id仅用于程序关联，不是需要输出的HTML属性。只使用项目基座和公共样式；保留本区块所有业务文案和有名称的操作控件，禁止工程/调试说明进入UI。公共骨架参考副本已去内部定位属性，仅作布局/风格参考，不得重新输出：\n${reference.serialize()}\n当前区块：${JSON.stringify(section)}\n其它区块名称（不用生成）：${plan.sections.filter(s=>s.id!==section.id).map(s=>s.name).join('、')}`,'section');
+      const messages=instruct(`只生成同一页面的本区块内容，以一个完整artifact包裹HTML片段，禁止解释。不要输出其它区块、公共骨架或全局style/link，不要输出data-design-slot或复制公共data-nid。区块id仅用于程序关联，不是需要输出的HTML属性。只使用项目基座和公共样式；保留本区块所有未经明确授权删除的业务文案、表单规则和操作控件，明确授权的文案变更按确认内容执行。用户要求在本页填写的字段应提供关联的可见label与input、select或textarea，不能仅用跳转按钮代替；明确只读的字段用dl/dt/dd逐项展示标签和值，或用关联label和readonly输入框，保留只读语义，不虚构可编辑状态。主操作须有可见名称；图标按钮应有可识别名称。禁止工程/调试说明进入UI。公共骨架参考副本已去内部定位属性，仅作布局/风格参考，不得重新输出：\n${reference.serialize()}\n当前区块：${JSON.stringify(section)}\n其它区块名称（不用生成）：${plan.sections.filter(s=>s.id!==section.id).map(s=>s.name).join('、')}`,'section');
       callbacks.onRequest?.(messages);
-      const response=await streamWithContinuation(core,{...options,messages,provenance:options.provenance?{...options.provenance,stepId:section.id}:undefined,maxTokens:perSection,jsonSchema:undefined},{resume:active,contextKey:`${contextKey}:${section.id}`,externalMediaOnly:plan.version===2,budget:{maxRequestedTokens:Math.min(8192,available,allocation??Infinity),continuationTokens:perSection,autoContinuations:1}});
+      const response=await streamWithContinuation(core,{...options,messages,provenance:options.provenance?{...options.provenance,stepId:section.id}:undefined,maxTokens:perSection,jsonSchema:undefined},{prepareGeneratedHtml:callbacks.prepareGeneratedHtml,resume:active,contextKey:`${contextKey}:${section.id}`,externalMediaOnly:plan.version===2,budget:{maxRequestedTokens:Math.min(8192,available,allocation??Infinity),continuationTokens:perSection,autoContinuations:1}});
       const previous=active?.previousContinuations??0;record(section.id,response);result.continuationCount+=Math.max(0,response.continuationCount-previous);active=response.checkpoint;guard();
       if(response.errorMessage)throw Error(response.errorMessage);
       const issue=structuredOutputIssue(response.finishReason,response.recoveredStreamError);

@@ -73,3 +73,16 @@ test('草稿身份注入避开原有nid，损坏建议记录不能导致重开�
  await storage.writeTextAtomic(`drafts/${value.id}.json`,JSON.stringify({...value,suggestions:'invalid'}));
  expect(await loadQualityDrafts(value.projectId)).toHaveLength(0);
 });
+
+test('区域草稿修复沿原Pipeline复验，拒绝修复失败版本且不重新生成整页',async()=>{
+ const source='<main class="container-max"><section data-nid="repair"><h2>操作</h2><button class="btn-primary"></button></section><section>'+Array.from({length:15},(_,i)=>`<p>保留${i}</p>`).join('')+'</section></main>';
+ const f=core(()=>`<artifact title="资料">${source}</artifact>`);
+ const options={input:{rawPrompt:'新建一个资料页面',activeScreenId:null,decision:{intent:'create_screen' as const,targetScreenId:null,reason:'test'}},provider:defaultProviders[0],model:'test',engineCore:f.value,screens:{},deviceProfile:'pc' as const,frameWidth:1440,baseSystemPrompt:'设计页面',designSystem:defaultTheme};
+ const first=await PipelineExecutor.execute(options);expect(first.failedDraft).toBeDefined();let requests=0;
+ f.value.generateObject=async()=>{requests++;return {nid:'repair',html:'<section data-nid="repair"><h2>操作</h2><button class="btn-primary">保存</button></section>'} as any;};
+ const fixed=await PipelineExecutor.execute({...options,qualityRepair:{draft:first.failedDraft!,labels:[],region:{nids:['repair'],instruction:'为主操作补充保存文案'}}});
+ expect(fixed.status).toBe('applied');expect(requests).toBe(1);expect(f.calls).toHaveLength(1);expect(fixed.extractedHtml).toContain('保留14');expect(fixed.executionRecord?.source).not.toBe('local-edit');
+ f.value.generateObject=async()=>({nid:'repair',html:'<section data-nid="repair"><h2>操作</h2><button class="btn-primary"></button></section>'} as any);
+ const blocked=await PipelineExecutor.execute({...options,qualityRepair:{draft:first.failedDraft!,labels:[],region:{nids:['repair'],instruction:'补齐操作'}}});
+ expect(blocked.status).toBe('rejected_by_quality');expect(blocked.failedDraft).toBeDefined();expect(blocked.extractedHtml).toBeUndefined();
+});

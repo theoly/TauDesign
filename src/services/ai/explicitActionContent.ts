@@ -2,7 +2,7 @@ import type {DesignTaskContract} from './designWorkflow';
 import type {QualityFinding} from './generationQuality';
 import {assessedFinding} from './findingPolicy';
 
-export type ContentTask = Pick<DesignTaskContract,'request'|'elementNid'|'multiPage'>;
+export type ContentTask = Pick<DesignTaskContract,'request'|'elementNid'|'multiPage'>&Partial<Pick<DesignTaskContract,'referenceImage'|'pageTaskPlan'|'businessTextReview'>>;
 export interface ExplicitActionText {text:string;nid?:string}
 export const actionTextSelector='button,a[href],[role="button"],input[type="submit"],input[type="button"]';
 const normalize=(text:string)=>text.normalize('NFC').replace(/\s+/g,' ').trim();

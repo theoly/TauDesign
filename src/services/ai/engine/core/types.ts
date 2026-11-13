@@ -25,6 +25,8 @@ export interface StreamTextOptions {
   signal?: AbortSignal;
   /** Task-scoped and serialized only for an explicitly supported model/endpoint. */
   enableThinking?: boolean;
+  /** Inactivity only; parent TaskBudget independently owns the total deadline. */
+  idleTimeoutMs?:number;
 }
 
 export interface TokenUsage {

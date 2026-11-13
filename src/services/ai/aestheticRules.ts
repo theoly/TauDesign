@@ -1,6 +1,7 @@
 import { mobileNavigationPrompt, normalizeMobileNavigation } from '../../utils/mobileNavigation';
 import { colorUsageRules } from '../../utils/semanticColors';
 import type { DeviceProfile } from '../../styles/baseCss';
+import {FORM_PRESENTATION_RULES} from './formPresentationRules';
 
 /**
  * 美学规则的设备分档注入 (A1 / T-AE-08, T-AE-09)。
@@ -14,30 +15,31 @@ import type { DeviceProfile } from '../../styles/baseCss';
  */
 
 /** 与设备无关的黄金视觉层级准则 (spec §1.1) */
-export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY — these rules are what separate a polished UI from a rough prototype):
-- 配色可见性与美观度：文字、图标和关键控件必须与实际背景清晰区分，严禁同色或近似色导致内容难以辨认。更换背景时同步检查并调整前景色；图片、渐变、半透明背景按叠加效果判断，必要时使用 Token 底色或遮罩。浅色/深色模式均须清晰可辨，并保持品牌色协调、语义一致和主次层级，不为柔和、低饱和或装饰效果牺牲可见性。
-- COLOR ROLES: 背景 bg，卡片 surface，分组 surface-alt；品牌强调约5–10%，集中于主操作/选中。普通指标/图标用中性色，语义色仅表示状态。主色文字用 .text-primary，主按钮用 .btn-primary；勿写死白字、蓝链接或整段彩色正文。
+export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY):
+- 配色可见性与美观度：文字、图标和关键控件必须与实际背景清晰区分，严禁同色或近似色导致内容难以辨认。更换背景时同步检查并调整前景色；图片、渐变、半透明背景按叠加效果判断，必要时用Token底色或遮罩。浅/深模式均保持品牌色协调、语义一致和主次层级，不为柔和、低饱和或装饰效果牺牲可见性。
+- COLOR ROLES: 背景bg、卡片surface、分组surface-alt；品牌约5–10%用于主操作/选中，普通指标/图标用中性，语义色表状态。.text-primary为主色文字，.btn-primary为主按钮；勿写死白字、蓝链接或整段彩色正文。
 - ${colorUsageRules()}
-- TYPOGRAPHY LADDER: 标题/正文/辅助三层，具体字号遵守设备档位与排版工艺。
-- SPACING RHYTHM: 组内.gap-1/.gap-2，卡片与章节间距按设备档位；组间大于组内。
-- ICONS: 按钮、输入框、指标卡与列表行须有 Lucide/Heroicons 风格内联SVG图标，class="icon"、stroke="currentColor"；无图标页面不合格。
-- REALISTIC CONTENT: 使用真实感中文姓名、电话、日期、金额和状态徽标；禁用“占位文字”/“Lorem ipsum”/“标题1”。
+- TYPE: 标题/正文/辅助三层，字号按设备与排版工艺。
+- SPACE: 组内.gap-1/.gap-2，组间更大，按设备档位。
+- ICONS: Lucide/Heroicons风格图标仅引用已登记外部文件，.icon/.icon-mask继承currentColor；禁止内联SVG、猜路径或符号占位。没有已登记资源时保留完整文字控件，不删功能。
+- CONTENT: 用真实感中文姓名/电话/日期/金额/状态，禁“占位文字”/“Lorem ipsum”/“标题1”。
 - 按钮文字默认不换行：.btn 已设 white-space: nowrap；不插入<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal 覆盖并调高按钮。
-- COMPONENT LAYOUT CONTRACT: .nowrap管flex换行，文字用.text-nowrap。标签.row.wrap.gap-2，不设.flex-1，空间不足整项换行。姓名单行、职业位于姓名下方，人物组可换行；润色不新增或移动节点。头像.avatar、装饰.icon-box，.icon留白对称。长文本.flex-1.min-w-0，地址/URL按需.break-words。禁缩裁文案或位移居中。长正文卡.col.gap-2独占宽度自然撑高。角标用.relative承载加.absolute锚定，禁覆盖标题正文。
-- STATUS & FEEDBACK: 状态用.badge-soft + 语义色；通知角标遵循组件契约，右上附着不遮图标或内容。`;
+- COMPONENT LAYOUT CONTRACT: .nowrap管flex、.text-nowrap管文字。标签.row.wrap.gap-2不设.flex-1，空间不足整项换行。姓名单行、职业位于姓名下方，人物组可换行；润色不新增或移动节点。头像.avatar、装饰.icon-box；.icon留白对称。长文.flex-1.min-w-0，地址/URL用.break-words；禁缩裁文案或位移居中。正文卡.col.gap-2独占宽度自然撑高。角标.relative+.absolute锚定，勿盖标题正文。
+- STATUS & FEEDBACK: 状态用.badge-soft + 语义色；通知角标遵循组件契约，右上附着不遮图标或内容。
+${FORM_PRESENTATION_RULES}`;
 
 /** Only new pages should proactively diversify repeated controls' business states. */
 export const NEW_SCREEN_STATE_RULES = `新页面同组控件多状态：尽量利用现有实例展示代表性不同状态，如输入框空值/已填/错误/禁用、选项未选/选中、按钮可用/加载/禁用。不额外堆砌控件；状态须与业务一致，互斥组最多一个选中；遵守用户指定状态和参考图，移动端不依赖hover。`;
 
 const PC_RULES = `DEVICE RULES — PC (1440px):
-- CONTENT WIDTH: Use .container-max (max 1200px, centered); NEVER stretch page content across 1440px.
-- Sections: .mt-8 / .mb-8; page: .p-6 / .p-8.
-- Cards: .p-5 / .p-6. Body: .text-sm (14px).
+- CONTENT WIDTH: .container-max最大1200px居中，勿横跨1440px。
+- Sections: .mt-8/.mb-8；页面.p-6/.p-8。
+- Cards: .p-5/.p-6；正文.text-sm(14px)。
 - Inputs: 40~44px.
-- Grids: .grid-2 / .grid-3 / .grid-4 are all appropriate for dense information.
-- HOVER: .card-hover for clickable cards, .row-hover for table rows, .link-hover for inline links.
-- Navigation: top bar and/or left sidebar.
-- SEMANTIC REGIONS: Decouple <aside class="sidebar">, .toolbar / .filter-bar, and <table>. Never emit white-on-white text.`;
+- Grids: 密集信息用.grid-2/.grid-3/.grid-4。
+- HOVER: 可点卡片.card-hover、表格行.row-hover、链接.link-hover。
+- Navigation: 顶栏或侧栏。
+- SEMANTIC REGIONS: <aside class="sidebar">、.toolbar/.filter-bar、<table>独立。Never emit white-on-white text.`;
 
 const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
 - SINGLE COLUMN ONLY for main content. No wide tables or desktop grids. Compact cards/actions/metrics may use .grid-2, .grid-3 or .row.gap-2 with .flex-1 if content fits; short labels follow COMPONENT LAYOUT CONTRACT. Long horizontal card lists use .scroll-x.

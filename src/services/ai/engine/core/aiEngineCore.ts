@@ -25,6 +25,11 @@ export class DefaultAIEngineCore implements AIEngineCore {
   public streamText(options: StreamTextOptions): StreamTextResult {
     const { transportRequest, estimatedInputChars,capacity } = prepareModelRequest(options);
 
+    const idleMs=options.idleTimeoutMs??90000;
+    if(!Number.isSafeInteger(idleMs)||idleMs<10||idleMs>180000)throw Error('无活动超时配置无效。');
+    let idleTimer:ReturnType<typeof setTimeout>|undefined;
+    let expireIdle=()=>{};
+    const activity=()=>{clearTimeout(idleTimer);idleTimer=setTimeout(()=>expireIdle(),idleMs);};
     let rawAccumulated = '';
     let settled = false;
     let finalUsage: TokenUsage | undefined;
@@ -92,6 +97,7 @@ export class DefaultAIEngineCore implements AIEngineCore {
 
     const handleEvent = (ev: StreamEvent) => {
       if (settled) return;
+      if(ev.type==='Delta'||ev.type==='ReasoningDelta'||ev.type==='Usage'||ev.type==='Connected')activity();
       if(ev.type==='RequestStarted'){typedEvents=true;receipt.requestId=ev.requestId;publishTransport();return;}
       if(ev.type==='TransportAttempt'){if(!receipt.attemptIds.includes(ev.attemptId))receipt.attemptIds.push(ev.attemptId);publishTransport();return;}
       if(ev.type==='Connected'){receipt.connected=true;receipt.httpStatus=ev.http_status;publishTransport();return;}
@@ -160,7 +166,7 @@ export class DefaultAIEngineCore implements AIEngineCore {
     const settleUsage=()=>{const usage=usageOrEstimate();receipt.usage=usage;publishTransport();resolveUsage(usage);if(!usagePublished){usagePublished=true;try{options.onUsage?.(usage);}catch{/* usage display cannot change completion */}}};
     const abort = () => {
       if (settled) return;
-      settled = true;
+      settled = true;clearTimeout(idleTimer);
       options.signal?.removeEventListener('abort', abort);
       finishQueues();
       receipt.closed=true;receipt.errorKind='cancelled';publishTransport();resolveTransport(structuredClone(receipt));
@@ -171,6 +177,13 @@ export class DefaultAIEngineCore implements AIEngineCore {
       resolveFinishReason(finishReason);
       try { transportAbort(); } catch { /* settle independently of transport cooperation */ }
     };
+    expireIdle=()=>{
+      if(settled)return;settled=true;clearTimeout(idleTimer);options.signal?.removeEventListener('abort',abort);finishQueues();
+      receipt.closed=true;receipt.errorKind='timeout';publishTransport();resolveTransport(structuredClone(receipt));
+      rejectText(Error(`[timeout] 连续 ${Math.round(idleMs/1000)} 秒没有接收到模型活动；本次结果未应用。`));
+      resolveReasoning(typedReasoning||undefined);settleUsage();resolveRecovery(undefined);resolveFinishReason(finishReason);try{transportAbort();}catch{/* timers settle even when transport does not cooperate */}
+    };
+    if(!settled)activity();
     if (options.signal?.aborted) abort();
     else options.signal?.addEventListener('abort', abort, { once: true });
 
@@ -193,7 +206,7 @@ export class DefaultAIEngineCore implements AIEngineCore {
     transportPromise
       .then(() => {
         if (settled) return;
-        settled = true;
+        settled = true;clearTimeout(idleTimer);
         options.signal?.removeEventListener('abort', abort);
         finishQueues();
         if (streamError) {
@@ -213,7 +226,7 @@ export class DefaultAIEngineCore implements AIEngineCore {
       })
       .catch((err) => {
         if (settled) return;
-        settled = true;
+        settled = true;clearTimeout(idleTimer);
         options.signal?.removeEventListener('abort', abort);
         finishQueues();
         if (hasCompleteArtifact(rawAccumulated)) {
