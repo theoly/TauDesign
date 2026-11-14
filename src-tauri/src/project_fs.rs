@@ -312,6 +312,7 @@ pub fn read_text_context_file(
 /// 中途崩溃时目标文件仍保持上一个完整版本 (PRD §3.8.2)。
 #[tauri::command]
 pub fn project_write_text_atomic(root: String, rel: String, contents: String) -> Result<(), String> {
+    if crate::session_lifecycle::is_marker(&rel) { return crate::session_lifecycle::write(&root, contents.as_bytes()); }
     atomic_project_write(&root,&rel,contents.as_bytes())
 }
 
@@ -450,6 +451,7 @@ pub fn project_list_dir(root: String, rel: String) -> Result<Vec<String>, String
 
 #[tauri::command]
 pub fn project_delete(root: String, rel: String) -> Result<(), String> {
+    if crate::session_lifecycle::is_marker(&rel) { return crate::session_lifecycle::release(&root); }
     let _project_guard=crate::project_snapshot::guard(&root,&rel)?;
     let canonical_rel=rel.split('/').filter(|p|!p.is_empty()&&*p!=".").collect::<Vec<_>>().join("/");
     if canonical_rel=="tasks"||canonical_rel.starts_with("tasks/.locks"){return Err("任务根目录或锁记录不能通过普通删除入口清理".into());}

@@ -8,6 +8,7 @@ mod ssrf_guard;
 mod utf8_stream;
 mod proxy_cancellation;
 mod media_resource;
+mod session_lifecycle;
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -261,6 +262,9 @@ pub fn run() {
             png_export::export_screen_png,
             export_save::export_save_file
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            if session_lifecycle::is_normal_end(&event) { session_lifecycle::normal_exit(); }
+        });
 }

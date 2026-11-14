@@ -92,3 +92,11 @@ doc/plain-language-feedback/*
 !doc/plain-language-feedback/evidence/
 doc/plain-language-feedback/evidence/*
 !doc/plain-language-feedback/evidence/browser/
+
+!doc/session-shutdown/
+doc/session-shutdown/*
+!doc/session-shutdown/*.md
+
+!doc/page-request-scope/
+doc/page-request-scope/*
+!doc/page-request-scope/*.md

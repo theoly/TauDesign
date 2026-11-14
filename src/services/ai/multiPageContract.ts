@@ -4,6 +4,7 @@ import {contentFingerprint} from './designWorkflow';
 import type {Screen} from '../../types/project';
 import {validatePageTaskPlan,type PageTaskPlan} from './pageTaskPlan';
 import {isTaskBudgetSnapshot,type TaskBudgetSnapshot} from './taskBudget';
+import {pageCountRoutingText} from './pageRequestScope';
 export interface MultiPageItem {id:string;name:string;requirements:string;links:string[];task?:PageTaskPlan}
 export interface MultiPagePlan {version:1;kind?:'variants';id:string;request:string;summary:string;contextFingerprint:string;originalPageCount:number;pages:MultiPageItem[];planning:{attempts:number;checkedAt:number;budget?:TaskBudgetSnapshot;inputFingerprint?:string;contract?:DesignTaskContract;evidence?:WorkflowValidationReport}}
 export interface MultiPageScope {version:1;kind?:'variants';planId:string;planFingerprint:string;itemId:string;screenId:string;name:string;index:number;total:number;originalPageCount:number;pageIds:string[];requiredTargetIds:string[]}
@@ -36,13 +37,13 @@ export function validateVariantItems(value:unknown):asserts value is MultiPageIt
 /** Only explicit multi-page creation. Single-page requests may mention many read-only reference pages. */
 export function requiresMultiPagePlan(request:string):boolean{
  // Ignore only a clause-leading negated split instruction, retaining independent positive scope.
- const t=request.trim().replace(/(^|[，,。；;！!\n])\s*(?:请\s*)?(?:不要|不必|无需|不用|不|别)\s*(?:再)?拆(?:分)?\s*(?:成|为|到)?\s*多(?:个)?页面/g,'$1');
+ const t=pageCountRoutingText(request).trim().replace(/(^|[，,。；;！!\n])\s*(?:请\s*)?(?:不要|不必|无需|不用|不|别)\s*(?:再)?拆(?:分)?\s*(?:成|为|到)?\s*多(?:个)?页面/g,'$1');
  if(!/(?:新建|创建|生成|设计|制作|做|\b(?:create|generate|design|build)\b)/i.test(t))return false;
  if(/(?:新建|创建|生成|设计|做)(?:一个|一张|1个|1张|单个)[^，。；\n]{0,12}页|\b(?:one|single|1)\s+(?:new\s+)?(?:page|screen)\b/i.test(t))return false;
- return /多(?:个)?页面|多画框|[百千万亿]\s*(?:个|张)?(?:页面|画框|页)|(?:[2-9]|\d{2,}|[二两三四五六七八九十])\s*(?:个|张)?(?:新)?(?:页面|画框|页)|(?:整套|全套|一套)[^。\n]{0,14}(?:页面|设计)|(?:页面|页)\s*[、和及与]\s*[^。！\n]{0,20}(?:页面|页)|\b(?:multiple|several|[2-9]|\d{2,})\s+(?:new\s+)?(?:pages|screens)\b|\b(?:create|design|generate|build)\b[^.\n]{0,120}\b(?:pages|screens)\b/i.test(t);
+ return /多(?:个)?页面|多画框|(?:所有|全部)(?:关联|相关)?页面|[百千万亿]\s*(?:个|张)?(?:页面|画框|页)|(?:[2-9]|\d{2,}|[二两三四五六七八九十])\s*(?:个|张)?(?:新)?(?:页面|画框|页)|(?:整套|全套|一套)[^。\n]{0,14}(?:页面|设计)|(?:页面|页)\s*[、和及与]\s*[^。！\n]{0,20}(?:页面|页)|\b(?:multiple|several|[2-9]|\d{2,})\s+(?:new\s+)?(?:pages|screens)\b|\b(?:create|design|generate|build)\b[^.\n]{0,120}\b(?:pages|screens)\b/i.test(t);
 }
 export function requestedPageCount(request:string):number|undefined{
- const match=request.match(/([0-9]+|[一二两三四五六七八九十百千万亿]+)\s*(?:(?:个|张)?(?:新)?(?:页面|画框|页)|(?:new\s+)?(?:pages|screens)\b)/i);
+ const match=pageCountRoutingText(request).match(/([0-9]+|[一二两三四五六七八九十百千万亿]+)\s*(?:(?:个|张)?(?:新)?(?:页面|画框|页)|(?:new\s+)?(?:pages|screens)\b)/i);
  if(!match)return;
  if(/[百千万亿]/.test(match[1]))return Infinity;
  const number=Number(match[1]);if(Number.isFinite(number))return number;

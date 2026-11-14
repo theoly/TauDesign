@@ -384,7 +384,7 @@ export class ProjectRepository {
   // 因此恢复内容 = 最后一次自动保存 + 完整的会话行。
 
   async acquireLock(): Promise<void> {
-    await this.storage.writeTextAtomic(LOCK_FILE, JSON.stringify({ openedAt: Date.now() }));
+    await this.storage.writeTextAtomic(LOCK_FILE, JSON.stringify({ openedAt: Date.now(), sessionId: crypto.randomUUID() }));
   }
 
   async releaseLock(): Promise<void> {

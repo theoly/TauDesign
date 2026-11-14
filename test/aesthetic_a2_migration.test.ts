@@ -147,6 +147,18 @@ describe('T-AE-43 · 打开本地工程', () => {
 });
 
 describe('T-AE-44 · 崩溃恢复 (PRD §3.8.5)', () => {
+  test('每次打开都有独立会话身份，旧版时间标记仍可读取', async () => {
+    await repo.acquireLock();
+    const first = JSON.parse((await storage.readText('.session.lock'))!);
+    await repo.acquireLock();
+    const second = JSON.parse((await storage.readText('.session.lock'))!);
+    expect(typeof first.sessionId).toBe('string');
+    expect(first.sessionId.length).toBeGreaterThan(0);
+    expect(second.sessionId).not.toBe(first.sessionId);
+    await storage.writeTextAtomic('.session.lock', JSON.stringify({openedAt:123}));
+    expect(await repo.detectUncleanShutdown()).toBe(123);
+  });
+
   test('正常关闭后不报异常退出', async () => {
     await repo.acquireLock();
     await repo.releaseLock();

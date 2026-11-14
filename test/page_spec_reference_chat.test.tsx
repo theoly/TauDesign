@@ -13,6 +13,7 @@ import {useAIConfigStore,defaultBindings,defaultProviders} from '../src/stores/u
 import {defaultTheme} from '../src/utils/themePresets';
 import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
 import {MockTransport} from '../src/services/ai/engine/transport/mockTransport';
+import {readFileSync} from 'node:fs';
 const execute=PipelineExecutor.execute,inspect=PageRenderCheck.inspect;
 let project:ReturnType<typeof useProjectStore.getState>,history:ReturnType<typeof useHistoryStore.getState>,config:ReturnType<typeof useAIConfigStore.getState>,oldAct:unknown;
 let engine:ReturnType<typeof useAIEngineChat>,root:Root,host:HTMLDivElement,requests:any[];
@@ -41,4 +42,13 @@ test('a real unknown page reference still stops chat before any page request or 
  const before=JSON.stringify(useProjectStore.getState().screens);
  await act(async()=>{await engine.sendMessage('参考页面"不存在的页面"\n'+aiChatDesignPrompt);});
  expect(requests).toHaveLength(0);expect(engine.messages.at(-1)?.text).toContain('未找到引用页面');expect(JSON.stringify(useProjectStore.getState().screens)).toBe(before);
+});
+test('the full P08 brief reaches the single-page pipeline without planning the 28-page inventory',async()=>{
+ const prompt=readFileSync(new URL('./fixtures/starFateBirthPrompt.txt',import.meta.url),'utf8').trim(),before=JSON.stringify(useProjectStore.getState().screens),inputs:any[]=[];
+ PipelineExecutor.execute=async options=>{inputs.push(options.input);throw Error('scope fixture stopped after entering the single-page pipeline');};
+ await act(async()=>{await engine.sendMessage(prompt);});
+ expect(inputs).toHaveLength(1);expect(inputs[0].rawPrompt).toBe(prompt);
+ expect(engine.messages.some(message=>Boolean(message.pagePlan))).toBe(false);
+ expect(engine.messages.at(-1)?.text).not.toContain('一次最多规划8页');
+ expect(JSON.stringify(useProjectStore.getState().screens)).toBe(before);
 });

@@ -1,4 +1,5 @@
 import { explicitlyRequestsPageRedesign } from './pageRedesignIntent';
+import {pageSpecificationStart} from './pageRequestScope';
 
 /** Shared exact reference matching for routing and prompt enrichment. No first-page/fuzzy fallback. */
 export interface ReferenceScreenIdentity { id:string; name:string; htmlContent:string }
@@ -34,11 +35,6 @@ const targetCueBefore=(text:string,position:number)=>/(?:参考|基于|仿照|�
 /** Shared by routing and context enrichment, including exact unknown-reference diagnostics. */
 export function quotedScreenReferences(text:string):QuotedText[]{
  return quotedText(text).filter(span=>(span.name||span.unclosed)&&cueBefore(text,span.start));
-}
-/** Numbered page requirements describe the new UI; document titles/copy are not implicit targets. */
-function pageSpecificationStart(text:string):number{
- const heading=/^[ \t]{0,3}(?:#{1,6}[ \t]+)?(?:\*\*)?(?:页面|page)[ \t]*[0-9一二三四五六七八九十]+[ \t]*[:：]/im.exec(text);
- return heading&&/(?:核心功能|功能定位|交互需求|交互逻辑|页面结构)/.test(text.slice(heading.index+heading[0].length))?heading.index:-1;
 }
 
 export function resolveScreenReferences(rawPrompt:string,screens:Record<string,ReferenceScreenIdentity>):ScreenReferenceResolution {
