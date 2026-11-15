@@ -19,6 +19,7 @@ export {parseReferencedElement,extractCleanUserPrompt} from '../../chatReference
 import type { ImageAttachment } from '../../../../types/referenceImage';
 import type { SectionedCheckpoint } from '../../sectionedGeneration';
 import {requiresPageVariantPlan,requiresMultiPagePlan,type MultiPageItem,type MultiPageReview} from '../../multiPageContract';
+import {projectWriteIssue} from '../../../storage/projectWriteSafety';
 import {prepareMultiPagePlan,prepareRecoveredMultiPagePlan,executeMultiPagePlan,type PreparedMultiPagePlan} from '../../multiPageService';
 import { buildConversationContext } from '../context/conversationContext';
 import { referenceDevicePrompt } from '../../../../utils/referenceDevice';
@@ -501,6 +502,10 @@ export function useAIEngineChat() {
         : null
     });
     if(!resuming&&!repairing&&!approved&&!recovered&&decision.action==='modify_screen'&&decision.targetScreenId&&!decision.elementNid&&!options?.wholePageRedesign&&!explicitlyRequestsPageRedesign(textToSend)&&requiresFunctionalPlanning(textToSend)){const target=requestScreens[decision.targetScreenId];if(target){const nid=functionalRegionTarget(target.htmlContent,requestState.getProtectedNids(target.id));if(nid)decision.elementNid=nid;}}
+    if(decision.action!=='question'&&decision.action!=='needs_reference'){
+      const issue=projectWriteIssue(requestState,useHistoryStore.getState().archiveError);
+      if(issue){const id=`readonly_${crypto.randomUUID()}`;trackFailure(id,textToSend,requestState,{attachment,textReferences});setMessages(prev=>[...prev,{id:`usr_${id}`,sender:'user',text:textToSend,imageUrl:attachment?.dataUrl},{id,sender:'assistant',isError:true,text:issue+' 本次未调用 AI，也未修改页面。'}]);return;}
+    }
     const sections=!repairing&&Boolean(options?.sectioned||resuming?.sectionedCheckpoint);
     if(sections&&((decision.action!=='create_screen'&&!(resuming?.contract.wholePageRedesign&&resuming.sectionedCheckpoint?.plan.version===2))||requiresMultiPagePlan(textToSend)||requiresPageVariantPlan(textToSend))){
       setMessages(prev=>[...prev,{id:`section_warn_${crypto.randomUUID()}`,sender:'assistant',text:'分区生成用于新建同一页。修改旧页请使用局部/区块修改；多页或多方案请关闭分区选项后单独规划。'}]);return;
@@ -1175,6 +1180,7 @@ export function useAIEngineChat() {
           checkpointId = toolResult.checkpointId;
           appliedHtml=toolResult.createdHtml;
           if(toolResult.repair)repairNotice='已完成一次控件样式修复，并重新通过全部交付检查。';
+          if(toolResult.notice)repairNotice=toolResult.notice;
         }
       }
 
@@ -1248,7 +1254,7 @@ export function useAIEngineChat() {
             text: repairNotice&&appliedHtml?`${repairNotice}\n<artifact identifier="screen_new" type="screen" title="${(finalScreenName||'新设计页').replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;').replaceAll('>','&gt;')}">${appliedHtml}</artifact>`:output.rawResponse
           },
           changeSet: {
-            screens: repairNotice&&createdScreenId?[{id:createdScreenId,name:finalScreenName||'新设计页',action:'created'}]:output.changeSet?.screens as any,
+            screens: toolAction==='created'&&createdScreenId?[{id:createdScreenId,name:finalScreenName||'新设计页',action:'created'}]:output.changeSet?.screens as any,
             checkpointId
           }
         });

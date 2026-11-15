@@ -16,12 +16,13 @@ describe('New Screen Auto Focus & Viewport Navigation (新建画框自动聚焦�
   let container: HTMLDivElement;
   let root: Root;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     localStorage.clear();
     useHistoryStore.setState({ past: [], future: [], checkpoints: [] });
+    const projectId=useProjectStore.getState().initNewProject({name:'Test Focus Project',deviceProfile:'pc',createSpecimen:false});
 
     useProjectStore.setState({
-      id: 'proj_test_focus',
+      id: projectId,
       name: 'Test Focus Project',
       screens: {
         'screen-1': {

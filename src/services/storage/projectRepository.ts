@@ -302,12 +302,13 @@ export class ProjectRepository {
     if(doc){
       const meta=JSON.parse(snapshot.files[PROJECT_JSON]);
       const unsupported=doc.schemaVersion!==undefined&&doc.schemaVersion!==1;
-      const badOrder=meta.screenOrder!==undefined&&(!Array.isArray(meta.screenOrder)||new Set(meta.screenOrder).size!==meta.screenOrder.length||meta.screenOrder.some((id:unknown)=>typeof id!=='string'||!doc.screens[id]));
+      const missingScreens=Object.keys(meta.screens??{}).filter(id=>!doc.screens[id]);
+      const badOrder=meta.screenOrder!==undefined&&(!Array.isArray(meta.screenOrder)||new Set(meta.screenOrder).size!==meta.screenOrder.length||meta.screenOrder.some((id:unknown)=>typeof id!=='string'||!Object.hasOwn(meta.screens??{},id)));
       let badHistory=false;
       let badPublication=false;try{parsePublicationCommits(meta.publicationCommits,doc.id);}catch{badPublication=true;}
       if(snapshot.files['history.json']!==undefined){try{const history=JSON.parse(snapshot.files['history.json']);badHistory=!history||![1,2,3].includes(history.schemaVersion)||history.projectId!==doc.id||!['past','future','checkpoints'].every(key=>Array.isArray(history[key]));}catch{badHistory=true;}}
       const missingDocument=meta.projectDocuments!==undefined&&(!meta.projectDocuments||typeof meta.projectDocuments!=='object'||Array.isArray(meta.projectDocuments))||Object.keys(meta.projectDocuments??{}).length!==Object.keys(doc.projectDocuments??{}).length||Object.values(doc.projectDocuments??{}).some(entry=>entry.missing)||Object.entries(meta.projectDocuments??{}).some(([id,value])=>{const original=(value as DocumentMeta)?.originalFile;return original!==undefined&&(original!==`documents/${id}.original.md`||snapshot.files[original]===undefined);});
-      const reason=unsupported?'工程格式版本不受当前编辑器支持，当前仅供查看；请使用兼容版本保存。':badOrder?'工程页面排序记录损坏，当前仅供查看；未覆盖原索引。':badHistory?'工程历史记录损坏或版本不兼容，当前仅供查看；原归档已保留。':badPublication?'工程交付提交事实损坏，当前仅供查看；原记录已保留。':undefined;
+      const reason=unsupported?'工程格式版本不受当前编辑器支持，当前仅供查看；请使用兼容版本保存。':missingScreens.length?`工程页面文件缺失 ${missingScreens.length} 个（${missingScreens.slice(0,3).map(id=>String(meta.screens[id]?.title??meta.screens[id]?.name??id).slice(0,30)).join('、')}${missingScreens.length>3?'等':''}）。索引和会话仍已保留，请恢复 screens 目录中的对应文件后重新打开工程。`:badOrder?'工程页面排序记录损坏，当前仅供查看；未覆盖原索引。':badHistory?'工程历史记录损坏或版本不兼容，当前仅供查看；原归档已保留。':badPublication?'工程交付提交事实损坏，当前仅供查看；原记录已保留。':undefined;
       recordProjectDocumentSource(doc,this.storage,doc.id,snapshot,!unsupported&&!badOrder&&!badHistory&&!badPublication&&!missingDocument&&Object.keys(meta.screens??{}).every(id=>Boolean(doc.screens[id])),reason);
       restrictProjectAuthoringSession(this.storage,this.authoring,doc);
     }

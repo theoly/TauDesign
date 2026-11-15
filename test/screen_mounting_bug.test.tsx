@@ -22,7 +22,7 @@ describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sy
       await act(async()=>{await new Promise(resolve=>setTimeout(resolve,1));});
       if(useProjectStore.getState().screenOrder.length===2&&!container.querySelector('button[title*="AI 正在生成中"]')&&container.textContent?.includes('设计画框已挂载至画板'))return;
     }
-    throw Error('等待实际挂载与整轮保存完成超时');
+    throw Error(`等待实际挂载与整轮保存完成超时：${container.textContent?.slice(-2000)}`);
   };
 
   const fireChange = (el: HTMLInputElement | HTMLTextAreaElement, val: string) => {
@@ -35,9 +35,10 @@ describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sy
     el.dispatchEvent(new Event('change', { bubbles: true }));
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
     localStorage.clear();
     useHistoryStore.setState({ past: [], future: [], checkpoints: [] });
+    const projectId=useProjectStore.getState().initNewProject({name:'Test Project',deviceProfile:'mobile',createSpecimen:false});
 
     // Ensure active provider has a valid key
     useAIConfigStore.setState({
@@ -50,7 +51,7 @@ describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sy
     // Setup initial project state mimicking initial creation:
     // 1 screen ('screen-1', 风格样张) and activeScreenId: 'screen-1'
     useProjectStore.setState({
-      id: 'proj-test-mount',
+      id: projectId,
       name: 'Test Project',
       screens: {
         'screen-1': {
@@ -74,6 +75,7 @@ describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sy
       }
     });
 
+    await useProjectStore.getState().saveProjectChecked();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -198,17 +200,10 @@ describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sy
     // Now artificially remove the screen from store to simulate an unmounted past message state
     const secondScreenId = useProjectStore.getState().screenOrder[1];
     act(() => {
-      useProjectStore.setState((prev) => {
-        const nextScreens = { ...prev.screens };
-        delete nextScreens[secondScreenId];
-        return {
-          screens: nextScreens,
-          screenOrder: ['screen-1'],
-          activeScreenId: 'screen-1'
-        };
-      });
+      useProjectStore.getState().removeScreen(secondScreenId);
     });
 
+    await useProjectStore.getState().saveProjectChecked();
     expect(useProjectStore.getState().screenOrder.length).toBe(1);
 
     // Re-render will now detect that the message's screen is not in store
@@ -227,5 +222,9 @@ describe('Bugfix: AI 画框生成并挂载至画板 (Screen Mounting & Canvas Sy
     // Screen is recovered!
     expect(useProjectStore.getState().screenOrder.length).toBe(2);
     expect(container.textContent).toContain('设计画框已挂载至画板');
+    const restored=useProjectStore.getState(),id=restored.screenOrder[1];
+    expect(id).not.toBe(secondScreenId);
+    expect(await restored.loadProjectById(restored.id)).toBe(true);
+    expect(useProjectStore.getState().screens[id].htmlContent).toContain('已恢复画框');
   });
 });

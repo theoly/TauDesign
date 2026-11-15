@@ -4,6 +4,7 @@ import {renderEvidenceIdentity} from '../ai/evidenceIdentity';
 import {prepareNewPageWithRepair,type PageRepairModel} from '../ai/pageCreationRepair';
 import type {PageRepairRecord} from '../ai/pageRepairRecord';
 import { useProjectStore } from '../../stores/useProjectStore';
+import {projectWriteIssue} from '../storage/projectWriteSafety';
 import { useHistoryStore } from '../../stores/useHistoryStore';
 import { NidEngine } from '../../utils/nidEngine';
 import { patchElementByNid } from '../../utils/domPatcher';
@@ -72,6 +73,7 @@ export interface CanvasToolExecutionResult {
   repair?:PageRepairRecord;
   checkpointId?: string;
   error?: string;
+  notice?:string;
 }
 
 /**
@@ -116,6 +118,8 @@ export class CanvasToolExecutor {
       return this.execute(call);
     }
     const params=structuredClone(call.params),state=useProjectStore.getState();
+    const writeIssue=projectWriteIssue(state,useHistoryStore.getState().archiveError);
+    if(writeIssue)return {success:false,tool:'create_screen',status:'failed',error:writeIssue};
     const contract=params.workflowContract===undefined?buildDesignTaskContract({intent:'create_screen',request:params.title||'创建新页面',
       deviceProfile:state.settings.deviceProfile,frameWidth:state.settings.frameWidth,designSystem:state.designSystem,
       designSystemOrigin:state.designSystemOrigin,designLibraryBinding:state.designLibraryBinding,knowledgeFingerprint:knowledgeFingerprint(state)}):params.workflowContract;
@@ -144,10 +148,8 @@ export class CanvasToolExecutor {
       if(!current())return failed(renderEvidenceIdentity(state.settings.deviceProfile)!==renderIdentity?'渲染检查依赖已变化，请重新检查后挂载。':'应用前工程已变化或创建已取消。');
       const {position:_position,...screen}=prepared.screen;
       const creationEvidence={...prepared.evidence,...(params.executionRecord?.sectioned||params.executionRecord?.draftRepair?{execution:{...structuredClone(params.executionRecord),completeHtml:prepared.screen.htmlContent}}:{})};
-      const newId=useProjectStore.getState().addScreen({...screen,metadata:{...screen.metadata,creationEvidence}},id,{referencedScreenId:params.referencedScreenId,preparedAssets:params.generatedAssets});
-      const checkpointId=useHistoryStore.getState().addCheckpoint(`AI 新建页面: ${name}`,{screenId:newId,htmlContent:prepared.screen.htmlContent});
-      useProjectStore.getState().panToScreen(newId);
-      return {success:true,tool:'create_screen',status:'screen_created',screenId:newId,screenName:name,checkpointId,createdHtml:prepared.screen.htmlContent,repair:prepared.evidence.repair};
+      const published=await useProjectStore.getState().commitCreatedScreen({...screen,id,position:_position,metadata:{...screen.metadata,creationEvidence}},{expectedContext:context,isCurrent:current,referencedScreenId:params.referencedScreenId,assets:params.generatedAssets});
+      return {success:true,tool:'create_screen',status:'screen_created',screenId:published.id,screenName:name,checkpointId:published.checkpointId,notice:published.notice,createdHtml:prepared.screen.htmlContent,repair:prepared.evidence.repair};
     }catch(error){return failed(error instanceof Error?error.message:'新建页面失败。');}
     finally{pendingCreations.delete(key);}
   }

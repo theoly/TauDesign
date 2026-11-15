@@ -21,6 +21,7 @@ beforeEach(async()=>{
  localStorage.clear();useHistoryStore.getState().restore(null);
  useProjectStore.getState().initNewProject({name:'新建聊天',deviceProfile:'mobile',designSystem:defaultTheme,createSpecimen:false});
  useProjectStore.getState().addScreen({name:'保留原页',htmlContent:'<main data-nid="old">旧页面</main>'},'old');
+ await useProjectStore.getState().saveProjectChecked();
  useAIConfigStore.setState({providers:defaultProviders.map(p=>p.id==='prov-deepseek'?{...p,apiKey:'test'}:p),bindings:defaultBindings});
  answer='<artifact identifier="new-page" type="screen" title="资料"><main><h1>新资料</h1><button class="btn btn-primary">保存资料</button></main></artifact>';requests=0;plannerRequests=0;plannerQuestions=[];
  const core:AIEngineCore={streamText(){requests++;return {textStream:(async function*(){yield answer;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(answer),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('stop'),abort(){}};},async generateObject<T>(){plannerRequests++;return {...chatPageTaskPlan,questions:plannerQuestions} as T;}};
@@ -34,6 +35,10 @@ async function send(){const input=host.querySelector('textarea')!;await act(asyn
  for(let i=0;i<200&&host.querySelector('button[title*="(Stop)"]');i++)await act(async()=>{await new Promise(resolve=>setTimeout(resolve,10));});
  expect(host.querySelector('button[title*="(Stop)"]')).toBeNull();
 }
+test('只读工程在功能规划或模型调用前停止，失败原因留在对话中',async()=>{
+ act(()=>useProjectStore.setState({projectSaveStatus:'readonly',projectSaveError:'工程缺失页面正文'}));
+ await send();expect(requests).toBe(0);expect(plannerRequests).toBe(0);expect(host.textContent).toContain('当前工程无法保存设计');expect(host.textContent).toContain('本次未调用 AI');
+});
 test('new page render failure is shown as not applied and retains original page, without a fake success',async()=>{
  PageRenderCheck.inspect=async()=>({status:'unavailable',findings:[],inspected:0,reason:'测试渲染不可用'});
  const checkpoints=useHistoryStore.getState().checkpoints.length;await send();

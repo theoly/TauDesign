@@ -15,7 +15,8 @@ import type {PageRepairRecord} from '../services/ai/pageRepairRecord';
 import {inspectDesignEntities,designEntitySummary} from '../services/ai/designEntityValidation';
 import {multiPageBatchAssets,consumeMultiPageBatch,confirmMultiPagePublication,currentMultiPagePublication,type ReadyMultiPageBatch} from '../services/ai/multiPageService';
 import {assertLibraryEditable,buildLibraryReferenceSnapshot,isLibraryReference,libraryMemberLocked,libraryReferenceIssue,verifyLibraryReferenceFiles} from '../services/ai/designLibraryReference';
-import {pageCreationContext,prepareNewPage} from '../services/ai/pageCreationValidation';
+import {pageCreationContext,prepareNewPage,isPageCreationEvidence,createdPageFingerprint} from '../services/ai/pageCreationValidation';
+import {projectWriteIssue} from '../services/storage/projectWriteSafety';
 import {candidateInputIssue,candidateAuthorizationBinding} from '../services/ai/candidateInputBinding';
 import {persistImportResources,importResourceAssets,type PreparedImportResources} from '../services/import/importResources';
 import {consumeMediaMigration,claimMediaMigrationPublish,type PreparedMediaMigration} from '../services/import/mediaMigration';
@@ -371,6 +372,8 @@ interface ProjectState {
 
   // Screen CRUD
   applyMultiPageCreation: (batch:ReadyMultiPageBatch,options?:{isCurrent?:()=>boolean}) => Promise<string[]>;
+  /** Internal final publication of an already validated AI page; never a validation bypass. */
+  commitCreatedScreen:(screen:Screen,options:{expectedContext:string;isCurrent:()=>boolean;referencedScreenId?:string;assets?:Asset[]})=>Promise<{id:string;checkpointId?:string;notice?:string}>;
   addScreen: (
     screen: (Omit<Screen, 'id' | 'position'> & { position?: { x: number; y: number } }) | Screen,
     customId?: string,
@@ -1326,6 +1329,30 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
     return {changes:{screens,assets,screenOrder:order,activeScreenId:pages[0]?.id??state.activeScreenId},patches:forward,inverse,resources:mergeRenderResourceFiles(pages.map(page=>page.metadata?.creationEvidence?.render.resourceFiles??[])),publication:{id:batch.id,kind:'batch',screenIds:publishedIds}};
     });
     await confirmMultiPagePublication(batch,origin.id,publication.receipt,publication.installed);if(publication.installed&&publishedIds[0])get().panToScreen(publishedIds[0]);return publishedIds;
+  },
+
+  commitCreatedScreen:async(input,options)=>{
+    const origin=get(),session=origin.projectAuthoringSession,screen=structuredClone(input),generated=structuredClone(options.assets??[]);
+    const issue=projectWriteIssue(origin,useHistoryStore.getState().archiveError);if(issue)throw Error(issue);
+    const label=`AI 新建页面: ${screen.name}`;
+    const result=await publishProjectMutation(get,rawSet,label,()=>get().projectAuthoringSession===session&&options.isCurrent()&&pageCreationContext(get())===options.expectedContext,()=>{
+      const state=get(),evidence=screen.metadata?.creationEvidence;
+      if(state.screens[screen.id])throw Error('新页面身份已被占用，未覆盖原页面。');
+      assertGeneratedAssetMetadata(generated);const assets={...state.assets};
+      for(const asset of generated){if(assets[asset.id]&&assets[asset.id].relPath!==asset.relPath)throw Error('生成资源身份冲突。');assets[asset.id]??=asset;}
+      if(!isPageCreationEvidence(evidence)||evidence.workflow.status!=='ready'||evidence.contract.multiPage||!evidence.contract.allowedChanges.includes('new-screen')||evidence.pageFingerprint!==createdPageFingerprint(screen)||evidence.tokenFingerprint!==designTokenFingerprint(state.designSystem.tokens)||evidence.contextFingerprint!==pageCreationContext({...state,assets}))throw Error('新页面检查来源或内容已变化，请重新检查。');
+      const layout=calculateNewScreenPosition(state.screens,state.screenOrder,{frameWidth:state.settings.frameWidth,viewportGuideHeight:state.settings.viewportGuideHeight,referencedScreenId:options.referencedScreenId,anchorScreenId:state.activeScreenId});
+      const style=screen.scopedCss?nextScopedStyleAsset(screen.id,screen.scopedCss,'generated'):undefined;
+      const page={...screen,entry:`screens/${screen.id}.html`,position:layout.position,...(style?{metadata:{...screen.metadata,scopedStyleAsset:style}}:{})};
+      const screens={...state.screens,[page.id]:page},order=[...state.screenOrder,page.id];
+      const forward:Patch[]=[{op:'add',path:['screens',page.id],value:page},{op:'replace',path:['screenOrder'],value:order}],inverse:Patch[]=[{op:'remove',path:['screens',page.id]},{op:'replace',path:['screenOrder'],value:state.screenOrder}];
+      for(const shift of layout.shiftedScreens){const old=state.screens[shift.id];if(!old)continue;const position={...old.position,x:shift.newX};screens[shift.id]={...old,position};forward.push({op:'replace',path:['screens',shift.id,'position'],value:position});inverse.push({op:'replace',path:['screens',shift.id,'position'],value:old.position});}
+      for(const asset of generated)if(!state.assets[asset.id]){forward.push({op:'add',path:['assets',asset.id],value:asset});inverse.push({op:'remove',path:['assets',asset.id]});}
+      return {changes:{screens,screenOrder:order,assets,activeScreenId:page.id},patches:forward,inverse,resources:evidence.render.resourceFiles,backups:[{label,screenSnapshot:{screenId:page.id,htmlContent:page.htmlContent}}],publication:{id:`create-${crypto.randomUUID()}`,kind:'batch',screenIds:[page.id]}};
+    });
+    const checkpointId=result.installed?useHistoryStore.getState().checkpoints.find(cp=>cp.label===label&&cp.screenSnapshot.screenId===screen.id)?.id:undefined;
+    if(result.installed)get().panToScreen(screen.id);
+    return {id:screen.id,checkpointId,notice:result.notice};
   },
 
   addScreen: (screenData, customId, options) => {

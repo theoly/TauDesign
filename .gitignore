@@ -100,3 +100,7 @@ doc/session-shutdown/*
 !doc/page-request-scope/
 doc/page-request-scope/*
 !doc/page-request-scope/*.md
+
+!doc/project-reopen-recovery/
+doc/project-reopen-recovery/*
+!doc/project-reopen-recovery/*.md
