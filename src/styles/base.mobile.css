@@ -199,12 +199,18 @@
   z-index: 1;
 }
 
-/* 底部标签导航：4~5 项，图标 + 10~11px 文字 */
+/* 底部标签导航（微信通用标准）：全宽贴底，按子项数量均分（3→130px / 4→97.5px @390） */
 .tabbar {
   display: flex;
   align-items: stretch;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   background-color: var(--color-surface, #ffffff);
   border-top: 1px solid var(--color-border, #e2e8f0);
+  padding-top: var(--space-1, 4px);
   padding-bottom: 34px;
   flex-shrink: 0;
   position: relative;
@@ -212,18 +218,120 @@
 }
 .tabbar > .tabbar-item {
   flex: 1 1 0%;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 2px;
-  padding-top: var(--space-2, 8px);
-  padding-bottom: var(--space-2, 8px);
+  min-height: 48px;
+  padding: var(--space-1, 4px) var(--space-1, 4px) var(--space-2, 8px);
+  box-sizing: border-box;
   font-size: 10px;
+  line-height: 1.2;
+  font-weight: 500;
   color: var(--color-text-muted, #94a3b8);
+  text-align: center;
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .tabbar > .tabbar-item.is-active {
   color: var(--color-primary-text, var(--color-primary));
+}
+/* 微信规范：图标可视区 28×28；兼容 .icon / 内联 svg / mask */
+.tabbar > .tabbar-item > .icon,
+.tabbar > .tabbar-item > .icon-mask,
+.tabbar > .tabbar-item > svg {
+  display: block;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  flex: none;
+  margin: 0 auto;
+}
+.tabbar > .tabbar-item > .icon-box {
+  width: 28px;
+  height: 28px;
+  flex: none;
+}
+.tabbar > .tabbar-item > .icon-box > .icon,
+.tabbar > .tabbar-item > .icon-box > svg {
+  width: 28px;
+  height: 28px;
+}
+
+/* 轻品牌软底栏：去硬分割线，改用柔和投影（仍全宽均分） */
+.tabbar-soft {
+  border-top-color: transparent;
+  box-shadow: var(--shadow-soft, 0 -4px 20px -2px rgba(15, 23, 42, 0.06));
+}
+
+/* 悬浮圆角底栏：消费/生活感场景；仍按子项均分，左右留边不挤成一团 */
+.tabbar-dock {
+  width: calc(100% - var(--space-8, 32px));
+  max-width: calc(100% - var(--space-8, 32px));
+  margin-left: auto;
+  margin-right: auto;
+  margin-bottom: var(--space-3, 12px);
+  padding-top: var(--space-2, 8px);
+  padding-bottom: var(--space-2, 8px);
+  border: 1px solid var(--color-border-subtle, var(--color-border));
+  border-radius: var(--radius-full, 9999px);
+  box-shadow: var(--shadow-lg, 0 12px 24px -6px rgba(15, 23, 42, 0.12));
+  background-color: var(--color-overlay-surface, var(--color-surface));
+}
+.tabbar-dock > .tabbar-item {
+  min-height: 44px;
+  border-radius: var(--radius-full, 9999px);
+}
+.tabbar-dock > .tabbar-item.is-active {
+  background-color: var(--color-primary-light, #e0e7ff);
+}
+
+/* 视口宽度锁：nowrap / min-content 子项不得把整列撑出 390px（红框底栏溢出根因） */
+html {
+  overflow-x: clip;
+}
+body {
+  max-width: 100%;
+  overflow-x: clip;
+}
+main,
+.col,
+.row,
+.card,
+.panel,
+.sheet-card,
+.cta-fixed,
+.tabbar,
+.list-item {
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* 标签/状态簇默认换行，避免一排 .badge/.tag 横向顶破画框 */
+.row:has(> .badge, > .badge-soft, > .tag) {
+  flex-wrap: wrap;
+}
+
+/* 列内主按钮可收缩；长文案允许换行，避免 white-space:nowrap 把父列撑宽 */
+.col > .btn,
+.card > .btn,
+.panel > .btn,
+.sheet-card > .btn {
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  height: auto;
 }
 
 /* 底部吸底主 CTA：移动端主操作的标准位置 */
@@ -231,6 +339,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3, 12px);
+  width: 100%;
+  box-sizing: border-box;
   padding: var(--space-3, 12px) var(--space-4, 16px) calc(var(--space-3, 12px) + 34px);
   background-color: var(--color-surface, #ffffff);
   border-top: 1px solid var(--color-border, #e2e8f0);
@@ -239,8 +349,13 @@
   z-index: 20;
 }
 .cta-fixed > .btn {
-  flex: 1 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
   min-height: calc(var(--space-6) * 2);
+  height: auto;
+  white-space: normal;
+  text-align: center;
 }
 
 /* 横滑卡片组：移动端需要并列内容时的替代方案（不用多列栅格） */

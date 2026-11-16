@@ -68,4 +68,32 @@ describe('控件设计规范', () => {
       }
     }
   });
+
+  test('移动端列内与吸底长按钮允许换行，避免撑破视口', () => {
+    const style = document.createElement('style');
+    style.textContent = getBaseCss('mobile');
+    document.head.append(style);
+    const col = document.createElement('div');
+    col.className = 'col';
+    const colBtn = document.createElement('button');
+    colBtn.className = 'btn btn-primary';
+    colBtn.textContent = '整理材料 / 开始决策分析';
+    col.append(colBtn);
+    const cta = document.createElement('div');
+    cta.className = 'cta-fixed';
+    const ctaBtn = document.createElement('button');
+    ctaBtn.className = 'btn btn-primary';
+    ctaBtn.textContent = '整理材料 / 开始决策分析';
+    cta.append(ctaBtn);
+    document.body.append(col, cta);
+    try {
+      expect(window.getComputedStyle(colBtn).whiteSpace).toBe('normal');
+      expect(window.getComputedStyle(ctaBtn).whiteSpace).toBe('normal');
+      expect(window.getComputedStyle(ctaBtn).flexShrink).not.toBe('0');
+    } finally {
+      col.remove();
+      cta.remove();
+      style.remove();
+    }
+  });
 });

@@ -80,7 +80,7 @@ export const MOBILE_REGION_TARGETS: RegionTargetDefinition[] = [
   {
     name: '底部标签栏 (Tab Bar)',
     keywords: ['tabbar', 'tab bar', '底部标签', '底部导航', '底导', '标签栏'],
-    scopeNotice: '仅限底部多标签导航切换栏 (.tabbar)。'
+    scopeNotice: '仅限底部多标签导航 (.tabbar / .tabbar-item 全宽均分；可选 .tabbar-soft / .tabbar-dock)。'
   },
   {
     name: '底栏/吸底操作栏 (CTA Fixed Bar)',

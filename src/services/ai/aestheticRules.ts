@@ -35,11 +35,12 @@ const PC_RULES = `DEVICE RULES — PC (1440px):
 const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
 - SINGLE COLUMN ONLY. 禁宽表；谨慎.grid-2/.scroll-x。
 - NO HOVER STATES. 禁 :hover/hover类。
+- WIDTH CONTAINMENT: 全部内容≤390px；禁固定宽度大于视口；标签簇用.row.wrap.gap-2；列内/吸底长按钮允许换行，勿用nowrap把父列撑破。
 - .p-4/.text-md；.input-touch/.tap-target；.safe-bottom；不预留系统顶栏高度。
 - FULL-BLEED HERO BANNERS & GRADIENTS: immersive brand/gradient headers use .hero-section full width, no horizontal margins, 0 bottom radius; cards below with normal spacing or gentle overlap.
 - CTA BUTTON PLACEMENT: card/sheet submits stay in-flow; use .cta-fixed only for sticky full-width bottom bars or when the reference shows them. ALWAYS match the button placement in the reference!
 - RIBBON BADGES & STATUS STRIPS: corner labels need reserved space via .relative+.absolute; notification badges use .notification-control; notice bars use .bg-warning-light/.bg-surface-alt.
-- .tabbar/.tabbar-item；角标不遮标题与主体。
+- TABBAR: 多页根导航用.tabbar全宽贴底；子项必须是直接子级.tabbar-item（3~5项均分铺满，禁左侧挤成小卡片组）；图标28px+10px文案；选中.is-active用品牌色。默认微信通用底栏；轻品牌可加.tabbar-soft；消费/生活感可用.tabbar.tabbar-dock悬浮圆角。角标不遮标题与主体。
 - SEMANTIC REGION DECOUPLING: .hero-section与自定义导航解耦；Never emit invisible white-on-white text.`;
 
 export function getDeviceAestheticRules(device: DeviceProfile, useCustomNavigation = false): string {

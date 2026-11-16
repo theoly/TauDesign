@@ -78,6 +78,26 @@ describe('CHK-F-04: 主体页面防重叠与防穿透保护', () => {
     expect(mobileCss).toMatch(/\.tabbar\s*\{[^}]*flex-shrink:\s*0/);
     expect(mobileCss).toMatch(/\.cta-fixed\s*\{[^}]*flex-shrink:\s*0/);
   });
+
+  test('tabbar 微信标准：全宽均分、28px 图标、soft/dock 变体可选', () => {
+    expect(mobileCss).toMatch(/\.tabbar\s*\{[^}]*width:\s*100%/s);
+    expect(mobileCss).toMatch(/\.tabbar\s*>\s*\.tabbar-item\s*\{[^}]*flex:\s*1 1 0%/s);
+    expect(mobileCss).toMatch(/\.tabbar\s*>\s*\.tabbar-item\s*>\s*\.icon[\s\S]*?width:\s*28px/);
+    expect(mobileCss).toContain('font-size: 10px');
+    expect(mobileCss).toContain('.tabbar-soft');
+    expect(mobileCss).toContain('.tabbar-dock');
+    expect(mobileCss).toMatch(/\.tabbar-dock\s*>\s*\.tabbar-item\.is-active\s*\{[^}]*background-color:\s*var\(--color-primary-light/s);
+  });
+
+  test('移动端视口宽度锁：长 CTA / 标签簇不得撑破 390px', () => {
+    expect(mobileCss).toMatch(/html\s*\{[^}]*overflow-x:\s*clip/);
+    expect(mobileCss).toMatch(/body\s*\{[^}]*overflow-x:\s*clip/);
+    expect(mobileCss).toContain('min-width: 0');
+    expect(mobileCss).toContain('max-width: 100%');
+    expect(mobileCss).toMatch(/\.cta-fixed\s*>\s*\.btn\s*\{[^}]*flex:\s*1 1 auto[^}]*min-width:\s*0[^}]*white-space:\s*normal/s);
+    expect(mobileCss).toMatch(/\.col\s*>\s*\.btn[\s\S]*?white-space:\s*normal/);
+    expect(mobileCss).toContain('.row:has(> .badge, > .badge-soft, > .tag)');
+  });
 });
 
 describe('CHK-F-05: 白名单与样张页 100% 覆盖保证', () => {
@@ -88,6 +108,9 @@ describe('CHK-F-05: 白名单与样张页 100% 覆盖保证', () => {
       'safe-top',
       'safe-bottom',
       'tabbar',
+      'tabbar-item',
+      'tabbar-soft',
+      'tabbar-dock',
       'cta-fixed',
       'scroll-x',
       'input-touch',

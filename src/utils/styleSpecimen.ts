@@ -395,8 +395,20 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
         <div class="border r-lg overflow-hidden">
           <div class="cta-fixed"><button class="btn btn-ghost">取消</button><button class="btn btn-primary">立即开通</button></div>
         </div>
-        <div class="border r-lg overflow-hidden">
+        <div class="border r-lg overflow-hidden col gap-0">
           <div class="tabbar">
+            ${[['首页', ICONS.sparkles, true], ['消息', ICONS.mail, false], ['我的', ICONS.user, false]]
+              .map(([l, ic, act]) => `<div class="tabbar-item${act ? ' is-active' : ''}">${ic}<span>${l}</span></div>`)
+              .join('')}
+          </div>
+          <div class="tabbar tabbar-soft">
+            ${[['首页', ICONS.sparkles, true], ['发现', ICONS.mail, false], ['我的', ICONS.user, false]]
+              .map(([l, ic, act]) => `<div class="tabbar-item${act ? ' is-active' : ''}">${ic}<span>${l}</span></div>`)
+              .join('')}
+          </div>
+        </div>
+        <div class="bg-surface-alt p-3">
+          <div class="tabbar tabbar-dock">
             ${[['首页', ICONS.sparkles, true], ['消息', ICONS.mail, false], ['我的', ICONS.user, false]]
               .map(([l, ic, act]) => `<div class="tabbar-item${act ? ' is-active' : ''}">${ic}<span>${l}</span></div>`)
               .join('')}
