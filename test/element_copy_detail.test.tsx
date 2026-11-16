@@ -105,12 +105,15 @@ describe('引用元素直接副本路径',()=>{
   expect(engine.messages.at(-1)?.text).toContain('引用元素');
  });
  test('原页变化或取消丢弃迟到结果',async()=>{
-  let resolve!:(value:any)=>void;objects.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));let pending!:Promise<void>;
-  await act(async()=>{pending=send();});
+  let resolve!:(value:any)=>void,dispatched!:()=>void;
+  const ready=new Promise<void>(r=>{dispatched=r;});
+  objects.mockImplementationOnce(()=>new Promise(r=>{resolve=r;dispatched();}));let pending!:Promise<void>;
+  await act(async()=>{pending=send();await ready;});
   act(()=>useProjectStore.getState().updateScreenHtml(id,pageOriginal.replace('保持合同规则','人工更新合同规则')));
   await act(async()=>{resolve({requiresPageRewrite:false,operations});await pending;});
   expect(useProjectStore.getState().stagedScreen).toBeNull();expect(engine.messages.at(-1)?.text).toContain('变化');
-  objects.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));await act(async()=>{pending=send();});act(()=>engine.abort());
+  let dispatchedNext!:()=>void;const readyNext=new Promise<void>(r=>{dispatchedNext=r;});
+  objects.mockImplementationOnce(()=>new Promise(r=>{resolve=r;dispatchedNext();}));await act(async()=>{pending=send();await readyNext;});act(()=>engine.abort());
   await act(async()=>{resolve({requiresPageRewrite:false,operations});await pending;});expect(useProjectStore.getState().stagedScreen).toBeNull();expect(pipeline).not.toHaveBeenCalled();
  });
 });

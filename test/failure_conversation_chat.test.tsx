@@ -64,8 +64,9 @@ test('a pending failure write keeps the old project scope and cannot overwrite a
  }finally{spy.mockRestore();}
 });
 test('a stopped in-flight attempt is saved as cancelled without applying a late result',async()=>{
- let resolve!:(value:any)=>void;pipeline.mockImplementationOnce(()=>new Promise(r=>resolve=r));let pending!:Promise<void>;
- await act(async()=>{pending=engine.sendMessage('新建一个资料页面');});
+ let resolve!:(value:any)=>void,dispatched!:()=>void;const ready=new Promise<void>(r=>{dispatched=r;});
+ pipeline.mockImplementationOnce(()=>new Promise(r=>{resolve=r;dispatched();}));let pending!:Promise<void>;
+ await act(async()=>{pending=engine.sendMessage('新建一个资料页面');await ready;});
  act(()=>engine.abort());await act(async()=>{resolve({status:'error',rawResponse:'',errorMessage:'已停止'});await pending;});
  await until(()=>engine.messages.some(m=>m.failureHistoryState==='saved'));
  const [row]=await useProjectStore.getState().getConversationStore().loadRecent();expect(row.assistant.failure?.status).toBe('cancelled');expect(useProjectStore.getState().stagedScreen).toBeNull();

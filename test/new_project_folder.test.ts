@@ -77,7 +77,7 @@ describe('T-NPF-01 · useProjectStore.initNewProject 带 folderPath 支持', () 
 
 describe('T-NPF-02 · useWorkspaceStore.createProject 透传 folderPath', () => {
   test('调用 createProject 传入 folderPath 时直接进入工作区并保存到目标路径', async () => {
-    const folderPath = '/Users/theoly/Desktop/a1';
+    const folderPath = '/Users/test/Desktop/a1';
     useWorkspaceStore.getState().createProject(
       'a1',
       'mobile',
@@ -109,13 +109,13 @@ describe('T-NPF-02 · useWorkspaceStore.createProject 透传 folderPath', () => 
 
 describe('T-NPF-03 · 目录名称与未初始化检测', () => {
   test('folderDisplayName 正确提取未初始化文件夹名称', () => {
-    expect(folderDisplayName('/Users/theoly/Desktop/a1')).toBe('a1');
-    expect(folderDisplayName('/Users/theoly/Desktop/a1/')).toBe('a1');
-    expect(folderDisplayName('C:\\Users\\theoly\\Desktop\\my_project.aidesign')).toBe('my_project');
+    expect(folderDisplayName('/Users/test/Desktop/a1')).toBe('a1');
+    expect(folderDisplayName('/Users/test/Desktop/a1/')).toBe('a1');
+    expect(folderDisplayName('C:\\Users\\test\\Desktop\\my_project.aidesign')).toBe('my_project');
   });
 
   test('缺少 project.json 的目录经 openLocalFolder 检测时返回 notProject: true 与 folderPath', async () => {
-    const mockFolder = '/Users/theoly/Desktop/empty_folder';
+    const mockFolder = '/Users/test/Desktop/empty_folder';
     const originalWindow = (globalThis as any).window;
     (globalThis as any).window = {
       isTauri: true,

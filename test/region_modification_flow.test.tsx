@@ -136,15 +136,17 @@ describe('区块确认到候选的真实流程',()=>{
  expect(useProjectStore.getState().screens[id].htmlContent).toBe(regionHtml);expect(pipeline).not.toHaveBeenCalled();
  });
  test('生成中取消或原页变化时丢弃结果',async()=>{
- const review=await start();let resolve!:(value:any)=>void;
- objects.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));let pending!:Promise<void>;
- await act(async()=>{pending=engine.confirmModification(review.id,['suggestion-1'],'','region');});
+ const review=await start();let resolve!:(value:any)=>void,dispatched!:()=>void;
+ const ready=new Promise<void>(r=>{dispatched=r;});
+ objects.mockImplementationOnce(()=>new Promise(r=>{resolve=r;dispatched();}));let pending!:Promise<void>;
+ await act(async()=>{pending=engine.confirmModification(review.id,['suggestion-1'],'','region');await ready;});
  act(()=>engine.abort());await act(async()=>{resolve({nid:'region',html:replacement});await pending;});
  expect(useProjectStore.getState().stagedScreen).toBeNull();
  objects.mockResolvedValue(regionAnalysis);await act(async()=>{await engine.sendMessage('修改当前页面',undefined,{referencedScreenId:id});});
  const next=engine.messages.filter(m=>m.modificationReview?.status==='ready').at(-1)!;
- objects.mockImplementationOnce(()=>new Promise(r=>{resolve=r;}));
- await act(async()=>{pending=engine.confirmModification(next.id,['suggestion-1'],'','region');});
+ let dispatchedNext!:()=>void;const readyNext=new Promise<void>(r=>{dispatchedNext=r;});
+ objects.mockImplementationOnce(()=>new Promise(r=>{resolve=r;dispatchedNext();}));
+ await act(async()=>{pending=engine.confirmModification(next.id,['suggestion-1'],'','region');await readyNext;});
  act(()=>useProjectStore.getState().updateScreenHtml(id,regionHtml+'<p>人工更新</p>'));
  await act(async()=>{resolve({nid:'region',html:replacement});await pending;});
  expect(useProjectStore.getState().stagedScreen).toBeNull();expect(pipeline).not.toHaveBeenCalled();
@@ -172,11 +174,11 @@ describe('区块确认到候选的真实流程',()=>{
   const review=await start();objects.mockResolvedValueOnce(task).mockResolvedValueOnce({nid:'region',html:functionalRegion});
   await act(async()=>{await engine.confirmModification(review.id,['suggestion-1'],'增加邮箱输入框','region');});
   const first=engine.messages.find(m=>m.structuredRetry)!;objects.mockResolvedValueOnce(task).mockResolvedValueOnce({nid:'region',html:functionalRegion});
-  await act(async()=>{engine.retryTurn(first.id);await new Promise(r=>setTimeout(r,15));});
+  await act(async()=>{await engine.retryTurn(first.id);});
   expect(objects).toHaveBeenCalledTimes(5);expect(pipeline).not.toHaveBeenCalled();expect(useProjectStore.getState().stagedScreen?.workflowContract?.allowedChanges).toEqual(['element:region']);
   expect(new Set(engine.messages.map(m=>m.id)).size).toBe(engine.messages.length);
   act(()=>useProjectStore.getState().updateScreenHtml(id,regionHtml+'<p>人工新增</p>'));
-  await act(async()=>{engine.retryTurn(first.id);await new Promise(r=>setTimeout(r,5));});expect(objects).toHaveBeenCalledTimes(5);expect(pipeline).not.toHaveBeenCalled();
+  await act(async()=>{await engine.retryTurn(first.id);});expect(objects).toHaveBeenCalledTimes(5);expect(pipeline).not.toHaveBeenCalled();
  });
  test('planning questions remain visible and do not stage any replacement',async()=>{
   const review=await start();objects.mockResolvedValue({...task,questions:['请确认邮箱是否必填']});

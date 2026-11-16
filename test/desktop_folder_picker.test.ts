@@ -62,14 +62,14 @@ describe('桌面运行时与文件夹选择器 (Desktop Folder Picker)', () => {
       (globalThis.window as any).__TAURI_INTERNALS__ = {
         invoke: async (cmd: string, args: any) => {
           if (cmd === 'plugin:dialog|open') {
-            return '/Users/theoly/workspace/test.aidesign';
+            return '/Users/test/workspace/test.aidesign';
           }
           return null;
         }
       };
 
       const result = await pickProjectFolder('选择测试工程');
-      expect(result).toBe('/Users/theoly/workspace/test.aidesign');
+      expect(result).toBe('/Users/test/workspace/test.aidesign');
     });
 
     test('CHK-F-06: 桌面环境下支持数组格式返回值解包', async () => {
@@ -77,14 +77,14 @@ describe('桌面运行时与文件夹选择器 (Desktop Folder Picker)', () => {
       (globalThis.window as any).__TAURI_INTERNALS__ = {
         invoke: async (cmd: string) => {
           if (cmd === 'plugin:dialog|open') {
-            return ['/Users/theoly/workspace/array-path.aidesign'];
+            return ['/Users/test/workspace/array-path.aidesign'];
           }
           return null;
         }
       };
 
       const result = await pickProjectFolder();
-      expect(result).toBe('/Users/theoly/workspace/array-path.aidesign');
+      expect(result).toBe('/Users/test/workspace/array-path.aidesign');
     });
 
     test('CHK-F-06: 用户取消选择时返回 null', async () => {

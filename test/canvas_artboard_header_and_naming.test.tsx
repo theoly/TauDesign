@@ -6,15 +6,27 @@ import { createRoot, Root } from 'react-dom/client';
 import { ScreenFrame } from '../src/components/canvas/ScreenFrame';
 import { InfiniteCanvas } from '../src/components/canvas/InfiniteCanvas';
 import { useProjectStore } from '../src/stores/useProjectStore';
+import { useHistoryStore } from '../src/stores/useHistoryStore';
+import { defaultTheme } from '../src/utils/themePresets';
 import { sanitizeScreenTitle, CanvasToolExecutor } from '../src/services/tools/canvasToolExecutor';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 describe('画框上方浮动标题、明暗可视性与 AI 命名测试', () => {
+  const priorProject = useProjectStore.getState();
+  const priorHistory = useHistoryStore.getState();
   let container: HTMLDivElement;
   let root: Root;
 
   beforeEach(() => {
+    localStorage.clear();
+    useHistoryStore.getState().restore(null);
+    useProjectStore.getState().initNewProject({
+      name: '画框命名测试',
+      deviceProfile: 'mobile',
+      designSystem: defaultTheme,
+      createSpecimen: false
+    });
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -25,6 +37,9 @@ describe('画框上方浮动标题、明暗可视性与 AI 命名测试', () => 
       root.unmount();
     });
     container.remove();
+    localStorage.clear();
+    useProjectStore.setState(priorProject, true);
+    useHistoryStore.setState(priorHistory, true);
   });
 
   test('CHK-F-01: 画布缩小至 scale < 0.25 时，页面内容保持高保真 iframe 呈现，不变成白板', async () => {
