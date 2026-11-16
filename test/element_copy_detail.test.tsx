@@ -49,6 +49,24 @@ describe('明确引用元素的局部style修改',()=>{
   }
   expect(()=>applyLocalCopyEdits(original,[operations[2],{nid:'bell',type:'remove_styles',value:'width'}],options)).toThrow('冲突');
  });
+ test('允许底栏布局常用 flex / 全宽声明，避免合法值被误判无效',()=>{
+  const html='<!doctype html><html><body><footer data-nid="bar" class="row" style="width:420px"><a data-nid="a1" class="col">决策</a><a data-nid="a2" class="col">排盘</a><a data-nid="a3" class="col">我的</a></footer></body></html>';
+  const result=applyLocalCopyEdits(html,[
+   {nid:'bar',type:'add_classes',value:'tabbar'},
+   {nid:'bar',type:'remove_classes',value:'row'},
+   {nid:'bar',type:'set_styles',value:'width:100%;max-width:100%;display:flex;justify-content:space-between;box-sizing:border-box;overflow-x:clip'},
+   {nid:'a1',type:'add_classes',value:'tabbar-item'},
+   {nid:'a1',type:'set_styles',value:'flex:1 1 0%;min-width:0'},
+   {nid:'a2',type:'add_classes',value:'tabbar-item'},
+   {nid:'a2',type:'set_styles',value:'flex:1 1 0%;min-width:0'},
+   {nid:'a3',type:'add_classes',value:'tabbar-item'},
+   {nid:'a3',type:'set_styles',value:'flex:1 1 0%;min-width:0'},
+  ],{device:'mobile',scopeNid:'bar'});
+  const after=parse(result.html).querySelector('[data-nid="bar"]') as HTMLElement;
+  expect(after.classList.contains('tabbar')).toBe(true);
+  expect(after.style.width).toBe('100%');
+  expect((parse(result.html).querySelector('[data-nid="a1"]') as HTMLElement).style.flex).toMatch(/1/);
+ });
 });
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;

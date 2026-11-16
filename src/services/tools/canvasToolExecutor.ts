@@ -18,6 +18,9 @@ import type { DesignExecutionRecord } from '../ai/designExecutionRecord';
 import {draftExecutionIssue} from '../ai/draftExecutionSource';
 import {resolveWorkflowValidation} from '../ai/workflowValidation';
 import type {TaskBudget} from '../ai/taskBudget';
+import { resolveScreenTitle } from '../../utils/screenTitle';
+
+export { sanitizeScreenTitle, resolveScreenTitle } from '../../utils/screenTitle';
 
 export type CanvasToolCall =
   | {
@@ -77,27 +80,6 @@ export interface CanvasToolExecutionResult {
 }
 
 /**
- * 智能清洗与精炼页面标题 (贴切同时尽量简短，不超过 20 汉字)
- */
-export function sanitizeScreenTitle(rawTitle?: string): string {
-  if (!rawTitle) return '新页面';
-  let t = rawTitle.trim();
-
-  // 1. 去除常见的 AI 后缀和括号标记: (AI 方案), (AI), [新版], （测试）等
-  t = t.replace(/\s*[\(（\[【](?:AI|新版|方案|候选|草稿).*?[\)）\]】]/gi, '').trim();
-
-  // 2. 去除冗余的业务前缀，如 "页面: ", "设计: "
-  t = t.replace(/^(?:页面|设计|原型)[:：\s]*/, '');
-
-  // 3. 极端长标题截断保底（不超过 20 个字符）
-  if (t.length > 20) {
-    t = t.slice(0, 20);
-  }
-
-  return t.trim() || '新页面';
-}
-
-/**
  * 统一画布工具执行器 (KISS 原则 / Canvas Tools)
  *
  * 所有对画板的写操作统一经由本执行器派发，
@@ -140,7 +122,7 @@ export class CanvasToolExecutor {
         components:state.components,decisions:state.decisions,projectDocuments:state.projectDocuments,overrides:state.overrides});
       for(const asset of params.generatedAssets??[]){if(snapshot.assets[asset.id]&&snapshot.assets[asset.id].relPath!==asset.relPath)throw Error('生成媒体身份冲突。');snapshot.assets[asset.id]??=asset;}
       const id=params.screenId&&!state.screens[params.screenId]?params.screenId:crypto.randomUUID();
-      const name=sanitizeScreenTitle(params.title?.trim()||`画框 ${state.screenOrder.length+1}`);
+      const name=resolveScreenTitle({artifactTitle:params.title?.trim()||undefined,html:params.html});
       const prepare=(signal?:AbortSignal)=>prepareNewPageWithRepair(snapshot,{id,name,htmlContent:params.html,position:{x:0,y:0}},contract,
         createProjectStorage(state.id,state.folderPath),{isCurrent:current,signal,repair:options.repair});
       const prepared=options.taskBudget?await options.taskBudget.run(prepare,options.signal):await prepare(options.signal);

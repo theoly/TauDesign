@@ -67,7 +67,7 @@ You MUST return the complete, standalone HTML design enclosed strictly inside an
 - The root element inside the artifact must be a container element with utility classes, such as <div class="card p-6 ...">, <main class="p-6 ...">, <section class="p-6 ...">, or <form class="card p-6 ...">.
 - Absolutely DO NOT output conversational chatter, greetings, explanations, or markdown code blocks outside or around the <artifact> block.
 - 必须且仅输出单个被 <artifact identifier="..." type="screen" title="..."> 与 </artifact> 包裹的高保真 HTML，严禁在标签之外输出任何解释、寒暄或 Markdown 文本。顶层容器请使用 <div>, <main>, <section> 或 <form>。
-- title 属性规范：必须为贴切的页面标题，在表达贴切的同时尽量简短，不要超过 20 个汉字（例如：“动态详情”、“会员中心”、“送花表达心意 - 牵手币充值”），严禁长篇大论或冗余说明。`;
+- title 属性规范：必须是从页面业务内容提炼的导航标题，简短贴切且不超过 20 个汉字（例如：“动态详情”、“会员中心”、“材料上传”、“说说这次决定”）。用户若明确指定标题则用用户原话；否则根据将生成的页面主标题/核心任务命名。严禁把需求提示词前缀、角色设定（如「你是微信原生小程序…」）、系统约束或长段说明截断当作 title。`;
 
 /**
  * contextEnricher 末尾追加的单行提醒，必须由 ARTIFACT_OUTPUT_CONTRACT 派生

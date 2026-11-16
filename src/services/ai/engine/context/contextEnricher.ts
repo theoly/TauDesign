@@ -356,7 +356,7 @@ ${screens[targetScreenId]?.scopedCss||params.overrides?`[目标来源CSS与L4，
 ${elementDirective}${regionDirective}
 [重要修改约束]: 请在严格保留原有业务内容、文本和已有 data-nid 的基础上进行指定调整。必须且仅输出被 <artifact identifier="${targetScreenId}" type="screen" title="${targetName}"> 与 </artifact> 包裹的完整 HTML，严禁输出 identifier="screen_new"。\n\n${ARTIFACT_OUTPUT_REMINDER}\n\n用户修改需求: ${userPrompt}`;
   } else if(intent!=='question') {
-    userPrompt = `${userPrompt}${regionDirective}\n\n[指令约束: 适配当前 ${deviceProfile} 设备 (${frameWidth}px)，必须且仅输出被 <artifact identifier="screen_new" type="screen" title="贴切精简页面标题(不超过20字)"> 与 </artifact> 包裹的完整高保真页面，严禁在标签外输出寒暄或解释]\n\n${ARTIFACT_OUTPUT_REMINDER}`;
+    userPrompt = `${userPrompt}${regionDirective}\n\n[指令约束: 适配当前 ${deviceProfile} 设备 (${frameWidth}px)，必须且仅输出被 <artifact identifier="screen_new" type="screen" title="从页面内容提炼的短标题"> 与 </artifact> 包裹的完整高保真页面；title须概括本页业务而非截取提示词前缀。严禁在标签外输出寒暄或解释]\n\n${ARTIFACT_OUTPUT_REMINDER}`;
   }
 
   // Inject referenced screen skeletons if any

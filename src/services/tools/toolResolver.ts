@@ -1,5 +1,5 @@
 import { CanvasToolCall } from './canvasToolExecutor';
-import { sanitizeScreenTitle } from './canvasToolExecutor';
+import { resolveScreenTitle } from '../../utils/screenTitle';
 import { PromptBuilder } from '../ai/promptBuilder';
 
 export interface ToolResolutionContext {
@@ -70,7 +70,11 @@ export function resolveToolFromAIResponse(
     return {
       tool: 'create_screen',
       params: {
-        title: sanitizeScreenTitle(artifactMetadata?.title || '新设计页'),
+        title: resolveScreenTitle({
+          artifactTitle: artifactMetadata?.title,
+          userPrompt,
+          html: extractedHtml
+        }),
         html: extractedHtml,
         screenId:
           artifactMetadata?.identifier &&
@@ -252,7 +256,11 @@ export function resolveToolFromAIResponse(
   return {
     tool: 'create_screen',
     params: {
-      title: sanitizeScreenTitle(artifactMetadata?.title || '新设计页'),
+      title: resolveScreenTitle({
+        artifactTitle: artifactMetadata?.title,
+        userPrompt,
+        html: extractedHtml
+      }),
       html: extractedHtml,
       screenId: candidateId,
       referencedScreenId

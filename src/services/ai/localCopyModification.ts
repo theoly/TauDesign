@@ -16,7 +16,8 @@ export interface LocalEditOptions { device: DeviceProfile; useCustomNavigation?:
 
 const styleProperties = new Set(['width','height','min-width','min-height','max-width','max-height','font-size','line-height',
   'padding','padding-top','padding-right','padding-bottom','padding-left','margin','margin-top','margin-right','margin-bottom','margin-left',
-  'position','top','right','bottom','left','display','align-items','justify-content','gap','flex-shrink','transform']);
+  'position','top','right','bottom','left','display','align-items','justify-content','align-self','gap','flex','flex-direction','flex-wrap',
+  'flex-grow','flex-shrink','flex-basis','box-sizing','overflow','overflow-x','overflow-y','white-space','text-align','transform']);
 function parseStyleChanges(op: LocalEditOperation): Array<[string, string]> {
   const declarations = op.value.split(';').map(value => value.trim()).filter(Boolean);
   if (!declarations.length || declarations.length > 12 || op.value.length > 1000) throw new Error('局部样式声明数量或长度无效。');
@@ -34,27 +35,49 @@ function parseStyleChanges(op: LocalEditOperation): Array<[string, string]> {
     const keywords: Record<string, string[]> = {
       position:['static','relative','absolute','fixed','sticky'], display:['block','inline-block','flex','inline-flex','grid','inline-grid'],
       'align-items':['center','start','end','flex-start','flex-end','stretch','baseline'],
-      'justify-content':['center','start','end','flex-start','flex-end','space-between','space-around','space-evenly'], transform:['none']
+      'justify-content':['center','start','end','flex-start','flex-end','space-between','space-around','space-evenly'],
+      'align-self':['auto','center','start','end','flex-start','flex-end','stretch','baseline'],
+      'flex-direction':['row','row-reverse','column','column-reverse'],
+      'flex-wrap':['nowrap','wrap','wrap-reverse'],
+      'box-sizing':['border-box','content-box'],
+      overflow:['visible','hidden','clip','auto','scroll'],
+      'overflow-x':['visible','hidden','clip','auto','scroll'],
+      'overflow-y':['visible','hidden','clip','auto','scroll'],
+      'white-space':['normal','nowrap','pre','pre-wrap','pre-line'],
+      'text-align':['left','center','right','start','end','justify'],
+      transform:['none']
     };
     let valid = keywords[property]?.includes(value);
     if (!keywords[property]) {
-      const numeric = value.replace(/var\(--(?:space-(?:0|1|2|3|4|5|6|8)|font-size-(?:xs|sm|md|lg|xl|[2-4]xl)|radius-(?:sm|md|lg|xl|full))\)/g,'1')
-        .replace(/calc\(/g,'(').replace(/(?:px|rem|em|vw|vh)/g,'');
-      valid = /^[\d.\s()+*\/%-]+$/.test(numeric)
-        || (value === 'auto' && /^(?:width|height|min-width|min-height|max-width|max-height|top|right|bottom|left|margin)/.test(property))
-        || (value === 'none' && /^(?:max-width|max-height)$/.test(property)) || (value === 'normal' && property === 'line-height');
-      const number = /^(-?\d+(?:\.\d+)?)(px)?$/.exec(value);
-      if (number && ((property === 'font-size' && (Number(number[1]) < 8 || Number(number[1]) > 96))
-        || (['width','height'].includes(property) && Number(number[1]) <= 0))) valid = false;
-      // 相对字号或calc不能在离线DOM保证最小可读尺寸；用明确px或现有字号Token。
-      if (property === 'font-size') valid = /^(?:\d+(?:\.\d+)?px|var\(--font-size-(?:xs|sm|md|lg|xl|[2-4]xl)\))$/.test(value)
-        && (!number || (Number(number[1]) >= 8 && Number(number[1]) <= 96));
-      if (['width','height','max-width','max-height'].includes(property)) {
-        const length = /^((?:\d+(?:\.\d+)?|\.\d+))(?:px|rem|em|%|vw|vh)$/.exec(value);
-        valid = Boolean((length && Number(length[1]) > 0)
-          || /^var\(--(?:space-(?:1|2|3|4|5|6|8)|font-size-(?:xs|sm|md|lg|xl|[2-4]xl))\)$/.test(value)
-          || (value === 'auto' && ['width','height'].includes(property))
-          || (value === 'none' && ['max-width','max-height'].includes(property)));
+      if (property === 'flex') {
+        valid = value === 'none' || value === 'auto'
+          || /^(?:\d+(?:\.\d+)?)(?:\s+\d+(?:\.\d+)?)?(?:\s+(?:0|0%|auto|(?:\d+(?:\.\d+)?(?:px|%|rem|em))))?$/.test(value);
+      } else if (property === 'flex-grow' || property === 'flex-shrink') {
+        valid = /^(?:\d+(?:\.\d+)?)$/.test(value);
+      } else if (property === 'flex-basis') {
+        valid = value === 'auto' || value === '0' || value === '0%'
+          || /^((?:\d+(?:\.\d+)?|\.\d+))(?:px|rem|em|%)$/.test(value);
+      } else {
+        const numeric = value.replace(/var\(--(?:space-(?:0|1|2|3|4|5|6|8)|font-size-(?:xs|sm|md|lg|xl|[2-4]xl)|radius-(?:sm|md|lg|xl|full))\)/g,'1')
+          .replace(/calc\(/g,'(').replace(/(?:px|rem|em|vw|vh)/g,'');
+        valid = /^[\d.\s()+*\/%-]+$/.test(numeric)
+          || (value === 'auto' && /^(?:width|height|min-width|min-height|max-width|max-height|top|right|bottom|left|margin|margin-top|margin-right|margin-bottom|margin-left|flex-basis)$/.test(property))
+          || (value === 'none' && /^(?:max-width|max-height)$/.test(property)) || (value === 'normal' && property === 'line-height')
+          || (value === '0 auto' && /^(?:margin|margin-left|margin-right)$/.test(property))
+          || (value === 'auto 0' && property === 'margin');
+        const number = /^(-?\d+(?:\.\d+)?)(px)?$/.exec(value);
+        if (number && ((property === 'font-size' && (Number(number[1]) < 8 || Number(number[1]) > 96))
+          || (['width','height'].includes(property) && Number(number[1]) <= 0))) valid = false;
+        // 相对字号或calc不能在离线DOM保证最小可读尺寸；用明确px或现有字号Token。
+        if (property === 'font-size') valid = /^(?:\d+(?:\.\d+)?px|var\(--font-size-(?:xs|sm|md|lg|xl|[2-4]xl)\))$/.test(value)
+          && (!number || (Number(number[1]) >= 8 && Number(number[1]) <= 96));
+        if (['width','height','max-width','max-height'].includes(property)) {
+          const length = /^((?:\d+(?:\.\d+)?|\.\d+))(?:px|rem|em|%|vw|vh)$/.exec(value);
+          valid = Boolean((length && Number(length[1]) > 0)
+            || /^var\(--(?:space-(?:1|2|3|4|5|6|8)|font-size-(?:xs|sm|md|lg|xl|[2-4]xl))\)$/.test(value)
+            || (value === 'auto' && ['width','height'].includes(property))
+            || (value === 'none' && ['max-width','max-height'].includes(property)));
+        }
       }
     }
     const probe = document.createElement('span').style;

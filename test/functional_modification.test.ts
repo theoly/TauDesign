@@ -19,6 +19,16 @@ test('explicit element structures include functional additions and decorative no
  for(const text of ['在卡片增加邮箱输入框','给按钮增加图标','插入分隔线','新增一行提示文字','add an icon'])expect(requiresElementStructure(text)).toBe(true);
  for(const text of ['增大图标，缩小badge','给按钮增加阴影','给输入框新增圆角','不要新增图标，只加粗文字','把标题改成“新增邮箱输入框”'])expect(requiresElementStructure(text)).toBe(false);
 });
+test('微信标准 tabbar / 底栏均分改写走元素子树结构路径，避免 set_styles 假失败',()=>{
+ for(const text of [
+  '把这个改成微信标准的tabbar样式，去掉多余白边',
+  '改成微信标准tabbar',
+  '把底部导航换成全宽均分tabbar',
+  'footer改成底部标签栏均分铺满',
+  '调整为微信标准底栏',
+ ]) expect(requiresElementStructure(text)).toBe(true);
+ for(const text of ['把底栏图标颜色改深一点','增大tab图标','给底栏加阴影']) expect(requiresElementStructure(text)).toBe(false);
+});
 test('visual adjustments, label changes, protective constraints and vague optimization do not create business planning',()=>{
  for(const text of ['给按钮增加阴影，文字小一号','增大图标，缩小badge','把按钮文案改为“新增筛选功能”','不要新增功能，只调整按钮颜色','优化页面','删除按钮的阴影','给输入框增加圆角'])expect(requiresFunctionalPlanning(text)).toBe(false);
  expect(requiresModificationReview('优化页面')).toBe(true);

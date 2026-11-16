@@ -76,7 +76,8 @@ describe('CHK-CT-02 ~ CHK-CT-04: CanvasToolExecutor 统一执行器', () => {
 
     const state = useProjectStore.getState();
     expect(state.screenOrder.length).toBe(1);
-    expect(state.screens[res.screenId!].name).toBe('新设计页');
+    // 占位 title「新设计页」会被丢弃，改从页面 h1 提炼
+    expect(state.screens[res.screenId!].name).toBe('首页');
     expect(state.activeScreenId).toBe(res.screenId);
   });
 
