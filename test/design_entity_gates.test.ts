@@ -79,6 +79,7 @@ test('多页面第二页组件引用错误，不交付已经检查通过的第�
   const answer=`<artifact identifier="screen_new" type="screen" title="${scope.name}"><main class="p-4"><h1>${scope.name}</h1><div${calls===2?' data-component-id="missing"':''}>资料</div><button class="btn btn-primary">保存</button></main></artifact>`;
   return {textStream:(async function*(){yield answer;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(answer),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('stop'),abort(){}};
  }};
- const before=counts(),plan=await prepareMultiPagePlan({state:useProjectStore.getState(),request:'创建两个页面',provider:{id:'fixture',protocol:'openai_compatible',name:'fixture',baseUrl:'https://invalid.local',apiKey:'fixture',isEnabled:true,models:[]} as any,model:'fixture',core,isCurrent:()=>true});
+ const {twoPageRequest}=await import('./fixtures/multiPageTask');
+ const before=counts(),plan=await prepareMultiPagePlan({state:useProjectStore.getState(),request:twoPageRequest(),provider:{id:'fixture',protocol:'openai_compatible',name:'fixture',baseUrl:'https://invalid.local',apiKey:'fixture',isEnabled:true,models:[]} as any,model:'fixture',core,isCurrent:()=>true});
  const result=await executeMultiPagePlan(plan,plan.plan.pages,{getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch)});expect(result.status).toBe('blocked');expect(result.message).toContain('不存在的组件');expect(calls).toBe(2);expect(renders).toBe(1);expect(counts()).toEqual(before);
 });

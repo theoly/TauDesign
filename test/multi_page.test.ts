@@ -12,7 +12,7 @@ import {RenderEvidenceAuthority} from '../src/services/ai/evidenceIdentity';
 import * as BudgetPolicy from '../src/services/ai/taskBudgetPolicy';
 import {TaskBudget} from '../src/services/ai/taskBudget';
 import {resourceRenderReport,stageResourceReport} from './helpers/renderResourceProof';
-import {withMultiPageTasks,multiPageTask} from './fixtures/multiPageTask';
+import {withMultiPageTasks,multiPageTask,pageSpec,twoPageRequest,threePageRequest} from './fixtures/multiPageTask';
 import {afterEach,beforeEach,expect,spyOn,test} from 'bun:test';
 import {prepareMultiPagePlan,executeMultiPagePlan,consumeMultiPageBatch,type PreparedMultiPagePlan} from '../src/services/ai/multiPageService';
 import {requiresMultiPagePlan,validateMultiPageItems,isMultiPageDelivery,type MultiPageProgress} from '../src/services/ai/multiPageContract';
@@ -50,7 +50,7 @@ const core:AIEngineCore={async generateObject(schema){objectCalls++;if((schema.p
  const answer=answerMode==='no-html'?'没有输出页面':`<artifact identifier="screen_new" type="screen" title="${title}">${html}</artifact>`;
  return {textStream:(async function*(){yield answer;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(answer),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('stop'),abort(){}};
 }};
-const prepare=(extra:Partial<Parameters<typeof prepareMultiPagePlan>[0]>={})=>prepareMultiPagePlan({state:useProjectStore.getState(),request:'生成登录页、注册页两个页面',provider,model:'model',core,isCurrent:()=>true,...extra});
+const prepare=(extra:Partial<Parameters<typeof prepareMultiPagePlan>[0]>={})=>prepareMultiPagePlan({state:useProjectStore.getState(),request:twoPageRequest(),provider,model:'model',core,isCurrent:()=>true,...extra});
 const run=(plan:PreparedMultiPagePlan,extra:Partial<Parameters<typeof executeMultiPagePlan>[2]>={})=>executeMultiPagePlan(plan,plan.plan.pages,{getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch),...extra});
 
 test('same project reopened after planning does not renew the original plan author even when design context is identical',async()=>{
@@ -115,8 +115,8 @@ for(const change of ['replace','delete'] as const)test(`multi-page final handoff
  try{await Promise.race([entry,new Promise((_,reject)=>setTimeout(()=>reject(Error('Resource batch did not reach IO')),3000))]);expect(dependencies).toBe(1);if(change==='replace')await storage.writeBinary(path,'AAED/w==');else await storage.remove(path);release();const result=await pending;expect(result.status).toBe('blocked');expect(result.message).toContain(change==='replace'?'已变化':'不存在');expect(await storage.readManagedSnapshot!()).toEqual(before);expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past).toEqual(history);}
  finally{release();await pending;spy.mockRestore();}
 });
-for(const request of ['生成3个页面','设计多页面会员系统','新建登录页、注册页和首页','创建登录页面和注册页面','创建一套后台页面','create multiple pages','generate home and profile pages'])test(`多页路由 ${request}`,()=>expect(requiresMultiPagePlan(request)).toBe(true));
-for(const request of ['新建一个资料页，参考首页和详情页','生成一个页面，使用两列卡片','创建详情页，底部链接列表页','修改当前页面','分析这些页面','create one page with two cards'])test(`单页或非新建不误判 ${request}`,()=>expect(requiresMultiPagePlan(request)).toBe(false));
+for(const request of [twoPageRequest(),threePageRequest(),`${pageSpec('P01','登录页')}\n${pageSpec('P02','注册页')}\n${pageSpec('P03','首页')}\n${pageSpec('P04','个人中心')}`])test(`多页路由：可提炼多个标题+内容 ${request.slice(0,24)}`,()=>expect(requiresMultiPagePlan(request)).toBe(true));
+for(const request of ['生成3个页面','设计多页面会员系统','新建登录页、注册页和首页','创建登录页面和注册页面','创建一套后台页面','create multiple pages','generate home and profile pages','新建一个资料页，参考首页和详情页','生成一个页面，使用两列卡片','创建详情页，底部链接列表页','修改当前页面','分析这些页面','create one page with two cards',pageSpec('P01','登录页')])test(`无法提炼多个标题+内容时按单页：${request.slice(0,24)}`,()=>expect(requiresMultiPagePlan(request)).toBe(false));
 
 test('规划只返回可编辑的有界计划，不生成HTML或写页面/History',async()=>{
  const before=useHistoryStore.getState().past.length,plan=await prepare();expect(objectCalls).toBe(1);expect(streamCalls).toHaveLength(0);
@@ -179,8 +179,9 @@ test('并发确认只运行一次，确认后修改调用方数组不能污染�
  const result=await pending;expect(result.status).toBe('complete');expect(useProjectStore.getState().screens[result.screenIds[0]].name).toBe('登录页');
 });
 test('直接Pipeline与单页工具不能把明确多页需求当作单页交付',async()=>{
- const output=await PipelineExecutor.execute({input:{rawPrompt:'生成3个页面',activeScreenId:null},provider,model:'model',engineCore:core,screens:{},deviceProfile:'mobile',frameWidth:390,baseSystemPrompt:'测试'});expect(output.status).toBe('error');expect(streamCalls).toHaveLength(0);
- const contract=buildDesignTaskContract({intent:'create_screen',request:'生成3个页面',deviceProfile:'mobile',frameWidth:390});
+ const multi=threePageRequest();
+ const output=await PipelineExecutor.execute({input:{rawPrompt:multi,activeScreenId:null},provider,model:'model',engineCore:core,screens:{},deviceProfile:'mobile',frameWidth:390,baseSystemPrompt:'测试'});expect(output.status).toBe('error');expect(streamCalls).toHaveLength(0);
+ const contract=buildDesignTaskContract({intent:'create_screen',request:multi,deviceProfile:'mobile',frameWidth:390});
  const result=await CanvasToolExecutor.executeAsync({tool:'create_screen',params:{title:'仅一页',html:'<main>仅一页</main>',workflowContract:contract}});expect(result.success).toBe(false);expect(useProjectStore.getState().screenOrder).toEqual(['old']);
 });
 test('伪造批次或复制句柄不能绕过私有批次与History',async()=>{
@@ -188,11 +189,12 @@ test('伪造批次或复制句柄不能绕过私有批次与History',async()=>{
  const items=[{id:'a',name:'a',requirements:'a',links:['missing']}];expect(()=>validateMultiPageItems(items)).toThrow('关联');
 });
 
-for(const request of ['生成9个页面','生成一百个页面','create 12 pages','CREATE 12 PAGES'])test(`超出页数 ${request} 在请求模型前拒绝拆分任务`,async()=>{
+test('超出页数：提炼出9个完整规格时在请求模型前拒绝拆分任务',async()=>{
+ const request=Array.from({length:9},(_,i)=>pageSpec(`P${String(i+1).padStart(2,'0')}`,`页面${i+1}`)).join('\n');
  await expect(prepare({request})).rejects.toThrow('最多规划8页');expect(objectCalls).toBe(0);expect(streamCalls).toHaveLength(0);
 });
 test('明确要求3页不能静默少规划1页；原计划与确认范围分别记录',async()=>{
- rawQueue=[rawPlan(),rawPlan()];await expect(prepare({request:'生成3个页面'})).rejects.toThrow('纠正后');expect(objectCalls).toBe(2);
+ rawQueue=[rawPlan(),rawPlan()];await expect(prepare({request:threePageRequest()})).rejects.toThrow('纠正后');expect(objectCalls).toBe(2);
 });
 test('输入规划合同/实际格式证据随页面交付快照保存',async()=>{
  const plan=await prepare(),result=await run(plan);expect(result.status).toBe('complete');
@@ -324,7 +326,7 @@ test('历史方案与范围拒绝未知kind/交叉关联/单个方案，旧多�
 });
 for(const request of ['设计报价页面，展示多个方案','生成套餐页，包含三个方案','create a page to show multiple options'])test(`业务内容不是设计备选 ${request}`,()=>expect(requiresPageVariantPlan(request)).toBe(false));
 test('多个业务页再做多方案须拆分，不静默只生成一个业务页的方案',async()=>{
- await expect(prepareVariants({request:'生成两个页面，给每页生成三个方案'})).rejects.toThrow('拆成独立任务');expect(objectCalls).toBe(0);
+ await expect(prepareVariants({request:`${twoPageRequest()}\n为每个页面生成三个设计方案`})).rejects.toThrow('拆成独立任务');expect(objectCalls).toBe(0);
 });
 
 import {createProjectStorage} from '../src/services/storage/projectStorage';
@@ -388,8 +390,8 @@ for(const phase of ['render','ready-handle'] as const)test(`checker change ${pha
   expect(result.status).toBe('blocked');expect(useProjectStore.getState().screenOrder).toEqual(['old']);expect(useHistoryStore.getState().past).toHaveLength(before);
  }finally{revision.mockRestore();}
 });
-for(const request of ['设计长页面，按分区生成同一页，不拆成多个页面','创建长文章页面。请不要拆分为多个页面','生成产品说明，别拆成多页面'])test(`单页分区的显式否定多页不应误分流：${request}`,()=>expect(requiresMultiPagePlan(request)).toBe(false));
-test('independent positive multi-page scope survives a separate negative split instruction',()=>expect(requiresMultiPagePlan('创建登录页、注册页和首页，不拆成多个页面')).toBe(true));
+for(const request of ['设计长页面，按分区生成同一页，不拆成多个页面','创建长文章页面。请不要拆分为多个页面','生成产品说明，别拆成多页面','创建登录页、注册页和首页，不拆成多个页面'])test(`单页或无法提炼多页时不误分流：${request}`,()=>expect(requiresMultiPagePlan(request)).toBe(false));
+test('已提炼出多个完整规格时即使附带勿拆分口令仍按多页',()=>expect(requiresMultiPagePlan(`${twoPageRequest()}\n请不要拆成多个页面`)).toBe(true));
 
 for(const scenario of ['complete','render-failure','cancelled','all-complete','image','image-evidence'] as const)test(`interrupted full nested tree ${scenario} keeps IDs, independent inputs, source receipts and a new root budget`,async()=>{
  const {prepareTreeTaskRecovery,treeRecoveryData,treeRecoveryMetadata,claimPreparedTreeRecovery}=await import('../src/services/ai/treeTaskRecovery');

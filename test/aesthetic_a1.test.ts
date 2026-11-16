@@ -44,7 +44,7 @@ describe('T-AE-07 · 设备专属类互斥', () => {
   });
 
   test('移动端独有类不出现在 PC 白名单', () => {
-    for (const c of ['safe-top', 'safe-bottom', 'appbar', 'tabbar', 'tabbar-soft', 'tabbar-dock', 'cta-fixed', 'scroll-x', 'input-touch', 'tap-target', 'list-item']) {
+    for (const c of ['safe-top', 'safe-bottom', 'appbar', 'tabbar', 'tabbar-soft', 'tabbar-dock', 'full-bleed', 'cta-fixed', 'scroll-x', 'input-touch', 'tap-target', 'list-item']) {
       expect(wl('mobile')).toContain(c);
       expect(wl('pc')).not.toContain(c);
     }
@@ -64,6 +64,7 @@ describe('T-AE-08/09 · Prompt 美学规则分档注入', () => {
     expect(p).toContain('SINGLE COLUMN ONLY');
     expect(p).toContain('NO HOVER STATES');
     expect(p).toContain('WIDTH CONTAINMENT');
+    expect(p).toContain('PAGE GUTTER');
     expect(p).toContain('TABBAR');
     // 白名单中不存在的类，规则文本里也不得点名——否则等于诱导模型使用
     expect(p).not.toContain('card-hover');

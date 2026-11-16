@@ -98,6 +98,15 @@ describe('CHK-F-04: 主体页面防重叠与防穿透保护', () => {
     expect(mobileCss).toMatch(/\.col\s*>\s*\.btn[\s\S]*?white-space:\s*normal/);
     expect(mobileCss).toContain('.row:has(> .badge, > .badge-soft, > .tag)');
   });
+
+  test('移动端默认页边距，全幅区可破出贴边', () => {
+    expect(mobileCss).toMatch(/body\s*\{[^}]*padding-left:\s*var\(--space-4/s);
+    expect(mobileCss).toMatch(/body\s*\{[^}]*padding-right:\s*var\(--space-4/s);
+    expect(mobileCss).toContain('.full-bleed');
+    expect(mobileCss).toMatch(/\.full-bleed[\s\S]*?margin-left:\s*calc\(-1 \* var\(--space-4/);
+    expect(mobileCss).toMatch(/\.tabbar:not\(\.tabbar-dock\)/);
+    expect(mobileCss).toMatch(/\.hero-section/);
+  });
 });
 
 describe('CHK-F-05: 白名单与样张页 100% 覆盖保证', () => {
@@ -111,6 +120,7 @@ describe('CHK-F-05: 白名单与样张页 100% 覆盖保证', () => {
       'tabbar-item',
       'tabbar-soft',
       'tabbar-dock',
+      'full-bleed',
       'cta-fixed',
       'scroll-x',
       'input-touch',

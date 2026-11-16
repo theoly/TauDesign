@@ -92,7 +92,8 @@ for(const treeMode of [false,true])test('multi-page production path registers ge
   return {textStream:(async function*(){yield text;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(text),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('stop'),abort(){}};
  }};
  PageRenderCheck.inspect=async(request,storage)=>({status:'complete',inspected:5,findings:[],resourceFiles:(await readProjectRenderResources(storage,[request.screen],request.assets)).resourceFiles});
- const prepared=await prepareMultiPagePlan({state:useProjectStore.getState(),request:'生成能量页和工具页两个页面',provider,model:'mock',core,isCurrent:()=>true});
+ const {twoPageRequest}=await import('./fixtures/multiPageTask');
+ const prepared=await prepareMultiPagePlan({state:useProjectStore.getState(),request:twoPageRequest(),provider,model:'mock',core,isCurrent:()=>true});
  const result=await executeMultiPagePlan(prepared,prepared.plan.pages,{getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch),...(treeMode?{generationTree:{concurrency:1 as const}}:{})});
  expect(result.message).not.toContain('失败');expect(result.status).toBe('complete');expect(Object.keys(useProjectStore.getState().assets)).toHaveLength(1);expect(useProjectStore.getState().screenOrder).toHaveLength(2);
  useHistoryStore.getState().undo();expect(useProjectStore.getState().screenOrder).toHaveLength(0);expect(Object.keys(useProjectStore.getState().assets)).toHaveLength(0);

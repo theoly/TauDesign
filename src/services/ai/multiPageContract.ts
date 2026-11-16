@@ -4,7 +4,7 @@ import {contentFingerprint} from './designWorkflow';
 import type {Screen} from '../../types/project';
 import {validatePageTaskPlan,type PageTaskPlan} from './pageTaskPlan';
 import {isTaskBudgetSnapshot,type TaskBudgetSnapshot} from './taskBudget';
-import {pageCountRoutingText} from './pageRequestScope';
+import {extractPageSpecifications,pageCountRoutingText} from './pageRequestScope';
 export interface MultiPageItem {id:string;name:string;requirements:string;links:string[];task?:PageTaskPlan}
 export interface MultiPagePlan {version:1;kind?:'variants';id:string;request:string;summary:string;contextFingerprint:string;originalPageCount:number;pages:MultiPageItem[];planning:{attempts:number;checkedAt:number;budget?:TaskBudgetSnapshot;inputFingerprint?:string;contract?:DesignTaskContract;evidence?:WorkflowValidationReport}}
 export interface MultiPageScope {version:1;kind?:'variants';planId:string;planFingerprint:string;itemId:string;screenId:string;name:string;index:number;total:number;originalPageCount:number;pageIds:string[];requiredTargetIds:string[]}
@@ -25,30 +25,36 @@ export function requiresPageVariantPlan(request:string):boolean{
   return Boolean(last&&!/展示|包含|列出|提供|选择|切换|show|include|display/i.test(last));
  });
 }
+function parseCountToken(token:string):number|undefined{
+ if(/[百千万亿]/.test(token))return Infinity;
+ const number=Number(token);if(Number.isFinite(number))return number;
+ const units:Record<string,number>={一:1,二:2,两:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9};
+ const parts=token.split('十');return parts.length===1?units[token]:((parts[0]?units[parts[0]]:1)*10+(parts[1]?units[parts[1]]:0));
+}
 export function requestedVariantCount(request:string):number|undefined{
  const match=request.match(/([0-9]+|[一二两三四五六七八九十百千万亿]+)\s*(?:个|种|套)\s*(?:不同的?)?(?:设计)?(?:方案|版本)|\b([0-9]+)\s+(?:(?:design|page)\s+)?(?:variants|alternatives|versions|options)\b/i);
- return match?requestedPageCount(`${match[1]??match[2]}页`):undefined;
+ if(!match)return;
+ return parseCountToken(match[1]??match[2]);
 }
 export function validateVariantItems(value:unknown):asserts value is MultiPageItem[]{
  validateMultiPageItems(value,2);
  if(value.length>4||value.some(p=>p.links.length))throw Error('同页比较应有2～4个方案，方案之间不能设置业务页面关联。');
 }
 
-/** Only explicit multi-page creation. Single-page requests may mention many read-only reference pages. */
+/**
+ * Multi-page only when the request contains ≥2 extractable pages (title + concrete content).
+ * Bare counts, inventory prose, same-route boards, and single specs always stay one page.
+ */
 export function requiresMultiPagePlan(request:string):boolean{
- // Ignore only a clause-leading negated split instruction, retaining independent positive scope.
- const t=pageCountRoutingText(request).trim().replace(/(^|[，,。；;！!\n])\s*(?:请\s*)?(?:不要|不必|无需|不用|不|别)\s*(?:再)?拆(?:分)?\s*(?:成|为|到)?\s*多(?:个)?页面/g,'$1');
- if(!/(?:新建|创建|生成|设计|制作|做|\b(?:create|generate|design|build)\b)/i.test(t))return false;
- if(/(?:新建|创建|生成|设计|做)(?:一个|一张|1个|1张|单个)[^，。；\n]{0,12}页|\b(?:one|single|1)\s+(?:new\s+)?(?:page|screen)\b/i.test(t))return false;
- return /多(?:个)?页面|多画框|(?:所有|全部)(?:关联|相关)?页面|[百千万亿]\s*(?:个|张)?(?:页面|画框|页)|(?:[2-9]|\d{2,}|[二两三四五六七八九十])\s*(?:个|张)?(?:新)?(?:页面|画框|页)|(?:整套|全套|一套)[^。\n]{0,14}(?:页面|设计)|(?:页面|页)\s*[、和及与]\s*[^。！\n]{0,20}(?:页面|页)|\b(?:multiple|several|[2-9]|\d{2,})\s+(?:new\s+)?(?:pages|screens)\b|\b(?:create|design|generate|build)\b[^.\n]{0,120}\b(?:pages|screens)\b/i.test(t);
+ return extractPageSpecifications(request).length>=2;
 }
 export function requestedPageCount(request:string):number|undefined{
- const match=pageCountRoutingText(request).match(/([0-9]+|[一二两三四五六七八九十百千万亿]+)\s*(?:(?:个|张)?(?:新)?(?:页面|画框|页)|(?:new\s+)?(?:pages|screens)\b)/i);
- if(!match)return;
- if(/[百千万亿]/.test(match[1]))return Infinity;
- const number=Number(match[1]);if(Number.isFinite(number))return number;
- const units:Record<string,number>={一:1,二:2,两:2,三:3,四:4,五:5,六:6,七:7,八:8,九:9};
- const parts=match[1].split('十');return parts.length===1?units[match[1]]:((parts[0]?units[parts[0]]:1)*10+(parts[1]?units[parts[1]]:0));
+ const specs=extractPageSpecifications(request).length;
+ if(specs>=2)return specs;
+ if(specs===1)return 1;
+ // No extractable title+content pages: treat as a single delivery page.
+ const match=pageCountRoutingText(request).match(/([0-9]+)\s*(?:个|张)?(?:新)?(?:页面|画框|页)/i);
+ return match?Number(match[1]):1;
 }
 export function validateMultiPageItems(value:unknown,min=1):asserts value is MultiPageItem[]{
  if(!Array.isArray(value)||value.length<min||value.length>8)throw Error(`页面计划应包含 ${min}～8 个页面，请拆分更大的任务。`);

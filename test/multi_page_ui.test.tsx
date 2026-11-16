@@ -1,4 +1,4 @@
-import {withMultiPageTasks,multiPageTask} from './fixtures/multiPageTask';
+import {withMultiPageTasks,multiPageTask,twoPageRequest} from './fixtures/multiPageTask';
 import {waitForChatIdle} from './modification_review_helpers';
 import {beforeEach,afterEach,expect,test} from 'bun:test';
 import React,{act} from 'react';
@@ -28,7 +28,7 @@ beforeEach(async()=>{
 afterEach(async()=>{release?.();await waitForChatIdle(host);act(()=>root.unmount());host.remove();DefaultAIEngineCore.prototype.generateObject=generate;DefaultAIEngineCore.prototype.streamText=stream;PageRenderCheck.inspect=inspect;useProjectStore.setState(prior,true);useHistoryStore.setState(history,true);useAIConfigStore.setState(config,true);(globalThis as any).IS_REACT_ACT_ENVIRONMENT=priorAct;});
 const card=()=>Array.from(host.querySelectorAll('[data-testid="multi-page-plan"]')).at(-1)!;
 const button=(text:string)=>Array.from(card().querySelectorAll('button')).find(b=>b.textContent===text)!;
-async function send(request='生成登录页、注册页两个页面'){const input=host.querySelector('textarea[placeholder^="输入设计诉求"]')! as HTMLTextAreaElement;await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(input,request);input.dispatchEvent(new Event('input',{bubbles:true}));});await act(async()=>{(host.querySelector('button[title="发送设计诉求 (Enter)"]') as HTMLButtonElement).click();await new Promise(r=>setTimeout(r,15));});}
+async function send(request=twoPageRequest()){const input=host.querySelector('textarea[placeholder^="输入设计诉求"]')! as HTMLTextAreaElement;await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,'value')!.set!.call(input,request);input.dispatchEvent(new Event('input',{bubbles:true}));});await act(async()=>{(host.querySelector('button[title="发送设计诉求 (Enter)"]') as HTMLButtonElement).click();await new Promise(r=>setTimeout(r,15));});}
 async function input(label:string,value:string){const field=card().querySelector(`[aria-label="${label}"]`)! as HTMLInputElement;await act(async()=>{Object.getOwnPropertyDescriptor(field.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype,'value')!.set!.call(field,value);field.dispatchEvent(new Event('input',{bubbles:true}));});}
 
 test('真实聊天先规划，编辑名称要求、确认后才生成，全部加入一次History',async()=>{

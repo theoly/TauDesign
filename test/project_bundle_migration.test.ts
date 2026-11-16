@@ -139,7 +139,8 @@ test('a real interrupted current shared-tree task migrates its full plan, target
  const model='fixture-vision',attachment={name:'独立参考.png',dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aKioAAAAASUVORK5CYII='};
  const provider={id:'migration-fixture',name:'fixture',baseUrl:'https://example.test/v1',protocol:'openai_compatible',apiKey:'synthetic-only',isEnabled:true} as const;
  try{
-  const plan=await prepareMultiPagePlan({state,request:'生成登录页、注册页两个页面',provider,model,attachment,core,textReferences:[{name:'完整需求.txt',source:'paste',content:'完整外部需求，迁移不删减'}],isCurrent:()=>true});
+  const {twoPageRequest}=await import('./fixtures/multiPageTask');
+  const plan=await prepareMultiPagePlan({state,request:twoPageRequest(),provider,model,attachment,core,textReferences:[{name:'完整需求.txt',source:'paste',content:'完整外部需求，迁移不删减'}],isCurrent:()=>true});
   const generated=await executeMultiPagePlan(plan,plan.plan.pages,{generationTree:{concurrency:1},getState:()=>state,commit:()=>{throw Error('partial batch must not commit');}});expect(generated.status).toBe('blocked');
   let task=(await listDesignTasks(f.source,f.doc.id)).find(task=>task.treeCheckpoint)!;for(let i=0;i<50&&task.state!=='blocked';i++){await new Promise(resolve=>setTimeout(resolve,10));task=(await readDesignTask(f.source,f.doc.id,task.id))!.task;}
   const before=(await readDesignTask(f.source,f.doc.id,task.id))!,trace=await readDesignTaskTraces(f.source,f.doc.id,task.id),requestCount=calls;expect(before.task.treeCheckpoint?.leafSources).toHaveLength(1);expect(before.task.treeCheckpoint?.delivery.planning.budget?.requests).toBe(1);

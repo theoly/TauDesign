@@ -414,6 +414,7 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
               .join('')}
           </div>
         </div>
+        <div class="full-bleed bg-surface-alt p-3 text-xs text-muted text-center">full-bleed · 全幅破出页边距</div>
         <div class="safe-top safe-bottom bg-surface-alt r-md text-xs text-muted text-center">safe-top / safe-bottom · 安全区预留</div>
       </div>`;
 

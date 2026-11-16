@@ -301,9 +301,13 @@
 html {
   overflow-x: clip;
 }
+/* 默认页边距：正文/卡片/按钮不贴窗口边缘；全幅区用破出规则 */
 body {
   max-width: 100%;
   overflow-x: clip;
+  box-sizing: border-box;
+  padding-left: var(--space-4, 16px);
+  padding-right: var(--space-4, 16px);
 }
 main,
 .col,
@@ -316,6 +320,20 @@ main,
 .list-item {
   max-width: 100%;
   min-width: 0;
+}
+
+/* 全幅破出：英雄区、底栏、系统栏、显式 .full-bleed（全屏图等）贴齐视口边缘 */
+.full-bleed,
+.hero-section,
+.tabbar:not(.tabbar-dock),
+.cta-fixed,
+.appbar,
+.status-bar {
+  width: calc(100% + 2 * var(--space-4, 16px));
+  max-width: calc(100% + 2 * var(--space-4, 16px));
+  margin-left: calc(-1 * var(--space-4, 16px));
+  margin-right: calc(-1 * var(--space-4, 16px));
+  box-sizing: border-box;
 }
 
 /* 标签/状态簇默认换行，避免一排 .badge/.tag 横向顶破画框 */

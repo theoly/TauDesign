@@ -125,7 +125,8 @@ for(const failSecond of [false,true])test(`多页首屏一次修复后${failSeco
   const content=pages===1?html:html.replace('font-size:0px','font-size:14px');const text=failSecond&&pages===2?'无有效页面':`<artifact identifier="screen_new" type="screen" title="${scope.name}">${content}</artifact>`;
   return {...core.streamText(options),textStream:(async function*(){yield text;})(),textPromise:Promise.resolve(text)};
  }};
- const before=useHistoryStore.getState().past.length,plan=await prepareMultiPagePlan({state:useProjectStore.getState(),request:'创建两个页面',provider,model:'fixture',core:multi,isCurrent:()=>true});
+ const {twoPageRequest}=await import('./fixtures/multiPageTask');
+ const before=useHistoryStore.getState().past.length,plan=await prepareMultiPagePlan({state:useProjectStore.getState(),request:twoPageRequest(),provider,model:'fixture',core:multi,isCurrent:()=>true});
  const progress:string[]=[],result=await executeMultiPagePlan(plan,plan.plan.pages,{getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch),onProgress:p=>progress.push(p[0]?.message??'')});
  expect(result.status).toBe(failSecond?'blocked':'complete');expect(calls.filter(c=>c.jsonSchema)).toHaveLength(1);expect(progress.some(m=>m.includes('一次受控样式修复'))).toBe(true);
  expect(useProjectStore.getState().screenOrder).toHaveLength(failSecond?0:2);expect(useHistoryStore.getState().past.length).toBe(before+(failSecond?0:1));

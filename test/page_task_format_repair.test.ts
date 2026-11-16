@@ -47,3 +47,17 @@ test('long page grouping limit and static-only inference policy are explicit in 
  const tooMany=raw();tooMany.features=Array.from({length:9},(_,i)=>({...tooMany.features[0],id:'f'+(i+1)}));
  expect(()=>validatePageTaskPlan(tooMany,contract())).toThrow('features');
 });
+test('extra keys and overlong strings are coerced without a format-repair round-trip',()=>{
+ const noisy:any=raw();
+ noisy.notes='model commentary';
+ noisy.goal='展示注册表单'+'详'.repeat(400);
+ noisy.features[0].extra='drop-me';
+ noisy.features[0].title='注册表单'+'长'.repeat(400);
+ noisy.features[0].information.push(...Array.from({length:10},(_,i)=>({label:`字段${i}`,kind:'display'})));
+ const plan=validatePageTaskPlan(noisy,contract());
+ expect(plan.goal.length).toBe(300);
+ expect(plan.features[0].title.length).toBe(300);
+ expect(plan.features[0].information).toHaveLength(8);
+ expect(plan).not.toHaveProperty('notes');
+ expect(plan.features[0]).not.toHaveProperty('extra');
+});

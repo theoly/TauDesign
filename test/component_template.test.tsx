@@ -127,7 +127,8 @@ test('多页第一份严格模板合格、第二页伪模板失败时不提前�
   const html=`<artifact identifier="screen_new" type="screen" title="${scope.name}"><main>${instance().replace('固定提示',calls===2?'坏固定区':'固定提示')}</main></artifact>`;
   return {textStream:(async function*(){yield html;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(html),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve(undefined),finishReasonPromise:Promise.resolve('stop'),abort(){}};
  }};
- const before=useHistoryStore.getState().past.length,plan=await prepareMultiPagePlan({state:useProjectStore.getState(),request:'创建两个页面',provider:{id:'fixture',name:'fixture',protocol:'openai_compatible',baseUrl:'https://invalid.local',apiKey:'fixture',isEnabled:true,models:[]} as any,model:'fixture',core,isCurrent:()=>true});
+ const {twoPageRequest}=await import('./fixtures/multiPageTask');
+ const before=useHistoryStore.getState().past.length,plan=await prepareMultiPagePlan({state:useProjectStore.getState(),request:twoPageRequest(),provider:{id:'fixture',name:'fixture',protocol:'openai_compatible',baseUrl:'https://invalid.local',apiKey:'fixture',isEnabled:true,models:[]} as any,model:'fixture',core,isCurrent:()=>true});
  const result=await executeMultiPagePlan(plan,plan.plan.pages,{getState:()=>useProjectStore.getState(),commit:batch=>useProjectStore.getState().applyMultiPageCreation(batch)});expect(result.status).toBe('blocked');expect(calls).toBe(2);expect(result.message).toContain('模板');expect(useProjectStore.getState().screenOrder).toHaveLength(0);expect(useHistoryStore.getState().past.length).toBe(before);
 });
 

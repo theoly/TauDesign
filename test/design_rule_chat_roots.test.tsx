@@ -67,7 +67,8 @@ for(const mode of ['local','region'] as const)test(`reviewed ${mode} modificatio
  expect(isModificationReviewReceipt(c.workflowContract!.modificationReview)).toBe(true);expect(c.workflowContract!.modificationReview!.analysis.workflowContract!.designGuidance!.requests).toHaveLength(1);expect(useProjectStore.getState().screens.page.htmlContent).toBe(original);
 });
 test('multi-page confirmation retains the original plan opt-in after the global control changes',async()=>{
- await act(async()=>{await engine.sendMessage('新建两个页面，分别展示长正文');});const m=engine.messages.find(m=>m.pagePlan?.plan)!;expect(m).toBeDefined();expect(requests).toHaveLength(1);expect(requests[0].messages[0].content).not.toContain('[LY-04@1]');
+ const {twoPageRequest}=await import('./fixtures/multiPageTask');
+ await act(async()=>{await engine.sendMessage(twoPageRequest());});const m=engine.messages.find(m=>m.pagePlan?.plan)!;expect(m).toBeDefined();expect(requests).toHaveLength(1);expect(requests[0].messages[0].content).not.toContain('[LY-04@1]');
  useAIConfigStore.getState().setAutoReferenceDesignRules(false);await act(async()=>{await engine.confirmPagePlan(m.id,m.pagePlan!.plan!.pages);});
  const created=Object.values(useProjectStore.getState().screens).filter(s=>s.id!=='page');expect(created).toHaveLength(2);expect(created.every(s=>s.metadata!.creationEvidence!.contract.designGuidance!.requests.length===1)).toBe(true);expect(requests).toHaveLength(3);expect(useProjectStore.getState().screens.page.htmlContent).toBe(original);
 });
