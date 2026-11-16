@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useProjectStore } from '../../../stores/useProjectStore';
 import { Accordion } from '../Accordion';
-import { Boxes, Image as ImageIcon, Settings2, Shapes } from 'lucide-react';
+import { Boxes, Image as ImageIcon, Library, Settings2, Shapes } from 'lucide-react';
 import { parseHtmlCopy } from '../../../utils/htmlDocument';
 import { AssetPreviewImage } from '../../assets/AssetPreviewImage';
+import { listActiveBuiltinMotherMeta } from '../../../reference-pages/builtinMetaIndex';
 
 interface AssetsPanelProps {
   /** 打开完整资源中心：上传、AI 生图、批量管理等重操作仍走弹窗 */
@@ -32,6 +33,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
   const icons = assetList.filter((a) => a.type === 'svg_icon');
   const media=assetList.filter(a=>a.type==='media'),fonts=assetList.filter(a=>a.type==='font');
   const componentList = Object.values(components);
+  const builtinMothers = useMemo(() => listActiveBuiltinMotherMeta(), []);
 
   /** 应用到当前选中元素：img 改 src，其他元素设为背景图 */
   const applyImage = (url: string) => {
@@ -132,6 +134,36 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+      </Accordion>
+
+      <Accordion panelKey="assets.mothers" title="母版" badge={builtinMothers.length} defaultOpen={false}>
+        {builtinMothers.length === 0
+          ? empty('暂无内置母版。可在资源中心将当前画框存为工程母版。')
+          : (
+            <div className="space-y-0.5 px-1.5">
+              {builtinMothers.slice(0, 12).map((meta) => (
+                <div
+                  key={meta.id}
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-slate-400"
+                  title={`${meta.device} · ${meta.pageKind}`}
+                >
+                  <Library className="w-3.5 h-3.5 text-emerald-500/80 shrink-0" />
+                  <span className="truncate">{meta.id}</span>
+                  <span className="ml-auto shrink-0 text-[10px] text-slate-600">只读</span>
+                </div>
+              ))}
+              {builtinMothers.length > 12 && (
+                <p className="px-3 py-1 text-[10px] text-slate-600">另有 {builtinMothers.length - 12} 条，见资源中心「母版」</p>
+              )}
+              <button
+                type="button"
+                onClick={onOpenAssetCenter}
+                className="mx-2 mb-1 mt-1 w-[calc(100%-1rem)] py-1.5 rounded-md bg-slate-800 hover:bg-slate-750 text-[10px] text-slate-300 transition"
+              >
+                打开资源中心存为母版
+              </button>
             </div>
           )}
       </Accordion>

@@ -1,0 +1,54 @@
+{
+  "id": "pc-detail-profile",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "detail",
+  "aliases": [
+    "资料详情",
+    "客户档案",
+    "人物详情",
+    "profile detail"
+  ],
+  "features": [
+    "avatar",
+    "badge",
+    "two-column",
+    "attribute-grid"
+  ],
+  "density": "standard",
+  "compositionHint": {
+    "layout": "two-column",
+    "regionRoles": [
+      "header",
+      "main",
+      "secondary"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "人物/客户档案详情",
+    "摘要与详情双栏"
+  ],
+  "notApplicableWhen": [
+    "纯列表",
+    "营销落地"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "9438bc46",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

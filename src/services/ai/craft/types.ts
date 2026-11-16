@@ -1,4 +1,4 @@
-import { GenerationIntent } from '../promptBuilder';
+import type { GenerationIntent } from '../promptBuilder';
 
 export interface CraftRule {
   slug: string;

@@ -41,7 +41,7 @@ export async function proposeStyleRepair(input:{state:PageCreationState;html:str
   if(nids.some(nid=>options.allowedNids&&!options.allowedNids.includes(nid)))return {status:'skipped',message:'报错控件无法安全修复。'};
   const targets=nids.map(nid=>Array.from(doc.body.querySelectorAll('[data-nid]')).filter(node=>node.getAttribute('data-nid')===nid));
   if(targets.some(nodes=>nodes.length!==1||!nodes[0].matches('button,a[href],[role="button"],input[type="submit"],input[type="button"]')||[...task.protectedNids,...(options.protectedNids??[])].some(nid=>Array.from(doc.querySelectorAll('[data-nid]')).some(protectedNode=>protectedNode.getAttribute('data-nid')===nid&&(protectedNode.contains(nodes[0])||nodes[0].contains(protectedNode))))||nodes[0].closest('template')||
-    (!nodes[0].textContent?.trim()&&!nodes[0].querySelector('svg,img,.icon')&&!nodes[0].getAttribute('value'))))return {status:'skipped',message:'报错控件无法安全修复。'};
+    (!nodes[0].textContent?.trim()&&!nodes[0].querySelector('svg,img,.icon,.icon-mask')&&!nodes[0].getAttribute('value'))))return {status:'skipped',message:'报错控件无法安全修复。'};
   const fragments=targets.map(nodes=>nodes[0].outerHTML);if(fragments.join('').length>12000)return {status:'skipped',message:'报错控件无法安全修复。'};
   const key=JSON.stringify([input.state.id,task.taskId,input.context]);
   if(attempted.has(key))return {status:'blocked',message:'本任务已尝试一次受控修复，未再次请求模型。'};

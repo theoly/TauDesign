@@ -1,0 +1,48 @@
+{
+  "id": "pc-empty-state",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "empty",
+  "aliases": [
+    "空状态",
+    "无数据",
+    "empty state"
+  ],
+  "features": [
+    "empty-cta",
+    "centered"
+  ],
+  "density": "relaxed",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "main"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "列表/项目为空引导创建",
+    "单一主操作"
+  ],
+  "notApplicableWhen": [
+    "已有数据的列表",
+    "错误结果页"
+  ],
+  "statesShown": [
+    "empty",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "618347a6",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

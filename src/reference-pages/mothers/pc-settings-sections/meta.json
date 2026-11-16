@@ -1,0 +1,51 @@
+{
+  "id": "pc-settings-sections",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "settings",
+  "aliases": [
+    "设置分组",
+    "账户设置",
+    "settings sections"
+  ],
+  "features": [
+    "settings-groups",
+    "sidebar",
+    "toggles"
+  ],
+  "density": "standard",
+  "compositionHint": {
+    "layout": "sidebar-main",
+    "regionRoles": [
+      "sidebar",
+      "main"
+    ],
+    "primaryCta": "none"
+  },
+  "applicableWhen": [
+    "分组设置与说明",
+    "侧栏导航设置"
+  ],
+  "notApplicableWhen": [
+    "营销落地",
+    "数据看板"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "1741255c",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

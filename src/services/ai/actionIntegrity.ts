@@ -1,4 +1,5 @@
 import {inspectText} from '../../utils/textNode';
+import {parseHtmlCopy} from '../../utils/htmlDocument';
 import {replacedInlineActions} from './inlineFormContract';
 import type { QualityFinding } from './generationQuality';
 
@@ -115,10 +116,49 @@ export function inspectActionIntegrity(doc: Document, original?: Document, reque
   }
   for (const action of actions) {
     const icon = Array.from(action.querySelectorAll('svg,img,.icon,.icon-mask')).some(node => !hidden(node));
-    if (hidden(action) || !primary(action) || label(action) || (icon && hasAccessibleActionName(action))) continue;
+    // Align with render-controls: every interactive control needs visible text or a named visible icon.
+    if (hidden(action) || label(action) || (icon && hasAccessibleActionName(action))) continue;
     if (!findings.some(f => f.code === 'action_label_lost' && f.nid === (action.getAttribute('data-nid') || undefined))) {
-      add(action, 'action_label_missing', '主操作按钮没有可识别的操作文案或图标名称。', icon?'图标缺少可识别的操作名称':'空按钮');
+      add(action, 'action_label_missing', primary(action) ? '主操作按钮没有可识别的操作文案或图标名称。' : '操作控件没有可识别的操作文案或图标名称。', icon?'图标缺少可识别的操作名称':'空按钮');
     }
   }
   return findings;
+}
+
+function inferIconActionName(action: Element): string {
+  const title = action.getAttribute('title')?.trim();
+  if (title) return title;
+  for (const icon of Array.from(action.querySelectorAll('svg,img,.icon,.icon-mask'))) {
+    if (hidden(icon)) continue;
+    const named = icon.getAttribute('aria-label')?.trim()
+      || (icon.matches('img') ? icon.getAttribute('alt')?.trim() : '')
+      || Array.from(icon.children).find(node => node.localName === 'title')?.textContent?.trim()
+      || '';
+    if (named) return named;
+  }
+  const hint = `${action.getAttribute('class') ?? ''} ${action.getAttribute('data-action') ?? ''}`;
+  if (/close|dismiss|取消/i.test(hint)) return '关闭';
+  if (/back|返回/i.test(hint)) return '返回';
+  if (/menu|hamburger|导航/i.test(hint)) return '菜单';
+  if (/upload|attach|file|photo|image|camera|add|plus|添加/i.test(hint)) return '添加';
+  return '操作';
+}
+
+/**
+ * Deterministic pre-gate repair for secondary icon chrome: unlabeled icon-only controls get aria-label
+ * so render-controls and offline integrity agree. Primary CTAs stay rejected for draft/text repair.
+ * Does not invent visible copy for empty text buttons.
+ */
+export function ensureActionAccessibleNames(html: string): string {
+  if (typeof DOMParser === 'undefined') return html;
+  const copy = parseHtmlCopy(html);
+  let changed = false;
+  for (const action of Array.from(copy.doc.querySelectorAll(ACTIONS))) {
+    if (hidden(action) || primary(action) || label(action) || hasAccessibleActionName(action)) continue;
+    const icons = Array.from(action.querySelectorAll('svg,img,.icon,.icon-mask')).filter(node => !hidden(node));
+    if (!icons.length) continue;
+    action.setAttribute('aria-label', inferIconActionName(action));
+    changed = true;
+  }
+  return changed ? copy.serialize() : html;
 }

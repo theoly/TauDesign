@@ -1,0 +1,51 @@
+{
+  "id": "mobile-dashboard-stack",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "mobile",
+  "pageKind": "dashboard",
+  "aliases": [
+    "移动看板",
+    "指标横滑",
+    "mobile dashboard"
+  ],
+  "features": [
+    "metrics",
+    "scroll-x",
+    "cards"
+  ],
+  "density": "compact",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "移动端指标横滑 + 纵向区块",
+    "无 hover 依赖"
+  ],
+  "notApplicableWhen": [
+    "桌面侧栏壳",
+    "系统状态栏"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "loading"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "d814ad0a",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

@@ -9,6 +9,13 @@ import {createProjectAuthoringSession,projectAuthor,projectStorageScope,recordPr
 import {prepareHistoryArchive,type HistorySnapshot} from './historyRepository';
 import {appendPublicationCommit,parsePublicationCommits,type PublicationDescriptor,type ProjectPublicationCommit} from './projectPublicationRecord';
 import {validatePublicationResources,type RenderResourceFile} from './renderResourceSnapshot';
+import {
+  listProjectLocalMothers,
+  loadProjectLocalMother,
+  saveMotherProjectLocal,
+  type SaveMotherResult
+} from '../../reference-pages/saveMother';
+import type { MotherPage } from '../../reference-pages/types';
 
 /**
  * 将画框对象或元信息规范化为标准 ArtifactManifest (REQ-OD-05 / BR-05.1)
@@ -48,11 +55,17 @@ export function normalizeToArtifactManifest(
  * ├── screens/{id}.html    # 画框 HTML 基线，便于外部 diff 与版本管理
  * ├── screens/{id}.css     # 画框 scopedCss
  * ├── assets/images|icons  # 附件原文件
- * └── conversations/       # 会话 JSONL 分片（见 conversationStore.ts）
+ * ├── conversations/       # 会话 JSONL 分片（见 conversationStore.ts）
+ * └── mothers/             # 可选工程母版库（sidecar，不进 managed snapshot）
+ *     ├── index.json       # { version:1, entries:[{id,updatedAt}] }；缺目录/缺索引 = 空
+ *     └── {id}/meta.json + body.html (+ regions/*.html)
  * ```
  *
  * **画框 HTML 单独成文件**正是 PRD §2.7 选择文件夹的理由之一：可被 Git 版本管理、
  * 可人工检查与外部编辑、损坏时可局部恢复。
+ *
+ * 工程母版读写见 `listProjectMothers` / `saveProjectMother`（委托
+ * `src/reference-pages/saveMother.ts`）；旧工程无 `mothers/` 时一律返回空列表。
  */
 
 const PROJECT_JSON = 'project.json';
@@ -401,6 +414,20 @@ export class ProjectRepository {
     } catch {
       return Date.now();
     }
+  }
+
+  /** 工程本地母版列表；缺 `mothers/` 时返回 []，不影响旧工程。 */
+  async listProjectMothers(): Promise<MotherPage[]> {
+    return listProjectLocalMothers(this.storage);
+  }
+
+  async loadProjectMother(id: string): Promise<MotherPage | null> {
+    return loadProjectLocalMother(this.storage, id);
+  }
+
+  /** 将已密封母版写入工程 `mothers/`（sidecar，不经 managed snapshot）。 */
+  async saveProjectMother(mother: MotherPage): Promise<SaveMotherResult> {
+    return saveMotherProjectLocal(this.storage, mother);
   }
 }
 

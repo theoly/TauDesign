@@ -1,0 +1,53 @@
+{
+  "id": "pc-dashboard-metrics",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "dashboard",
+  "aliases": [
+    "指标看板",
+    "运营概览",
+    "metrics dashboard"
+  ],
+  "features": [
+    "metrics",
+    "toolbar",
+    "cards",
+    "secondary-list"
+  ],
+  "density": "compact",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main",
+      "secondary"
+    ],
+    "primaryCta": "toolbar"
+  },
+  "applicableWhen": [
+    "运营/业务指标概览",
+    "指标卡有主次字号"
+  ],
+  "notApplicableWhen": [
+    "纯表单",
+    "营销落地首屏"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "loading"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "56c5c321",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

@@ -206,6 +206,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const shouldAutoScrollRef = useRef(true);
+  const wasGeneratingRef = useRef(false);
 
   const toggleCodeExpand = (msgId: string) => {
     setExpandedCodeIds((prev) => ({ ...prev, [msgId]: !prev[msgId] }));
@@ -246,13 +247,6 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   }, [engine.restoredHistoryKey]);
 
   const latestReviewStatus = engine.messages[engine.messages.length - 1]?.modificationReview?.status;
-  useLayoutEffect(() => {
-    const el = scrollContainerRef.current;
-    if (el && shouldAutoScrollRef.current && (latestReviewStatus === 'ready' || latestReviewStatus === 'error')) {
-      el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
-      setIsAtBottom(true);
-    }
-  }, [latestReviewStatus]);
 
   // 监听并接收来自属性面板等的「一键评测」推送报告
   useEffect(() => {
@@ -486,12 +480,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       setIsElementReferenced(false);
     }
 
-    // 发送新消息时重置自动跟随并滚到底部
+    // 发送后强制跟随最新进度；真正贴底由下方 layout effect 在消息入列后执行。
     shouldAutoScrollRef.current = true;
     setIsAtBottom(true);
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
-    }, 50);
 
     // 引用与否只由用户显式操作决定：开关点亮 / @提及 / 元素引用。
     // 「命中修改词就偷偷把活跃画框当引用」是误改现有页面的根源，已移除 (BR-GT-02)。
@@ -527,14 +518,21 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
     }
   }
 
+  const snapMessagesToBottom = () => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+    setIsAtBottom(true);
+  };
+
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    if (messagesEndRef.current?.scrollIntoView) {
-      messagesEndRef.current.scrollIntoView({ behavior });
-    } else if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
-    }
     shouldAutoScrollRef.current = true;
     setIsAtBottom(true);
+    // 浮动按钮可平滑；自动跟随时一律用 scrollTop，避免 smooth+scrollIntoView 跟不上增高。
+    if (behavior === 'smooth' && messagesEndRef.current?.scrollIntoView) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+    snapMessagesToBottom();
   };
 
   const handleScroll = () => {
@@ -556,20 +554,34 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
     }
   };
 
-  // 仅在 AI 输出时才自动滚动到底部；若用户向上滚动取消跟随则暂停滚动
-  useEffect(() => {
-    if (engine.isGenerating) {
+  const activeProgress = activeGeneratingMsg?.generationProgress ?? '';
+  const activeExecutionStamp = activeGeneratingMsg?.executionEvents?.at(-1)?.at ?? 0;
+  const activeActivity = activeGeneratingMsg?.executionActivity;
+  const activeActivityStamp = activeActivity
+    ? `${activeActivity.lastActivityAt ?? activeActivity.startedAt}:${activeActivity.textChars}:${activeActivity.reasoningChars}:${activeActivity.status}`
+    : '';
+  const latestMessageStamp = engine.messages.length
+    ? `${engine.messages.length}:${engine.messages[engine.messages.length - 1]?.id}:${engine.messages[engine.messages.length - 1]?.isGenerating ? 1 : 0}`
+    : '0';
+
+  // 新一轮生成开始时拉一次到底；流式/进度增高时继续贴底。用户上滑取消跟随。
+  useLayoutEffect(() => {
+    if (engine.isGenerating && !wasGeneratingRef.current) {
       shouldAutoScrollRef.current = true;
       setIsAtBottom(true);
-      messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
     }
-  }, [engine.isGenerating]);
-
-  useEffect(() => {
-    if (engine.isGenerating && shouldAutoScrollRef.current) {
-      messagesEndRef.current?.scrollIntoView?.({ behavior: 'smooth' });
-    }
-  }, [activeStreamText]);
+    wasGeneratingRef.current = engine.isGenerating;
+    if (!shouldAutoScrollRef.current) return;
+    snapMessagesToBottom();
+  }, [
+    engine.isGenerating,
+    activeStreamText,
+    activeProgress,
+    activeExecutionStamp,
+    activeActivityStamp,
+    latestMessageStamp,
+    latestReviewStatus
+  ]);
 
   return (
     <div data-testid="ai-chat-panel" className="w-[390px] shrink-0 h-full bg-slate-900 border-r border-slate-800 flex flex-col z-20 select-text">
@@ -1712,6 +1724,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       )}
 
       {/* 上下文引用控制栏（卡片/按钮双态：启用 / 非启用）*/}
+      {/* TODO(E4c): optional mother enabled/disabled chip beside page/element refs — skip for now (invasive; wait for E5 mother inject wiring). */}
       {(activeScreen || selectedNode) && (
         <div className="px-3 py-2 border-t border-slate-800 bg-slate-900/60 flex items-center flex-wrap gap-2">
           <span className="text-[10px] text-slate-500 mr-0.5 flex-shrink-0">引用</span>

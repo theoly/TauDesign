@@ -1,0 +1,52 @@
+{
+  "id": "pc-pricing-compare",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "pricing",
+  "aliases": [
+    "套餐对比",
+    "价格表",
+    "会员套餐",
+    "pricing compare"
+  ],
+  "features": [
+    "pricing-tiers",
+    "badge",
+    "comparison"
+  ],
+  "density": "standard",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "三列套餐对比",
+    "突出推荐档"
+  ],
+  "notApplicableWhen": [
+    "单列移动套餐",
+    "后台设置页"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "c9b47db9",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

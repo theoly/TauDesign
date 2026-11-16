@@ -23,6 +23,11 @@ export interface DesignSystemTokens {
   typography: {
     fontFamilySans: string;
     fontFamilyMono: string;
+    /**
+     * Optional display / hero face. Same brand hue family as sans — a typographic
+     * role only, not a second brand axis. Compiler falls back to fontFamilySans.
+     */
+    fontFamilyDisplay?: string;
     sizes: Record<string, number>;
     weights: Record<string, number>;
     lineHeights: Record<string, number>;

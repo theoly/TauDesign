@@ -1,0 +1,54 @@
+<main class="col bg-page">
+  <header class="col gap-3 p-4 border-b bg-surface" data-region="header">
+    <div class="row items-center justify-between gap-3">
+      <h1 class="text-xl font-bold">我的课程</h1>
+      <button class="btn btn-primary btn-sm">报名</button>
+    </div>
+    <div class="filter-bar scroll-x" data-region="filters">
+      <button class="btn btn-secondary btn-sm is-active text-nowrap">全部</button>
+      <button class="btn btn-ghost btn-sm text-nowrap">进行中</button>
+      <button class="btn btn-ghost btn-sm text-nowrap">已完成</button>
+      <button class="btn btn-ghost btn-sm text-nowrap">已过期</button>
+    </div>
+  </header>
+  <section class="col gap-3 p-4" data-region="main">
+    <article class="card shadow-card p-4 col gap-3 is-selected">
+      <div class="row justify-between items-start gap-2">
+        <div class="col gap-1 min-w-0">
+          <h2 class="text-md font-semibold">产品叙事工作坊</h2>
+          <p class="text-xs text-muted">导师 陈予安 · 剩余 4 课时</p>
+        </div>
+        <span class="badge-soft text-success">进行中</span>
+      </div>
+      <p class="text-sm text-secondary">下周一下午继续「用户旅程图」实操。</p>
+      <div class="row justify-between items-center">
+        <span class="avatar">陈</span>
+        <button class="btn btn-ghost btn-sm">继续学习</button>
+      </div>
+    </article>
+    <article class="card shadow-card p-4 col gap-3">
+      <div class="row justify-between items-start gap-2">
+        <div class="col gap-1 min-w-0">
+          <h2 class="text-md font-semibold">原型表达精讲</h2>
+          <p class="text-xs text-muted">导师 林知夏 · 已学完</p>
+        </div>
+        <span class="badge-soft text-muted">已完成</span>
+      </div>
+      <p class="text-sm text-secondary">可回看作业点评与示范稿。</p>
+      <div class="row justify-between items-center">
+        <span class="avatar">林</span>
+        <button class="btn btn-ghost btn-sm">查看证书</button>
+      </div>
+    </article>
+    <article class="card shadow-card p-4 col gap-3 surface-subtle">
+      <div class="row justify-between items-start gap-2">
+        <div class="col gap-1 min-w-0">
+          <h2 class="text-md font-semibold">品牌色系统营</h2>
+          <p class="text-xs text-muted">报名已截止</p>
+        </div>
+        <span class="badge-soft text-warning">已过期</span>
+      </div>
+      <p class="text-sm text-secondary">下一期开放时可优先候补。</p>
+    </article>
+  </section>
+</main>

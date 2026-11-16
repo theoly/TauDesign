@@ -1,6 +1,18 @@
 import React from 'react';
 import type { DesignBrief } from '../../services/ai/designBrief';
-const pageKinds={form:'表单',detail:'详情/档案',list:'列表',dashboard:'工作台/看板',pricing:'套餐/充值',conversation:'对话/建议',unknown:'未确定'};
+const pageKinds: Record<string, string> = {
+  form: '表单',
+  detail: '详情/档案',
+  list: '列表',
+  dashboard: '工作台/看板',
+  pricing: '套餐/充值',
+  conversation: '对话/建议',
+  landing: '落地/营销',
+  settings: '设置',
+  empty: '空状态',
+  result: '结果/成功',
+  unknown: '未确定'
+};
 
 export function DesignBriefCard({ brief }: { brief: DesignBrief }) {
   return <details className="my-2 rounded-lg border border-slate-700 bg-slate-900 p-3 text-xs text-slate-300" data-testid="design-brief">

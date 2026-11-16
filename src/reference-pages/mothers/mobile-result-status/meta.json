@@ -1,0 +1,50 @@
+{
+  "id": "mobile-result-status",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "mobile",
+  "pageKind": "result",
+  "aliases": [
+    "移动结果",
+    "状态结果",
+    "mobile result"
+  ],
+  "features": [
+    "result-status",
+    "next-actions"
+  ],
+  "density": "standard",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "main",
+      "footer"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "移动端状态结果页",
+    "主次按钮纵向"
+  ],
+  "notApplicableWhen": [
+    "桌面宽结果卡",
+    "空态引导页"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "129f0afb",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

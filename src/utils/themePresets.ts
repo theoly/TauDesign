@@ -1,9 +1,9 @@
 import { DesignSystem, DesignSystemTokens, ModePair, ThemePreset } from '../types/designSystem';
 
 /**
- * 四套工业级主题预设 (A2 / T-AE-17)。
+ * 工业级主题预设 (A2 / T-AE-17)。
  *
- * 改造前四套全部以 `...techBlueTheme.tokens` 展开，**仅覆写 primary 色阶与 radius**
+ * 改造前多套全部以 `...techBlueTheme.tokens` 展开，**仅覆写 primary 色阶与 radius**
  * （emerald 连 radius 都没改），neutral / background / surface / shadow / typography /
  * spacing 完全一致——所谓"一键换风格"实际只换了个按钮颜色，这才是
  * doc/aesthetic/spec.md §1 病因 5「风格无主脑」的真因。
@@ -11,22 +11,29 @@ import { DesignSystem, DesignSystemTokens, ModePair, ThemePreset } from '../type
  * 现在每套在**色相、中性色冷暖、圆角尺度、阴影性格、间距密度、边框微妙度、
  * 字族**七个维度上各自成立。
  *
+ * Single-brand-hue discipline: each preset owns **one** primary hue ramp. Accent /
+ * semantic / surface roles are companions on that hue (or neutral), not a second
+ * brand axis. Display font (`fontFamilyDisplay`) is a typographic role only —
+ * same brand family, never a parallel color brand.
+ *
  * ⚠️ preset 与 colorMode 正交 (T-AE-18)：preset 决定**色相与性格**，
- * colorMode 决定**明暗**。每套预设都必须提供可用的 light + dark 两组取值，
- * 不存在"只能用于深色"的预设。
+ * colorMode 决定**明暗**。每套预设都必须提供可用的 light + dark 两组取值
+ * （ModePair shadows 强制成对），不存在"只能用于深色"的预设。
  */
 
 const SANS = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif';
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
+/** Display face defaults to the same family as sans — role swap, not a second brand. */
+const DISPLAY = SANS;
 
 const pair = (light: string, dark: string): ModePair => ({ light, dark });
 
-const SIZES = { xs: 12, sm: 14, md: 16, lg: 18, xl: 20, '2xl': 24, '3xl': 30, '4xl': 36 };
+const SIZES = { xs: 12, sm: 14, md: 16, lg: 18, xl: 20, '2xl': 24, '3xl': 30, '4xl': 36, '5xl': 48, '6xl': 60 };
 const WEIGHTS = { normal: 400, medium: 500, semibold: 600, bold: 700 };
 const LINE_HEIGHTS = { tight: 1.25, normal: 1.5, relaxed: 1.625 };
-const SPACING = { '0': 0, '1': 4, '2': 8, '3': 12, '4': 16, '5': 20, '6': 24, '8': 32 };
+const SPACING = { '0': 0, '1': 4, '2': 8, '3': 12, '4': 16, '5': 20, '6': 24, '8': 32, '10': 40, '12': 48, '16': 64 };
 
-/** 深色下阴影必须更强更黑才可见，浅色下则需克制 */
+/** 深色下阴影必须更强更黑才可见，浅色下则需克制；始终 ModePair */
 const shadow = (light: string, dark: string) => pair(light, dark);
 
 // ── 0. Neutral Modern (现代中性微质感 · 默认主题) ─────────────────────────
@@ -47,7 +54,7 @@ export const neutralModernTheme: DesignSystem = {
       textSecondary: pair('#64748b', '#94a3b8'),
       border: pair('#e2e8f0', '#222d42')
     },
-    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
+    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, fontFamilyDisplay: DISPLAY, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
     spacing: SPACING,
     radius: { none: '0px', sm: '3px', md: '6px', lg: '10px', xl: '14px', full: '9999px' },
     shadows: {
@@ -81,7 +88,7 @@ export const minimalistSlateTheme: DesignSystem = {
       textSecondary: pair('#71717a', '#a1a1aa'),
       border: pair('#e4e4e7', '#3f3f46')
     },
-    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
+    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, fontFamilyDisplay: DISPLAY, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
     // 极简风靠留白而非装饰，间距放大
     spacing: SPACING,
     radius: { none: '0px', sm: '2px', md: '4px', lg: '6px', xl: '8px', full: '9999px' },
@@ -117,7 +124,7 @@ export const techIndigoTheme: DesignSystem = {
       textSecondary: pair('#64748b', '#94a3b8'),
       border: pair('#e2e8f0', '#2c3550')
     },
-    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
+    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, fontFamilyDisplay: DISPLAY, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
     spacing: SPACING,
     radius: { none: '0px', sm: '4px', md: '8px', lg: '12px', xl: '16px', full: '9999px' },
     // 主色弥散微光是这套风格的签名
@@ -158,7 +165,8 @@ export const warmCoralTheme: DesignSystem = {
     typography: {
       fontFamilySans: SANS,
       fontFamilyMono: MONO,
-      sizes: { xs: 13, sm: 15, md: 17, lg: 19, xl: 22, '2xl': 26, '3xl': 32, '4xl': 40 },
+      fontFamilyDisplay: DISPLAY,
+      sizes: { xs: 13, sm: 15, md: 17, lg: 19, xl: 22, '2xl': 26, '3xl': 32, '4xl': 40, '5xl': 52, '6xl': 64 },
       weights: WEIGHTS,
       lineHeights: { tight: 1.3, normal: 1.55, relaxed: 1.7 }
     },
@@ -200,6 +208,7 @@ export const cyberCyanTheme: DesignSystem = {
     typography: {
       fontFamilySans: SANS,
       fontFamilyMono: MONO,
+      fontFamilyDisplay: DISPLAY,
       sizes: SIZES,
       weights: WEIGHTS,
       lineHeights: { tight: 1.2, normal: 1.45, relaxed: 1.6 }
@@ -239,7 +248,7 @@ export const antBlueTheme: DesignSystem = {
       textSecondary: pair('#8c8c8c', '#a6a6a6'),
       border: pair('#d9d9d9', '#303030')
     },
-    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
+    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, fontFamilyDisplay: DISPLAY, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
     spacing: SPACING,
     radius: { none: '0px', sm: '2px', md: '6px', lg: '8px', xl: '12px', full: '9999px' },
     shadows: {
@@ -273,7 +282,7 @@ export const supabaseEmeraldTheme: DesignSystem = {
       textSecondary: pair('#71717a', '#a1a1aa'),
       border: pair('#e4e4e7', '#2e2e2e')
     },
-    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
+    typography: { fontFamilySans: SANS, fontFamilyMono: MONO, fontFamilyDisplay: DISPLAY, sizes: SIZES, weights: WEIGHTS, lineHeights: LINE_HEIGHTS },
     spacing: SPACING,
     radius: { none: '0px', sm: '2px', md: '4px', lg: '6px', xl: '8px', full: '9999px' },
     shadows: {

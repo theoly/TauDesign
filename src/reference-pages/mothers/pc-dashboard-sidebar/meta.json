@@ -1,0 +1,52 @@
+{
+  "id": "pc-dashboard-sidebar",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "dashboard",
+  "aliases": [
+    "侧栏看板",
+    "后台总览",
+    "sidebar dashboard"
+  ],
+  "features": [
+    "sidebar",
+    "metrics",
+    "navigation",
+    "table"
+  ],
+  "density": "compact",
+  "compositionHint": {
+    "layout": "sidebar-main",
+    "regionRoles": [
+      "sidebar",
+      "main"
+    ],
+    "primaryCta": "toolbar"
+  },
+  "applicableWhen": [
+    "带侧栏导航的后台总览",
+    "证明 sidebar 壳层可用"
+  ],
+  "notApplicableWhen": [
+    "移动单列看板",
+    "无导航营销页"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "empty"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "15f13a34",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

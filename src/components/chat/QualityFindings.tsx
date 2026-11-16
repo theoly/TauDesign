@@ -3,8 +3,22 @@ import React from 'react';
 import type { QualityFinding } from '../../services/ai/generationQuality';
 import { findingDisposition, findingRequirement } from '../../services/ai/findingPolicy';
 
-const labels = { blocker: '阻断', warning: '警告', unverified: '未验证', advisory: '设计建议' };
-const colors = { blocker: 'text-rose-300', warning: 'text-amber-200', unverified: 'text-slate-300', advisory: 'text-sky-200' };
+const labels = {
+  blocker: '阻断',
+  warning: '警告',
+  unverified: '未验证',
+  advisory: '设计建议',
+  elevatable: '待提升',
+  'layout-risk': '布局风险',
+} as const;
+const colors = {
+  blocker: 'text-rose-300',
+  warning: 'text-amber-200',
+  unverified: 'text-slate-300',
+  advisory: 'text-sky-200',
+  elevatable: 'text-violet-200',
+  'layout-risk': 'text-rose-300',
+} as const;
 
 export function findingSummary(findings: QualityFinding[]): string {
   return (Object.keys(labels) as Array<keyof typeof labels>)

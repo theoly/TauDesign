@@ -1,0 +1,52 @@
+{
+  "id": "pc-form-grouped",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "form",
+  "aliases": [
+    "分组表单",
+    "资料表单",
+    "新建客户",
+    "grouped form"
+  ],
+  "features": [
+    "form-groups",
+    "validation",
+    "input"
+  ],
+  "density": "standard",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "分组字段的创建/编辑表单",
+    "需要错误态示例"
+  ],
+  "notApplicableWhen": [
+    "多步向导",
+    "纯展示详情"
+  ],
+  "statesShown": [
+    "filled",
+    "error",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "448e93f7",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

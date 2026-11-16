@@ -1,0 +1,41 @@
+<main class="bg-page p-8">
+  <div class="container-max col gap-8">
+    <header class="col gap-4" data-region="header">
+      <h1 class="text-2xl font-bold">发布活动</h1>
+      <div class="row items-center gap-3 text-sm">
+        <span class="badge-soft text-primary is-selected">1 基本信息</span>
+        <span class="text-muted">—</span>
+        <span class="badge-soft">2 场次安排</span>
+        <span class="text-muted">—</span>
+        <span class="badge-soft text-muted">3 确认发布</span>
+      </div>
+    </header>
+    <section class="card shadow-card p-6 col gap-5" data-region="main">
+      <h2 class="text-lg font-semibold">基本信息</h2>
+      <div class="col gap-4">
+        <div class="col gap-2">
+          <label class="text-sm font-medium">活动名称</label>
+          <input class="input" value="春季会员开放日" />
+        </div>
+        <div class="grid-2 gap-4">
+          <div class="col gap-2">
+            <label class="text-sm font-medium">活动类型</label>
+            <select class="select"><option>线下沙龙</option><option>线上直播</option></select>
+          </div>
+          <div class="col gap-2">
+            <label class="text-sm font-medium">预计人数</label>
+            <input class="input" value="80" />
+          </div>
+        </div>
+        <div class="col gap-2">
+          <label class="text-sm font-medium">一句话介绍</label>
+          <textarea class="input" rows="2">面向老会员与潜客的产品体验与答疑。</textarea>
+        </div>
+      </div>
+      <div class="row justify-between items-center mt-2">
+        <button class="btn btn-ghost" disabled>上一步</button>
+        <button class="btn btn-primary">下一步</button>
+      </div>
+    </section>
+  </div>
+</main>

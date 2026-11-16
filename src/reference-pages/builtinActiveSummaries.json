@@ -1,0 +1,1245 @@
+[
+  {
+    "id": "mobile-conversation-reading",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "mobile",
+    "pageKind": "conversation",
+    "aliases": [
+      "移动阅读",
+      "建议正文",
+      "conversation reading"
+    ],
+    "features": [
+      "long-copy",
+      "reading",
+      "segments"
+    ],
+    "density": "relaxed",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "main"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "移动端长文阅读与建议",
+      "分段清晰"
+    ],
+    "notApplicableWhen": [
+      "卡片套卡片",
+      "系统壳阅读器"
+    ],
+    "statesShown": [
+      "filled",
+      "selected"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "bfdc9635",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "mobile-dashboard-stack",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "mobile",
+    "pageKind": "dashboard",
+    "aliases": [
+      "移动看板",
+      "指标横滑",
+      "mobile dashboard"
+    ],
+    "features": [
+      "metrics",
+      "scroll-x",
+      "cards"
+    ],
+    "density": "compact",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "移动端指标横滑 + 纵向区块",
+      "无 hover 依赖"
+    ],
+    "notApplicableWhen": [
+      "桌面侧栏壳",
+      "系统状态栏"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "loading"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "d814ad0a",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "mobile-detail-hero",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "mobile",
+    "pageKind": "detail",
+    "aliases": [
+      "移动详情",
+      "英雄详情",
+      "商品详情",
+      "hero detail"
+    ],
+    "features": [
+      "hero",
+      "badge",
+      "cards"
+    ],
+    "density": "standard",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "移动端全宽英雄区详情",
+      "下方信息卡列表"
+    ],
+    "notApplicableWhen": [
+      "桌面双栏档案",
+      "系统状态栏演示"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "0073cc60",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "mobile-detail-tabs",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "mobile",
+    "pageKind": "detail",
+    "aliases": [
+      "详情分栏",
+      "详情标签",
+      "detail tabs"
+    ],
+    "features": [
+      "tabs",
+      "badge",
+      "cards"
+    ],
+    "density": "compact",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "移动详情需横向小节切换",
+      "概览与评价分区"
+    ],
+    "notApplicableWhen": [
+      "单英雄无切换",
+      "桌面侧栏导航"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "empty"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "bb97d99a",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "mobile-empty-state",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "mobile",
+    "pageKind": "empty",
+    "aliases": [
+      "移动空态",
+      "无内容引导",
+      "mobile empty"
+    ],
+    "features": [
+      "empty-cta",
+      "centered"
+    ],
+    "density": "relaxed",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "main"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "移动端空态引导",
+      "触控主按钮"
+    ],
+    "notApplicableWhen": [
+      "桌面宽屏空态装饰过多",
+      "系统空页面壳"
+    ],
+    "statesShown": [
+      "empty",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "0933c952",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "mobile-form-sheet",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "mobile",
+    "pageKind": "form",
+    "aliases": [
+      "移动表单",
+      "信息登记",
+      "sheet form",
+      "触控表单"
+    ],
+    "features": [
+      "form-groups",
+      "input-touch",
+      "validation"
+    ],
+    "density": "standard",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "main"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "移动端单列表单",
+      "提交按钮位于内容流末"
+    ],
+    "notApplicableWhen": [
+      "桌面多列分组",
+      "强制底栏 cta-fixed"
+    ],
+    "statesShown": [
+      "filled",
+      "error",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "aec18d56",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "mobile-landing-hero",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "mobile",
+    "pageKind": "landing",
+    "aliases": [
+      "移动落地",
+      "移动营销首屏",
+      "mobile landing"
+    ],
+    "features": [
+      "hero",
+      "brand",
+      "cta-fixed"
+    ],
+    "density": "relaxed",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main",
+        "footer"
+      ],
+      "primaryCta": "cta-fixed"
+    },
+    "applicableWhen": [
+      "移动全宽英雄区",
+      "底栏单一主操作"
+    ],
+    "notApplicableWhen": [
+      "桌面三列卖点首屏",
+      "系统状态栏落地"
+    ],
+    "statesShown": [
+      "filled",
+      "selected"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "66494c08",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "mobile-list-cards",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "mobile",
+    "pageKind": "list",
+    "aliases": [
+      "移动卡片列表",
+      "手机项目列表",
+      "mobile card list"
+    ],
+    "features": [
+      "filters",
+      "cards",
+      "badge",
+      "avatar"
+    ],
+    "density": "standard",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main"
+      ],
+      "primaryCta": "toolbar"
+    },
+    "applicableWhen": [
+      "移动端卡片浏览列表",
+      "顶部分类筛选"
+    ],
+    "notApplicableWhen": [
+      "桌面多列表格",
+      "系统壳伪元素演示",
+      "营销落地页",
+      "营销长落地页"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "empty"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "0082b5c8",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "mobile-pricing-stack",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "mobile",
+    "pageKind": "pricing",
+    "aliases": [
+      "移动套餐",
+      "纵向套餐",
+      "mobile pricing"
+    ],
+    "features": [
+      "pricing-tiers",
+      "badge",
+      "cards"
+    ],
+    "density": "standard",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "移动端纵向套餐卡",
+      "推荐卡微质感"
+    ],
+    "notApplicableWhen": [
+      "三列桌面对比",
+      "等权三主按钮"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "622253d6",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "mobile-result-status",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "mobile",
+    "pageKind": "result",
+    "aliases": [
+      "移动结果",
+      "状态结果",
+      "mobile result"
+    ],
+    "features": [
+      "result-status",
+      "next-actions"
+    ],
+    "density": "standard",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "main",
+        "footer"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "移动端状态结果页",
+      "主次按钮纵向"
+    ],
+    "notApplicableWhen": [
+      "桌面宽结果卡",
+      "空态引导页"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "129f0afb",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "mobile-settings-grouped",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "mobile",
+    "pageKind": "settings",
+    "aliases": [
+      "移动设置",
+      "分组设置列表",
+      "mobile settings"
+    ],
+    "features": [
+      "settings-groups",
+      "list-item"
+    ],
+    "density": "compact",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main"
+      ],
+      "primaryCta": "none"
+    },
+    "applicableWhen": [
+      "移动端分组设置列表",
+      "节标题 + 行"
+    ],
+    "notApplicableWhen": [
+      "桌面侧栏设置",
+      "系统设置壳"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "7ee5db08",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-conversation-suggest",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "conversation",
+    "aliases": [
+      "长文建议",
+      "方案说明",
+      "阅读正文",
+      "conversation suggest"
+    ],
+    "features": [
+      "long-copy",
+      "suggestions",
+      "reading"
+    ],
+    "density": "relaxed",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "长阅读建议/说明页",
+      "低权操作不抢正文"
+    ],
+    "notApplicableWhen": [
+      "密集仪表盘",
+      "嵌套卡片墙"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "9f75dded",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-dashboard-metrics",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "dashboard",
+    "aliases": [
+      "指标看板",
+      "运营概览",
+      "metrics dashboard"
+    ],
+    "features": [
+      "metrics",
+      "toolbar",
+      "cards",
+      "secondary-list"
+    ],
+    "density": "compact",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main",
+        "secondary"
+      ],
+      "primaryCta": "toolbar"
+    },
+    "applicableWhen": [
+      "运营/业务指标概览",
+      "指标卡有主次字号"
+    ],
+    "notApplicableWhen": [
+      "纯表单",
+      "营销落地首屏"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "loading"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "56c5c321",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-dashboard-sidebar",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "dashboard",
+    "aliases": [
+      "侧栏看板",
+      "后台总览",
+      "sidebar dashboard"
+    ],
+    "features": [
+      "sidebar",
+      "metrics",
+      "navigation",
+      "table"
+    ],
+    "density": "compact",
+    "compositionHint": {
+      "layout": "sidebar-main",
+      "regionRoles": [
+        "sidebar",
+        "main"
+      ],
+      "primaryCta": "toolbar"
+    },
+    "applicableWhen": [
+      "带侧栏导航的后台总览",
+      "证明 sidebar 壳层可用"
+    ],
+    "notApplicableWhen": [
+      "移动单列看板",
+      "无导航营销页"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "empty"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "15f13a34",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-detail-profile",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "detail",
+    "aliases": [
+      "资料详情",
+      "客户档案",
+      "人物详情",
+      "profile detail"
+    ],
+    "features": [
+      "avatar",
+      "badge",
+      "two-column",
+      "attribute-grid"
+    ],
+    "density": "standard",
+    "compositionHint": {
+      "layout": "two-column",
+      "regionRoles": [
+        "header",
+        "main",
+        "secondary"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "人物/客户档案详情",
+      "摘要与详情双栏"
+    ],
+    "notApplicableWhen": [
+      "纯列表",
+      "营销落地"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "9438bc46",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-empty-state",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "empty",
+    "aliases": [
+      "空状态",
+      "无数据",
+      "empty state"
+    ],
+    "features": [
+      "empty-cta",
+      "centered"
+    ],
+    "density": "relaxed",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "main"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "列表/项目为空引导创建",
+      "单一主操作"
+    ],
+    "notApplicableWhen": [
+      "已有数据的列表",
+      "错误结果页"
+    ],
+    "statesShown": [
+      "empty",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "618347a6",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-form-grouped",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "form",
+    "aliases": [
+      "分组表单",
+      "资料表单",
+      "新建客户",
+      "grouped form"
+    ],
+    "features": [
+      "form-groups",
+      "validation",
+      "input"
+    ],
+    "density": "standard",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "分组字段的创建/编辑表单",
+      "需要错误态示例"
+    ],
+    "notApplicableWhen": [
+      "多步向导",
+      "纯展示详情"
+    ],
+    "statesShown": [
+      "filled",
+      "error",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "448e93f7",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-form-wizard",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "form",
+    "aliases": [
+      "分步表单",
+      "向导表单",
+      "步骤创建",
+      "wizard form"
+    ],
+    "features": [
+      "wizard",
+      "steps",
+      "form-groups"
+    ],
+    "density": "standard",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "多步骤创建流程",
+      "需展示当前步与进度"
+    ],
+    "notApplicableWhen": [
+      "单页短表单",
+      "设置开关页"
+    ],
+    "statesShown": [
+      "filled",
+      "disabled",
+      "selected"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "3ea21f39",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-landing-hero",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "landing",
+    "aliases": [
+      "落地页",
+      "品牌首页",
+      "营销首屏",
+      "landing hero"
+    ],
+    "features": [
+      "hero",
+      "brand",
+      "single-cta"
+    ],
+    "density": "relaxed",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main",
+        "footer"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "品牌英雄区 + 单一主操作",
+      "首屏不堆统计条"
+    ],
+    "notApplicableWhen": [
+      "后台列表",
+      "多 CTA 首屏"
+    ],
+    "statesShown": [
+      "filled",
+      "selected"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "f622beae",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-list-cards",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "list",
+    "aliases": [
+      "卡片列表",
+      "项目列表",
+      "成员卡片",
+      "card list",
+      "gallery list",
+      "会员列表"
+    ],
+    "features": [
+      "filters",
+      "cards",
+      "avatar",
+      "badge",
+      "grid",
+      "toolbar"
+    ],
+    "density": "standard",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main"
+      ],
+      "primaryCta": "toolbar"
+    },
+    "applicableWhen": [
+      "适合卡片浏览的资源或项目列表",
+      "需展示头像与徽章摘要"
+    ],
+    "notApplicableWhen": [
+      "密集多列表格",
+      "长文阅读页",
+      "营销长落地页",
+      "营销落地页"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "empty"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "99998f75",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-list-table",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "list",
+    "aliases": [
+      "表格列表",
+      "数据表格",
+      "订单列表",
+      "table list",
+      "data table"
+    ],
+    "features": [
+      "filters",
+      "table",
+      "toolbar",
+      "badge",
+      "row-actions"
+    ],
+    "density": "compact",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main",
+        "footer"
+      ],
+      "primaryCta": "toolbar"
+    },
+    "applicableWhen": [
+      "需要可筛选的表格型列表",
+      "多列字段对比与行内操作"
+    ],
+    "notApplicableWhen": [
+      "营销落地页",
+      "纯卡片瀑布流",
+      "移动端信息流",
+      "营销长落地页"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "empty"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "0bf0cc36",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-pricing-compare",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "pricing",
+    "aliases": [
+      "套餐对比",
+      "价格表",
+      "会员套餐",
+      "pricing compare"
+    ],
+    "features": [
+      "pricing-tiers",
+      "badge",
+      "comparison"
+    ],
+    "density": "standard",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "header",
+        "main"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "三列套餐对比",
+      "突出推荐档"
+    ],
+    "notApplicableWhen": [
+      "单列移动套餐",
+      "后台设置页"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "c9b47db9",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-result-success",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "result",
+    "aliases": [
+      "成功结果",
+      "提交成功",
+      "result success"
+    ],
+    "features": [
+      "result-status",
+      "next-actions"
+    ],
+    "density": "standard",
+    "compositionHint": {
+      "layout": "flow",
+      "regionRoles": [
+        "main",
+        "footer"
+      ],
+      "primaryCta": "inline"
+    },
+    "applicableWhen": [
+      "提交成功摘要与后续操作",
+      "主次按钮清晰"
+    ],
+    "notApplicableWhen": [
+      "失败为主的状态页",
+      "长表单本身"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "b30b4595",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  },
+  {
+    "id": "pc-settings-sections",
+    "version": "1.0.0",
+    "status": "active",
+    "device": "pc",
+    "pageKind": "settings",
+    "aliases": [
+      "设置分组",
+      "账户设置",
+      "settings sections"
+    ],
+    "features": [
+      "settings-groups",
+      "sidebar",
+      "toggles"
+    ],
+    "density": "standard",
+    "compositionHint": {
+      "layout": "sidebar-main",
+      "regionRoles": [
+        "sidebar",
+        "main"
+      ],
+      "primaryCta": "none"
+    },
+    "applicableWhen": [
+      "分组设置与说明",
+      "侧栏导航设置"
+    ],
+    "notApplicableWhen": [
+      "营销落地",
+      "数据看板"
+    ],
+    "statesShown": [
+      "filled",
+      "selected",
+      "disabled"
+    ],
+    "promptBudgetChars": 1200,
+    "license": {
+      "source": "authored",
+      "note": "builtin beauty p0"
+    },
+    "origin": "builtin",
+    "contentFingerprint": "1741255c",
+    "review": {
+      "reviewer": "beauty-p0",
+      "date": "2026-11-16",
+      "renderPass": true
+    }
+  }
+]

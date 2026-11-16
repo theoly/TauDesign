@@ -6,7 +6,7 @@ import {validRenderCoverage} from './renderCoverage';
 
 export function isQualityFinding(value:unknown):value is QualityFinding {
  const f=value as QualityFinding|undefined;
- return Boolean(f&&typeof f.code==='string'&&['error','warning'].includes(f.severity)&&typeof f.message==='string'&&typeof f.actual==='string'&&typeof f.expected==='string'&&(f.nid===undefined||typeof f.nid==='string')&&validFindingAssessment(f));
+ return Boolean(f&&typeof f.code==='string'&&['error','warning'].includes(f.severity)&&typeof f.message==='string'&&typeof f.actual==='string'&&typeof f.expected==='string'&&(f.nid===undefined||typeof f.nid==='string')&&(f.repairLane===undefined||typeof f.repairLane==='string')&&validFindingAssessment(f));
 }
 export function isQualityReport(value:unknown):value is QualityReport {
  const r=value as QualityReport|undefined;

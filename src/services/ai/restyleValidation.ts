@@ -14,6 +14,7 @@ import { normalizeMobileNavigation, normalizeScreenNavigation } from '../../util
 import { projectComponentSync } from '../../utils/componentSync';
 import { contentFingerprint } from './designWorkflow';
 import { readProjectRenderResources, inspectProjectAssetReferences, referencedProjectAssets, screenForAssetAudit, verifyProjectAssetFiles, type ProjectAssetIssue } from './projectAssetIntegrity';
+import {rewriteBuiltinIconAliases} from './builtinIconAliases';
 import { PageRenderCheck } from './pageRenderCheck';
 import {resolveWorkflowValidation,evaluateWorkflowValidation,type WorkflowValidationReport} from './workflowValidation';
 import {taskRuleSafetyIssue} from './designKnowledge/safety';
@@ -47,12 +48,13 @@ export async function prepareCheckedRestyle(state: RestyleValidationState, outco
   const fail = (message:string) => {report.message = taskRuleSafetyIssue(outcome.workflowContract)??(!sameRendering()?'检查器、基座样式或渲染环境已变化，请重新检查；原任务输入未更新。':message);return result;};
   try {
     if (!current()) return fail('工程已变化或重塑已取消。');
-    const {target,html} = outcome;
+    const {target,html:rawHtml} = outcome;
     const referenceIssue=libraryReferenceIssue(state);if(referenceIssue)return fail(referenceIssue);
     if(target.kind==='component'&&libraryMemberLocked(state,'components',target.id))return fail(libraryReadOnlyMessage);
     const baseline = target.kind === 'screen' ? state.screens[target.id]?.htmlContent : state.components[target.id]?.templateHtml;
-    if (outcome.status !== 'applied' || !html || baseline === undefined ||
+    if (outcome.status !== 'applied' || !rawHtml || baseline === undefined ||
       (target.kind === 'screen' ? normalizeMobileNavigation(baseline,state.settings).html : baseline) !== target.html) return fail('重塑目标或原页面基线已变化。');
+    const html = rewriteBuiltinIconAliases(rawHtml, Object.values(state.assets)).html;
     const task=resolveWorkflowValidation(outcome.workflowContract,'batch');
     if(!task.ok)return fail(task.message);
     const contract=outcome.workflowContract;

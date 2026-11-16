@@ -3,7 +3,7 @@ import { typographyCraft } from './typography';
 import { colorCraft } from './color';
 import { antiAiSlopCraft } from './anti-ai-slop';
 import { layoutCraft } from './layout';
-import { GenerationIntent } from '../promptBuilder';
+import type { GenerationIntent } from '../promptBuilder';
 
 export * from './types';
 export * from './typography';

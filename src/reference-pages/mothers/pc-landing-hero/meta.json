@@ -1,0 +1,52 @@
+{
+  "id": "pc-landing-hero",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "landing",
+  "aliases": [
+    "落地页",
+    "品牌首页",
+    "营销首屏",
+    "landing hero"
+  ],
+  "features": [
+    "hero",
+    "brand",
+    "single-cta"
+  ],
+  "density": "relaxed",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main",
+      "footer"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "品牌英雄区 + 单一主操作",
+    "首屏不堆统计条"
+  ],
+  "notApplicableWhen": [
+    "后台列表",
+    "多 CTA 首屏"
+  ],
+  "statesShown": [
+    "filled",
+    "selected"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "f622beae",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

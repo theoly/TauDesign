@@ -78,6 +78,9 @@ a { color: var(--color-primary-text); }
 .gap-5 { gap: var(--space-5, 20px); }
 .gap-6 { gap: var(--space-6, 24px); }
 .gap-8 { gap: var(--space-8, 32px); }
+.gap-10 { gap: var(--space-10, 40px); }
+.gap-12 { gap: var(--space-12, 48px); }
+.gap-16 { gap: var(--space-16, 64px); }
 
 .p-0 { padding: var(--space-0, 0px); }
 .p-1 { padding: var(--space-1, 4px); }
@@ -87,6 +90,9 @@ a { color: var(--color-primary-text); }
 .p-5 { padding: var(--space-5, 20px); }
 .p-6 { padding: var(--space-6, 24px); }
 .p-8 { padding: var(--space-8, 32px); }
+.p-10 { padding: var(--space-10, 40px); }
+.p-12 { padding: var(--space-12, 48px); }
+.p-16 { padding: var(--space-16, 64px); }
 
 .px-0 { padding-left: var(--space-0, 0px); padding-right: var(--space-0, 0px); }
 .px-1 { padding-left: var(--space-1, 4px); padding-right: var(--space-1, 4px); }
@@ -96,6 +102,9 @@ a { color: var(--color-primary-text); }
 .px-5 { padding-left: var(--space-5, 20px); padding-right: var(--space-5, 20px); }
 .px-6 { padding-left: var(--space-6, 24px); padding-right: var(--space-6, 24px); }
 .px-8 { padding-left: var(--space-8, 32px); padding-right: var(--space-8, 32px); }
+.px-10 { padding-left: var(--space-10, 40px); padding-right: var(--space-10, 40px); }
+.px-12 { padding-left: var(--space-12, 48px); padding-right: var(--space-12, 48px); }
+.px-16 { padding-left: var(--space-16, 64px); padding-right: var(--space-16, 64px); }
 
 .py-0 { padding-top: var(--space-0, 0px); padding-bottom: var(--space-0, 0px); }
 .py-1 { padding-top: var(--space-1, 4px); padding-bottom: var(--space-1, 4px); }
@@ -105,6 +114,9 @@ a { color: var(--color-primary-text); }
 .py-5 { padding-top: var(--space-5, 20px); padding-bottom: var(--space-5, 20px); }
 .py-6 { padding-top: var(--space-6, 24px); padding-bottom: var(--space-6, 24px); }
 .py-8 { padding-top: var(--space-8, 32px); padding-bottom: var(--space-8, 32px); }
+.py-10 { padding-top: var(--space-10, 40px); padding-bottom: var(--space-10, 40px); }
+.py-12 { padding-top: var(--space-12, 48px); padding-bottom: var(--space-12, 48px); }
+.py-16 { padding-top: var(--space-16, 64px); padding-bottom: var(--space-16, 64px); }
 
 .m-0 { margin: var(--space-0, 0px); }
 .m-1 { margin: var(--space-1, 4px); }
@@ -114,6 +126,9 @@ a { color: var(--color-primary-text); }
 .m-5 { margin: var(--space-5, 20px); }
 .m-6 { margin: var(--space-6, 24px); }
 .m-8 { margin: var(--space-8, 32px); }
+.m-10 { margin: var(--space-10, 40px); }
+.m-12 { margin: var(--space-12, 48px); }
+.m-16 { margin: var(--space-16, 64px); }
 
 .mt-0 { margin-top: var(--space-0, 0px); }
 .mt-1 { margin-top: var(--space-1, 4px); }
@@ -123,6 +138,9 @@ a { color: var(--color-primary-text); }
 .mt-5 { margin-top: var(--space-5, 20px); }
 .mt-6 { margin-top: var(--space-6, 24px); }
 .mt-8 { margin-top: var(--space-8, 32px); }
+.mt-10 { margin-top: var(--space-10, 40px); }
+.mt-12 { margin-top: var(--space-12, 48px); }
+.mt-16 { margin-top: var(--space-16, 64px); }
 
 .mb-0 { margin-bottom: var(--space-0, 0px); }
 .mb-1 { margin-bottom: var(--space-1, 4px); }
@@ -132,6 +150,59 @@ a { color: var(--color-primary-text); }
 .mb-5 { margin-bottom: var(--space-5, 20px); }
 .mb-6 { margin-bottom: var(--space-6, 24px); }
 .mb-8 { margin-bottom: var(--space-8, 32px); }
+.mb-10 { margin-bottom: var(--space-10, 40px); }
+.mb-12 { margin-bottom: var(--space-12, 48px); }
+.mb-16 { margin-bottom: var(--space-16, 64px); }
+
+.ml-0 { margin-left: var(--space-0, 0px); }
+.ml-1 { margin-left: var(--space-1, 4px); }
+.ml-2 { margin-left: var(--space-2, 8px); }
+.ml-3 { margin-left: var(--space-3, 12px); }
+.ml-4 { margin-left: var(--space-4, 16px); }
+.ml-5 { margin-left: var(--space-5, 20px); }
+.ml-6 { margin-left: var(--space-6, 24px); }
+.ml-8 { margin-left: var(--space-8, 32px); }
+.ml-10 { margin-left: var(--space-10, 40px); }
+.ml-12 { margin-left: var(--space-12, 48px); }
+.ml-16 { margin-left: var(--space-16, 64px); }
+
+.mr-0 { margin-right: var(--space-0, 0px); }
+.mr-1 { margin-right: var(--space-1, 4px); }
+.mr-2 { margin-right: var(--space-2, 8px); }
+.mr-3 { margin-right: var(--space-3, 12px); }
+.mr-4 { margin-right: var(--space-4, 16px); }
+.mr-5 { margin-right: var(--space-5, 20px); }
+.mr-6 { margin-right: var(--space-6, 24px); }
+.mr-8 { margin-right: var(--space-8, 32px); }
+.mr-10 { margin-right: var(--space-10, 40px); }
+.mr-12 { margin-right: var(--space-12, 48px); }
+.mr-16 { margin-right: var(--space-16, 64px); }
+
+.mx-0 { margin-left: var(--space-0, 0px); margin-right: var(--space-0, 0px); }
+.mx-1 { margin-left: var(--space-1, 4px); margin-right: var(--space-1, 4px); }
+.mx-2 { margin-left: var(--space-2, 8px); margin-right: var(--space-2, 8px); }
+.mx-3 { margin-left: var(--space-3, 12px); margin-right: var(--space-3, 12px); }
+.mx-4 { margin-left: var(--space-4, 16px); margin-right: var(--space-4, 16px); }
+.mx-5 { margin-left: var(--space-5, 20px); margin-right: var(--space-5, 20px); }
+.mx-6 { margin-left: var(--space-6, 24px); margin-right: var(--space-6, 24px); }
+.mx-8 { margin-left: var(--space-8, 32px); margin-right: var(--space-8, 32px); }
+.mx-10 { margin-left: var(--space-10, 40px); margin-right: var(--space-10, 40px); }
+.mx-12 { margin-left: var(--space-12, 48px); margin-right: var(--space-12, 48px); }
+.mx-16 { margin-left: var(--space-16, 64px); margin-right: var(--space-16, 64px); }
+.mx-auto { margin-left: auto; margin-right: auto; }
+
+.my-0 { margin-top: var(--space-0, 0px); margin-bottom: var(--space-0, 0px); }
+.my-1 { margin-top: var(--space-1, 4px); margin-bottom: var(--space-1, 4px); }
+.my-2 { margin-top: var(--space-2, 8px); margin-bottom: var(--space-2, 8px); }
+.my-3 { margin-top: var(--space-3, 12px); margin-bottom: var(--space-3, 12px); }
+.my-4 { margin-top: var(--space-4, 16px); margin-bottom: var(--space-4, 16px); }
+.my-5 { margin-top: var(--space-5, 20px); margin-bottom: var(--space-5, 20px); }
+.my-6 { margin-top: var(--space-6, 24px); margin-bottom: var(--space-6, 24px); }
+.my-8 { margin-top: var(--space-8, 32px); margin-bottom: var(--space-8, 32px); }
+.my-10 { margin-top: var(--space-10, 40px); margin-bottom: var(--space-10, 40px); }
+.my-12 { margin-top: var(--space-12, 48px); margin-bottom: var(--space-12, 48px); }
+.my-16 { margin-top: var(--space-16, 64px); margin-bottom: var(--space-16, 64px); }
+.my-auto { margin-top: auto; margin-bottom: auto; }
 
 /* 4. Typography Ladder */
 .text-xs { font-size: var(--font-size-xs, 12px); line-height: 1.33; }
@@ -142,11 +213,20 @@ a { color: var(--color-primary-text); }
 .text-2xl { font-size: var(--font-size-2xl, 24px); line-height: 1.33; }
 .text-3xl { font-size: var(--font-size-3xl, 30px); line-height: 1.25; }
 .text-4xl { font-size: var(--font-size-4xl, 36px); line-height: 1.2; }
+.text-5xl { font-size: var(--font-size-5xl, 48px); line-height: 1.15; }
+.text-6xl { font-size: var(--font-size-6xl, 60px); line-height: 1.1; }
 
 .font-normal { font-weight: 400; }
 .font-medium { font-weight: 500; }
 .font-semibold { font-weight: 600; }
 .font-bold { font-weight: 700; }
+.font-display { font-family: var(--font-display, var(--font-sans)); }
+.font-mono { font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace); }
+
+.tracking-tight { letter-spacing: -0.025em; }
+.tracking-wide { letter-spacing: 0.025em; }
+.leading-tight { line-height: 1.25; }
+.leading-normal { line-height: 1.5; }
 
 .text-left { text-align: left; }
 .text-center { text-align: center; }
@@ -160,7 +240,12 @@ a { color: var(--color-primary-text); }
 .text-warning { color: var(--color-warning, #d97706); }
 .text-danger { color: var(--color-danger, #dc2626); }
 
-/* 5. Surfaces, Backgrounds & Borders */
+/* 5. Surfaces, Backgrounds & Borders
+   ThemeBackground roles (cssCompiler.compileBackgroundVariables):
+   --background-page / --background-primary-action / --background-decorative-surface */
+.bg-page { background: var(--background-page, var(--color-bg)); }
+.bg-primary-action { background: var(--background-primary-action, var(--color-primary)); color: var(--color-on-primary); }
+.bg-decorative { background: var(--background-decorative-surface, var(--color-surface)); }
 .bg-decorative-surface { background: var(--background-decorative-surface, var(--color-surface)); }
 .bg-surface { background-color: var(--color-surface, #ffffff); }
 .bg-surface-alt { background-color: var(--color-surface-alt, #f1f5f9); }
@@ -407,6 +492,48 @@ a { color: var(--color-primary-text); }
 .cursor-pointer { cursor: pointer; }
 .leading-relaxed { line-height: 1.625; }
 
+/* Layout shells — semantic regions for generated UI (sidebar / toolbar / filter / hero) */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  align-self: stretch;
+  gap: var(--space-3, 12px);
+  padding: var(--space-4, 16px);
+  background-color: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+}
+.toolbar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  background-color: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
+}
+.filter-bar {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  background-color: var(--color-surface-alt);
+  border-bottom: 1px solid var(--color-border);
+}
+.hero-section {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+  padding: var(--space-8, 32px) var(--space-6, 24px);
+  overflow: hidden;
+  background: var(--background-decorative-surface, var(--color-primary-light));
+  border-radius: var(--radius-xl, 16px);
+}
+
 /* 10. Micro-texture System (A1 / T-AE-06)
    赋予界面现代质感的复合原子类。此处的阴影/模糊为字面量，
    A2 完成 Token Schema 扩展后改为 var(--shadow-soft) 等引用
@@ -430,6 +557,15 @@ a { color: var(--color-primary-text); }
   background-color: var(--color-surface, #ffffff);
   border: 1px solid var(--color-border-subtle, var(--color-border, #e2e8f0));
 }
+.glass-strong {
+  backdrop-filter: blur(var(--blur-lg, 20px));
+  -webkit-backdrop-filter: blur(var(--blur-lg, 20px));
+  background-color: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  border: 1px solid var(--color-border-subtle, var(--color-border));
+}
+.blur-sm { filter: blur(var(--blur-sm, 6px)); }
+.blur-md { filter: blur(var(--blur-md, 12px)); }
+.blur-lg { filter: blur(var(--blur-lg, 20px)); }
 .border-subtle { border: 1px solid var(--color-border-subtle, var(--color-border, #e2e8f0)); }
 
 /* 10.3 复合组件模式 */

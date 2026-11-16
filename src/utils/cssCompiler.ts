@@ -14,17 +14,20 @@ export function compileTokensToCss(tokens: DesignSystemTokens, mode: 'light' | '
   const density = DENSITY_SCALE[tokens.personality.density];
   const sp = (k: string, fallback: number) => Math.round((s[k] ?? fallback) * density);
 
+  // Brand discipline: one primary hue ramp drives interactive color. Do not invent
+  // secondary brand axes here — accent/semantic roles stay derived, ModePair shadows stay paired.
   return `:root {
   color-scheme: ${mode};
   /* Colors */
   ${colorRoleKeys.map(role => `--color-${COLOR_ROLES[role][1]}: ${roles[role]};`).join('\n  ')}
 
-  /* Background roles */
+  /* Background roles (ThemeBackground → --background-page|primary-action|decorative-surface) */
   ${compileBackgroundVariables(tokens.backgrounds, mode)}
 
   /* Typography */
   --font-sans: ${t.fontFamilySans};
   --font-mono: ${t.fontFamilyMono};
+  --font-display: ${t.fontFamilyDisplay || t.fontFamilySans};
   --font-size-xs: ${t.sizes.xs || 12}px;
   --font-size-sm: ${t.sizes.sm || 14}px;
   --font-size-md: ${t.sizes.md || 16}px;
@@ -33,6 +36,8 @@ export function compileTokensToCss(tokens: DesignSystemTokens, mode: 'light' | '
   --font-size-2xl: ${t.sizes['2xl'] || 24}px;
   --font-size-3xl: ${t.sizes['3xl'] || 30}px;
   --font-size-4xl: ${t.sizes['4xl'] || 36}px;
+  --font-size-5xl: ${t.sizes['5xl'] || 48}px;
+  --font-size-6xl: ${t.sizes['6xl'] || 60}px;
 
   /* Spacing (按 personality.density 缩放) */
   --space-0: ${sp('0', 0)}px;
@@ -43,6 +48,9 @@ export function compileTokensToCss(tokens: DesignSystemTokens, mode: 'light' | '
   --space-5: ${sp('5', 20)}px;
   --space-6: ${sp('6', 24)}px;
   --space-8: ${sp('8', 32)}px;
+  --space-10: ${sp('10', 40)}px;
+  --space-12: ${sp('12', 48)}px;
+  --space-16: ${sp('16', 64)}px;
 
   ${device === 'pc' ? '' : `/* Mobile header geometry */
   --mini-status-height: 44px;

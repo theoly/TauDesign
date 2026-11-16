@@ -1,0 +1,58 @@
+{
+  "id": "pc-list-table",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "list",
+  "aliases": [
+    "表格列表",
+    "数据表格",
+    "订单列表",
+    "table list",
+    "data table"
+  ],
+  "features": [
+    "filters",
+    "table",
+    "toolbar",
+    "badge",
+    "row-actions"
+  ],
+  "density": "compact",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main",
+      "footer"
+    ],
+    "primaryCta": "toolbar"
+  },
+  "applicableWhen": [
+    "需要可筛选的表格型列表",
+    "多列字段对比与行内操作"
+  ],
+  "notApplicableWhen": [
+    "营销落地页",
+    "纯卡片瀑布流",
+    "移动端信息流",
+    "营销长落地页"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "empty"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "0bf0cc36",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

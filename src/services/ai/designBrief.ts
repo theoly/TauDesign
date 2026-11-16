@@ -3,7 +3,18 @@ import type { DesignSystem } from '../../types/designSystem';
 import type { ComponentDefinition } from '../../types/project';
 import {explicitActionTexts} from './explicitActionContent';
 
-export type PageKind = 'form' | 'detail' | 'list' | 'dashboard' | 'pricing' | 'conversation' | 'unknown';
+export type PageKind =
+  | 'form'
+  | 'detail'
+  | 'list'
+  | 'dashboard'
+  | 'pricing'
+  | 'conversation'
+  | 'landing'
+  | 'settings'
+  | 'empty'
+  | 'result'
+  | 'unknown';
 export interface ContentObligation {
   kind: 'exact' | 'semantic';
   target?: 'field-label';
@@ -13,8 +24,13 @@ export interface ContentObligation {
 }
 /** Inference only: never grants permission or establishes a business fact. */
 export function inferPageKind(request: string): PageKind {
-  const value=request.normalize('NFKC').toLowerCase();
+  const value = request.normalize('NFKC').toLowerCase();
+  // Narrow / high-signal kinds first so broad terms (列表/管理) do not steal them.
   if (/表单|填写|注册|登录|录入|\bform\b/.test(value)) return 'form';
+  if (/空状态|暂无内容|暂无数据|空页面|\bempty[\s_-]*state\b/.test(value)) return 'empty';
+  if (/结果页|提交成功|支付成功|操作成功|成功页|\bsuccess[\s_-]*page\b|\bresult[\s_-]*page\b/.test(value)) return 'result';
+  if (/设置页|偏好设置|系统设置|账号设置|\bsettings\b|\bpreferences\b/.test(value)) return 'settings';
+  if (/落地页|营销页|官网首页|品牌首页|\blanding([\s_-]*page)?\b/.test(value)) return 'landing';
   if (/详情|档案|\bprofile\b|\bdetail\b/.test(value)) return 'detail';
   if (/套餐|充值|\brecharge\b|\bpricing\b/.test(value)) return 'pricing';
   if (/对话|聊天|建议正文|\bconversation\b/.test(value)) return 'conversation';
@@ -65,11 +81,17 @@ export function buildDesignBrief(input: DesignBriefInput): DesignBrief {
   const contentObligations=[...(input.contentObligations??[]),...explicitActionTexts(request).map<ContentObligation>(item=>({kind:'exact' as const,source:'user' as const,text:item.text})),...explicitFieldLabels(request).map<ContentObligation>(item=>({kind:'exact' as const,source:'user' as const,target:'field-label' as const,text:item.text}))]
     .filter((item,index,all)=>all.findIndex(other=>other.kind===item.kind&&other.source===item.source&&other.text===item.text&&other.target===item.target)===index);
   const layout = {
-    form:'按填写顺序分组；标签、帮助与反馈分层',detail:'主体信息优先；按业务分组，详情完整展示',
-    list:'筛选与列表分区，重复行复用同一组件',dashboard:'关键指标优先，明细与操作分层',
-    pricing:'余额、套餐及权益、说明与确认分区；价格由用户或工程资料支持',
-    conversation:'对话/建议正文拥有阅读宽度；来源、时间与操作分层',
-    unknown:'按用户需求组织信息，保持清晰主次'
+    form: '按填写顺序分组；标签、帮助与反馈分层',
+    detail: '主体信息优先；按业务分组，详情完整展示',
+    list: '筛选与列表分区，重复行复用同一组件',
+    dashboard: '关键指标优先，明细与操作分层',
+    pricing: '余额、套餐及权益、说明与确认分区；价格由用户或工程资料支持',
+    conversation: '对话/建议正文拥有阅读宽度；来源、时间与操作分层',
+    landing: '品牌英雄区优先；首屏单一主主张与主操作，下文一节卖点',
+    settings: '按设置分组列出；说明与控件分层，避免装饰性眉标题',
+    empty: '居中空态说明与单一主操作；禁止堆砌无关模块',
+    result: '状态摘要优先；后续主/次操作分层',
+    unknown: '按用户需求组织信息，保持清晰主次'
   }[pageKind];
   return { requirementsPolicy: input.projectKnowledge ? '结合项目需求与相关页面推断功能、字段、交互状态及UI要求；不确定项保留待确认。' : undefined, contextId: fingerprint(shared), goal: request.trim().split('\n')[0].slice(0, 120), device,
     direction: designSystem.name, density, primaryColor: designSystem.tokens.colors.primary['500'],

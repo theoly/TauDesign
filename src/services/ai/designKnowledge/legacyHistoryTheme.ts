@@ -26,7 +26,7 @@ const binding=(v:unknown)=>object(v)&&(v.source==='custom'?fields(v,{source:s=>s
 const roles=(v:unknown)=>fields(v,{},Object.fromEntries(['light','dark'].map(k=>[k,(m:unknown)=>fields(m,{},Object.fromEntries(colorRoleKeys.map(r=>[r,binding])))])));
 const colors=(v:unknown)=>fields(v,{primary:stringMap,neutral:stringMap,success:text,warning:text,danger:text,
  background:pair,surface:pair,surfaceAlt:pair,textPrimary:pair,textSecondary:pair,border:pair});
-const typography=(v:unknown)=>fields(v,{fontFamilySans:text,fontFamilyMono:text,sizes:numericMap,weights:numericMap,lineHeights:numericMap});
+const typography=(v:unknown)=>fields(v,{fontFamilySans:text,fontFamilyMono:text,sizes:numericMap,weights:numericMap,lineHeights:numericMap},{fontFamilyDisplay:text});
 const radius=(v:unknown)=>fields(v,Object.fromEntries(['none','sm','md','lg','xl','full'].map(k=>[k,text])));
 // Pre-A2 snapshots may contain string shadows or omit the later blur/personality fields.
 const shadows=(v:unknown)=>fields(v,{sm:s=>text(s)||pair(s),md:s=>text(s)||pair(s),lg:s=>text(s)||pair(s)},

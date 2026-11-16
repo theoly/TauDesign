@@ -1,0 +1,50 @@
+{
+  "id": "pc-result-success",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "result",
+  "aliases": [
+    "成功结果",
+    "提交成功",
+    "result success"
+  ],
+  "features": [
+    "result-status",
+    "next-actions"
+  ],
+  "density": "standard",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "main",
+      "footer"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "提交成功摘要与后续操作",
+    "主次按钮清晰"
+  ],
+  "notApplicableWhen": [
+    "失败为主的状态页",
+    "长表单本身"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "b30b4595",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

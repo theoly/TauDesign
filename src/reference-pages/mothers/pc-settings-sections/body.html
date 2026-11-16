@@ -1,0 +1,45 @@
+<main class="bg-page row items-start">
+  <aside class="sidebar p-4 col gap-3" data-region="sidebar">
+    <h1 class="text-sm font-bold px-2">设置</h1>
+    <nav class="col gap-1">
+      <button class="btn btn-secondary btn-sm justify-start is-selected">账户</button>
+      <button class="btn btn-ghost btn-sm justify-start">通知</button>
+      <button class="btn btn-ghost btn-sm justify-start">安全</button>
+    </nav>
+  </aside>
+  <section class="flex-1 col gap-6 p-8" data-region="main">
+    <div class="col gap-1">
+      <h2 class="text-xl font-bold">账户资料</h2>
+      <p class="text-sm text-muted">这些信息会显示在团队成员列表中</p>
+    </div>
+    <div class="card shadow-card p-6 col gap-5">
+      <div class="grid-2 gap-5">
+        <div class="col gap-2">
+          <label class="text-sm font-medium">显示名称</label>
+          <input class="input" value="林婉清" />
+        </div>
+        <div class="col gap-2">
+          <label class="text-sm font-medium">对外邮箱</label>
+          <input class="input" value="wanqing@yunshan.cn" />
+        </div>
+      </div>
+      <div class="row items-center justify-between py-2 border-t">
+        <div class="col gap-1">
+          <span class="text-sm font-medium">公开个人主页</span>
+          <span class="text-xs text-muted">关闭后仅团队内可见</span>
+        </div>
+        <button class="btn btn-secondary btn-sm is-selected">已开启</button>
+      </div>
+      <div class="row items-center justify-between py-2 border-t">
+        <div class="col gap-1">
+          <span class="text-sm font-medium">两步验证</span>
+          <span class="text-xs text-muted">由管理员统一要求</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" disabled>已强制</button>
+      </div>
+      <div class="row justify-end">
+        <button class="btn btn-primary">保存更改</button>
+      </div>
+    </div>
+  </section>
+</main>

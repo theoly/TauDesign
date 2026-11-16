@@ -204,4 +204,34 @@ describe('ChatDrawer: Chat Scroll Control & Floating "Latest Content" Button', (
       expect(container.textContent).not.toContain('答复 旧工程');
     } finally { load.mockRestore(); }
   });
+
+  test('对话增高且处于跟随时立刻贴底；上滑后增高不再抢滚动', () => {
+    act(() => {
+      root.render(React.createElement(ChatDrawer, { onOpenSettings: () => {} }));
+    });
+    const el = container.querySelector('.overflow-y-auto') as HTMLDivElement;
+    Object.defineProperty(el, 'scrollHeight', { value: 1000, configurable: true });
+    Object.defineProperty(el, 'clientHeight', { value: 400, configurable: true });
+    Object.defineProperty(el, 'scrollTop', { value: 600, configurable: true, writable: true });
+    // Grow while still at bottom / following
+    Object.defineProperty(el, 'scrollHeight', { value: 1400, configurable: true });
+    act(() => {
+      const img = document.createElement('img');
+      el.appendChild(img);
+      img.dispatchEvent(new Event('load'));
+    });
+    expect(el.scrollTop).toBe(1000);
+    // Scroll away
+    el.scrollTop = 120;
+    act(() => { el.dispatchEvent(new Event('scroll')); });
+    Object.defineProperty(el, 'scrollHeight', { value: 1700, configurable: true });
+    act(() => {
+      const img = document.createElement('img');
+      el.appendChild(img);
+      img.dispatchEvent(new Event('load'));
+    });
+    expect(el.scrollTop).toBe(120);
+    expect(container.querySelector('[data-testid="scroll-to-bottom-btn"]')).not.toBeNull();
+  });
+
 });

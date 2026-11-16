@@ -1,0 +1,52 @@
+{
+  "id": "pc-conversation-suggest",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "conversation",
+  "aliases": [
+    "长文建议",
+    "方案说明",
+    "阅读正文",
+    "conversation suggest"
+  ],
+  "features": [
+    "long-copy",
+    "suggestions",
+    "reading"
+  ],
+  "density": "relaxed",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "长阅读建议/说明页",
+    "低权操作不抢正文"
+  ],
+  "notApplicableWhen": [
+    "密集仪表盘",
+    "嵌套卡片墙"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "9f75dded",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

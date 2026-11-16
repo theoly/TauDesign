@@ -1,0 +1,48 @@
+{
+  "id": "mobile-empty-state",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "mobile",
+  "pageKind": "empty",
+  "aliases": [
+    "移动空态",
+    "无内容引导",
+    "mobile empty"
+  ],
+  "features": [
+    "empty-cta",
+    "centered"
+  ],
+  "density": "relaxed",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "main"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "移动端空态引导",
+    "触控主按钮"
+  ],
+  "notApplicableWhen": [
+    "桌面宽屏空态装饰过多",
+    "系统空页面壳"
+  ],
+  "statesShown": [
+    "empty",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "0933c952",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

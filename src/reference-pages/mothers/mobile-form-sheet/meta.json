@@ -1,0 +1,51 @@
+{
+  "id": "mobile-form-sheet",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "mobile",
+  "pageKind": "form",
+  "aliases": [
+    "移动表单",
+    "信息登记",
+    "sheet form",
+    "触控表单"
+  ],
+  "features": [
+    "form-groups",
+    "input-touch",
+    "validation"
+  ],
+  "density": "standard",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "main"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "移动端单列表单",
+    "提交按钮位于内容流末"
+  ],
+  "notApplicableWhen": [
+    "桌面多列分组",
+    "强制底栏 cta-fixed"
+  ],
+  "statesShown": [
+    "filled",
+    "error",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "aec18d56",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

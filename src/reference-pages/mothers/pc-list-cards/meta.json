@@ -1,0 +1,59 @@
+{
+  "id": "pc-list-cards",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "list",
+  "aliases": [
+    "卡片列表",
+    "项目列表",
+    "成员卡片",
+    "card list",
+    "gallery list",
+    "会员列表"
+  ],
+  "features": [
+    "filters",
+    "cards",
+    "avatar",
+    "badge",
+    "grid",
+    "toolbar"
+  ],
+  "density": "standard",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main"
+    ],
+    "primaryCta": "toolbar"
+  },
+  "applicableWhen": [
+    "适合卡片浏览的资源或项目列表",
+    "需展示头像与徽章摘要"
+  ],
+  "notApplicableWhen": [
+    "密集多列表格",
+    "长文阅读页",
+    "营销长落地页",
+    "营销落地页"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "empty"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "99998f75",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

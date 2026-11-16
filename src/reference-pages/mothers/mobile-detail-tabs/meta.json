@@ -1,0 +1,51 @@
+{
+  "id": "mobile-detail-tabs",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "mobile",
+  "pageKind": "detail",
+  "aliases": [
+    "详情分栏",
+    "详情标签",
+    "detail tabs"
+  ],
+  "features": [
+    "tabs",
+    "badge",
+    "cards"
+  ],
+  "density": "compact",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "移动详情需横向小节切换",
+    "概览与评价分区"
+  ],
+  "notApplicableWhen": [
+    "单英雄无切换",
+    "桌面侧栏导航"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "empty"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "bb97d99a",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

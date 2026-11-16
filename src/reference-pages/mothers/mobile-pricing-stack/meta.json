@@ -1,0 +1,51 @@
+{
+  "id": "mobile-pricing-stack",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "mobile",
+  "pageKind": "pricing",
+  "aliases": [
+    "移动套餐",
+    "纵向套餐",
+    "mobile pricing"
+  ],
+  "features": [
+    "pricing-tiers",
+    "badge",
+    "cards"
+  ],
+  "density": "standard",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "移动端纵向套餐卡",
+    "推荐卡微质感"
+  ],
+  "notApplicableWhen": [
+    "三列桌面对比",
+    "等权三主按钮"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "622253d6",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

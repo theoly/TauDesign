@@ -1,0 +1,49 @@
+{
+  "id": "mobile-conversation-reading",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "mobile",
+  "pageKind": "conversation",
+  "aliases": [
+    "移动阅读",
+    "建议正文",
+    "conversation reading"
+  ],
+  "features": [
+    "long-copy",
+    "reading",
+    "segments"
+  ],
+  "density": "relaxed",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "main"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "移动端长文阅读与建议",
+    "分段清晰"
+  ],
+  "notApplicableWhen": [
+    "卡片套卡片",
+    "系统壳阅读器"
+  ],
+  "statesShown": [
+    "filled",
+    "selected"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "bfdc9635",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

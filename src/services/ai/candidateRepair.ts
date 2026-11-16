@@ -15,6 +15,7 @@ import {formRuleScope} from './formBehaviorChanges';
 import {inspectDesignEntities,designEntitySummary} from './designEntityValidation';
 import {libraryReferenceIssue,verifyLibraryReferenceFiles} from './designLibraryReference';
 import {inspectProjectAssetReferences,referencedProjectAssets,verifyProjectAssetFiles,screenForAssetAudit} from './projectAssetIntegrity';
+import {rewriteBuiltinIconAliases} from './builtinIconAliases';
 import {PageRenderCheck} from './pageRenderCheck';
 import {knowledgeFingerprint} from './projectKnowledge';
 import {pageCreationContext} from './pageCreationValidation';
@@ -80,6 +81,7 @@ async function repairCandidateTask(input:CandidateRepairInput,storage:ProjectSto
  const guard=()=>{if(!current())throw Error('修复已取消或候选/工程上下文已变化。');};
  const policy={requireExternalMedia:true,mediaCss:[baseline.scopedCss??'',...Object.entries(state.overrides??{}).filter(([key])=>key.startsWith(baseline.id+':')).flatMap(([,entry])=>Object.values(entry.declarations))].join('\n'),deviceProfile:state.settings.deviceProfile,useCustomNavigation:state.settings.useCustomNavigation,designSystem:state.designSystem};
  const makeScreen=(html:string):Screen=>({...baseline,name:candidate.screenName,htmlContent:html,metadata:{...baseline.metadata,...(candidate.navigationTitle?{navigationTitle:candidate.navigationTitle}:{})}});
+ const normalizeHtml=(html:string)=>rewriteBuiltinIconAliases(html,Object.values(state.assets),baseline.scopedCss??'').html;
  const validate=async(html:string)=>{
   guard();const libraryIssue=libraryReferenceIssue(state);if(libraryIssue)throw Error(libraryIssue);
   const source=checkGenerationSourceSafety(html,policy);if(!source.passed)throw Error(qualitySummary(source));
@@ -93,8 +95,9 @@ async function repairCandidateTask(input:CandidateRepairInput,storage:ProjectSto
  };
  let receipt:PageRepairRecord|undefined;
  try{
-  await validate(candidate.newHtml);
-  const proposal=await proposeStyleRepair({state,html:candidate.newHtml,contract:task,render:input.render!,context:pageCreationContext(state)},
+  const workingHtml=normalizeHtml(candidate.newHtml);
+  await validate(workingHtml);
+  const proposal=await proposeStyleRepair({state,html:workingHtml,contract:task,render:input.render!,context:pageCreationContext(state)},
    {...options,allowedNids:eligibility.allowedNids,protectedNids:eligibility.protectedNids});
   if(proposal.status==='proposed')onReceipt?.(proposal.record);else if(proposal.repair)onReceipt?.(proposal.repair);
   if(proposal.status!=='proposed')return {status:'blocked',message:proposal.message,repair:proposal.repair};

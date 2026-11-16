@@ -37,13 +37,13 @@ async function executeTarget(core: AIEngineCore, options: {
     if(workflowContract.designGuidance&&(workflowContract.designGuidance.protocol??'html')!==protocol)throw Error('规则快照与本次重塑输出协议不匹配。');
     if(!workflowContract.designGuidance){
       const query={request:workflowContract.request,operation:workflowContract.operation,device:quality.deviceProfile??'pc',scope:'page' as const,features:options.contextualGuidance?.features??pageRuleFeatures(target.html),maxChars:10000};
-      const selection=protocol==='html'?buildContextualCraft('modify_screen',query).selection:
+      const selection=protocol==='html'?buildContextualCraft('modify_screen',query,'replace').selection:
         selectTokenGuidance(compileTokensToCss(quality.designSystem!.tokens,options.colorMode??'light',quality.deviceProfile??'pc'),query,'css');
       workflowContract.designGuidance=makeGuidancePacket(workflowContract,selection,protocol);
     }
     const issue=guidancePacketIssue(workflowContract,false);if(issue)throw Error(issue);
     if(protocol==='html'&&workflowContract.designGuidance.selection.body){
-      const baseline=renderCraftSection('modify_screen'),body=renderFrozenCraft('modify_screen',workflowContract.designGuidance.selection);
+      const baseline=renderCraftSection('modify_screen'),body=renderFrozenCraft('modify_screen',workflowContract.designGuidance.selection,'replace');
       const candidates=request.messages.filter(m=>m.role==='system'&&m.content.includes(baseline));
       if(candidates.length!==1)throw Error('本次重塑缺少唯一可替换的工艺窗口，未请求模型。');
       candidates[0].content=candidates[0].content.replace(baseline,body);

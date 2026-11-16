@@ -14,60 +14,44 @@ import {FORM_PRESENTATION_RULES} from './formPresentationRules';
  * 参见 doc/aesthetic/spec.md 第四章 PC / Mobile 设备美学对照。
  */
 
-/** 与设备无关的黄金视觉层级准则 (spec §1.1) */
+/** 与设备无关的黄金视觉层级准则 (spec §1.1)；E5 压缩以保住 create ≤12k。 */
 export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY):
 - 配色可见性与美观度：文字、图标和关键控件必须与实际背景清晰区分，严禁同色或近似色导致内容难以辨认。更换背景时同步检查并调整前景色；图片、渐变、半透明背景按叠加效果判断，必要时用Token底色或遮罩。浅/深模式均保持品牌色协调、语义一致和主次层级，不为柔和、低饱和或装饰效果牺牲可见性。
-- COLOR ROLES: 背景bg、卡片surface、分组surface-alt；品牌约5–10%用于主操作/选中，普通指标/图标用中性，语义色表状态。.text-primary为主色文字，.btn-primary为主按钮；勿写死白字、蓝链接或整段彩色正文。
+- COLOR ROLES: bg/surface/surface-alt；品牌5–10%主操作；.text-primary主色字，.btn-primary主按钮；勿写死白字、蓝链接或整段彩色正文。
 - ${colorUsageRules()}
-- TYPE: 标题/正文/辅助三层，字号按设备与排版工艺。
-- SPACE: 组内.gap-1/.gap-2，组间更大，按设备档位。
-- ICONS: Lucide/Heroicons风格图标仅引用已登记外部文件，.icon/.icon-mask继承currentColor；禁止内联SVG、猜路径或符号占位。没有已登记资源时保留完整文字控件，不删功能。
-- CONTENT: 用真实感中文姓名/电话/日期/金额/状态，禁“占位文字”/“Lorem ipsum”/“标题1”。
-- 按钮文字默认不换行：.btn 已设 white-space: nowrap；不插入<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal 覆盖并调高按钮。
-- COMPONENT LAYOUT CONTRACT: .nowrap管flex、.text-nowrap管文字。标签.row.wrap.gap-2不设.flex-1，空间不足整项换行。姓名单行、职业位于姓名下方，人物组可换行；润色不新增或移动节点。头像.avatar、装饰.icon-box；.icon留白对称。长文.flex-1.min-w-0，地址/URL用.break-words；禁缩裁文案或位移居中。正文卡.col.gap-2独占宽度自然撑高。角标.relative+.absolute锚定，勿盖标题正文。
-- STATUS & FEEDBACK: 状态用.badge-soft + 语义色；通知角标遵循组件契约，右上附着不遮图标或内容。
+- TYPE/SPACE: 标题/正文/辅助；组内.gap-1/.gap-2，组间更大。ICONS: Lucide/Heroicons风格图标仅引用已登记外部文件，.icon/.icon-mask继承currentColor；禁止内联SVG、猜路径或符号占位。无登记资源时保留完整文字控件；禁无名图标按钮。
+- CONTENT: 真实感中文数据；禁占位/Lorem/“标题1”。按钮文字默认不换行：.btn 已设 white-space: nowrap；不插入<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal 覆盖。
+- COMPONENT LAYOUT CONTRACT: .nowrap管flex、.text-nowrap管文字。标签.row.wrap.gap-2不设.flex-1；姓名单行、职业位于姓名下方；润色不新增或移动节点；长文.flex-1.min-w-0；角标.relative+.absolute。.badge-soft表状态。
 ${FORM_PRESENTATION_RULES}`;
 
 /** Only new pages should proactively diversify repeated controls' business states. */
 export const NEW_SCREEN_STATE_RULES = `新页面同组控件多状态：尽量利用现有实例展示代表性不同状态，如输入框空值/已填/错误/禁用、选项未选/选中、按钮可用/加载/禁用。不额外堆砌控件；状态须与业务一致，互斥组最多一个选中；遵守用户指定状态和参考图，移动端不依赖hover。`;
 
 const PC_RULES = `DEVICE RULES — PC (1440px):
-- CONTENT WIDTH: .container-max最大1200px居中，勿横跨1440px。
-- Sections: .mt-8/.mb-8；页面.p-6/.p-8。
-- Cards: .p-5/.p-6；正文.text-sm(14px)。
-- Inputs: 40~44px.
-- Grids: 密集信息用.grid-2/.grid-3/.grid-4。
-- HOVER: 可点卡片.card-hover、表格行.row-hover、链接.link-hover。
-- Navigation: 顶栏或侧栏。
-- SEMANTIC REGIONS: <aside class="sidebar">、.toolbar/.filter-bar、<table>独立。Never emit white-on-white text.`;
+- .container-max≤1200px居中；区块.mt-8/.mb-8；页.p-6/.p-8；卡.p-5/.p-6；正文.text-sm。
+- Inputs 40~44px；密集信息.grid-2/.grid-3/.grid-4；可点.card-hover/.row-hover/.link-hover。
+- 顶/侧栏导航；SEMANTIC REGIONS: <aside class="sidebar">、.toolbar/.filter-bar、table独立。Never emit white-on-white text.`;
 
 const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
-- SINGLE COLUMN ONLY for main content. No wide tables or desktop grids. Compact cards/actions/metrics may use .grid-2, .grid-3 or .row.gap-2 with .flex-1 if content fits; short labels follow COMPONENT LAYOUT CONTRACT. Long horizontal card lists use .scroll-x.
-- .list-item仅用于横向紧凑列表，长正文卡片不用它；顶部.row.wrap.gap-2，操作组.flex-auto.min-w-0.wrap.justify-end，空间不足整组换行、组内按钮逐项换行。旧页仅改对应class，保留DOM/文案。
-- NO HOVER STATES. Touch screens never fire hover, and no hover utility exists in this profile's whitelist. Never write a :hover rule or reference a hover class. Express affordance through spacing, dividers, borders and .badge-soft instead.
-- Page section spacing: .mt-4 / .mt-6 (NOT .mt-8); page padding .p-4 / .px-4 (NOT .p-8).
-- Card padding: .p-3 / .p-4. Body text: .text-md (16px) — 14px is too small on a phone.
-- TOUCH TARGETS: inputs use .input .input-touch (48px). Any icon-only button must carry .tap-target (44x44 minimum).
-- SAFE AREAS: use .safe-bottom for the home indicator. System status and default WeChat navigation belong to the runtime shell, never reserve their top height in business HTML.
-- STRUCTURE & APPBAR (STRICT LAYOUT CONTRACT):
-  * BODY CONTAINMENT & NO OVERLAP: business content starts at its own origin; the renderer reserves system chrome. Never use negative margins or fixed top offsets to slide content under that chrome.
-  * FULL-BLEED HERO BANNERS & GRADIENTS: When a screen features an immersive brand/gradient header (e.g. certification/profile/store banner), let the hero block span the full width without horizontal margins and without bottom rounded corners (0 bottom radius). List cards beneath it sit on the canvas with standard spacing or gentle overlap.
-  * Bottom navigation uses .tabbar with .tabbar-item (mark active as .is-active).
-  * CTA BUTTON PLACEMENT: In card forms or bottom sheet dialogs, form submit buttons belong inline within the card flow (e.g. under inputs, above social proof). Use .cta-fixed when a sticky full-screen bottom bar is explicitly requested or appropriate. When reproducing a design reference, ALWAYS match the button placement in the reference!
-  * RIBBON BADGES & STATUS STRIPS: Card corner labels need their own reserved area; never cover the title, image subject or body content. 采用 .relative 容器配合 .absolute 精确锚定四角，与下方姓名/标题区域保留充足纵向隔离，严禁在常规流中无定位覆盖或用负 margin 导致徽标与文字重叠。Notification badges use .notification-control with a compact icon grid and reserved top band; anchor the badge to the icon’s own top-right corner, never the containing row/card corner (even when the control stretches); center the icon horizontally, never overlap it or use side-by-side columns. Use .badge-dot for a subtle update and .badge-count for small counts, reserving danger color for urgent issues. Notice bars use subtle background tint (.bg-warning-light or .bg-surface-alt) with semantic icons.
-  * ACTION BAR MULTI-BUTTON SIZING: 移动端（390px）卡片或弹窗操作行含 ≥3 个按钮时，2字辅助按钮使用 .flex-none 配合紧凑内边距（如 .px-2/.px-3），长文案（≥4字）主操作按钮使用 .flex-1.min-w-0，确保内容两端保留呼吸边距，严禁内容贴边。
-  * SEMANTIC REGION DECOUPLING: Keep business Hero (.hero-section), headings, search and actions independent from optional custom navigation. Never fuse system status with a business header. Never emit invisible white-on-white text when changing backgrounds!`;
+- SINGLE COLUMN ONLY. 禁宽表；谨慎.grid-2/.scroll-x。
+- NO HOVER STATES. 禁 :hover/hover类。
+- .p-4/.text-md；.input-touch/.tap-target；.safe-bottom；不预留系统顶栏高度。
+- FULL-BLEED HERO BANNERS & GRADIENTS: immersive brand/gradient headers use .hero-section full width, no horizontal margins, 0 bottom radius; cards below with normal spacing or gentle overlap.
+- CTA BUTTON PLACEMENT: card/sheet submits stay in-flow; use .cta-fixed only for sticky full-width bottom bars or when the reference shows them. ALWAYS match the button placement in the reference!
+- RIBBON BADGES & STATUS STRIPS: corner labels need reserved space via .relative+.absolute; notification badges use .notification-control; notice bars use .bg-warning-light/.bg-surface-alt.
+- .tabbar/.tabbar-item；角标不遮标题与主体。
+- SEMANTIC REGION DECOUPLING: .hero-section与自定义导航解耦；Never emit invisible white-on-white text.`;
 
 export function getDeviceAestheticRules(device: DeviceProfile, useCustomNavigation = false): string {
   return device === 'pc' ? PC_RULES : `${MOBILE_RULES}\n${mobileNavigationPrompt({ deviceProfile: device, useCustomNavigation })}`;
 }
 
 /**
- * Few-Shot 范例按设备分档且条件注入 (T-AE-10)。
+ * Legacy device HTML snippets retained for navigation / specimen regression tests only.
  *
- * buildSystemPrompt 的产物是每次请求全量常驻的 system prompt，塞入范例约
- * 增加 1.5k~3k token/次，因此只在「新建画框」时注入，且两档位互斥——
- * 给移动端喂 PC 范例是当前生成结果"PC 味很重"的直接来源。
+ * @deprecated E5: production create prompts use `src/reference-pages` mother injector first.
+ * Do not call this as the primary REFERENCE EXAMPLE path; PromptBuilder falls back to short
+ * prose when the retriever refuses — never these long HTML blobs.
  */
 const PC_EXAMPLE = `<main class="p-8">
   <div class="container-max col gap-6">
@@ -76,13 +60,13 @@ const PC_EXAMPLE = `<main class="p-8">
         <h1 class="text-2xl font-bold">运营概览</h1>
         <p class="text-sm text-muted">数据更新于 2026-09-16 09:30</p>
       </div>
-      <button class="btn btn-primary"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg><span>新建任务</span></button>
+      <button class="btn btn-primary"><span>新建任务</span></button>
     </div>
     <div class="grid-3 gap-4">
       <div class="card card-hover p-5 col gap-2">
         <div class="row items-center justify-between">
           <span class="text-xs text-muted">本月新增用户</span>
-          <span class="text-success"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 7 13.5 15.5 8.5 10.5 2 17"/><path d="M16 7h6v6"/></svg></span>
+          <span class="text-success text-sm">↑</span>
         </div>
         <span class="text-3xl font-bold">2,847</span>
         <span class="badge-soft text-success">较上月 +12.5%</span>
@@ -92,9 +76,9 @@ const PC_EXAMPLE = `<main class="p-8">
 </main>`;
 
 const MOBILE_EXAMPLE = `<main class="col bg-surface-alt" style="min-height:100%;">
-  <div class="status-bar"><span>9:41</span><span class="status-bar-icons"><svg viewBox="0 0 24 24" fill="currentColor" aria-label="信号"><path d="M3 19h3v-4H3zm5 0h3v-7H8zm5 0h3V9h-3zm5 0h3V5h-3z"/></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="Wi-Fi"><path d="M2 8a16 16 0 0 1 20 0M5 12a11 11 0 0 1 14 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/></svg><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-label="电量"><rect x="2" y="6" width="18" height="12" rx="2"/><path d="M22 10v4"/><rect x="5" y="9" width="12" height="6" fill="currentColor" stroke="none"/></svg></span></div>
+  <div class="status-bar"><span>9:41</span><span class="status-bar-icons"></span></div>
   <div class="appbar">
-    <span class="tap-target"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg></span>
+    <span class="tap-target">‹</span>
     <span class="appbar-title">账户登录</span>
     <span class="appbar-capsule" aria-label="小程序胶囊"><span class="appbar-capsule-more">···</span><span class="appbar-capsule-home"></span></span>
   </div>
@@ -105,23 +89,19 @@ const MOBILE_EXAMPLE = `<main class="col bg-surface-alt" style="min-height:100%;
     </div>
     <div class="col gap-4">
       <div class="input-group">
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-10 5L2 7"/></svg>
         <input class="input input-touch" value="138 0013 8000" />
       </div>
       <div class="input-group">
-        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
         <input class="input input-touch" value="请输入验证码" />
         <button class="btn btn-ghost btn-sm nowrap">获取验证码</button>
       </div>
     </div>
     <div class="divider-text">或使用以下方式登录</div>
-    <div class="row gap-3 justify-center">
-      <span class="tap-target card p-3"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg></span>
-    </div>
   </div>
   <div class="cta-fixed"><button class="btn btn-primary">登录</button></div>
 </main>`;
 
+/** @deprecated Prefer mother injector; kept for mobile-navigation / specimen tests. */
 export function getFewShotExample(device: DeviceProfile, useCustomNavigation = false): string {
   return device === 'pc' ? PC_EXAMPLE : normalizeMobileNavigation(MOBILE_EXAMPLE, { deviceProfile: device, useCustomNavigation }).html;
 }

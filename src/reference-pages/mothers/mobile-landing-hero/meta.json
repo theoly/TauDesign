@@ -1,0 +1,51 @@
+{
+  "id": "mobile-landing-hero",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "mobile",
+  "pageKind": "landing",
+  "aliases": [
+    "移动落地",
+    "移动营销首屏",
+    "mobile landing"
+  ],
+  "features": [
+    "hero",
+    "brand",
+    "cta-fixed"
+  ],
+  "density": "relaxed",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main",
+      "footer"
+    ],
+    "primaryCta": "cta-fixed"
+  },
+  "applicableWhen": [
+    "移动全宽英雄区",
+    "底栏单一主操作"
+  ],
+  "notApplicableWhen": [
+    "桌面三列卖点首屏",
+    "系统状态栏落地"
+  ],
+  "statesShown": [
+    "filled",
+    "selected"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "66494c08",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

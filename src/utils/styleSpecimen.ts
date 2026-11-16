@@ -13,8 +13,8 @@ import { getBaseCss, type DeviceProfile } from '../styles/baseCss';
  * 纯静态模板，不调用大模型：确定性、零成本、零等待，且随 Token 即时换肤。
  */
 
-const SPACING_STEPS = ['0', '1', '2', '3', '4', '5', '6', '8'];
-const TEXT_SIZES = ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl'];
+const SPACING_STEPS = ['0', '1', '2', '3', '4', '5', '6', '8', '10', '12', '16'];
+const TEXT_SIZES = ['xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl', '6xl'];
 const WEIGHTS: Array<[string, string]> = [
   ['font-normal', '常规 400'],
   ['font-medium', '中等 500'],
@@ -23,6 +23,7 @@ const WEIGHTS: Array<[string, string]> = [
 ];
 const RADII = ['r-none', 'r-sm', 'r-md', 'r-lg', 'r-xl', 'r-full'];
 const SHADOWS = ['shadow-none', 'shadow-sm', 'shadow-md', 'shadow-lg'];
+const MARGIN_AXES = ['ml', 'mr', 'mx', 'my'] as const;
 
 const icon = (path: string) =>
   `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
@@ -122,6 +123,10 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
   const marginAllDemo = SPACING_STEPS
     .map((n) => `<span class="tag m-${n}">m-${n}</span>`)
     .join('');
+
+  const axisMarginDemo = MARGIN_AXES
+    .map((axis) => SPACING_STEPS.map((n) => `<span class="tag ${axis}-${n}">${axis}-${n}</span>`).join(''))
+    .join('') + '<span class="tag mx-auto">mx-auto</span><span class="tag my-auto">my-auto</span>';
 
   const grids = [1, 2, 3, 4, 5, 6]
     .map(
@@ -271,6 +276,9 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
       </div>`;
 
   const misc = `
+    <div class="bg-page p-4 r-md mb-2">bg-page · 页面背景角色</div>
+    <div class="bg-primary-action p-4 r-md mb-2">bg-primary-action · 主操作背景</div>
+    <div class="bg-decorative p-4 r-md mb-2">bg-decorative · 装饰背景</div>
     <div class="bg-decorative-surface p-4 r-md">主题装饰背景</div>
       <div class="col gap-3">
         <div class="relative bg-surface-alt r-md p-3 sticky-top text-xs text-muted">
@@ -283,6 +291,8 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
           )}" />
         </div>
         <p class="text-sm text-secondary leading-relaxed m-0">leading-relaxed：这段文字用于演示放松的行高，在长段落中提供更舒展的阅读节奏。</p>
+        <p class="text-sm leading-tight tracking-tight font-display">font-display · tracking-tight · leading-tight</p>
+        <p class="text-sm leading-normal tracking-wide font-mono">font-mono · tracking-wide · leading-normal</p>
       </div>`;
 
   const texture = `
@@ -318,8 +328,22 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
           </div>
         </div>
         <div class="glass p-4 r-lg text-sm text-secondary">glass · 毛玻璃表面</div>
+        <div class="glass-strong p-4 r-lg text-sm text-secondary">glass-strong · 强毛玻璃</div>
+        <div class="row wrap gap-3 items-center">
+          <span class="blur-sm text-xs text-muted">blur-sm</span>
+          <span class="blur-md text-xs text-muted">blur-md</span>
+          <span class="blur-lg text-xs text-muted">blur-lg</span>
+        </div>
         <div class="surface-subtle p-4 r-lg text-sm text-secondary">surface-subtle · 微质感表面</div>
         <div class="border-subtle p-4 r-lg text-sm text-secondary">border-subtle · 半透明微边框（随 borderAlpha 变化）</div>
+        <div class="row gap-0 border r-lg overflow-hidden" style="min-height:120px;">
+          <aside class="sidebar" style="width:120px;"><span class="text-xs text-muted">sidebar</span></aside>
+          <div class="col flex-1">
+            <div class="toolbar"><span class="text-xs text-muted">toolbar</span></div>
+            <div class="filter-bar"><span class="text-xs text-muted">filter-bar</span></div>
+            <div class="hero-section"><span class="text-xl font-display tracking-tight">hero-section</span></div>
+          </div>
+        </div>
         <div class="grid-3 gap-3">
           <div class="bg-gradient-soft p-3 r-md text-xs text-muted text-center">bg-gradient-soft</div>
           <div class="bg-ambient-warm p-3 r-md text-xs text-muted text-center">bg-ambient-warm</div>
@@ -400,11 +424,11 @@ export function buildStyleSpecimenHtml(device: DeviceProfile = 'pc'): string {
   </header>
 
   ${section('色板 Palette', '主色、强调色、表面层级与语义色', `<div class="grid-5 gap-3">${colorSwatches}</div>`)}
-  ${section('字阶 Type Scale', 'text-xs 至 text-4xl 全档', `<div class="col gap-0">${textScale}</div>`)}
+  ${section('字阶 Type Scale', 'text-xs 至 text-6xl 全档', `<div class="col gap-0">${textScale}</div>`)}
   ${section('字重与文本色', 'font-* 四档与语义文本色', `<div class="col gap-2">${weights}<div class="row wrap gap-2 mt-3">${textColors}</div></div>`)}
   ${section('圆角 Radius', 'r-none 至 r-full', `<div class="grid-6 gap-3">${radii}</div>`)}
   ${section('阴影 Shadow', '层级与悬浮感', `<div class="grid-4 gap-3">${shadows}</div>`)}
-  ${section('间距标尺 Spacing', '4px 基准阶梯，p / px / py / m / mt / mb / gap 同刻度', `<div class="col gap-3">${spacingRuler}<div class="divider"></div><div class="col gap-0">${gapDemo}</div><div class="row wrap gap-1 mt-3">${marginDemo}</div><div class="row wrap mt-3 bg-surface-alt r-sm">${marginAllDemo}</div></div>`)}
+  ${section('间距标尺 Spacing', '4px 基准阶梯，含 10/12/16；p / px / py / m / mt / mb / ml / mr / mx / my / gap 同刻度', `<div class="col gap-3">${spacingRuler}<div class="divider"></div><div class="col gap-0">${gapDemo}</div><div class="row wrap gap-1 mt-3">${marginDemo}</div><div class="row wrap mt-3 bg-surface-alt r-sm">${marginAllDemo}</div><div class="row wrap gap-1 mt-3">${axisMarginDemo}</div></div>`)}
   ${section('栅格 Grid', 'grid-1 至 grid-6', `<div class="col gap-4">${grids}</div>`)}
   ${section('布局与对齐 Flex', 'justify / items / flex / text-align / wrap', alignments)}
   ${section('按钮 Button', '主次、尺寸与图标组合', buttons)}

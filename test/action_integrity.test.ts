@@ -13,6 +13,7 @@ import { CanvasToolExecutor } from '../src/services/tools/canvasToolExecutor';
 import { useProjectStore } from '../src/stores/useProjectStore';
 import { useHistoryStore } from '../src/stores/useHistoryStore';
 import { finalizeModelHtml } from '../src/services/ai/modelHtmlResult';
+import { ensureActionAccessibleNames } from '../src/services/ai/actionIntegrity';
 
 const before = '<main data-nid="root"><section data-nid="sheet"><p data-nid="detail">合同核销规则</p></section><footer data-nid="footer"><button data-nid="save" class="btn">暂存</button><button data-nid="submit" class="btn btn-primary"><img class="icon" src="https://example.com/fixture-icon.svg" alt=""/><span data-nid="label">提交并核销 1 次合同约见权益</span></button></footer></main>';
 const blank = '<main data-nid="root"><section data-nid="sheet"><p data-nid="detail">合同核销规则</p></section><footer data-nid="footer"><button data-nid="save" class="btn">暂存</button><button data-nid="submit" class="btn btn-primary"><img class="icon" src="https://example.com/fixture-icon.svg" alt=""/><span data-nid="label"></span></button></footer></main>';
@@ -31,6 +32,13 @@ test('颜色类不代表主操作，带名称的 icon-mask 保留语义，真正
   expect(checkGenerationQuality(named).findings.some(f=>f.code==='action_label_missing')).toBe(false);
   const empty='<main><button data-nid="save" class="btn-primary"></button></main>';
   expect(checkGenerationQuality(empty).findings.some(f=>f.code==='action_label_missing'&&f.nid==='save')).toBe(true);
+});
+test('次要无名称图标按钮与空按钮同样阻断；ensure 可为图标控件补齐 aria-label', () => {
+  const hollow='<main><button data-nid="photo" class="btn" data-action="add"><span class="icon-mask"></span></button><button class="btn-primary">保存</button></main>';
+  expect(checkGenerationQuality(hollow).findings.some(f=>f.code==='action_label_missing'&&f.nid==='photo')).toBe(true);
+  const fixed=ensureActionAccessibleNames(hollow);
+  expect(fixed).toContain('aria-label="添加"');
+  expect(checkGenerationQuality(fixed).findings.some(f=>f.code==='action_label_missing'&&f.nid==='photo')).toBe(false);
 });
 const context = (prompt: string): PipelineContext => ({ input: { rawPrompt: prompt, activeScreenId: 's1' }, intent: 'modify_screen', intentReason: 'test', hasExplicitStructuralChangeIntent: false,
   targetScreen: { id: 's1', name: '回访', htmlContent: before, isSkeleton: false }, referencedScreens: [], unmatchedMentions: [], activeRules: [], activeDecisions: [], assembledMessages: [], estimatedChars: 0, isContextTrimmed: false, warnings: [] });

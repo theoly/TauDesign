@@ -1,0 +1,37 @@
+<main class="bg-page row items-stretch">
+  <aside class="sidebar p-4 col gap-4" data-region="sidebar">
+    <div class="col gap-1 px-2">
+      <span class="text-sm font-bold">云杉后台</span>
+      <span class="text-xs text-muted">运营中心</span>
+    </div>
+    <nav class="col gap-1">
+      <button class="btn btn-secondary btn-sm justify-start is-selected">总览</button>
+      <button class="btn btn-ghost btn-sm justify-start">订单</button>
+      <button class="btn btn-ghost btn-sm justify-start">客户</button>
+      <button class="btn btn-ghost btn-sm justify-start">设置</button>
+    </nav>
+  </aside>
+  <section class="flex-1 col gap-5 p-6" data-region="main">
+    <header class="toolbar">
+      <div class="col gap-1">
+        <h1 class="text-xl font-bold">今日总览</h1>
+        <p class="text-sm text-muted">门店与线上合并口径</p>
+      </div>
+      <button class="btn btn-primary">创建任务</button>
+    </header>
+    <div class="grid-3 gap-4">
+      <div class="card shadow-card p-4 col gap-1"><span class="text-xs text-muted">成交额</span><span class="text-2xl font-bold">¥18.6 万</span></div>
+      <div class="card shadow-card p-4 col gap-1"><span class="text-xs text-muted">订单数</span><span class="text-2xl font-bold">326</span></div>
+      <div class="card shadow-card p-4 col gap-1 surface-subtle"><span class="text-xs text-muted">客诉</span><span class="text-2xl font-bold">3</span></div>
+    </div>
+    <div class="card shadow-card overflow-hidden">
+      <div class="row items-center justify-between px-5 py-3 border-b bg-surface-alt">
+        <h2 class="text-md font-semibold">异常订单</h2>
+        <span class="badge-soft text-warning">2 条待处理</span>
+      </div>
+      <div class="px-5 py-3 row justify-between is-selected"><span class="text-sm">ORD-0842 支付超时</span><button class="btn btn-text btn-sm">处理</button></div>
+      <div class="px-5 py-3 row justify-between"><span class="text-sm">ORD-0791 地址不全</span><button class="btn btn-text btn-sm">处理</button></div>
+      <div class="p-5 text-sm text-muted">其余订单运行正常。</div>
+    </div>
+  </section>
+</main>

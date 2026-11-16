@@ -14,9 +14,28 @@ const checks = {
 } as const;
 export type FindingCheckId = keyof typeof checks;
 export interface FindingAssessment { checkId: FindingCheckId; status: 'failed' | 'unverified' | 'advice' }
-export type FindingDisposition = 'blocker' | 'warning' | 'unverified' | 'advisory';
+export type FindingDisposition = 'blocker' | 'warning' | 'unverified' | 'advisory' | 'elevatable' | 'layout-risk';
+
+/** Improve-ladder lane attached to elevatable / layout findings (E6). */
+export type RepairLane = 'deterministic' | 'style' | 'polish' | 'region' | 'regen';
+
+const REPAIR_LANES: readonly RepairLane[] = ['deterministic', 'style', 'polish', 'region', 'regen'];
+
+const LAYOUT_RISK_CODES = new Set([
+  'incomplete_html',
+  'layout_risk_device_contract',
+  'active_content',
+  'event_handler',
+  'unsafe_url',
+  'duplicate_nid'
+]);
+
+export function validRepairLane(value: unknown): value is RepairLane {
+  return typeof value === 'string' && (REPAIR_LANES as readonly string[]).includes(value);
+}
 
 export function validFindingAssessment(finding: QualityFinding): boolean {
+  if (finding.repairLane !== undefined && !validRepairLane(finding.repairLane)) return false;
   if (finding.assessment === undefined) {
     if (['render_check_unverified', 'render_contrast_unverified', 'required_field_label_missing', 'required_field_label_unverified', 'required_action_text_missing', 'required_action_text_unverified'].includes(finding.code)) return false;
     return !(checks['render-controls'].codes as readonly string[]).includes(finding.code) || finding.severity === 'error';
@@ -39,14 +58,34 @@ export function assessedFinding(checkId: FindingCheckId, status: FindingAssessme
   return finding;
 }
 
+/** Elevatable aesthetic / hard-visual finding: warning + repairLane (create must not hard-fail solely on these). */
+export function elevatableFinding(
+  details: Omit<QualityFinding, 'severity' | 'assessment'> & { repairLane: RepairLane }
+): QualityFinding {
+  const finding: QualityFinding = { ...details, severity: 'warning' };
+  if (!validFindingAssessment(finding)) throw new Error('Elevatable finding is invalid');
+  return finding;
+}
+
+export function isLayoutRiskFinding(finding: QualityFinding): boolean {
+  return LAYOUT_RISK_CODES.has(finding.code) && finding.severity === 'error';
+}
+
+export function isElevatableFinding(finding: QualityFinding): boolean {
+  return finding.severity === 'warning' && validRepairLane(finding.repairLane);
+}
+
 export function findingDisposition(finding: QualityFinding): FindingDisposition {
   if (!validFindingAssessment(finding)) return 'blocker';
+  if (isLayoutRiskFinding(finding)) return 'layout-risk';
+  if (isElevatableFinding(finding)) return 'elevatable';
   if (finding.assessment?.status === 'unverified') return 'unverified';
   if (finding.assessment?.status === 'advice') return 'advisory';
   return finding.severity === 'error' ? 'blocker' : 'warning';
 }
 export function findingRequirement(finding: QualityFinding): 'required' | 'advisory' {
   if (!validFindingAssessment(finding)) return 'required';
+  if (isElevatableFinding(finding)) return 'advisory';
   return finding.assessment ? checks[finding.assessment.checkId].requirement : finding.severity === 'error' ? 'required' : 'advisory';
 }
 

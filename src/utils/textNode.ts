@@ -101,7 +101,7 @@ export function setDirectText(el: Element, next: string): boolean {
 /** Missing action copy beside icon-only children; append a text node without flattening SVG. */
 export function appendMissingIconActionText(el: Element, text: string): boolean {
   if (!text.trim() || !el.matches('button,a,[role="button"]') || directTextNodes(el).length || !el.children.length
-    || Array.from(el.children).some(child=>!child.matches('svg,img,.icon'))) return false;
+    || Array.from(el.children).some(child=>!child.matches('svg,img,.icon,.icon-mask'))) return false;
   el.appendChild(el.ownerDocument.createTextNode(text));
   return true;
 }

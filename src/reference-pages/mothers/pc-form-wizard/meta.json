@@ -1,0 +1,52 @@
+{
+  "id": "pc-form-wizard",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "pc",
+  "pageKind": "form",
+  "aliases": [
+    "分步表单",
+    "向导表单",
+    "步骤创建",
+    "wizard form"
+  ],
+  "features": [
+    "wizard",
+    "steps",
+    "form-groups"
+  ],
+  "density": "standard",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "多步骤创建流程",
+    "需展示当前步与进度"
+  ],
+  "notApplicableWhen": [
+    "单页短表单",
+    "设置开关页"
+  ],
+  "statesShown": [
+    "filled",
+    "disabled",
+    "selected"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "3ea21f39",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

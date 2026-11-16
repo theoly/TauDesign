@@ -1,0 +1,55 @@
+<main class="bg-page p-8">
+  <div class="container-max col gap-6">
+    <header class="toolbar" data-region="header">
+      <div class="col gap-1 min-w-0">
+        <h1 class="text-2xl font-bold tracking-tight">订单管理</h1>
+        <p class="text-sm text-muted">共 128 条 · 今日新增 6 单</p>
+      </div>
+      <div class="row gap-2 items-center">
+        <button class="btn btn-secondary btn-sm">导出</button>
+        <button class="btn btn-primary">新建订单</button>
+      </div>
+    </header>
+    <div class="filter-bar" data-region="filters">
+      <input class="input" placeholder="搜索订单号 / 客户" />
+      <select class="select"><option>全部状态</option><option>待支付</option><option>已发货</option></select>
+      <button class="btn btn-ghost btn-sm">重置</button>
+    </div>
+    <section class="card shadow-card overflow-hidden" data-region="main">
+      <div class="row items-center gap-4 px-5 py-3 bg-surface-alt border-b text-xs text-muted font-medium">
+        <span class="flex-1">订单信息</span><span class="flex-none">金额</span><span class="flex-none">状态</span><span class="flex-none">操作</span>
+      </div>
+      <div class="row-hover is-selected px-5 py-4 row items-center gap-4">
+        <div class="flex-1 col gap-1 min-w-0">
+          <span class="text-sm font-medium text-nowrap">ORD-20261116-0842</span>
+          <span class="text-xs text-muted">杭州云杉科技 · 林婉清</span>
+        </div>
+        <span class="flex-none text-sm font-semibold">¥2,860</span>
+        <span class="badge-soft text-warning flex-none">待支付</span>
+        <button class="btn btn-text btn-sm flex-none">催付</button>
+      </div>
+      <div class="row-hover px-5 py-4 row items-center gap-4">
+        <div class="flex-1 col gap-1 min-w-0">
+          <span class="text-sm font-medium text-nowrap">ORD-20261115-2301</span>
+          <span class="text-xs text-muted">苏州青禾园艺 · 周予安</span>
+        </div>
+        <span class="flex-none text-sm font-semibold">¥680</span>
+        <span class="badge-soft text-success flex-none">已发货</span>
+        <button class="btn btn-text btn-sm flex-none">详情</button>
+      </div>
+      <div class="row-hover px-5 py-4 row items-center gap-4">
+        <div class="flex-1 col gap-1 min-w-0">
+          <span class="text-sm font-medium text-nowrap">ORD-20261114-1190</span>
+          <span class="text-xs text-muted">成都叠溪文创 · 何知夏</span>
+        </div>
+        <span class="flex-none text-sm font-semibold">¥1,240</span>
+        <span class="badge-soft text-info flex-none">处理中</span>
+        <button class="btn btn-text btn-sm flex-none">跟进</button>
+      </div>
+    </section>
+    <footer class="row justify-between items-center text-sm text-muted" data-region="footer">
+      <span>已选 1 条</span>
+      <div class="row gap-2"><button class="btn btn-ghost btn-sm">上一页</button><button class="btn btn-ghost btn-sm">下一页</button></div>
+    </footer>
+  </div>
+</main>

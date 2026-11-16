@@ -1,0 +1,44 @@
+<main class="bg-page p-8">
+  <div class="container-max col gap-8">
+    <header class="col gap-1" data-region="header">
+      <h1 class="text-2xl font-bold">新建客户</h1>
+      <p class="text-sm text-muted">带 * 为必填项，保存后可继续补充联系人</p>
+    </header>
+    <section class="col gap-6" data-region="main">
+      <div class="card shadow-card p-6 col gap-5">
+        <h2 class="text-lg font-semibold">基本信息</h2>
+        <div class="grid-2 gap-5">
+          <div class="col gap-2">
+            <label class="text-sm font-medium">公司名称 *</label>
+            <input class="input" value="杭州云杉科技有限公司" />
+          </div>
+          <div class="col gap-2">
+            <label class="text-sm font-medium">客户等级</label>
+            <select class="select"><option>A 类战略</option><option>B 类成长</option></select>
+          </div>
+          <div class="col gap-2">
+            <label class="text-sm font-medium">联系邮箱 *</label>
+            <input class="input" value="ops@" />
+            <span class="text-xs text-danger">请输入完整邮箱地址</span>
+          </div>
+          <div class="col gap-2">
+            <label class="text-sm font-medium">所属行业</label>
+            <input class="input" value="企业服务" disabled />
+            <span class="text-xs text-muted">由线索来源自动填充</span>
+          </div>
+        </div>
+      </div>
+      <div class="card shadow-card p-6 col gap-5">
+        <h2 class="text-lg font-semibold">跟进备注</h2>
+        <div class="col gap-2">
+          <label class="text-sm font-medium">备注</label>
+          <textarea class="input" rows="3">本周完成需求访谈，对方希望先看移动端方案。</textarea>
+        </div>
+      </div>
+      <div class="row justify-end gap-3">
+        <button class="btn btn-ghost">取消</button>
+        <button class="btn btn-primary">保存客户</button>
+      </div>
+    </section>
+  </div>
+</main>

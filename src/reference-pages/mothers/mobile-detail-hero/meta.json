@@ -1,0 +1,52 @@
+{
+  "id": "mobile-detail-hero",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "mobile",
+  "pageKind": "detail",
+  "aliases": [
+    "移动详情",
+    "英雄详情",
+    "商品详情",
+    "hero detail"
+  ],
+  "features": [
+    "hero",
+    "badge",
+    "cards"
+  ],
+  "density": "standard",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main"
+    ],
+    "primaryCta": "inline"
+  },
+  "applicableWhen": [
+    "移动端全宽英雄区详情",
+    "下方信息卡列表"
+  ],
+  "notApplicableWhen": [
+    "桌面双栏档案",
+    "系统状态栏演示"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "0073cc60",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

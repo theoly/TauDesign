@@ -1,0 +1,54 @@
+{
+  "id": "mobile-list-cards",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "mobile",
+  "pageKind": "list",
+  "aliases": [
+    "移动卡片列表",
+    "手机项目列表",
+    "mobile card list"
+  ],
+  "features": [
+    "filters",
+    "cards",
+    "badge",
+    "avatar"
+  ],
+  "density": "standard",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main"
+    ],
+    "primaryCta": "toolbar"
+  },
+  "applicableWhen": [
+    "移动端卡片浏览列表",
+    "顶部分类筛选"
+  ],
+  "notApplicableWhen": [
+    "桌面多列表格",
+    "系统壳伪元素演示",
+    "营销落地页",
+    "营销长落地页"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "empty"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "0082b5c8",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

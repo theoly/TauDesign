@@ -31,6 +31,7 @@ import {
   Heart,
   Image as ImageIcon,
   Layers,
+  Library,
   Lock,
   Mail,
   Plus,
@@ -48,6 +49,10 @@ import {
   Wand2,
   Zap
 } from 'lucide-react';
+import { listActiveBuiltinMotherMeta } from '../../reference-pages/builtinMetaIndex';
+import { saveActiveScreenAsProjectMother } from '../../reference-pages/saveMother';
+import { createProjectStorage } from '../../services/storage/projectStorage';
+import type { MotherPageMeta } from '../../reference-pages/types';
 
 interface AssetModalProps {
   onClose: () => void;
@@ -69,15 +74,19 @@ const BUILTIN_LUCIDE_ICONS = [
 ];
 
 export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
-  const [activeTab, setActiveTab] = useState<'components' | 'images' | 'icons' | 'ai_svg'>('components');
+  const [activeTab, setActiveTab] = useState<'components' | 'images' | 'icons' | 'ai_svg' | 'mothers'>('components');
   const [iconSearch, setIconSearch] = useState('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [builtinMothers] = useState<MotherPageMeta[]>(() => listActiveBuiltinMotherMeta());
+  const [savingMother, setSavingMother] = useState(false);
 
   // Store Hooks
   const {
     id:projectId,
+    folderPath,
     screens,
     activeScreenId,
+    settings,
     components,
     designLibraryBinding,
     assets,
@@ -120,6 +129,38 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
   const showFeedback = (msg: string) => {
     setStatusMsg(msg);
     setTimeout(() => setStatusMsg(null), 3500);
+  };
+
+  const handleSaveActiveScreenAsMother = async () => {
+    if (!activeScreenId) {
+      showFeedback('请先选中一个画框');
+      return;
+    }
+    const screen = screens[activeScreenId];
+    if (!screen?.htmlContent) {
+      showFeedback('当前画框没有可保存的 HTML');
+      return;
+    }
+    const device = (settings?.deviceProfile === 'mobile' ? 'mobile' : 'pc') as 'pc' | 'mobile';
+    setSavingMother(true);
+    try {
+      const storage = createProjectStorage(projectId, folderPath);
+      const result = await saveActiveScreenAsProjectMother(storage, {
+        bodyHtml: screen.htmlContent,
+        device,
+        title: screen.name || activeScreenId
+      });
+      if (!result.ok) {
+        const detail = result.ingest.issues[0]?.message ?? result.error ?? '保存失败';
+        showFeedback(`存为母版失败：${detail}`);
+        return;
+      }
+      showFeedback(`已存为工程母版：${result.mother?.meta.id}`);
+    } catch (error) {
+      showFeedback(`存为母版失败：${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setSavingMother(false);
+    }
   };
 
   // Filter Lucide icons
@@ -314,6 +355,18 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
           >
             <Sparkles className="w-3.5 h-3.5 text-purple-400" />
             <span>AI 矢量图标设计器</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('mothers')}
+            className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
+              activeTab === 'mothers'
+                ? 'border-emerald-500 text-emerald-400 font-semibold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Library className="w-3.5 h-3.5 text-emerald-400" />
+            <span>母版</span>
           </button>
         </div>
 
@@ -751,6 +804,55 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                       </button>
                     </div>
                   </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 5: Mothers (E4c) — builtin read-only + save active screen as project-local */}
+          {activeTab === 'mothers' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Library className="w-4 h-4 text-emerald-400" />
+                    <span className="font-semibold text-slate-200">业务母版库</span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-slate-500 leading-relaxed">
+                    内置母版只读；可将当前画框经 ingest 后存入工程 `mothers/`。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={!activeScreenId || savingMother}
+                  onClick={handleSaveActiveScreenAsMother}
+                  className="shrink-0 px-3 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-xl text-[11px] font-medium transition"
+                >
+                  {savingMother ? '保存中…' : '将当前画框存为母版'}
+                </button>
+              </div>
+
+              {builtinMothers.length === 0 ? (
+                <p className="text-[11px] text-slate-500 px-1 py-6 text-center">暂无可用内置母版</p>
+              ) : (
+                <div className="space-y-1.5 max-h-[48vh] overflow-y-auto pr-1">
+                  {builtinMothers.map((meta) => (
+                    <div
+                      key={meta.id}
+                      className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border border-slate-800 bg-slate-950/60"
+                    >
+                      <div className="min-w-0">
+                        <div className="text-slate-200 font-medium truncate">{meta.id}</div>
+                        <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                          {meta.device} · {meta.pageKind}
+                          {meta.aliases[0] ? ` · ${meta.aliases[0]}` : ''}
+                        </div>
+                      </div>
+                      <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-slate-700 text-slate-500">
+                        只读
+                      </span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

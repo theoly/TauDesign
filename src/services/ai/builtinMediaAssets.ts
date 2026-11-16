@@ -2,7 +2,10 @@ import {createProjectStorage} from '../storage/projectStorage';
 import {pageCreationContext} from './pageCreationValidation';
 import {useProjectStore} from '../../stores/useProjectStore';
 import type {Asset} from '../../types/project';
-export const BUILTIN_MEDIA_ICON_NAMES=['arrow-left','arrow-right','bell','calendar','check','chevron-down','chevron-right','clock','heart','house','info','mail','map-pin','menu','message-circle','plus','search','settings','shield-check','user','users','x'] as const;
+import {BUILTIN_MEDIA_ICON_NAMES} from './builtinIconAliases';
+
+export {BUILTIN_MEDIA_ICON_NAMES, builtinIconAliasMap, rewriteBuiltinIconAliases} from './builtinIconAliases';
+
 /** Bundled vectors are resource preparation, not HTML produced by a model or a remote upload. */
 export async function prepareBuiltinMediaAssets(signal?:AbortSignal):Promise<void>{
  const state=useProjectStore.getState(),context=pageCreationContext(state),storage=createProjectStorage(state.id,state.folderPath),assets:Asset[]=[];

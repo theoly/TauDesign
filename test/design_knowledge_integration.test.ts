@@ -31,12 +31,17 @@ test('one local narrowed retry cannot escape target or excluded workflow',()=>{
   expect(selectWithNarrowRetry({...q,operation:'import'},'长正文').attempts).toBe(1);
   expect(selectWithNarrowRetry({...q,operation:'modify',scope:'element'},'长正文').fallback).toBe('unknown-target');
 });
-test('experimental guidance only replaces craft, preserving output, device, whitelist and project contracts',()=>{
+test('experimental guidance appends scene rules additively, preserving baseline craft and contracts',()=>{
   for(const deviceProfile of ['mobile','pc'] as const){
     const base={designSystem:techBlueTheme,deviceProfile,frameWidth:deviceProfile==='pc'?1440:390};
     const baseline=PromptBuilder.buildSystemPrompt(base);
     const experimental=PromptBuilder.buildSystemPrompt({...base,contextualGuidance:{request:'长正文挤成一列',operation:'create',scope:'page',maxChars:10000}});
-    expect(experimental).toContain('[LY-04@1]');expect(experimental.length).toBeLessThanOrEqual(baseline.length);
+    expect(experimental).toContain('排版与文字阶梯 (Typography Craft)');
+    expect(experimental).toContain('反 AI 塑料感与审美负面清单 (Anti-AI-Slop Craft)');
+    // PC keeps scene appendix under ≤12k; mobile may drop scene last to preserve required device phrases.
+    if(deviceProfile==='pc')expect(experimental).toContain('[LY-04@1]');
+    expect(buildContextualCraft('create_screen',{request:'长正文挤成一列',operation:'create',device:deviceProfile,scope:'page',maxChars:10000}).body).toContain('[LY-04@1]');
+    expect(experimental.length).toBeLessThan(12000);
     for(const header of ['### ROLE & CORE CONSTRAINTS','### DESIGN TOKENS','### CLASS WHITELIST','### DESIGN SPECIFICATION','### OUTPUT CONTRACT']){
       expect(experimental).toContain(header);
     }
@@ -49,6 +54,7 @@ test('adapter does not impose HTML protocol on JSON or source-preserving request
   const q:RuleQuery={request:'角标',operation:'modify',device:'mobile',scope:'element',features:['badge'],maxChars:800};
   const body=buildContextualCraft('modify_screen',q).body;
   expect(body).toContain('[CP-02@1]');expect(body).not.toContain('返回完整 HTML');
+  expect(body).toContain('排版与文字阶梯 (Typography Craft)');
   const base={designSystem:techBlueTheme,deviceProfile:'mobile' as const,frameWidth:390,intent:'modify_screen' as const,outputContract:'ONLY JSON PATCH'};
   expect(PromptBuilder.buildSystemPrompt({...base,contextualGuidance:q})).toEndWith('ONLY JSON PATCH');
   expect(buildContextualCraft('modify_screen',{...q,preserveSource:true}).selection.selected).toEqual([]);

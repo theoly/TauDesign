@@ -6,6 +6,18 @@
 .safe-top { padding-top: 44px; }
 .safe-bottom { padding-bottom: 34px; }
 
+/* Mobile hero: edge-to-edge, flush bottom radius for sheet continuity */
+.hero-section {
+  width: 100%;
+  margin-left: 0;
+  margin-right: 0;
+  border-radius: var(--radius-none, 0px);
+  border-bottom-left-radius: var(--radius-none, 0px);
+  border-bottom-right-radius: var(--radius-none, 0px);
+  padding-left: var(--space-4, 16px);
+  padding-right: var(--space-4, 16px);
+}
+
 /* 微信小程序式头部：状态栏与页面导航分层，避免 .appbar.safe-top 的复合高度重复计算。 */
 .status-bar {
   display: flex;

@@ -2,6 +2,7 @@ import { normalizeMobileNavigation } from '../../utils/mobileNavigation';
 import { htmlIsComplete } from '../../utils/htmlCompleteness';
 import { extractArtifact } from './engine/pipeline/interceptors/streamTransform';
 import { checkGenerationQuality, checkGenerationSourceSafety, qualitySummary, type QualityOptions, type QualityReport } from './generationQuality';
+import { ensureActionAccessibleNames } from './actionIntegrity';
 import type { ContinuationResult } from './boundedContinuation';
 import { isOutputLimit } from './generationContinuation';
 
@@ -36,7 +37,7 @@ export function finalizeModelHtml(result: ContinuationResult, options: QualityOp
   const policy={...options,requireExternalMedia:true};
   const source = checkGenerationSourceSafety(raw, policy);
   if (!source.passed) return { status: 'rejected_by_quality', artifact: artifact ?? undefined, qualityReport: source, message: qualitySummary(source) };
-  const html = normalizeMobileNavigation(raw, options).html;
+  const html = ensureActionAccessibleNames(normalizeMobileNavigation(raw, options).html);
   const qualityReport = checkGenerationQuality(html, policy);
   return { status: qualityReport.passed ? 'valid' : 'rejected_by_quality', artifact: artifact ?? undefined, html, qualityReport,
     ...(!qualityReport.passed ? { message: qualitySummary(qualityReport) } : {}) };

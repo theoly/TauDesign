@@ -99,6 +99,7 @@ import { contentFingerprint, type DesignTaskContract } from '../services/ai/desi
 import { knowledgeFingerprint } from '../services/ai/projectKnowledge';
 import { designTokenFingerprint } from '../utils/designSystemIdentity';
 import { readProjectRenderResources, auditProjectAssets, inspectProjectAssetReferences, referencedProjectAssets, screenForAssetAudit, verifyProjectAssetFiles, type ProjectAssetAuditReport, type ProjectAssetIssue } from '../services/ai/projectAssetIntegrity';
+import {rewriteBuiltinIconAliases} from '../services/ai/builtinIconAliases';
 import {sanitizeExecutionMedia,type DesignExecutionRecord } from '../services/ai/designExecutionRecord';
 import {assertExternalMedia,mediaReferenceIssue} from '../services/ai/externalMedia';
 import {settleDesignTaskDelivery} from '../services/storage/designTaskRepository';
@@ -2665,7 +2666,10 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
   },
 
   stageScreenChange: (targetScreenId, newHtml, screenName, modificationRequest, workflowContract, executionRecord, repair) => {
-    const target=get().screens[targetScreenId];assertExternalMedia(newHtml,target?screenForAssetAudit(target,get().overrides).scopedCss:undefined);
+    const target=get().screens[targetScreenId];
+    const aliased=rewriteBuiltinIconAliases(newHtml,Object.values(get().assets),target?screenForAssetAudit(target,get().overrides).scopedCss:undefined);
+    newHtml=aliased.html;
+    assertExternalMedia(newHtml,aliased.scopedCss||(target?screenForAssetAudit(target,get().overrides).scopedCss:undefined));
     const sourceSafe = checkGenerationSourceSafety(newHtml).passed;
     const normalized = sourceSafe ? normalizeMobileNavigation(newHtml, get().settings) : { html: newHtml, title: undefined };
     const taskSnapshot = workflowContract===undefined?undefined:structuredClone(workflowContract);

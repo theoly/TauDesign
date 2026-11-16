@@ -1,6 +1,6 @@
 import { referenceDevicePrompt } from '../../utils/referenceDevice';
 import type { ReferenceDevice } from '../../types/project';
-import { renderDesignBrief, type DesignBrief } from './designBrief';
+import { renderDesignBrief, type DesignBrief, type PageKind } from './designBrief';
 import { renderComponentContracts, renderProjectComponents } from './componentContracts';
 import { DesignSystem } from '../../types/designSystem';
 import { Asset, ComponentDefinition, Decision } from '../../types/project';
@@ -11,6 +11,18 @@ import { renderCraftSection } from './craft';
 import { buildContextualCraft,renderFrozenCraft } from './designKnowledge/promptAdapter';
 import type { RuleQuery } from './designKnowledge/types';
 import { resolveDesignProse } from './engine/context/designProseProvider';
+import {
+  resolveBeautyPromptBundle,
+  type BeautyLaneInput
+} from './beautyLane';
+import {
+  buildVisualStyleLock,
+  renderVisualStyleLock,
+  type VisualStyleLock
+} from './visualStyleLock';
+import { buildMotherReferenceExample } from '../../reference-pages/injector';
+import { matchMother } from '../../reference-pages/retriever';
+import type { MotherDensity, MotherPageKind, MotherSelection } from '../../reference-pages/types';
 
 export type GenerationIntent = 'create_screen' | 'modify_screen' | 'change_theme' | 'question';
 
@@ -60,6 +72,9 @@ You MUST return the complete, standalone HTML design enclosed strictly inside an
  * contextEnricher 末尾追加的单行提醒，必须由 ARTIFACT_OUTPUT_CONTRACT 派生
  */
 export const ARTIFACT_OUTPUT_REMINDER = `[输出约束: 仅输出单个 <artifact> 块，块外不得有任何文本、说明或 markdown 代码块]`;
+
+/** Soft upper bound for create system prompts (existing ≤12k contract tests). */
+export const SYSTEM_PROMPT_CHAR_BUDGET = 11999;
 
 const SECTION_HEADER_MAP: Record<PromptSectionId, string> = {
   role_core: '### ROLE & CORE CONSTRAINTS',
@@ -124,8 +139,168 @@ export interface PromptBuildOptions {
   hasAttachment?: boolean;
   componentRequest?: string;
   taskBrief?: DesignBrief;
+  /** Optional page kind override when taskBrief is absent (tests / callers). */
+  pageKind?: PageKind;
+  /** Optional request text for mother matching when taskBrief.goal is absent. */
+  requestText?: string;
+  /** Manual mother id override for retriever. */
+  userMotherId?: string;
+  /** Explicit 1:1 restore wording (feeds BeautyLane). */
+  restoreIntent?: boolean;
+  /** Design-library binding present (library_bound lane). */
+  hasDesignLibraryBinding?: boolean;
+  /** Pre-built VisualStyleLock; free_create may synthesize when absent. */
+  visualStyleLock?: VisualStyleLock | null;
   /** 润色共享完整设计上下文，但使用自己的输出格式。 */
   outputContract?: string;
+}
+
+function shortReferenceFallback(device: 'pc' | 'mobile'): string {
+  return `### REFERENCE EXAMPLE (fallback):
+完整结构见 COMPONENT LIBRARY；按业务组合，勿照搬示例文案。
+${device === 'mobile' ? '移动端单列；系统顶栏不写入页面HTML。' : 'PC用.container-max；正文与操作分组。'}
+用户文案完整保留。`;
+}
+
+function resolveMotherPageKind(pageKind: PageKind | undefined): MotherPageKind | PageKind | undefined {
+  if (!pageKind || pageKind === 'unknown') return pageKind;
+  return pageKind;
+}
+
+function resolveMotherSelection(
+  options: PromptBuildOptions,
+  beauty: ReturnType<typeof resolveBeautyPromptBundle>
+): MotherSelection | null {
+  if (!beauty.allowMotherInjection) return null;
+  const pageKind = options.pageKind ?? options.taskBrief?.scene?.pageKind;
+  const requestText =
+    options.requestText ?? options.taskBrief?.goal ?? options.componentRequest;
+  const density = options.designSystem.tokens.personality.density as MotherDensity;
+  return matchMother({
+    device: options.deviceProfile,
+    pageKind: resolveMotherPageKind(pageKind),
+    requestText,
+    density,
+    hasAttachment: options.hasAttachment,
+    userMotherId: options.userMotherId
+  });
+}
+
+function buildReferenceExampleSection(
+  options: PromptBuildOptions,
+  beauty: ReturnType<typeof resolveBeautyPromptBundle>,
+  mother: MotherSelection | null
+): string | null {
+  const intent = options.intent ?? 'create_screen';
+  if (intent !== 'create_screen' || options.hasAttachment) return null;
+  if (mother) {
+    // Prefer structure prior under create ≤12k; tighten when brief/conventions inflate the prompt.
+    const budget = options.taskBrief ? 480 : 1000;
+    return buildMotherReferenceExample(mother, budget).text;
+  }
+  return shortReferenceFallback(options.deviceProfile);
+}
+
+function joinSections(sections: Array<{ id: PromptSectionId; content: string }>): string {
+  return sections.map((s) => s.content).join('\n\n');
+}
+
+/**
+ * Keep create system prompts inside the ≤12k contract.
+ * Prefer dropping optional craft tails; never erase baseline craft titles or StyleLock header.
+ */
+function fitSystemPromptToBudget(
+  sections: Array<{ id: PromptSectionId; content: string }>,
+  budget: number = SYSTEM_PROMPT_CHAR_BUDGET
+): string {
+  let text = joinSections(sections);
+  if (text.length <= budget) return text;
+
+  const craftIdx = sections.findIndex((s) => s.id === 'craft_references');
+  if (craftIdx < 0) return text;
+
+  const applyCraft = (craft: string) => {
+    sections[craftIdx] = { ...sections[craftIdx], content: craft };
+    text = joinSections(sections);
+    return text.length <= budget;
+  };
+
+  let craft = sections[craftIdx].content;
+
+  // Prefer shrinking references/mothers before dropping StyleLock (E5 free_create lock).
+  // Never drop CONTEXTUAL SCENE RULES — guidance receipts need renderRule() text.
+
+  const refIdx = sections.findIndex((s) => s.id === 'reference_example');
+  if (refIdx >= 0 && text.length > budget) {
+    const current = sections[refIdx].content;
+    if (!current.includes('(mother:')) {
+      const device: 'pc' | 'mobile' =
+        text.includes('MOBILE Profile') || text.includes('DEVICE RULES — MOBILE') ? 'mobile' : 'pc';
+      sections[refIdx] = { ...sections[refIdx], content: shortReferenceFallback(device) };
+      text = joinSections(sections);
+    }
+  }
+
+  if (refIdx >= 0 && text.length > budget) {
+    const current = sections[refIdx].content;
+    const motherHeader = current.match(/^### REFERENCE EXAMPLE \(mother:[^\n]+\)/);
+    if (motherHeader) {
+      const overflow = text.length - budget;
+      const suffix = '\n[母版摘要已按预算压缩]';
+      const keep = Math.max(motherHeader[0].length + 24, current.length - overflow - suffix.length);
+      sections[refIdx] = {
+        ...sections[refIdx],
+        content: `${current.slice(0, keep).trimEnd()}${suffix}`
+      };
+      text = joinSections(sections);
+    }
+  }
+
+  if (text.length > budget) {
+    const craftIdx2 = sections.findIndex((s) => s.id === 'craft_references');
+    if (craftIdx2 >= 0) {
+      let c = sections[craftIdx2].content;
+      c = c.replace(
+        /DEVICE RULES — MOBILE \(390px\):[\s\S]*?(?=\nWECHAT NATIVE NAVIGATION|\n#### 视觉层次金律)/,
+        'DEVICE RULES — MOBILE (390px):\n- SINGLE COLUMN ONLY.\n- NO HOVER STATES.\n- FULL-BLEED HERO BANNERS & GRADIENTS: .hero-section full-bleed, 0 bottom radius.\n- CTA BUTTON PLACEMENT: in-flow submits; .cta-fixed only when sticky bottom bar fits. ALWAYS match the button placement in the reference!\n- RIBBON BADGES & STATUS STRIPS: .relative+.absolute; .notification-control; notice bars.\n- SEMANTIC REGION DECOUPLING: Never emit invisible white-on-white text.\n'
+      );
+      sections[craftIdx2] = { ...sections[craftIdx2], content: c };
+      text = joinSections(sections);
+      craft = sections[craftIdx2].content;
+    }
+  }
+
+  if (refIdx >= 0 && text.length > budget) {
+    const current = sections[refIdx].content;
+    const headerEnd = current.indexOf('\n');
+    if (headerEnd > 0) {
+      const overflow = text.length - budget;
+      const body = current.slice(headerEnd + 1);
+      const keptBody = body.slice(0, Math.max(0, body.length - overflow)).trimEnd();
+      sections[refIdx] = {
+        ...sections[refIdx],
+        content: `${current.slice(0, headerEnd)}\n${keptBody}`
+      };
+      text = joinSections(sections);
+    }
+  }
+
+  // Last resort only: drop StyleLock after mother/device compression.
+  if (text.length > budget) {
+    craft = sections[craftIdx].content;
+    const lockAt = craft.indexOf('\n### VISUAL STYLE LOCK');
+    if (lockAt !== -1) {
+      craft = craft.slice(0, lockAt).trimEnd();
+      if (applyCraft(craft)) return text;
+    }
+    const lockAtHead = craft.indexOf('### VISUAL STYLE LOCK');
+    if (lockAtHead === 0 || (lockAtHead > 0 && craft[lockAtHead - 1] === '\n')) {
+      craft = craft.slice(0, lockAtHead).trimEnd();
+      applyCraft(craft);
+    }
+  }
+
+  return text;
 }
 
 export class PromptBuilder {
@@ -133,24 +308,29 @@ export class PromptBuilder {
     const intent: GenerationIntent = options.intent ?? 'create_screen';
     const sections: Array<{ id: PromptSectionId; content: string }> = [];
 
+    const beautyInput: BeautyLaneInput = {
+      intent,
+      hasAttachment: options.hasAttachment,
+      restoreIntent: options.restoreIntent,
+      hasDesignLibraryBinding: options.hasDesignLibraryBinding,
+      request: options.requestText ?? options.taskBrief?.goal ?? options.componentRequest
+    };
+    const beauty = resolveBeautyPromptBundle(beautyInput);
+    const motherSelection =
+      intent === 'create_screen' && !options.hasAttachment
+        ? resolveMotherSelection(options, beauty)
+        : null;
+
     // 1. role_core
     const roleContent = `### ROLE & CORE CONSTRAINTS:
-TauDesign UI/UX引擎：生成精致的语义HTML5。
-1. STYLING ARCHITECTURE: 颜色、间距、字体、圆角、阴影仅用所给白名单类与CSS变量；禁止硬编码hex/rgb和<script>。
-2. ICONS & IMAGES: 图标尺寸使用.icon/.icon-mask；输入图标用.input-group；图片/媒体只引用资源清单中的真实独立文件或明确提供的HTTPS URL，禁止data URL/base64/内联SVG媒体。图标优先.icon-mask并用mask-image和-webkit-mask-image引用外部SVG，background-color:currentColor继承前景Token。参考图片的Provider专用输入字段与页面代码分离。
-3. TARGET DEVICE PROFILE:
-   - Width: ${options.frameWidth}px (${options.deviceProfile.toUpperCase()})
-   - Height: 内容自然撑高
-   - ${referenceDevicePrompt({ ...options, viewportGuideHeight: options.viewportGuideHeight ?? (options.deviceProfile === 'mobile' ? 844 : 900) })}
+TauDesign UI/UX引擎：生成精致语义HTML5。
+1. STYLING: 仅用白名单类与CSS变量；禁硬编码hex/rgb与<script>。
+2. ICONS & IMAGES: .icon/.icon-mask；输入用.input-group；媒体仅资源清单真实路径或HTTPS；禁data URL/base64/内联SVG媒体。优先.icon-mask+mask-image/-webkit-mask-image引用外部SVG，background-color:currentColor。禁无名图标按钮。参考图走Provider输入字段，不写入页面代码。
+3. DEVICE: Width ${options.frameWidth}px (${options.deviceProfile.toUpperCase()})；高度随内容。${referenceDevicePrompt({ ...options, viewportGuideHeight: options.viewportGuideHeight ?? (options.deviceProfile === 'mobile' ? 844 : 900) })}
 BACKGROUND ROLES: 新页body继承--background-page，根透明；.btn-primary: --background-primary-action；.bg-decorative-surface: --background-decorative-surface。explicit优先；local保留背景。
-4. COLOR MODE (CRITICAL):
-   - Render in ${(options.colorMode ?? 'light').toUpperCase()} mode; Tokens已按此模式解析。
-   - NEVER hardcode a color literal. 用var(--color-*)、var(--background-*)或白名单类适配toggle light/dark。${
+4. COLOR MODE: ${(options.colorMode ?? 'light').toUpperCase()} mode; Tokens已按此模式解析。NEVER hardcode a color literal. 用var(--color-*)/--background-*或白名单类适配toggle light/dark。${
      options.hasAttachment && options.intent!=='question'
-       ? `\n5. REFERENCE IMAGE FIDELITY:
-   - Use the screenshot as layout/content reference; express its visual warmth through current project Tokens (.bg-ambient-warm, .bg-ambient-cool, .bg-gradient-soft). Project device/navigation, component rules and explicit edit scope take priority over reference appearance.
-   - For full-bleed headers, avoid artificial floating cards with bottom rounded corners.
-   - NARROW EXCEPTION (deviation-note): the "no text outside <artifact>" rule above has exactly one scoped exception, fully specified in the DEVIATION DISCLOSURE section of the user message below. Follow that section's conditions precisely; do not invent a different format.`
+       ? `\n5. REFERENCE IMAGE FIDELITY: 截图作布局/内容参考，用项目Token(.bg-ambient-warm/.bg-ambient-cool/.bg-gradient-soft)；设备/导航/组件/编辑范围优先。全宽头图勿人造底圆角浮卡。NARROW EXCEPTION (deviation-note): artifact外文本仅遵循 DEVIATION DISCLOSURE。`
        : ''
    }`;
     sections.push({ id: 'role_core', content: roleContent });
@@ -176,32 +356,96 @@ BACKGROUND ROLES: 新页body继承--background-page，根透明；.btn-primary: 
     const whitelistContent = `### CLASS WHITELIST (derived from base.css — these are the ONLY classes that exist):\n${classWhitelist}`;
     sections.push({ id: 'class_whitelist', content: whitelistContent });
 
-    // 5. 完整组件范例：新建提供结构，修改仅提供行为约束。
-    if (intent === 'create_screen' || intent === 'modify_screen') {
-      sections.push({ id: 'component_library', content: `### COMPONENT LIBRARY (REUSABLE PROJECT COMPONENTS)
-${renderComponentContracts(intent === 'create_screen' && !options.hasAttachment, options.componentRequest, options.mediaAssets??[])}${options.components?.length ? `
-
-${renderProjectComponents(options.components)}` : ''}` });
+    // Resolve scene appendix early so optional sections can yield budget to additive rules.
+    const wantsCraft = intent === 'create_screen' || intent === 'modify_screen';
+    let sceneAppendix = '';
+    let craftBaseForSections = wantsCraft ? renderCraftSection(intent) : '';
+    if (wantsCraft && options.frozenGuidance) {
+      const frozen = renderFrozenCraft(intent, options.frozenGuidance);
+      if (frozen.startsWith(craftBaseForSections)) sceneAppendix = frozen.slice(craftBaseForSections.length);
+      else craftBaseForSections = frozen;
+    } else if (wantsCraft && options.contextualGuidance) {
+      const built = buildContextualCraft(intent, {
+        ...options.contextualGuidance,
+        device: options.deviceProfile
+      });
+      if (built.body.startsWith(craftBaseForSections)) sceneAppendix = built.body.slice(craftBaseForSections.length);
+      else craftBaseForSections = built.body;
     }
 
-    // 6. craft_references (REQ-OD-06 / BR-06.1~6.2)
-    const wantsCraft = intent === 'create_screen' || intent === 'modify_screen';
+    // 5. 组件契约：默认不塞 HTML 范例（保 ≤12k / StyleLock / 母版）；媒体路径单独短清单。
+    // 有场景规则时改短 stub，避免 guided create 相对 baseline 增长。
+    if (intent === 'create_screen' || intent === 'modify_screen') {
+      const requestText = options.componentRequest ?? '';
+      const assets = options.mediaAssets ?? [];
+      let mediaNote = '';
+      if (assets.length) {
+        mediaNote =
+          `\n已登记独立资源（仅用下列路径；优先.icon-mask，禁止内联 SVG 或 path 标签）：\n` +
+          assets.map((a) => `- ${a.name}: ${a.relPath}`).join('\n');
+      } else if (/通知|角标|徽标|badge|图标/i.test(requestText)) {
+        mediaNote =
+          '\n图标结构示例未提供：当前未登记对应独立资源，不得猜测路径或改为内联SVG。';
+      }
+      if (sceneAppendix) {
+        sections.push({
+          id: 'component_library',
+          content:
+            '### COMPONENT LIBRARY (REUSABLE PROJECT COMPONENTS)\n沿用 COMPONENT CONTRACTS；修改或润色只调整已授权节点。' +
+            mediaNote
+        });
+      } else {
+        sections.push({
+          id: 'component_library',
+          content: `### COMPONENT LIBRARY (REUSABLE PROJECT COMPONENTS)
+${renderComponentContracts(false, requestText, assets)}${mediaNote}${
+            options.components?.length
+              ? `\n\n${renderProjectComponents(options.components)}`
+              : ''
+          }`
+        });
+      }
+    }
+
+    // 6. craft_references (REQ-OD-06 / BR-06.1~6.2) — baseline craft always present; scene rules append last.
     if (wantsCraft) {
-      const craftBase = options.frozenGuidance ? renderFrozenCraft(intent,options.frozenGuidance) : options.contextualGuidance
-        ? buildContextualCraft(intent,{...options.contextualGuidance,device:options.deviceProfile}).body
-        : renderCraftSection(intent);
-      const deviceRules = getDeviceAestheticRules(options.deviceProfile, options.useCustomNavigation);
-      const craftContent = `${craftBase}\n\n#### 设备档位专属工艺约束 (${options.deviceProfile.toUpperCase()} Profile)\n${deviceRules}\n\n#### 视觉层次金律 (VISUAL HIERARCHY)\n${GOLDEN_HIERARCHY}${intent === 'create_screen' ? `\n\n${NEW_SCREEN_STATE_RULES}` : ''}`;
+      let craftBase = craftBaseForSections;
+      // When contextual scene rules append (create additive path), keep baseline craft titles
+      // but drop optional tails / compress device copy so guided ≤ unguided message budget
+      // (protocol dry-run: 最终请求字符预算不得增长). Full device rules remain without scene.
+      const deviceRules = sceneAppendix
+        ? options.deviceProfile === 'pc'
+          ? 'DEVICE RULES — PC (1440px):\n- .container-max≤1200px；SEMANTIC REGIONS: sidebar/toolbar/filter-bar。\n'
+          : 'DEVICE RULES — MOBILE (390px):\n- SINGLE COLUMN ONLY.\n- NO HOVER STATES.\n- FULL-BLEED HERO BANNERS & GRADIENTS; CTA BUTTON PLACEMENT: ALWAYS match the button placement in the reference; RIBBON BADGES & STATUS STRIPS.\n- SEMANTIC REGION DECOUPLING: Never emit invisible white-on-white text.\n'
+        : getDeviceAestheticRules(options.deviceProfile, options.useCustomNavigation);
+      const includeCreateState =
+        intent === 'create_screen' && !motherSelection && !sceneAppendix;
+      let craftContent = `${craftBase}${includeCreateState ? `\n\n${NEW_SCREEN_STATE_RULES}` : ''}\n\n#### 设备档位专属工艺约束 (${options.deviceProfile.toUpperCase()} Profile)\n${deviceRules}\n\n#### 视觉层次金律 (VISUAL HIERARCHY)\n${GOLDEN_HIERARCHY}`;
+
+      if (sceneAppendix) craftContent += sceneAppendix;
+
+      if (beauty.allowVisualStyleLock && !sceneAppendix) {
+        const lock =
+          options.visualStyleLock !== undefined
+            ? options.visualStyleLock
+            : buildVisualStyleLock({
+                lane: beauty.lane,
+                density: options.designSystem.tokens.personality.density
+              });
+        const lockText = renderVisualStyleLock(lock);
+        if (lockText) craftContent += `\n\n${lockText}`;
+      }
+
       sections.push({ id: 'craft_references', content: craftContent });
     }
 
-    // 7. reference_example (T-AE-10 / 仅无参考图的纯文本 create_screen 时注入)
-    if (intent === 'create_screen' && !options.hasAttachment) {
-      const exampleContent = `### REFERENCE EXAMPLE (component patterns):
-完整结构示例见 COMPONENT LIBRARY。按当前业务组合组件，勿照搬示例姓名、数据或页面用途。
-${options.deviceProfile === 'mobile' ? '移动端保持单列并遵守当前导航策略；系统顶部栏不写入页面HTML。' : 'PC页面使用container-max，正文层级与操作区分组。'}
-用户提供的文案必须完整保留；自拟短标签应控制长度，业务数据按场景换行。`;
-      sections.push({ id: 'reference_example', content: exampleContent });
+    // 7. reference_example — mother injector first (BeautyLane gated); short prose fallback only.
+    // Skip when scene rules already occupy the optional budget (guided create parity).
+    const referenceExample = sceneAppendix
+      ? null
+      : buildReferenceExampleSection(options, beauty, motherSelection);
+    if (referenceExample) {
+      sections.push({ id: 'reference_example', content: referenceExample });
     }
 
     // 8. project_conventions (PRD D18)
@@ -236,7 +480,10 @@ ${options.deviceProfile === 'mobile' ? '移动端保持单列并遵守当前导�
     // 10. output_contract (恒为末位 / 末位铁律)
     sections.push({ id: 'output_contract', content: options.outputContract ?? ARTIFACT_OUTPUT_CONTRACT });
 
-    return sections.map((s) => s.content).join('\n\n');
+    // Always fit create/modify prompts; question/theme are already small.
+    return intent === 'create_screen' || intent === 'modify_screen'
+      ? fitSystemPromptToBudget(sections)
+      : joinSections(sections);
   }
 
   public static buildIntentAnalysisPrompt(userInput: string, existingScreensCount: number): string {

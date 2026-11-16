@@ -1,0 +1,50 @@
+{
+  "id": "mobile-settings-grouped",
+  "version": "1.0.0",
+  "status": "active",
+  "device": "mobile",
+  "pageKind": "settings",
+  "aliases": [
+    "移动设置",
+    "分组设置列表",
+    "mobile settings"
+  ],
+  "features": [
+    "settings-groups",
+    "list-item"
+  ],
+  "density": "compact",
+  "compositionHint": {
+    "layout": "flow",
+    "regionRoles": [
+      "header",
+      "main"
+    ],
+    "primaryCta": "none"
+  },
+  "applicableWhen": [
+    "移动端分组设置列表",
+    "节标题 + 行"
+  ],
+  "notApplicableWhen": [
+    "桌面侧栏设置",
+    "系统设置壳"
+  ],
+  "statesShown": [
+    "filled",
+    "selected",
+    "disabled"
+  ],
+  "promptBudgetChars": 1200,
+  "license": {
+    "source": "authored",
+    "note": "builtin beauty p0"
+  },
+  "origin": "builtin",
+  "contentFingerprint": "7ee5db08",
+  "review": {
+    "reviewer": "beauty-p0",
+    "date": "2026-11-16",
+    "renderPass": true
+  }
+}

@@ -144,6 +144,9 @@ export class CanvasToolExecutor {
       const prepare=(signal?:AbortSignal)=>prepareNewPageWithRepair(snapshot,{id,name,htmlContent:params.html,position:{x:0,y:0}},contract,
         createProjectStorage(state.id,state.folderPath),{isCurrent:current,signal,repair:options.repair});
       const prepared=options.taskBudget?await options.taskBudget.run(prepare,options.signal):await prepare(options.signal);
+      // Beauty ladder ledger is attached inside prepareNewPageWithRepair (withBeautyImprove).
+      // Full auto-polish when beautyImprove.shouldRunPolish remains gated on an explicit polish budget
+      // (RestylePanel / future create polish slot) — do not silent-restyle every create.
       if(prepared.status!=='ready')return {...failed(prepared.message),repair:prepared.repair};
       if(!current())return failed(renderEvidenceIdentity(state.settings.deviceProfile)!==renderIdentity?'渲染检查依赖已变化，请重新检查后挂载。':'应用前工程已变化或创建已取消。');
       const {position:_position,...screen}=prepared.screen;

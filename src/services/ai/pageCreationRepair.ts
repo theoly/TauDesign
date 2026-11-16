@@ -3,16 +3,32 @@ import type {ProjectStorage} from '../storage/projectStorage';
 import {contentFingerprint,type DesignTaskContract} from './designWorkflow';
 import {prepareNewPage,pageCreationContext,type PageCreationState,type PreparedNewPage} from './pageCreationValidation';
 import {proposeStyleRepair,type PageRepairModel} from './controlledStyleRepair';
+import {planBeautyImprove} from './beautyImproveLadder';
 export type {PageRepairModel} from './controlledStyleRepair';
+export { planBeautyImprove } from './beautyImproveLadder';
+
+function withBeautyImprove(prepared:PreparedNewPage):PreparedNewPage{
+  if(prepared.status!=='ready')return prepared;
+  const plan=planBeautyImprove(prepared.screen.htmlContent,prepared.evidence.quality.findings);
+  return {...prepared,evidence:{...prepared.evidence,beautyImprove:{
+    shouldRunPolish:plan.shouldRunPolish,
+    layoutRiskBlocked:plan.layoutRiskBlocked,
+    modelCallBudgetRemaining:plan.modelCallBudgetRemaining,
+    repairLedger:plan.repairLedger
+  }}};
+}
 
 /** New-page delivery retains all gates after the common style-only proposal. */
 export async function prepareNewPageWithRepair(state:PageCreationState,screen:Screen,contract:DesignTaskContract,storage:ProjectStorage,
  options:{isCurrent:()=>boolean;signal?:AbortSignal;repair?:PageRepairModel}):Promise<PreparedNewPage> {
+ // After gates: attach planBeautyImprove ledger. Auto polish/restyle once only when a PageRepairModel
+ // (or future polish budget) is present AND shouldRunPolish && !layoutRiskBlocked — not implemented as
+ // unconditional restyle here to avoid unbudgeted model calls on every create.
  const snapshot=structuredClone({id:state.id,folderPath:state.folderPath,settings:state.settings,designSystem:state.designSystem,designSystemOrigin:state.designSystemOrigin,
  designLibraryBinding:state.designLibraryBinding,components:state.components,assets:state.assets,screens:state.screens,overrides:state.overrides,decisions:state.decisions,projectDocuments:state.projectDocuments});
  const task=structuredClone(contract),current=()=>!options.signal?.aborted&&options.isCurrent();
  const first=await prepareNewPage(snapshot,structuredClone(screen),task,storage,{isCurrent:current,signal:options.signal});
- if(first.status==='ready'||!first.renderFailure||!options.repair||!current()||task.operation!=='create')return first;
+ if(first.status==='ready'||!first.renderFailure||!options.repair||!current()||task.operation!=='create')return withBeautyImprove(first);
  const {screen:normalized,render}=first.renderFailure;
  const proposal=await proposeStyleRepair({state:snapshot,html:normalized.htmlContent,contract:task,render,context:pageCreationContext(snapshot)},
  {...options,model:{...options.repair,provider:structuredClone(options.repair.provider)}});
@@ -28,7 +44,7 @@ export async function prepareNewPageWithRepair(state:PageCreationState,screen:Sc
    const introduced=verified.evidence.render.findings.find(f=>!previous.has(JSON.stringify([f.code,f.nid,f.severity])));
    if(introduced)throw Error(`修复引入了新的渲染问题：${introduced.message}`);
    record={...record,status:'repaired',afterHtmlFingerprint:contentFingerprint(verified.screen.htmlContent),checkedAt:Date.now(),message:'已完成一次控件样式修复，源码、实体、资源和新的iframe检查全部通过。'};
-   return {...verified,evidence:{...verified.evidence,repair:record}};
+   return withBeautyImprove({...verified,evidence:{...verified.evidence,repair:record}});
  }catch(error){
    const message=error instanceof Error?error.message:'修复失败。';
    return {status:'blocked',message:`已尝试一次受控修复，结果未应用：${message}`,repair:{...record,status:options.signal?.aborted?'cancelled':'blocked',checkedAt:Date.now(),message}};

@@ -10,13 +10,15 @@ import { techBlueTheme } from '../../utils/themePresets';
 import { inspectActionIntegrity } from './actionIntegrity';
 import { htmlIsComplete } from '../../utils/htmlCompleteness';
 import {inspectFormRuleChanges} from './formBehaviorChanges';
-import { assessedFinding, type FindingAssessment } from './findingPolicy';
+import { assessedFinding, type FindingAssessment, type RepairLane } from './findingPolicy';
 import {explicitActionTexts,inspectExplicitActionTexts,type ContentTask} from './explicitActionContent';
 import {inspectExternalMedia} from './externalMedia';
 import {buildPageRedesignSource,inspectRedesignContent} from './pageRedesignSource';
 import {contentFingerprint} from './designWorkflow';
 import {inspectInlineForms,inspectProgressSummary} from './inlineFormContract';
 import {inspectCssTokenProperties} from './cssTokenPropertyValidation';
+import { inspectAestheticHeuristics } from './aestheticHeuristics';
+import { inspectVisualBlockers } from './visualBlockerRules';
 
 export interface QualityFinding {
   code: string;
@@ -26,6 +28,8 @@ export interface QualityFinding {
   expected: string;
   message: string;
   assessment?: FindingAssessment;
+  /** E6 improve ladder: present on elevatable aesthetic / hard-visual findings. */
+  repairLane?: RepairLane;
 }
 export interface QualityReport { passed: boolean; findings: QualityFinding[] }
 export interface QualityOptions {
@@ -125,7 +129,34 @@ export function checkGenerationQuality(html: string, options: QualityOptions = {
     }
   }
   findings.push(...inspectActionIntegrity(doc, options.baselineHtml ? parseHtmlCopy(options.baselineHtml).doc : undefined, options.modificationRequest));
+
+  // E6 aesthetic / hard-visual gates — elevatable warnings (do not hard-fail create by themselves).
+  // Page-level gates target `<main>` frames; skip component-contract / fragment fixtures.
+  if (/<main\b/i.test(html)) {
+    findings.push(...inspectAestheticHeuristics(html), ...inspectVisualBlockers(html));
+  }
+  findings.push(...inspectDeviceContractHints(doc, options.deviceProfile));
+
   return { passed: !findings.some(f => f.severity === 'error'), findings };
+}
+
+/** Cheap device-contract layout-risk hints (severe incomplete HTML already covered above). */
+function inspectDeviceContractHints(doc: Document, deviceProfile?: DeviceProfile): QualityFinding[] {
+  if (deviceProfile !== 'mobile') return [];
+  const findings: QualityFinding[] = [];
+  const wideGrid = doc.body?.querySelector('.grid-3, .grid-4, .grid-5, .grid-6');
+  if (wideGrid) {
+    findings.push({
+      code: 'layout_risk_device_contract',
+      severity: 'error',
+      nid: wideGrid.getAttribute('data-nid') || undefined,
+      message: '移动端出现三列及以上栅格，属于布局风险，不得经 L0–L2 洗白后交付。',
+      actual: wideGrid.getAttribute('class') ?? 'grid-3+',
+      expected: '移动端单列流或最多双列；宽桌面栅格改走 PC 档',
+      repairLane: 'regen'
+    });
+  }
+  return findings;
 }
 
 export function qualitySummary(report: QualityReport): string {

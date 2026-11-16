@@ -16,9 +16,9 @@ import { buildStyleSpecimenHtml, specimenCoverage } from '../src/utils/styleSpec
 const whitelist = extractClassWhitelist(getBaseCss('pc'));
 
 describe('T-AE-01 · 间距阶梯相对 Token 刻度完备', () => {
-  // Token 刻度定义于 cssCompiler.compileTokensToCss，为 {0,1,2,3,4,5,6,8}（无 7）
-  const scale = ['0', '1', '2', '3', '4', '5', '6', '8'];
-  for (const prefix of ['gap', 'p', 'px', 'py', 'm', 'mt', 'mb']) {
+  // Token 刻度定义于 cssCompiler.compileTokensToCss：{0,1,2,3,4,5,6,8,10,12,16}（无 7/9/…）
+  const scale = ['0', '1', '2', '3', '4', '5', '6', '8', '10', '12', '16'];
+  for (const prefix of ['gap', 'p', 'px', 'py', 'm', 'mt', 'mb', 'ml', 'mr', 'mx', 'my']) {
     test(`.${prefix}-* 覆盖全部刻度`, () => {
       for (const n of scale) expect(whitelist).toContain(`${prefix}-${n}`);
     });

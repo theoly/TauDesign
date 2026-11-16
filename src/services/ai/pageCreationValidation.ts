@@ -14,7 +14,9 @@ import {designTokenFingerprint} from '../../utils/designSystemIdentity';
 import {normalizeScreenNavigation} from '../../utils/mobileNavigation';
 import {NidEngine} from '../../utils/nidEngine';
 import {checkGenerationSourceSafety,checkGenerationQuality,qualitySummary,type QualityReport} from './generationQuality';
+import {ensureActionAccessibleNames} from './actionIntegrity';
 import {readProjectRenderResources,inspectProjectAssetReferences,referencedProjectAssets,verifyProjectAssetFiles} from './projectAssetIntegrity';
+import {rewriteBuiltinIconAliases} from './builtinIconAliases';
 import {PageRenderCheck} from './pageRenderCheck';
 import type {RenderedQualityReport} from '../../utils/renderedQuality';
 import {resolveWorkflowValidation,evaluateWorkflowValidation,isWorkflowValidationReport,type WorkflowValidationReport} from './workflowValidation';
@@ -36,6 +38,13 @@ export interface PageCreationEvidence {
   workflow:WorkflowValidationReport;source:QualityReport;quality:QualityReport;render:RenderedQualityReport;
   files:Array<{id:string;relPath:string}>;tokenFingerprint:string;
   repair?:PageRepairRecord;
+  /** E6 beauty ladder plan attached after gates; polish not auto-run without model budget hook. */
+  beautyImprove?:{
+    shouldRunPolish:boolean;
+    layoutRiskBlocked:boolean;
+    modelCallBudgetRemaining:number;
+    repairLedger:Array<{lane:string;findingCodes:string[];passed:boolean;note?:string}>;
+  };
 }
 export type PreparedNewPage={status:'ready';screen:Screen;evidence:PageCreationEvidence}|{status:'blocked';message:string;renderFailure?:{screen:Screen;render:RenderedQualityReport};repair?:PageRepairRecord};
 /** Include rendering metadata and resources; moving the canvas or measuring pages is not a design change. */
@@ -84,12 +93,15 @@ export async function prepareNewPage(state:PageCreationState,screen:Screen,contr
     if(unsupported)return fail(`页面核验器不支持必要阶段 ${unsupported}。`);
     const qualityOptions={requireExternalMedia:true,mediaCss:[screen.scopedCss??'',...Object.entries(state.overrides??{}).filter(([key])=>key.startsWith(screen.id+':')).flatMap(([,entry])=>Object.values(entry.declarations))].join('\n'),contentTask:contract,deviceProfile:state.settings.deviceProfile,useCustomNavigation:state.settings.useCustomNavigation,designSystem:state.designSystem,
       tokenLintContext:importing?getTokenLintContext(screen):'project-tokens' as const};
-    const source=checkGenerationSourceSafety(screen.htmlContent,qualityOptions);if(!source.passed)return fail(qualitySummary(source));
-    const normalized=normalizeScreenNavigation({...screen,htmlContent:NidEngine.injectNids(screen.htmlContent)},state.settings);
+    const assets=Object.values(state.assets);
+    const aliased=rewriteBuiltinIconAliases(ensureActionAccessibleNames(screen.htmlContent),assets,screen.scopedCss??'');
+    const repairedHtml=aliased.html;
+    const source=checkGenerationSourceSafety(repairedHtml,qualityOptions);if(!source.passed)return fail(qualitySummary(source));
+    const normalized=normalizeScreenNavigation({...screen,htmlContent:NidEngine.injectNids(repairedHtml),scopedCss:aliased.scopedCss},state.settings);
     const quality=checkGenerationQuality(normalized.htmlContent,qualityOptions);if(!quality.passed)return fail(qualitySummary(quality));
     const entities=inspectDesignEntities(normalized.htmlContent,{components:state.components,pageIds:[...Object.keys(state.screens),screen.id,...(contract.multiPage?.pageIds??[])]});
     if(!entities.passed)return fail(designEntitySummary(entities));
-    const assets=Object.values(state.assets),references=inspectProjectAssetReferences([normalized],assets).filter(issue=>issue.entityId===screen.id);
+    const references=inspectProjectAssetReferences([normalized],assets).filter(issue=>issue.entityId===screen.id);
     if(references.length)return fail(references[0].message);
     const files=referencedProjectAssets(normalized,assets);
     let readFiles:Array<{id:string;relPath:string}>=[];
