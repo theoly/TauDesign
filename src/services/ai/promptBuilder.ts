@@ -1,4 +1,5 @@
 import { referenceDevicePrompt } from '../../utils/referenceDevice';
+import { mobileNavigationPrompt } from '../../utils/mobileNavigation';
 import type { ReferenceDevice } from '../../types/project';
 import { renderDesignBrief, type DesignBrief, type PageKind } from './designBrief';
 import { renderComponentContracts, renderProjectComponents } from './componentContracts';
@@ -261,7 +262,7 @@ function fitSystemPromptToBudget(
     if (craftIdx2 >= 0) {
       let c = sections[craftIdx2].content;
       c = c.replace(
-        /DEVICE RULES — MOBILE \(390px\):[\s\S]*?(?=\nWECHAT NATIVE NAVIGATION|\n#### 视觉层次金律)/,
+        /DEVICE RULES — MOBILE \(390px\):[\s\S]*?(?=\nWECHAT NATIVE NAVIGATION|\nCUSTOM MOBILE NAVIGATION|\n#### 视觉层次金律)/,
         'DEVICE RULES — MOBILE (390px):\n- SINGLE COLUMN ONLY.\n- NO HOVER STATES.\n- FULL-BLEED HERO BANNERS & GRADIENTS: .hero-section full-bleed, 0 bottom radius.\n- CTA BUTTON PLACEMENT: in-flow submits; .cta-fixed only when sticky bottom bar fits. ALWAYS match the button placement in the reference!\n- RIBBON BADGES & STATUS STRIPS: .relative+.absolute; .notification-control; notice bars.\n- SEMANTIC REGION DECOUPLING: Never emit invisible white-on-white text.\n'
       );
       sections[craftIdx2] = { ...sections[craftIdx2], content: c };
@@ -416,7 +417,7 @@ ${renderComponentContracts(false, requestText, assets)}${mediaNote}${
       const deviceRules = sceneAppendix
         ? options.deviceProfile === 'pc'
           ? 'DEVICE RULES — PC (1440px):\n- .container-max≤1200px；SEMANTIC REGIONS: sidebar/toolbar/filter-bar。\n'
-          : 'DEVICE RULES — MOBILE (390px):\n- SINGLE COLUMN ONLY.\n- NO HOVER STATES.\n- FULL-BLEED HERO BANNERS & GRADIENTS; CTA BUTTON PLACEMENT: ALWAYS match the button placement in the reference; RIBBON BADGES & STATUS STRIPS.\n- SEMANTIC REGION DECOUPLING: Never emit invisible white-on-white text.\n'
+          : `DEVICE RULES — MOBILE (390px):\n- SINGLE COLUMN ONLY.\n- NO HOVER STATES.\n- FULL-BLEED HERO BANNERS & GRADIENTS; CTA BUTTON PLACEMENT: ALWAYS match the button placement in the reference; RIBBON BADGES & STATUS STRIPS.\n- SEMANTIC REGION DECOUPLING: Never emit invisible white-on-white text.\n${mobileNavigationPrompt({ deviceProfile: 'mobile', useCustomNavigation: options.useCustomNavigation })}`
         : getDeviceAestheticRules(options.deviceProfile, options.useCustomNavigation);
       const includeCreateState =
         intent === 'create_screen' && !motherSelection && !sceneAppendix;
