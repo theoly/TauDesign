@@ -218,7 +218,12 @@ describe('ExportModal UI Specification (ISSUE-024 / CHK-EXP-01 ~ CHK-EXP-05)', (
 
       await act(async () => {
         exportPngBtn!.click();
-        await new Promise((r) => setTimeout(r, 50));
+      });
+      await act(async () => {
+        for (let i = 0; i < 40; i++) {
+          if (container.textContent?.includes('PNG 渲染失败')) break;
+          await new Promise((r) => setTimeout(r, 25));
+        }
       });
 
       // 严禁下载错误空白图片！

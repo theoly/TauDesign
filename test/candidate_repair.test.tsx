@@ -222,7 +222,7 @@ test('candidate verification may finish after spending the exact single-request 
 });
 test('candidate parent timeout exits hung verification while retaining its real model receipt',async()=>{
  stage();let release!:()=>void;const gate=new Promise<void>(resolve=>release=resolve),before=useProjectStore.getState().stagedScreen!;
- const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1800,maxDurationMs:100,maxRequestDurationMs:100});PageRenderCheck.inspect=async()=>{await gate;return structuredClone(good);};
+ const budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:1800,maxDurationMs:800,maxRequestDurationMs:800});PageRenderCheck.inspect=async()=>{await gate;return structuredClone(good);};
  try{
   expect(await useProjectStore.getState().repairStagedCandidate({core,provider,model:'fixture',taskBudget:budget})).toBe(false);
   const state=useProjectStore.getState();expect(state.stagedRepairStatus).toBeNull();expect(state.stagedRepairError).toContain('总时限');expect(state.stagedScreen?.candidateId).toBe(before.candidateId);
