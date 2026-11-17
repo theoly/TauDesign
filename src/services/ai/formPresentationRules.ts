@@ -1,6 +1,6 @@
 import type {QualityFinding} from './generationQuality';
 
-export const FORM_PRESENTATION_RULES=`表单：输入用边框/下划线/填充，保留label与业务原值。只读项共组，Token内距勿贴边。同类行标签与值统一列。勾选/单选：label.row.items-start.gap-3+文案.flex-1.min-w-0.break-words同行横排；禁单字竖列、空卡挤出正文。密度按设备/Token。颜色用Token；border-width用长度、border-style用solid。只改选中的元素或区域；导入保留原貌`;
+export const FORM_PRESENTATION_RULES=`表单：输入用边框/下划线/填充，保留label与业务原值。只读项共组，Token内距勿贴边。同类行标签与值统一列。勾选/单选：label.row.items-start.gap-3+文案.flex-1.min-w-0.break-words同行横排；禁单字竖列、空卡挤出正文。密度按设备/Token。颜色用Token。只改选中的元素或区域；导入保留原貌`;
 export const SCOPED_FORM_PRESENTATION_RULES=FORM_PRESENTATION_RULES+'\n局部范围优先：上述指导仅适用于本次授权子树，已有无关表单和只读分组不得为满足指导重排；当前操作协议不支持的调整应停止说明，不扩大授权、不更改输出Schema。';
 
 /** Measured presentation advice, never a semantic/aesthetic guarantee or an automatic rewrite. */

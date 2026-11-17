@@ -20,7 +20,7 @@ export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY):
 - COLOR ROLES: bg/surface/surface-alt；品牌5–10%主操作；.text-primary主色字，.btn-primary主按钮；勿写死白字、蓝链接或整段彩色正文。
 - ${colorUsageRules()}
 - TYPE/SPACE: 标题/正文/辅助；组内.gap-1/.gap-2，组间更大。ICONS: Lucide/Heroicons风格图标仅引用已登记外部文件，.icon/.icon-mask继承currentColor；禁止内联SVG、猜路径或符号占位。没有已登记资源时保留完整文字控件，不删功能；禁无名图标按钮。
-- CONTENT: 真实感中文；禁占位/Lorem/“标题1”。按钮默认nowrap；不插<br>。优先留宽或整组换行，不改写截断指定文案；仅用户明确要求时用 white-space: normal。
+- CONTENT: 真实感中文；禁占位/Lorem/“标题1”。按钮文字默认不换行：.btn 已设 white-space: nowrap；不插<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal。
 - COMPONENT LAYOUT CONTRACT: .nowrap管flex、.text-nowrap管文字。标签.row.wrap.gap-2不设.flex-1；姓名单行、职业位于姓名下方；润色不新增或移动节点；长文/勾选.flex-1.min-w-0.break-words禁竖排；角标.relative+.absolute。.badge-soft。跳转行.justify-between：文左箭头右，禁整组居中。
 ${FORM_PRESENTATION_RULES}`;
 
