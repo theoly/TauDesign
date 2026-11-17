@@ -6,7 +6,7 @@
   <img src="assets/brand/taudesign-mark.svg" alt="TauDesign" width="104" height="104" />
 </p>
 
-<p align="center"><strong>An AI-assisted design workspace with a local project format and an infinite canvas.</strong></p>
+<p align="center"><strong>An AI-assisted UI design workspace with an infinite canvas and local project folders.</strong></p>
 
 <p align="center">
   <img src="assets/screenshots/editor-workspace.png" alt="TauDesign editor: AI chat, infinite canvas and inspector panels" width="880" />
@@ -19,123 +19,113 @@
   <img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="Apache 2.0" />
 </p>
 
-TauDesign turns product requirements, reference images and existing HTML into editable, high-fidelity UI designs. Arrange pages on one canvas, refine elements visually, compare AI proposals and export HTML or PNG. Desktop projects live in local `.aidesign` folders.
+TauDesign helps product managers, designers, and makers turn product ideas, reference images, and existing web pages into editable, high-fidelity UI designs. Arrange multiple screens on one infinite canvas, fine-tune details visually, compare AI design proposals side by side, and export clean HTML or high-resolution PNGs. Your desktop projects are saved directly on your computer in local `.aidesign` folders.
 
-**Developer Preview:** the current scope is static UI design and design handoff. Clickable business prototypes, real form submission and role state machines are outside the current acceptance scope. Review generated content and keep backups of important projects.
+> **Developer Preview:** TauDesign currently focuses on static UI design and design handoff. Interactive clickable prototypes, live form submissions, and backend logic are not part of the current scope. Please review AI-generated designs and keep regular backups of important projects.
 
-## Features
+## What you can do
 
 | Area | Capabilities |
 | --- | --- |
-| Canvas | Multiple pages, pan and zoom, minimap, automatic placement and first-screen guides. |
-| Devices | Immutable Mobile/PC project profiles, reference device presets and device-aware layout constraints. |
-| AI workflows | New pages, reference-image generation, explicit element edits, reviewed page optimization, multiple pages and alternative designs. |
-| Project context | View and edit uploaded documents and AI summaries; reuse relevant pages, project requirements and design rules. |
-| HTML import | Preserve appearance, unify with project tokens, or selectively map colors, typography, spacing, radii and shadows. |
-| Design systems | Built-in presets, custom palettes and style candidates, light/dark tokens, gradient backgrounds and style extraction from existing pages. |
-| Design libraries | Import project copies, bind pinned read-only versions, or explicitly open the source library for editing. |
-| Visual editing | Element selection, spacing and alignment controls, safe text edits, cascading deletion and persistent undo/redo. |
-| Proposal review | Compare original and candidate pages; replace, keep both or discard after delivery checks. |
-| Delivery | HTML and PNG export, resource checks, render diagnostics, candidate previews and saved delivery records. |
+| **Infinite canvas** | Arrange multiple pages on one board, pan and zoom smoothly, navigate with a minimap, and use automatic layout and first-screen guides. |
+| **Device presets** | Choose Mobile or PC when creating a project, with reference device sizes and layout rules tailored to that screen type. |
+| **AI design assistant** | Create new pages from text or reference images, edit specific elements, ask for layout improvements, plan multi-page flows, and compare alternative designs. |
+| **Project context** | Upload product documents (and view or edit AI summaries) so the AI understands your goals, existing pages, and design rules. |
+| **HTML import** | Bring in existing HTML pages—keep their original appearance, unify them with your project's style, or selectively match colors, fonts, spacing, corners, and shadows. |
+| **Design systems** | Start from built-in presets, customize colors and light/dark themes, add gradient backgrounds, or extract a style directly from an existing page. |
+| **Design libraries** | Import reusable copies into your project, pin a read-only reference version, or open the source library directly for editing. |
+| **Visual editing** | Click any element to adjust spacing, alignment, and text safely; remove groups cleanly; and undo or redo changes at any time. |
+| **Proposal review** | Compare the original page and AI proposal side by side; choose to replace, keep both, or discard after built-in checks. |
+| **Export & handoff** | Export HTML and PNG files with built-in layout diagnostics, image checks, and saved delivery records. |
 
-### Start with functionality and information
+## How the AI workflow works
 
-New pages and supported functionality changes first capture the user goal, required information, available actions and relevant interface states. Project documents, explicitly referenced pages and supplied images provide context; unresolved essential questions stop generation. This is a static design brief, not implemented backend behavior. Precise visual edits retain their scoped editing route.
+### Start with goals and content
 
-### A controlled editing workflow
+When you ask for a new page or a functional update, TauDesign first clarifies the user's goal, what information needs to be shown, what actions are available, and which screen states matter. It draws context from your uploaded project documents, referenced pages, and images—and pauses to ask if essential details are missing.
 
-1. Reference the intended page or element explicitly in chat.
-2. A precise request, such as changing one button label, goes directly to a copy-based local edit. A broad request, such as optimizing a page, first produces suggestions you can select and supplement.
-3. The workflow records the target, baseline, allowed changes, device, design system and relevant project context.
-4. Source, structure, text, resource and iframe render checks determine whether a candidate can be adopted. Failed or incomplete results remain unapplied.
-5. Compare the candidate with the original. Adoption uses History so you can undo or redo it.
+### Safe, step-by-step editing
 
-Render diagnostics include compressed body text, clipping, overlap and some contrast issues. For supported cases where horizontal action groups squeeze long text, the render report offers a layout repair preview and a local candidate. These checks cover specific rules; business accuracy and visual quality still need review.
+1. **Point to what you want to change:** Reference the target page or element in chat.
+2. **Quick edits vs. broader improvements:** Specific requests (such as changing a button label) go straight to a safe, targeted edit. Broader requests (such as optimizing a crowded page) first give you suggestions you can review, pick from, and refine.
+3. **Automatic quality checks:** Before a proposal can be applied, TauDesign checks for broken structure, missing images, squeezed body text, clipped or overlapping elements, and certain contrast issues. When a horizontal button group squeezes text on supported layouts, it can also suggest a quick layout fix.
+4. **Compare and decide:** Preview the proposal next to your current page. Nothing is overwritten without your confirmation, and accepted changes can always be undone.
 
-AI model and Provider settings include **Automatic design guidance (trial)**, off by default. This application preference selects relevant guidance for new tasks; ongoing tasks keep their frozen rules. Turning it off restores general guidance and keeps existing pages and provenance.
+In **Provider Configuration**, you can also turn on **Automatic design guidance (trial)** (off by default) to let TauDesign automatically pick relevant layout and style tips for new tasks. Turning it off switches back to general guidance without affecting your existing pages.
 
-### Design evidence and recovery
+### Keeping track of your work
 
-Tasks retain their selected rules, target baseline and request receipts. Candidate and delivery panels explain the checks; reopened conversations show **historical design guidance** without sending another AI request or restoring execution permissions. The details distinguish assembled inputs from recorded application calls, including failed or cancelled calls. A repair awaiting authorization persistence can have assembled rules and no call receipt. Parent/child request identities are checked when evidence is saved, reopened and considered for adoption. These records do not prove Provider receipt, model compliance or a passed page inspection. See the [request provenance audit](./doc/ui-design-workflow/request-provenance-audit.md) for the verified scope. [Compatible older theme snapshots](./doc/ui-design-workflow/runtime-compatibility-audit.md) retain their original bindings; invalid metadata leaves conversation text readable.
+Every AI task remembers which page, theme, documents, and instructions it started from, and shows what happened during generation—including any failed, stopped, or incomplete attempts—so you can always see how a design was produced.
 
-Supported invisible-label or zero-size control failures can receive one restricted style repair and a full recheck. Automatic repair shares the generation task's remaining quota; a user-triggered candidate repair is a separate single request. Confirmed draft-label repair changes only authorized text and records that it made no model call. Failed, cancelled or inconsistent evidence does not unlock adoption.
+- If you edit the original page, update your project documents, or change the theme after a proposal was generated, simply start a new request so the AI works from your latest version.
+- If you replace a local image file at the same path, click **Refresh preview and recheck** to update the preview without spending another AI request.
+- Conversation history is saved locally with your project. Even if a file has an unreadable line, TauDesign isolates it so the rest of your conversation stays intact (though keeping regular project backups is still recommended).
 
-New candidates freeze their task inputs and authorized changes even when automatic design guidance is disabled. Changes to the baseline, project documents (including AI summaries), navigation metadata, theme or manual overrides require a new task; another passing render cannot renew that authorization. Older candidates without complete input or authorization snapshots remain viewable but require a new task before adoption or repair. Checker revision, base CSS and browser rendering identity are tracked separately, so changed check dependencies require fresh render evidence. Moving a frame does not invalidate the task. Trusted application rule withdrawals block further execution and adoption while keeping historical rules and receipts readable. The bundled withdrawal list is currently empty. Actual local resource bytes are recorded as SHA256 evidence; replacing a file at the same path requires **Refresh preview and recheck**, without another model request or renewed task authorization. The [invalidation checklist](./doc/ui-design-workflow/invalidation.md) and [consumer audit](./doc/ui-design-workflow/invalidation-audit.md) record the verified invalidation matrix.
+### Long pages and multi-page flows
 
-Conversation history uses append-only monthly JSONL files. Readers isolate malformed rows, recover missing or damaged indexes from valid month files and coordinate concurrent writes to the same project. Desktop readers also isolate invalid UTF-8 rows; these safeguards do not replace project backups.
+For a long page, ask TauDesign to build it in **2–6 sections**—each section is checked before being combined into one page. You can also ask for a multi-page plan to review before generating screens. If a response gets cut off partway through, you can continue it within the same session (incomplete pages are never applied automatically).
 
-Chat shows actual execution steps and application call activity, including observed text/reasoning characters and JSON result size. Modification analysis, structured edits and multi-page planning/generation also feed this activity summary. Deterministic local edits make no model request; multi-page generation tracks activity separately from its planning call. Elapsed time does not advance stages. Stopping a request suppresses late updates; older records without stage evidence show an overall status. Counts describe the current execution, including its controlled repair; continuation retains the parent task’s cumulative quota. These are application-level observations, not HTTP counts or Provider acknowledgements. The inspector exposes request activity and an explicit Stop action; candidate repair can be cancelled from either control. Restyle operations release their UI lock on cancellation and reject stale callbacks when another trial starts. Task deadlines also cover resource checks, rendering and persistence waits; cancellation or expiry prevents late work from authorizing page changes. Restyle reports distinguish an unapplied result from a page already committed to History whose archive finalization timed out. The [lifecycle audit](./doc/ui-design-workflow/progress-audit.md) records the verified paths and remaining acceptance boundaries.
+### Importing HTML and mobile navigation
 
-### Large pages and generation limits
+To bring in an existing web page, open **File → Import HTML** (or use the import button in the Pages panel). Preview the page and choose whether to keep its original look or adapt it to your project's theme. You can also extract a theme from an imported or existing page in the **Design System** panel or the full theme editor.
 
-Use section generation for a new long page: plan **2–6 sections** and assemble one page after checks. Explicit multi-page requests can use a reviewed page plan. Bounded continuation handles supported truncated responses; incomplete HTML is not applied. Section and continuation checkpoints currently last only for the active session.
-
-Manual continuation shares the original task's cumulative quota, deadline, frozen rules and functional plan. The [child execution audit](./doc/ui-design-workflow/child-execution-audit.md) covers sections, continuation, format corrections and controlled repairs. When that allowance is insufficient, split the design or explicitly start a new generation; continuing does not reset the quota.
-
-### HTML import and mobile navigation
-
-Open **File → Import HTML**, or use the import action in the Pages panel. Inspect the analysis and preview, then select a preservation or token-mapping mode. A new project can derive its design system from the imported page. Existing projects can preview and confirm an extracted theme; style extraction is available in both the Design System panel and the full theme editor.
-
-Mobile projects default to a shared WeChat-style status/navigation bar. Imported or reference-image top bars are excluded from page content under this policy. The shared chrome appears on the canvas and in PNG exports, and is excluded from exported HTML. Enable **Use custom navigation** to include authored navigation in the page design.
+Mobile projects automatically display a shared top status and navigation bar on the canvas and in PNG exports (excluded from exported HTML). Turn on **Use custom navigation** if you want to design your own top bar inside the page.
 
 ## Getting started
 
-1. Open TauDesign and create a project in a local folder. Choose Mobile or PC, a reference device and a design preset or custom style. The project profile stays fixed.
-2. Open **Provider Configuration** in the AI chat panel. Configure an endpoint, credentials and model, then assign the required model roles. Reference-image workflows need a vision-capable model.
-3. Start with a prompt, an image, an HTML import or project documents. Enable page/element references when you want to edit existing content.
-4. Review diagnostics and candidates, then export the accepted design.
+1. **Create a project:** Open TauDesign and choose a local folder. Pick Mobile or PC, a reference device size, and a built-in or custom style (the Mobile/PC choice stays fixed for the project).
+2. **Connect an AI provider:** Open **Provider Configuration** in the AI chat panel, enter your API endpoint, key, and model, and assign model roles. If you plan to design from reference images, pick a model that supports vision.
+3. **Start designing:** Describe a page in chat, attach a reference image, import an HTML file, or upload project documents. Turn on page or element references when you want to edit something specific.
+4. **Review and export:** Check any layout diagnostics, compare proposals, and export your finished design as HTML or PNG.
 
-Supported provider protocols include OpenAI-compatible APIs, Anthropic, Gemini and native Ollama. Presets include services such as OpenAI, DeepSeek and Aliyun DashScope. For a local endpoint, configure the corresponding protocol/model and its private-network access option when required. Credentials and model availability depend on the endpoint.
+TauDesign works with OpenAI-compatible APIs, Anthropic, Gemini, and local Ollama, and includes presets for services like OpenAI, DeepSeek, and Aliyun DashScope. For local models running on your machine, select the matching protocol/model and enable private-network access if required.
 
 ### Example prompts
 
-| Task | Example |
+| Goal | Example prompt |
 | --- | --- |
-| New page | “Design a clean subscription page with plan comparison, benefits and a primary action.” |
-| Precise edit | “On the referenced button, shorten the label to ‘Save changes’ and retain its icon and size.” |
-| Broad review | “Review this mobile page for crowded content and unclear hierarchy; let me choose the improvements.” |
-| Long page | “Create a product landing page in sections: overview, benefits, pricing and FAQ.” |
+| **New page** | “Design a clean subscription page with plan comparison, benefits, and a primary action.” |
+| **Precise edit** | “On the referenced button, shorten the label to ‘Save changes’ and keep its icon and size.” |
+| **Broad review** | “Review this mobile page for crowded content and unclear hierarchy; let me choose the improvements.” |
+| **Long page** | “Create a product landing page in sections: overview, benefits, pricing, and FAQ.” |
 
-### Keyboard and canvas controls
+### Keyboard and canvas shortcuts
 
-| Control | Action |
+| Shortcut | Action |
 | --- | --- |
-| Space + drag | Pan the canvas. |
-| Trackpad scroll | Pan the canvas. |
-| Cmd/Ctrl + wheel | Zoom around the pointer, from 10% to 400%. |
-| Cmd/Ctrl + Z | Undo. |
-| Cmd/Ctrl + Shift + Z | Redo. |
-| Click an element | Select it and open its properties. |
-| Double-click editable text | Edit text in place. |
-| Enter / Esc while editing | Confirm / cancel the text edit. |
-| Delete / Backspace with a selected node | Delete the node and its descendants. |
-| Double-click a frame title | Rename the frame. |
+| `Space` + drag | Pan around the canvas |
+| Trackpad scroll | Pan around the canvas |
+| `Cmd/Ctrl` + scroll wheel | Zoom in and out around the pointer (10% to 400%) |
+| `Cmd/Ctrl + Z` | Undo |
+| `Cmd/Ctrl + Shift + Z` | Redo |
+| Click an element | Select it and open its properties |
+| Double-click editable text | Edit text directly on the page |
+| `Enter` / `Esc` while editing | Confirm or cancel the text edit |
+| `Delete` / `Backspace` | Delete the selected element (and its contents) |
+| Double-click a frame title | Rename the page |
 
-## Projects, privacy and export
+## Your projects, privacy, and exports
 
-A desktop project folder contains `project.json`, page files under `screens/`, assets under `assets/`, and persisted conversation/history records. Back up the whole folder to retain its related files. Project Settings shows the project path and provides an **Open directory** action.
+- **Local-first storage:** A desktop project folder holds `project.json`, your pages under `screens/`, images under `assets/`, and your conversation and undo history. Back up the whole folder to keep everything together. You can view the folder path or open it anytime from **Project Settings** (**Open directory**).
+- **Privacy & AI requests:** When you run an AI task, your prompt and the selected context (referenced pages, images, or documents) are sent to the AI provider you configured. Your API keys are stored locally on your machine. If you prefer offline inference, you can connect a local model (such as Ollama), keeping in mind that remote fonts or external image links in a page may still load over the network.
+- **HTML export:** Packages your page with its styles and local assets (plus an optional manifest file). Remember to check any external links or fonts before handing off.
+- **PNG export:** Export at 1x, 2x, or 3x resolution for either the full page or the first screen. The desktop app uses native rendering for crisp results and reports any known rendering limitations (such as certain shadow effects).
 
-AI requests send your prompt and the page, image or document context included by the workflow to your configured provider. API credentials are stored in local application settings and used to authenticate requests to configured endpoints. Remote fonts and images may make their own network requests. A local model can keep AI inference on your machine; offline use also depends on the assets your pages reference.
-
-- **HTML:** inline project styles and available resolved assets, with an optional Manifest sidecar. Imported styles may require retaining internal identifiers. Check external resources when handing off a page.
-- **PNG:** 1x, 2x or 3x, for the whole page or the first screen. Desktop export prefers native rendering and measures content height; a browser-compatible fallback is available. Backend limitations, including some WebKit shadow cases, are reported explicitly.
-- **Portability:** exported designs can be viewed without TauDesign, subject to their resource dependencies. Static and pixel checks do not establish implemented business behavior or identical rendering on every system.
-
-## Build from source
+## For developers: Build from source
 
 ### Prerequisites
 
-The frontend uses React 18, TypeScript, Vite 6, Zustand and Immer. The desktop shell uses Tauri 2 and Rust.
+The frontend uses React 18, TypeScript, Vite 6, Zustand, and Immer. The desktop shell uses Tauri 2 and Rust.
 
-Install Node.js 22, [pnpm](https://pnpm.io/) (recommended >= 12.0.0), and Rust stable/Cargo through [rustup](https://rustup.rs/). Desktop builds also need the target platform's system dependencies:
+Install Node.js 22, [pnpm](https://pnpm.io/) (recommended >= 12.0.0), and Rust stable/Cargo via [rustup](https://rustup.rs/). Desktop builds also require platform dependencies:
 
 | Platform | Requirements |
 | --- | --- |
 | macOS | Xcode Command Line Tools; system WebKit. |
-| Windows | Microsoft C++ desktop build tools, Windows SDK, WebView2 Runtime and the MSVC Rust toolchain. |
-| Linux | Distribution-specific Tauri dependencies, including WebKitGTK 4.1 development packages, build tools and OpenSSL. |
+| Windows | Microsoft C++ desktop build tools, Windows SDK, WebView2 Runtime, and the MSVC Rust toolchain. |
+| Linux | Distribution-specific Tauri dependencies, including WebKitGTK 4.1 development packages, build tools, and OpenSSL. |
 
-See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for platform setup. Run the following commands from the repository root.
+See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for platform setup, then run the commands below from the repository root.
 
 ### Install and develop
 
@@ -143,23 +133,19 @@ See the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for pla
 pnpm install --frozen-lockfile
 ```
 
-For frontend development:
+For browser-only frontend development (`http://localhost:5173`):
 
 ```bash
 pnpm dev
 ```
 
-Open `http://localhost:5173`. Vite uses a strict port; stop an existing server on that port first. Browser mode uses the Vite AI proxy and a fallback storage path. Validate native file storage, system dialogs and native PNG export in desktop mode.
-
-For the complete desktop app:
+For the full desktop app (Tauri starts Vite automatically—do not run a separate dev server on port 5173):
 
 ```bash
 pnpm tauri dev
 ```
 
-Tauri starts Vite automatically; do not run a second dev server on port 5173. API credentials are configured in the app and are not required to build it.
-
-### Validate and build
+### Test and build
 
 ```bash
 pnpm test
@@ -168,86 +154,25 @@ pnpm build
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
-The frontend build goes to `dist/`. To build native desktop bundles on the target operating system:
+The frontend build outputs to `dist/`. To build native desktop installers:
 
 ```bash
 pnpm run tauri:build
 ```
 
-Tauri bundles go to `src-tauri/target/release/bundle/`. Use the packaging script below for its platform-specific defaults.
-
-### Collect desktop packages
-
-The repository packaging script requires Bash and `jq`; use Git Bash on Windows.
+Tauri bundles are written to `src-tauri/target/release/bundle/`. To collect platform packages into `dist-desktop/` (requires Bash and `jq`; use Git Bash on Windows):
 
 ```bash
 pnpm run package:desktop
 ```
 
-Artifacts are collected into `dist-desktop/`. The local product name and app version come from `src-tauri/tauri.conf.json`.
-
 | Build host | Default collected artifacts |
 | --- | --- |
-| macOS | `.app` only; DMG and ZIP are opt-in. |
-| Windows | MSI and NSIS `.exe`. |
-| Linux | DEB and AppImage; RPM when `rpmbuild` is installed. |
+| macOS | `.app` only (`PACKAGE_DMG=1 PACKAGE_ZIP=1` to include DMG/ZIP) |
+| Windows | MSI and NSIS `.exe` |
+| Linux | DEB and AppImage (plus RPM when `rpmbuild` is installed) |
 
-Optional macOS formats:
-
-```bash
-PACKAGE_DMG=1 PACKAGE_ZIP=1 pnpm run package:desktop
-```
-
-`SKIP_BUILD=1` collects existing artifacts. `PACKAGE_PLATFORM` overrides platform detection only; it does not configure cross-compilation. Signing and notarization require a separate distribution setup.
-
-The [Desktop release workflow](./.github/workflows/release.yml) supports version tags and manual runs, native builds, source archives and checksums. Publication waits for the required jobs to pass. See [release usage](./doc/desktop-release/README.md) for assets and configuration; workflow configuration alone does not establish that a release has been published.
-
-## Architecture and validation scope
-
-- Desktop AI traffic goes through the Rust proxy; browser development uses the Vite proxy.
-- Each frame renders in an isolated `iframe srcdoc` document.
-- Generated page styles use the token-based [base stylesheet](./src/styles/base.css), separately from the editor's Tailwind styles.
-- Stable DOM identifiers, manual override layers and History protect local edits.
-- The current refactor has unit, browser and macOS native evidence. Windows/Linux native acceptance remains a recorded gap; configured build targets do not replace platform testing.
-
-### Recorded verification
-
-<!-- CURRENT_WORKFLOW_STATUS_BEGIN -->
-The worktree implements rule selection, functional/information/static-interaction planning, unified four-protocol model encoding, preflight capacity budgets, four page write strategies (`SkeletonMainAtomic`, `SectionPlanThenWrite`, `SectionedPatch`, `DerivedCopyMutableOnly`), shared generation trees, media externalization, cross-instance conditional publication, provenance, shared budgets, candidate gates and save/reopen workflows. Automatic design guidance remains **off by default**. In the latest 24-pair, 48-task live trial (`doc/model-interaction-refactor/evidence/2026-11-07-live-experiment-01`), all 48 runs were recorded and all automated quality/cost gates passed (contextual first-pass 19/24 vs baseline 15/24, final-pass 19/24 vs 17/24, severe layout issues 0 vs 1, input median 10,121 vs 10,580, duration median 12.29s vs 14.28s); independent two-reviewer human blind review for this new batch remains an open external step (not replaced by Agent self-scoring), and the earlier reviewed batch (`47.92%` preference) remains preserved, so contextual guidance stays optional (`defaultEnabled: false`).
-
-Full acceptance passed on the current worktree (`doc/model-interaction-refactor/evidence/2026-11-07-final-acceptance-03` and `2026-11-07-entry-matrix-05`): **3,684 frontend/integration tests across 307 files (0 failures)**, **66 Rust library tests (0 failures)**, type checking, production build, 42/42 Chromium/WebKit workflow matrix, full dual-engine browser evidence, and native macOS save/reopen plus three adoption modes, HTML and four native PNG exports on two read-only copies of real projects (`smatch` and `pc01`). All 501 runtime inputs and 865 inputs including tests stayed unchanged, as did original project file hashes. See the [model interaction refactor report](./doc/model-interaction-refactor/test.md) and [earlier evidence index](./doc/ui-design-workflow/completion-current.md) for scope and limits. Windows/Linux machine testing remains a disclosed gap.
-
-Feedback-driven fixes anchor notification badges to the icon itself, preserve explicit semantic backgrounds over component defaults, and organize chat advice with neutral body text, clear grouping and quieter actions while retaining the original copy. See the [badge record](./doc/badge-anchor/test.md), [conversation fix](./doc/conversation-readability/README.md) and [M5 record](./doc/ui-design-workflow/m5-delivery.md). Static design acceptance excludes live backend submissions, clickable business prototypes and role state machines.
-
-Quality findings distinguish blockers, warnings, unverified checks and advice. Required failures or unavailable checks block adoption; advisory unknowns disclose their limits. Turning guidance off restores generic guidance without deleting adopted pages or historical provenance. Model trials retain failures, continuations, repairs and full accounting; estimated timeout usage is explicitly marked and is not presented as precise billing.
-The default-off switch controls contextual rule retrieval; connected functional planning and delivery checks continue to run.
-
-<!-- CURRENT_WORKFLOW_STATUS_END -->
-
-Supported explicit button-text instructions now feed the design brief and shared source/render checks. Text in adjacent content, hidden nodes, accessible names or outside the selected scope cannot substitute for the requested visible label. A 30-case calibration passed 120 engine/device combinations; this checks literal content within the documented scope, while business semantics still require review.
-
-Explicit field-label instructions also check literal text, valid native control association and rendered visibility. Placeholders, adjacent copy and hidden text do not substitute for a label. A 26-case calibration passed 104 engine/device combinations; briefs distinguish field labels from button requirements. See the [content-check audit](./doc/ui-design-workflow/content-check-audit.md) for supported scope and limits.
-
-Layout checks now recognize intentional wrapping from computed styles and disclose uncertain badge-corner contact. Nested inline body text is checked for severe compression; exceeding the measurement budget leaves the report incomplete. The current 37-case suite passed 148 engine/device combinations, with another 248 surface-cascade combinations passing. Applicability records cannot waive required failures.
-
-Explicit text that remains in source but is hidden by a control’s own zero font or dimensions can reuse the existing one-call style repair. Wrong or missing text still blocks it. Actual toolbar, mask, adoption, undo/redo and browser save/reopen passed 16 scenarios; four repair scenarios and two delivery-history checks also passed. See the [delivery audit](./doc/ui-design-workflow/delivery-audit.md). These checks do not replace native acceptance or real-model evaluation.
-
-The following checks were recorded on **2026-10-31** for application code in [acd3ea5](https://github.com/theoly/TauDesign/commit/acd3ea53c46e8fa1053a401ce3a25014434d4d44):
-
-| Check | Result |
-| --- | --- |
-| Frontend tests | 2,580 passed, 0 failed. |
-| Rust library tests | 26 passed, 0 failed. |
-| Type checking and production build | Passed. |
-| Controlled browser regression | Chromium and WebKit; Mobile and PC profiles. |
-
-Browser checks use controlled model responses. These results verify the tested workflows; they do not establish real-model quality, complete platform acceptance or a published release. See the [dated test report](./doc/ui-design-workflow/test.md) for scope and remaining gaps.
-
-See [current workflow status](./doc/design-workflow-refactor/current.md) for earlier implementation and acceptance records. The ongoing [UI design workflow plan](./doc/ui-design-workflow/README.md), [task list](./doc/ui-design-workflow/task.md) and [test reports](./doc/ui-design-workflow/test.md) track the current refactor. Independent review execution is complete; the quality-gain gates failed, so rollout remains optional. See the [formal evaluation](./doc/ui-design-workflow/evidence/2026-11-03-formal-review-completion/README.md). Code, browser, native, package and publication evidence retain their own scopes; automatic design guidance stays off by default.
-
-The [UI design guide (Chinese)](./doc/ui-design-guidance/guide.md) explains the generation rules for hierarchy, spacing, typography, theme backgrounds and component layout, including limits for edits to existing pages.
-
-Detailed screenshots, project snapshots and raw validation logs remain local and are excluded from Git. The committed verification scripts and Markdown reports describe how to reproduce the controlled checks.
+`SKIP_BUILD=1` collects existing artifacts, and `PACKAGE_PLATFORM` overrides platform detection without configuring cross-compilation. Signing and notarization require a separate distribution setup. See [release usage](./doc/desktop-release/README.md) for details on the [Desktop release workflow](./.github/workflows/release.yml).
 
 ## License
 
