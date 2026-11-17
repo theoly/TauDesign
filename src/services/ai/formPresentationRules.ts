@@ -1,6 +1,6 @@
 import type {QualityFinding} from './generationQuality';
 
-export const FORM_PRESENTATION_RULES=`表单：输入用边框/下划线/有效填充等清晰指示，保留label关联、状态和业务原值。相关只读项共组，外框留Token内距勿贴边，不伪装可编辑。同类行标签与值统一列，长标签完整换行。密度按设备、业务和spacing/typography Token选取，组间大于组内，兼顾触控，不套固定行高/padding。颜色Token用于颜色，border-width用长度、border-style用solid等；合法变量/fallback/引用链保留。只改选中的元素或区域，保留其它业务/控件/媒体外链；导入保留原貌不强排。`;
+export const FORM_PRESENTATION_RULES=`表单：输入用边框/下划线/填充，保留label与业务原值。只读项共组，Token内距勿贴边。同类行标签与值统一列。勾选/单选：label.row.items-start.gap-3+文案.flex-1.min-w-0.break-words同行横排；禁单字竖列、空卡挤出正文。密度按设备/Token。颜色用Token；border-width用长度、border-style用solid。只改选中的元素或区域；导入保留原貌`;
 export const SCOPED_FORM_PRESENTATION_RULES=FORM_PRESENTATION_RULES+'\n局部范围优先：上述指导仅适用于本次授权子树，已有无关表单和只读分组不得为满足指导重排；当前操作协议不支持的调整应停止说明，不扩大授权、不更改输出Schema。';
 
 /** Measured presentation advice, never a semantic/aesthetic guarantee or an automatic rewrite. */
@@ -61,6 +61,43 @@ export function inspectFormPresentation(doc:Document,maxNodes=1500):QualityFindi
   const s=css(group),sides=['Top','Right','Bottom','Left'];
   if(sides.some(side=>!(Number.parseFloat(s[`padding${side}` as keyof CSSStyleDeclaration] as string)>0)))
    add(group,'render_form_group_padding','只读信息组有外框，但部分方向没有内边距，请核对内容是否贴边。',`padding ${s.paddingTop} ${s.paddingRight} ${s.paddingBottom} ${s.paddingLeft}`,'按项目spacing Token给相关只读信息组留出呼吸空间；嵌套内容已有留白时可保留');
+ }
+ findings.push(...inspectOptionTextColumns(doc,maxNodes));
+ return findings;
+}
+
+/** Detect checkbox/radio copy squeezed into a one-character vertical strip (common mobile flex failure). */
+export function inspectOptionTextColumns(doc:Document,maxNodes=1500):QualityFinding[]{
+ const win=doc.defaultView;if(!win||doc.documentElement.clientWidth<=0||doc.body.getBoundingClientRect().width<=0)return [];
+ const findings:QualityFinding[]=[],css=(el:Element)=>win.getComputedStyle(el);
+ const visible=(el:Element)=>{
+  for(let at:Element|null=el;at;at=at.parentElement){const s=css(at);if(at.hasAttribute('hidden')||s.display==='none'||s.visibility==='hidden'||Number(s.opacity)===0)return false;}
+  const r=el.getBoundingClientRect();return r.width>0&&r.height>0;
+ };
+ const textOf=(el:Element)=>((el.textContent??'').replace(/\s+/g,' ').trim());
+ const isChoice=(el:Element)=>el.matches('input[type="checkbox"],input[type="radio"]');
+ const hosts=Array.from(doc.querySelectorAll('label,li,.card,[role="checkbox"],[role="option"]')).slice(0,maxNodes).filter(visible);
+ const seen=new Set<Element>();
+ for(const host of hosts){
+  const control=host.matches('input')?host:host.querySelector('input[type="checkbox"],input[type="radio"]');
+  if(!control||!isChoice(control)||!visible(control))continue;
+  const candidates:Element[]=[];
+  if(host!==control)candidates.push(host);
+  for(const child of Array.from(host.children))if(child!==control&&!child.contains(control)&&!isChoice(child))candidates.push(child);
+  const parent=host.parentElement;
+  if(parent)for(const sib of Array.from(parent.children))if(sib!==host&&!sib.contains(control)&&!isChoice(sib)&&visible(sib))candidates.push(sib);
+  for(const candidate of candidates){
+   if(seen.has(candidate)||!visible(candidate))continue;
+   // Prefer the readable copy node, not the control chrome itself.
+   if(candidate===control||isChoice(candidate))continue;
+   const text=textOf(candidate);if(text.length<4)continue;
+   const rect=candidate.getBoundingClientRect(),font=Number.parseFloat(css(candidate).fontSize)||14;
+   const narrow=rect.width<=font*1.75,tall=rect.height>=font*Math.max(3.2,text.length*0.55);
+   if(!(narrow&&tall))continue;
+   seen.add(candidate);
+   findings.push({code:'render_option_text_column',severity:'warning',nid:candidate.getAttribute('data-nid')??host.getAttribute('data-nid')??control.closest('[data-nid]')?.getAttribute('data-nid')??undefined,message:'选项/勾选文案被挤成单字竖列，阅读困难。',actual:`约${Math.round(rect.width)}×${Math.round(rect.height)}px · ${text.slice(0,24)}`,expected:'label.row.items-start.gap-3 + 文案.flex-1.min-w-0.break-words，正文留在卡片内横向换行'});
+   break;
+  }
  }
  return findings;
 }

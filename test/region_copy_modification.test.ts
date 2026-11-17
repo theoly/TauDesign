@@ -19,8 +19,19 @@ describe('atomic region copy modifications', () => {
   expect(() => validateRegionTargets(html, ['a'], { allowedNids: ['b'] })).toThrow();
   expect(() => validateRegionTargets(html, ['a'], { protectedNids: ['buy'] })).toThrow();
  });
- test('rejects incomplete, multi-root, identity, metadata, unsafe and cross-region changes', () => {
-  for (const replacement of [good.slice(0,-10), good+'<div></div>', 'text'+good, good.replace('data-nid="a"','data-nid="x"'), good.replace('data-component="card"',''), good.replace('</section>','<script>alert(1)</script></section>'), good.replace('New title','<img onerror="bad()">'), good.replace('data-nid="heading"','data-nid="p"'), good.replace('<button data-nid="buy" class="btn btn-primary">Buy</button>','')]) expect(() => applyRegionCopyEdits(html,[{nid:'a',html:replacement}],options)).toThrow();
+ test('rejects incomplete, multi-root, identity, metadata and unsafe changes', () => {
+  for (const replacement of [good.slice(0,-10), good+'<div></div>', 'text'+good, good.replace('data-nid="a"','data-nid="x"'), good.replace('data-component="card"',''), good.replace('</section>','<script>alert(1)</script></section>'), good.replace('New title','<img onerror="bad()">'), good.replace('<button data-nid="buy" class="btn btn-primary">Buy</button>','')]) expect(() => applyRegionCopyEdits(html,[{nid:'a',html:replacement}],options)).toThrow();
+ });
+ test('remaps foreign page nids instead of aborting, and keeps outside siblings intact', () => {
+  const leaked = good.replace('data-nid="heading"','data-nid="p"');
+  const result = applyRegionCopyEdits(html,[{nid:'a',html:leaked}],options);
+  const doc = new DOMParser().parseFromString(result.html, 'text/html');
+  expect(doc.querySelector('aside [data-nid="p"]')?.textContent).toBe('Other');
+  const heading = doc.querySelector('section[data-nid="a"] h2');
+  expect(heading?.getAttribute('data-nid')).not.toBe('p');
+  expect(heading?.getAttribute('data-nid')).toBeTruthy();
+  expect(result.html).toContain('New title');
+  expect(result.qualityReport.passed).toBe(true);
  });
  test('rejects global styles and document wrappers before DOM normalization', () => {
   for (const replacement of [good.replace('</section>','<style>aside{display:none}</style></section>'), '<html><body>'+good+'</body></html>', good.replace('</section>','<template><link rel="stylesheet" href="x"></template></section>')]) expect(() => applyRegionCopyEdits(html,[{nid:'a',html:replacement}],options)).toThrow();

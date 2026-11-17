@@ -9,6 +9,7 @@ import {defaultProviders} from '../src/stores/useAIConfigStore';
 import {defaultTheme} from '../src/utils/themePresets';
 import {TaskBudget,withTaskBudget} from '../src/services/ai/taskBudget';
 import type {StreamTextOptions,AIEngineCore} from '../src/services/ai/engine/core/types';
+import {twoPageRequest} from './fixtures/multiPageTask';
 const provider=defaultProviders[0];
 const plan=()=>({title:'会员中心',shellHtml:'<main class="container-max col gap-4 p-4"><h1 class="text-xl">会员中心</h1><section data-design-slot="section-1" class="card p-4"></section><section data-design-slot="section-2" class="card p-4"></section></main>',sections:[{id:'section-1',name:'推荐',requirements:'展示会员推荐'},{id:'section-2',name:'权益',requirements:'展示会员权益及查看按钮'}]});
 function fake(response:(o:StreamTextOptions,n:number)=>{text:string;finish?:string}){const calls:StreamTextOptions[]=[];const core:AIEngineCore={streamText(o){calls.push(o);const r=response(o,calls.length);return {textStream:(async function*(){yield r.text;})(),reasoningStream:(async function*(){})(),textPromise:Promise.resolve(r.text),reasoningPromise:Promise.resolve(undefined),usagePromise:Promise.resolve({inputTokens:2,outputTokens:3}),finishReasonPromise:Promise.resolve(r.finish??'stop'),abort(){}};},async generateObject(){throw Error('unused');}};return {core,calls};}
@@ -77,7 +78,7 @@ test('同页模式走统一Pipeline，记录分步来源；旧页/多页需求�
  const p={input:{rawPrompt:'新建一个会员中心页面',activeScreenId:null,decision:{intent:'create_screen' as const,targetScreenId:null,reason:'fixture'}},provider,model:'fixture',engineCore:f.core,screens:{},deviceProfile:'pc' as const,frameWidth:1440,baseSystemPrompt:'设计页面',designSystem:defaultTheme,sectioned:{}};
  const r=await PipelineExecutor.execute(p);expect(r.status).toBe('applied');expect(r.executionRecord?.source).toBe('sectioned-model');expect(r.executionRecord?.rawResponse).toBe('');expect(r.executionRecord?.sectioned?.requests).toHaveLength(3);
  expect((await PipelineExecutor.execute({...p,input:{...p.input,decision:{intent:'modify_screen',targetScreenId:'old',reason:'fixture'}}})).status).toBe('error');
- expect((await PipelineExecutor.execute({...p,input:{...p.input,rawPrompt:'创建两个页面'}})).status).toBe('error');expect(f.calls).toHaveLength(3);
+ expect((await PipelineExecutor.execute({...p,input:{...p.input,rawPrompt:twoPageRequest()}})).status).toBe('error');expect(f.calls).toHaveLength(3);
 });
 
 test('六块达到批次32768预算时保留进度，继续从当前区块前缀开始且不重新规划',async()=>{

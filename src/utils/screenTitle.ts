@@ -25,10 +25,18 @@ export function isPromptLikeTitle(title: string, userPrompt?: string): boolean {
   if (!userPrompt?.trim()) return false;
   const head = userPrompt.replace(/\s+/g, ' ').trim();
   if (!head) return false;
-  // 标题基本是提示词开头截断
-  if (head.startsWith(t) && t.length >= 6) return true;
+  // Short prompts that equal the title are real page names, not truncated briefs.
+  if (head === t) return false;
+  // 标题基本是更长提示词开头截断
+  if (head.startsWith(t) && t.length >= 6 && head.length > t.length) return true;
   const head20 = head.slice(0, 20);
-  if (t.length >= 8 && (head20.startsWith(t.slice(0, 8)) || t.startsWith(head20.slice(0, 8)))) return true;
+  if (
+    head.length > t.length &&
+    t.length >= 8 &&
+    (head20.startsWith(t.slice(0, 8)) || t.startsWith(head20.slice(0, 8)))
+  ) {
+    return true;
+  }
   return false;
 }
 

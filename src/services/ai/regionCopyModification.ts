@@ -17,6 +17,7 @@ import {applyLocalCopyEdits} from './localCopyModification';
 import {allocateOutputSteps} from './generationStrategy';
 import type {TaskBudget} from './taskBudget';
 import {buildScopedPageContext as scopedDependency} from './engine/context/scopedPageContext';
+import { NidEngine } from '../../utils/nidEngine';
 
 export interface RegionEditOptions {
   device?: DeviceProfile;
@@ -138,9 +139,27 @@ export function applyRegionCopyEdits(html: string, replacements: RegionReplaceme
       const target=replacementNodes.find(el=>el.getAttribute('data-nid')===change.nid);
       if(!target||!matchesFormAttribute(target,change))throw Error('元素结构结果没有落实本次明确授权的控件规则。');
     }
+    // Foreign page nids must not be stolen into this region (would duplicate identity after merge).
+    // Remap them to fresh nids so accidental model leakage does not abort an otherwise valid region edit.
+    const reserved = new Set(
+      Array.from(original.doc.querySelectorAll('[data-nid]'))
+        .filter((el) => !sourceNodes.includes(el))
+        .map((el) => el.getAttribute('data-nid')!)
+    );
     for (const el of replacementNodes) {
+      if (el === root) continue;
       const nid = el.getAttribute('data-nid');
-      if (nid && original.byNid.has(nid) && !sourceNodes.includes(original.byNid.get(nid)![0])) throw new Error('区块引用了其他区域的节点身份。');
+      if (!nid) continue;
+      const owner = original.byNid.get(nid)?.[0];
+      const foreign = Boolean(owner && !sourceNodes.includes(owner));
+      if (!foreign && !reserved.has(nid)) {
+        reserved.add(nid);
+        continue;
+      }
+      let nextNid = NidEngine.generateNid();
+      while (reserved.has(nextNid) || original.byNid.has(nextNid)) nextNid = NidEngine.generateNid();
+      el.setAttribute('data-nid', nextNid);
+      reserved.add(nextNid);
     }
     const nextText = (root.textContent ?? '').replace(/\s+/g, ' ').trim();
     for (const node of sourceNodes) {

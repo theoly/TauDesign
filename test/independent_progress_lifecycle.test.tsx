@@ -11,7 +11,7 @@ import {PageRenderCheck} from '../src/services/ai/pageRenderCheck';
 import {useProjectStore} from '../src/stores/useProjectStore';
 import {useHistoryStore} from '../src/stores/useHistoryStore';
 import {useAIConfigStore,defaultProviders,defaultBindings} from '../src/stores/useAIConfigStore';
-import {withMultiPageTasks,multiPageTask} from './fixtures/multiPageTask';
+import {withMultiPageTasks,multiPageTask,twoPageRequest} from './fixtures/multiPageTask';
 import {ConversationStore} from '../src/services/storage/conversationStore';
 import * as Structured from '../src/services/ai/structuredEditExecutor';
 import type {StreamTextOptions,StreamTextResult} from '../src/services/ai/engine/core/types';
@@ -118,7 +118,7 @@ for(const lateStatus of ['cancelled','ready'] as const)test(`a late ${lateStatus
   const current=engine.messages.find(m=>m.id===review.id)!;expect(engine.isGenerating).toBe(true);expect(current.isStopped).toBe(false);expect(current.isError).toBe(false);expect(current.modificationReview?.status).toBe('submitted');expect(current.modificationReview?.summary).not.toContain('旧局部');expect(current.executionActivity).toMatchObject({active:1,status:'waiting'});
  }finally{await act(async()=>{for(const e of executions)e.result.resolve({status:'cancelled',message:'清理测试'});await first;await second;});execute.mockRestore();}
 });
-async function prepareBatch(){const task=await begin('生成资料一、资料二两个页面');expect(calls).toHaveLength(1);expect(message().executionActivity).toMatchObject({requests:1,active:1,status:'waiting'});await answer(0,batch,task.pending);expect(message().pagePlan?.status).toBe('ready');return message();}
+async function prepareBatch(){const task=await begin(twoPageRequest());expect(calls).toHaveLength(1);expect(message().executionActivity).toMatchObject({requests:1,active:1,status:'waiting'});await answer(0,batch,task.pending);expect(message().pagePlan?.status).toBe('ready');return message();}
 function generated(index:number){const match=htmlCalls[index].options.messages[0].content.match(/confirmedMultiPageScope=(.*); output exactly this page/)!;const scope=JSON.parse(match[1]);return `<artifact title="${scope.name}"><main class="p-4"><h1>${scope.name}</h1><p>展示${scope.name}</p><button class="btn btn-primary">提交</button></main></artifact>`;}
 test('multi-page planning and generation have separate summaries and one batch History action',async()=>{
  const review=await prepareBatch();expect(review.executionActivity).toMatchObject({requests:1,active:0,status:'returned'});const before=useHistoryStore.getState().past.length;

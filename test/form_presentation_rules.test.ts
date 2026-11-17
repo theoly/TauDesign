@@ -1,7 +1,7 @@
 import {expect,test} from 'bun:test';
 import {inspectCssTokenProperties} from '../src/services/ai/cssTokenPropertyValidation';
 import {checkGenerationQuality} from '../src/services/ai/generationQuality';
-import {FORM_PRESENTATION_RULES,SCOPED_FORM_PRESENTATION_RULES,inspectFormPresentation} from '../src/services/ai/formPresentationRules';
+import {FORM_PRESENTATION_RULES,SCOPED_FORM_PRESENTATION_RULES,inspectFormPresentation,inspectOptionTextColumns} from '../src/services/ai/formPresentationRules';
 import {GOLDEN_HIERARCHY} from '../src/services/ai/aestheticRules';
 import {parseHtmlCopy} from '../src/utils/htmlDocument';
 import {PromptBuilder} from '../src/services/ai/promptBuilder';
@@ -85,9 +85,33 @@ test('important and all competing declarations remain unverified while an isolat
 });
 test('shared prompt allows legitimate styles and scopes changes; detached DOM never claims a visual proof',()=>{
  expect(GOLDEN_HIERARCHY).toContain(FORM_PRESENTATION_RULES);
- for(const text of ['下划线','只读','统一列','Token','选中的元素或区域','导入保留原貌'])expect(FORM_PRESENTATION_RULES).toContain(text);
+ for(const text of ['下划线','只读','统一列','Token','选中的元素或区域','导入保留原貌','单字竖列','flex-1.min-w-0'])expect(FORM_PRESENTATION_RULES).toContain(text);
  expect(FORM_PRESENTATION_RULES).not.toMatch(/52px|12px/);
  expect(inspectFormPresentation(parseHtmlCopy('<input style="border:0;background:none">').doc)).toEqual([]);
+});
+test('option rows flag single-character vertical text strips and leave healthy horizontal copy alone',()=>{
+ const styleProxy=(base:CSSStyleDeclaration)=>new Proxy(base,{get(target,property){
+  if(property==='fontSize')return '14px';
+  if(property==='display')return 'block';
+  if(property==='visibility')return 'visible';
+  if(property==='opacity')return '1';
+  return Reflect.get(target,property);
+ }});
+ const size=(el:Element,width:number,height:number,left=16,top=40)=>Object.defineProperty(el,'getBoundingClientRect',{configurable:true,value:()=>({width,height,top,left,right:left+width,bottom:top+height,x:left,y:top,toJSON:()=>({})})});
+ const broken=parseHtmlCopy('<label data-nid="opt"><span class="card" style="width:280px"></span><input type="checkbox"><span data-nid="copy">两份机会的核心差异在轮岗时长与通勤</span></label>').doc;
+ Object.defineProperty(broken.documentElement,'clientWidth',{configurable:true,value:390});
+ size(broken.body,390,600,0,0);
+ for(const el of Array.from(broken.querySelectorAll('*')))size(el,el.getAttribute('data-nid')==='copy'?14:280,el.getAttribute('data-nid')==='copy'?240:48,el.getAttribute('data-nid')==='copy'?300:16);
+ const view=broken.defaultView!;const style=view.getComputedStyle.bind(view);
+ view.getComputedStyle=((el:Element)=>styleProxy(style(el))) as typeof view.getComputedStyle;
+ expect(inspectOptionTextColumns(broken).some(f=>f.code==='render_option_text_column')).toBe(true);
+ const healthy=parseHtmlCopy('<label data-nid="ok" class="row items-start gap-3"><input type="checkbox"><span data-nid="copy" class="flex-1 min-w-0 break-words">两份机会的核心差异在轮岗时长与通勤</span></label>').doc;
+ Object.defineProperty(healthy.documentElement,'clientWidth',{configurable:true,value:390});
+ size(healthy.body,390,600,0,0);
+ for(const el of Array.from(healthy.querySelectorAll('*')))size(el,300,40,40);
+ const healthyView=healthy.defaultView!;const healthyStyle=healthyView.getComputedStyle.bind(healthyView);
+ healthyView.getComputedStyle=((el:Element)=>styleProxy(healthyStyle(el))) as typeof healthyView.getComputedStyle;
+ expect(inspectOptionTextColumns(healthy)).toEqual([]);
 });
 for(const intent of ['create_screen','modify_screen'] as const)test(`${intent} system prompt actually carries device-independent form guidance`,()=>{
  for(const deviceProfile of ['pc','mobile'] as const)expect(PromptBuilder.buildSystemPrompt({intent,deviceProfile,frameWidth:deviceProfile==='pc'?1440:390,decisions:[],designSystem:techBlueTheme})).toContain(FORM_PRESENTATION_RULES);

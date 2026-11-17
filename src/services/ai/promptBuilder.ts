@@ -234,7 +234,11 @@ function fitSystemPromptToBudget(
   const refIdx = sections.findIndex((s) => s.id === 'reference_example');
   if (refIdx >= 0 && text.length > budget) {
     const current = sections[refIdx].content;
-    if (!current.includes('(mother:')) {
+    // Empty mother shells only burn budget; drop them before deeper craft cuts.
+    if (/^### REFERENCE EXAMPLE \(mother:[^\n]+\)\s*$/.test(current.trim())) {
+      sections.splice(refIdx, 1);
+      text = joinSections(sections);
+    } else if (!current.includes('(mother:')) {
       const device: 'pc' | 'mobile' =
         text.includes('MOBILE Profile') || text.includes('DEVICE RULES — MOBILE') ? 'mobile' : 'pc';
       sections[refIdx] = { ...sections[refIdx], content: shortReferenceFallback(device) };
@@ -261,28 +265,43 @@ function fitSystemPromptToBudget(
     const craftIdx2 = sections.findIndex((s) => s.id === 'craft_references');
     if (craftIdx2 >= 0) {
       let c = sections[craftIdx2].content;
-      c = c.replace(
+      const compactMobile =
+        'DEVICE RULES — MOBILE (390px):\n- SINGLE COLUMN ONLY.\n- NO HOVER STATES.\n- WIDTH CONTAINMENT: ≤390px; no 100vw; root <main class="col …">; .row.wrap; CTA may wrap.\n- PAGE GUTTER: body>main ~16px inset; keep content inset, never flush right. Only .hero-section/.full-bleed/.tabbar/.cta-fixed/.appbar/.status-bar edge-to-edge.\n- TABBAR: .tabbar equal-split .tabbar-item; optional .tabbar-soft/.tabbar-dock.\n- FULL-BLEED HERO BANNERS & GRADIENTS; CTA BUTTON PLACEMENT: ALWAYS match the button placement in the reference; RIBBON BADGES & STATUS STRIPS.\n- SEMANTIC REGION DECOUPLING: Never emit invisible white-on-white text.\n';
+      const next = c.replace(
         /DEVICE RULES — MOBILE \(390px\):[\s\S]*?(?=\nWECHAT NATIVE NAVIGATION|\nCUSTOM MOBILE NAVIGATION|\n#### 视觉层次金律)/,
-        'DEVICE RULES — MOBILE (390px):\n- SINGLE COLUMN ONLY.\n- NO HOVER STATES.\n- WIDTH CONTAINMENT: ≤390px; no 100vw; root <main class="col …">; tag clusters .row.wrap; long CTA may wrap.\n- PAGE GUTTER: base already insets body>main ~16px each side; keep copy/cards/buttons symmetrically inset; never flush to the right edge. Only .hero-section/.full-bleed/.tabbar/.cta-fixed/.appbar/.status-bar go edge-to-edge.\n- TABBAR: .tabbar full-width; direct .tabbar-item children equal-split (3~5); 28px icon+10px label; .is-active brand color; optional .tabbar-soft / .tabbar-dock; never left-clustered card chips.\n- FULL-BLEED HERO BANNERS & GRADIENTS: .hero-section full-bleed, 0 bottom radius.\n- CTA BUTTON PLACEMENT: in-flow submits; .cta-fixed only when sticky bottom bar fits. ALWAYS match the button placement in the reference!\n- RIBBON BADGES & STATUS STRIPS: .relative+.absolute; .notification-control; notice bars.\n- SEMANTIC REGION DECOUPLING: Never emit invisible white-on-white text.\n'
+        compactMobile
       );
-      sections[craftIdx2] = { ...sections[craftIdx2], content: c };
-      text = joinSections(sections);
-      craft = sections[craftIdx2].content;
+      // Never expand an already-compressed mobile block.
+      if (next.length < c.length) {
+        sections[craftIdx2] = { ...sections[craftIdx2], content: next };
+        text = joinSections(sections);
+        craft = sections[craftIdx2].content;
+      }
     }
   }
 
   if (refIdx >= 0 && text.length > budget) {
     const current = sections[refIdx].content;
-    const headerEnd = current.indexOf('\n');
-    if (headerEnd > 0) {
-      const overflow = text.length - budget;
-      const body = current.slice(headerEnd + 1);
-      const keptBody = body.slice(0, Math.max(0, body.length - overflow)).trimEnd();
+    const motherHeader = current.match(/^### REFERENCE EXAMPLE \(mother:[^\n]+\)/);
+    if (motherHeader && current.length > motherHeader[0].length + 32) {
+      // Keep mother id receipt; drop body rather than wiping to a bare header.
       sections[refIdx] = {
         ...sections[refIdx],
-        content: `${current.slice(0, headerEnd)}\n${keptBody}`
+        content: `${motherHeader[0]}\n[母版摘要已按预算压缩]`
       };
       text = joinSections(sections);
+    } else if (!motherHeader) {
+      const headerEnd = current.indexOf('\n');
+      if (headerEnd > 0) {
+        const overflow = text.length - budget;
+        const body = current.slice(headerEnd + 1);
+        const keptBody = body.slice(0, Math.max(0, body.length - overflow)).trimEnd();
+        sections[refIdx] = {
+          ...sections[refIdx],
+          content: `${current.slice(0, headerEnd)}\n${keptBody}`
+        };
+        text = joinSections(sections);
+      }
     }
   }
 
@@ -297,7 +316,7 @@ function fitSystemPromptToBudget(
     const lockAtHead = craft.indexOf('### VISUAL STYLE LOCK');
     if (lockAtHead === 0 || (lockAtHead > 0 && craft[lockAtHead - 1] === '\n')) {
       craft = craft.slice(0, lockAtHead).trimEnd();
-      applyCraft(craft);
+      if (applyCraft(craft)) return text;
     }
   }
 
@@ -417,7 +436,7 @@ ${renderComponentContracts(false, requestText, assets)}${mediaNote}${
       const deviceRules = sceneAppendix
         ? options.deviceProfile === 'pc'
           ? 'DEVICE RULES — PC (1440px):\n- .container-max≤1200px；SEMANTIC REGIONS: sidebar/toolbar/filter-bar。\n'
-          : `DEVICE RULES — MOBILE (390px):\n- SINGLE COLUMN ONLY.\n- NO HOVER STATES.\n- WIDTH CONTAINMENT: ≤390px; no 100vw; root <main class="col …">; tag clusters .row.wrap; long CTA may wrap.\n- PAGE GUTTER: base insets body>main ~16px each side; keep copy/cards/buttons symmetrically inset; never flush right. Only .hero-section/.full-bleed/.tabbar/.cta-fixed/.appbar/.status-bar edge-to-edge.\n- TABBAR: .tabbar full-width equal-split .tabbar-item; optional .tabbar-soft/.tabbar-dock.\n- FULL-BLEED HERO BANNERS & GRADIENTS; CTA BUTTON PLACEMENT: ALWAYS match the button placement in the reference; RIBBON BADGES & STATUS STRIPS.\n- SEMANTIC REGION DECOUPLING: Never emit invisible white-on-white text.\n${mobileNavigationPrompt({ deviceProfile: 'mobile', useCustomNavigation: options.useCustomNavigation })}`
+          : `DEVICE RULES — MOBILE (390px):\n- SINGLE COLUMN ONLY.\n- NO HOVER STATES.\n- WIDTH CONTAINMENT: ≤390px; no 100vw; root <main class="col">.\n- PAGE GUTTER: body>main ~16px inset; never flush right. Only .hero-section/.full-bleed/.tabbar/.cta-fixed/.appbar/.status-bar edge-to-edge.\n- TABBAR: .tabbar equal-split .tabbar-item; optional .tabbar-soft/.tabbar-dock.\n- FULL-BLEED HERO BANNERS & GRADIENTS; CTA BUTTON PLACEMENT: ALWAYS match the button placement in the reference; RIBBON BADGES & STATUS STRIPS.\n- SEMANTIC REGION DECOUPLING: Never emit invisible white-on-white text.\n${mobileNavigationPrompt({ deviceProfile: 'mobile', useCustomNavigation: options.useCustomNavigation })}`
         : getDeviceAestheticRules(options.deviceProfile, options.useCustomNavigation);
       const includeCreateState =
         intent === 'create_screen' && !motherSelection && !sceneAppendix;

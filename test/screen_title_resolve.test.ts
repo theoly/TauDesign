@@ -41,6 +41,16 @@ describe('页面标题裁决 · 禁止提示词前缀命名', () => {
     expect(sanitizeScreenTitle('送花表达心意 - 牵手币充值 (AI 方案)')).toBe('送花表达心意 - 牵手币充值');
   });
 
+  test('短提示与 artifact 标题相同时保留业务名，不回落到 h1', () => {
+    const prompt = '推荐匹配 · 暂无数据';
+    expect(isPromptLikeTitle(prompt, prompt)).toBe(false);
+    expect(resolveScreenTitle({
+      artifactTitle: prompt,
+      userPrompt: prompt,
+      html: '<div><h1>暂无数据</h1></div>'
+    })).toBe(prompt);
+  });
+
   test('create_screen 工具解析使用内容标题而非提示词前缀', () => {
     const html = `<main data-nid="root"><h1 data-nid="h">说说这次决定</h1><p>补充材料后继续。</p></main>`;
     const call = resolveToolFromAIResponse({

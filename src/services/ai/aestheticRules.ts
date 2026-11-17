@@ -20,8 +20,8 @@ export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY):
 - COLOR ROLES: bg/surface/surface-alt；品牌5–10%主操作；.text-primary主色字，.btn-primary主按钮；勿写死白字、蓝链接或整段彩色正文。
 - ${colorUsageRules()}
 - TYPE/SPACE: 标题/正文/辅助；组内.gap-1/.gap-2，组间更大。ICONS: Lucide/Heroicons风格图标仅引用已登记外部文件，.icon/.icon-mask继承currentColor；禁止内联SVG、猜路径或符号占位。没有已登记资源时保留完整文字控件，不删功能；禁无名图标按钮。
-- CONTENT: 真实感中文数据；禁占位/Lorem/“标题1”。按钮文字默认不换行：.btn 已设 white-space: nowrap；不插入<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal 覆盖。
-- COMPONENT LAYOUT CONTRACT: .nowrap管flex、.text-nowrap管文字。标签.row.wrap.gap-2不设.flex-1；姓名单行、职业位于姓名下方；润色不新增或移动节点；长文.flex-1.min-w-0；角标.relative+.absolute。.badge-soft表状态。
+- CONTENT: 真实感中文；禁占位/Lorem/“标题1”。按钮文字默认不换行：.btn 已设 white-space: nowrap；不插入<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal 覆盖。
+- COMPONENT LAYOUT CONTRACT: .nowrap管flex、.text-nowrap管文字。标签.row.wrap.gap-2不设.flex-1；姓名单行、职业位于姓名下方；润色不新增或移动节点；长文与勾选.flex-1.min-w-0.break-words，禁止单字竖排；角标.relative+.absolute。.badge-soft表状态。
 ${FORM_PRESENTATION_RULES}`;
 
 /** Only new pages should proactively diversify repeated controls' business states. */
@@ -35,13 +35,13 @@ const PC_RULES = `DEVICE RULES — PC (1440px):
 const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
 - SINGLE COLUMN ONLY. 禁宽表；谨慎.grid-2/.scroll-x。
 - NO HOVER STATES. 禁 :hover/hover类。
-- WIDTH CONTAINMENT: 全部内容≤390px；禁100vw/固定宽度大于视口；根节点用<main class="col …">；标签簇用.row.wrap.gap-2；列内/吸底长按钮允许换行，勿用nowrap把父列撑破。
-- PAGE GUTTER: 基座已为body>main左右注入约16px margin；正文/卡片/按钮不得再贴齐视口右缘。左右呼吸须对称。仅.hero-section/.full-bleed/.tabbar/.cta-fixed/.appbar/.status-bar可贴边。禁给根main再写width:100vw或仅左侧padding。
+- WIDTH CONTAINMENT: ≤390px；禁100vw/超视口固定宽；根<main class="col …">；标签.row.wrap.gap-2；列内/吸底长按钮可换行，勿nowrap撑破父列。
+- PAGE GUTTER: body>main已约16px左右margin；正文/卡片/按钮勿贴右缘，左右对称。仅.hero-section/.full-bleed/.tabbar/.cta-fixed/.appbar/.status-bar可贴边。禁根main再写width:100vw或仅左侧padding。
 - .py-4/.px-0或内容区.p-4；.text-md；.input-touch/.tap-target；.safe-bottom；不预留系统顶栏高度。
-- FULL-BLEED HERO BANNERS & GRADIENTS: immersive brand/gradient headers use .hero-section full width, no horizontal margins, 0 bottom radius; cards below with normal spacing or gentle overlap. Full-bleed media use .full-bleed.
-- CTA BUTTON PLACEMENT: card/sheet submits stay in-flow; use .cta-fixed only for sticky full-width bottom bars or when the reference shows them. ALWAYS match the button placement in the reference!
-- RIBBON BADGES & STATUS STRIPS: corner labels need reserved space via .relative+.absolute; notification badges use .notification-control; notice bars use .bg-warning-light/.bg-surface-alt.
-- TABBAR: 多页根导航用.tabbar全宽贴底；子项必须是直接子级.tabbar-item（3~5项均分铺满，禁左侧挤成小卡片组）；图标28px+10px文案；选中.is-active用品牌色。默认微信通用底栏；轻品牌可加.tabbar-soft；消费/生活感可用.tabbar.tabbar-dock悬浮圆角。角标不遮标题与主体。
+- FULL-BLEED HERO BANNERS & GRADIENTS: .hero-section full width, no horizontal margins, 0 bottom radius; cards below normal spacing/overlap; .full-bleed media.
+- CTA BUTTON PLACEMENT: card/sheet submits in-flow; .cta-fixed only for sticky full-width bottom bars or when the reference shows them. ALWAYS match the button placement in the reference!
+- RIBBON BADGES & STATUS STRIPS: .relative+.absolute; .notification-control; notice bars .bg-warning-light/.bg-surface-alt.
+- TABBAR: .tabbar全宽贴底；直接子级.tabbar-item（3~5均分）；28px图标+10px文案；.is-active品牌色；可选.tabbar-soft/.tabbar-dock。角标不遮主体。
 - SEMANTIC REGION DECOUPLING: .hero-section与自定义导航解耦；Never emit invisible white-on-white text.`;
 
 export function getDeviceAestheticRules(device: DeviceProfile, useCustomNavigation = false): string {

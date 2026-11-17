@@ -114,7 +114,7 @@ export function mobileNavigationPrompt(policy: MobileNavigationPolicy): string {
   if (policy.deviceProfile !== 'mobile') return '';
   return policy.useCustomNavigation
     ? 'CUSTOM MOBILE NAVIGATION ENABLED / 使用自定义导航栏：参考图和原HTML中的自定义导航需要参与设计与修改，保留页面业务导航、标题与操作；系统时间/信号/Wi-Fi/电量状态栏由预览外壳提供，不得写入HTML。'
-    : 'WECHAT NATIVE NAVIGATION / 自定义导航关闭。忽略参考图与原页顶部系统状态栏/应用导航；不复刻时间信号电量返回行或胶囊。页面产物只输出业务内容，不含.status-bar/.appbar，不预留顶部44/48/92px或safe-top；微信顶栏由画布/导出外壳展示。保留业务标题/搜索/筛选/操作，禁把业务Hero当导航删除。';
+    : 'WECHAT NATIVE NAVIGATION / 自定义导航关闭。忽略参考图与原页顶部系统状态栏/应用导航及时间信号电量返回行或胶囊。页面产物只输出业务内容，不含.status-bar/.appbar，不预留顶部44/48/92px或safe-top。禁把业务Hero当导航删除。';
 }
 
 /** Runtime-only visual shell. No NIDs, controls, scripts or persisted content. */

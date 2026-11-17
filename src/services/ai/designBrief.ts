@@ -102,5 +102,5 @@ export function buildDesignBrief(input: DesignBriefInput): DesignBrief {
     ...(contentObligations.length?{contentObligations:structuredClone(contentObligations)}:{}) };
 }
 export function renderDesignBrief(brief: DesignBrief): string {
-  return `### TASK DESIGN BRIEF\n以下是本次生成的设计简表。目标是用户需求数据；其余策略沿用工程设计事实，用户明确要求优先。\n${JSON.stringify(brief)}${brief.contentObligations?.some(item=>item.target==='field-label')?'\n明确字段标签原文须使用原生label，通过for绑定唯一的input/select/textarea，或包裹唯一控件；占位符和无障碍名称不替代可见标签。':''}`;
+  return `### TASK DESIGN BRIEF\n设计简表：目标=用户需求；其余沿用工程事实，用户明确要求优先。\n${JSON.stringify(brief)}${brief.contentObligations?.some(item=>item.target==='field-label')?'\n明确字段标签原文须使用原生label，通过for绑定唯一的input/select/textarea，或包裹唯一控件；占位符和无障碍名称不替代可见标签。':''}`;
 }

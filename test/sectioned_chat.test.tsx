@@ -1,6 +1,6 @@
 import {chatPageTaskPlan} from './fixtures/pageTaskPlan';
 import {defaultPageComposition} from '../src/services/ai/pageComposition';
-import {withMultiPageTasks} from './fixtures/multiPageTask';
+import {twoPageRequest,withMultiPageTasks} from './fixtures/multiPageTask';
 import {waitForChatIdle} from './modification_review_helpers';
 import {afterEach,beforeEach,expect,test} from 'bun:test';
 import React,{act} from 'react';
@@ -44,5 +44,5 @@ test('区块失败保持原工程，继续只请求未完成区块，不再规�
  await act(async()=>{button('继续区块设计').click();await delay();});await waitForChatIdle(host);expect(calls).toHaveLength(5);expect(calls[4].jsonSchema).toBeUndefined();expect(calls[4].messages.at(-1)?.content).toContain('section-2');expect(Object.keys(useProjectStore.getState().screens)).toHaveLength(1);
 });
 test('显式多页请求优先展示可确认的页面计划，分区偏好不允许直接执行或覆盖页面',async()=>{
- await send('创建两个页面');expect(calls).toHaveLength(1);expect((calls[0].jsonSchema?.properties as any)?.pages).toBeDefined();expect(host.textContent).toContain('确认计划并生成 2');expect(Object.keys(useProjectStore.getState().screens)).toHaveLength(0);
+ await send(twoPageRequest());expect(calls).toHaveLength(1);expect((calls[0].jsonSchema?.properties as any)?.pages).toBeDefined();expect(host.textContent).toContain('确认计划并生成 2');expect(Object.keys(useProjectStore.getState().screens)).toHaveLength(0);
 });
