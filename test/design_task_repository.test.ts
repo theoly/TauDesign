@@ -53,7 +53,7 @@ test('invalid tasks remain visible as fixed diagnostics; explicit cleanup leaves
  await expect(removeCorruptDesignTask(m.storage,'p','design-broken',()=>false)).rejects.toThrow('变化');expect(m.files.has('tasks/design-broken/manifest.json')).toBe(true);
  await removeCorruptDesignTask(m.storage,'p','design-broken');expect(m.files.has('tasks/design-broken/manifest.json')).toBe(false);expect(m.files.get('screens/page.html')).toBe('page');expect(m.files.get('assets/images/a.png')).toBe('asset');expect(m.files.get('deliveries/a.json')).toBe('delivery');expect((await readDesignTask(m.storage,'p',i.id))?.task.id).toBe(i.id);
 });
-test('a repaired record cannot be deleted through the broken-record action and scan limits are explicit',async()=>{
+test('a repaired record cannot be deleted through the broken-record action and index rebuild surfaces all invalid folders',async()=>{
  const m=memory(),i=input();m.files.set(`tasks/${i.id}/manifest.json`,'broken');expect((await listDesignTaskIndex(m.storage,'p')).invalid).toHaveLength(1);await saveDesignTask(m.storage,i,[]);await expect(removeCorruptDesignTask(m.storage,'p',i.id)).rejects.toThrow('有效');
- for(let n=0;n<101;n++)m.files.set(`tasks/design-corrupt-${n}/manifest.json`,'broken');const index=await listDesignTaskIndex(m.storage,'p');expect(index.hasMore).toBe(true);expect(index.tasks.length+index.invalid.length).toBe(100);
+ for(let n=0;n<101;n++)m.files.set(`tasks/design-corrupt-${n}/manifest.json`,'broken');const index=await listDesignTaskIndex(m.storage,'p');expect(index.invalid.length).toBeGreaterThanOrEqual(101);expect(index.budget.limit).toBeGreaterThan(0);
 });

@@ -16,6 +16,8 @@ import {readBrowserProject,publishBrowserProject} from './browserProjectSnapshot
 import {browserResourceFileStore,initializeBrowserResources,isBrowserResourcePath} from './browserResourceStore';
 import {validatePublicationResources,type RenderResourceFile} from './renderResourceSnapshot';
 
+import {DESIGN_TASK_BYTE_BUDGET} from './designTaskIndex';
+
 export interface TaskArchiveFile {path:string;contents:string}
 export function validateTaskArchive(files:TaskArchiveFile[],deletedMarker?:string,directory=true){
  if(files.length>5000||!directory&&(files.length>0||deletedMarker===undefined)||new Set(files.map(file=>file.path)).size!==files.length)throw Error('任务归档文件数量或身份无效。');let total=0;
@@ -177,18 +179,29 @@ export class LocalStorageStorage implements ProjectStorage {
   publishManagedSnapshot(expected:string,changes:ProjectFileChange[],resources:RenderResourceFile[]=[]){validatePublicationResources(resources);return this.projectLock(()=>publishBrowserProject(this.scopeKey,()=>this.legacyManagedFiles(),expected,changes,{files:resources,legacy:()=>this.legacyResources()}));}
   private taskPath(rel:string):{id:string;tail:string}|undefined{
     if(!rel.startsWith('tasks/'))return;const [,id,...parts]=rel.split('/');
+    if(id==='index.json'&&parts.length===0)return;
     if(id==='.locks'||!/^design-[a-z0-9-]{1,110}$/.test(id))throw Error('任务目录或锁记录不能通过普通入口修改。');return {id,tail:parts.join('/')};
+  }
+  private liveTaskBytes(){
+    const prefix=this.key('tasks/');let total=0;
+    for(const key of Object.keys(localStorage)){
+      if(!key.startsWith(prefix))continue;
+      const rest=key.slice(prefix.length),id=rest.split('/')[0];
+      if(!/^design-[a-z0-9-]{1,110}$/.test(id))continue;
+      const value=localStorage.getItem(key);if(value!==null)total+=new TextEncoder().encode(value).length;
+    }
+    return total;
   }
   private async taskLock<T>(id:string,run:()=>Promise<T>):Promise<T>{
     if(!/^design-[a-z0-9-]{1,110}$/.test(id))throw Error('任务标识无效。');
     if(!navigator.locks)throw Error('当前浏览器没有跨实例排他锁，不能安全写入任务。');
     return navigator.locks.request('design-tasks:'+this.key('tasks'),run);
   }
-  private assertTaskLive(id:string,allowClaim=false){
+  private assertTaskLive(id:string,allowClaim=false,incomingBytes=0){
     if(localStorage.getItem(this.key(`tasks/.locks/${id}.deleted`))!==null)throw Error('任务已被清理，拒绝迟到写入。');
     if(!allowClaim&&localStorage.getItem(this.key(`tasks/${id}/recovery-claim.json`))!==null)throw Error('任务已被新恢复任务接替，拒绝旧产物写入。');
     const prefix=this.key('tasks/'),names=new Set(Object.keys(localStorage).filter(key=>key.startsWith(prefix)).map(key=>key.slice(prefix.length).split('/')[0]).filter(name=>/^design-[a-z0-9-]{1,110}$/.test(name)));
-    if(!names.has(id)&&names.size>=40)throw Error('设计任务存档已达40项，请清理历史记录。');
+    if(!names.has(id)&&this.liveTaskBytes()+Math.max(0,incomingBytes)>DESIGN_TASK_BYTE_BUDGET.localStorage)throw Error('设计任务存档已超过体积预算，请清理历史记录。');
   }
   private async mutate<T>(rel:string,run:()=>Promise<T>):Promise<T>{
     if(projectTransactionPath(rel))throw Error('受管工程文件必须通过条件发布入口写入。');
@@ -218,7 +231,7 @@ export class LocalStorageStorage implements ProjectStorage {
     validateTaskArchive(files,deletedMarker,directory);
     return this.taskLock(id,async()=>{
       if(localStorage.getItem(this.key(`tasks/.locks/${id}.deleted`))!==null)throw Error('目标已有删除标记，未覆盖。');
-      if(directory)this.assertTaskLive(id,true);
+      if(directory)this.assertTaskLive(id,true,files.reduce((sum,file)=>sum+new TextEncoder().encode(file.contents).length,0));
       const prefix=this.key(`tasks/${id}/`);if(localStorage.getItem(this.key(`tasks/${id}`))!==null||Object.keys(localStorage).some(key=>key.startsWith(prefix)))throw Error('目标已有任务目录，未覆盖。');
       const entries=[...files].sort((a,b)=>Number(a.path==='manifest.json')-Number(b.path==='manifest.json')),written:Array<{path:string;value:string}>=[];
       try{

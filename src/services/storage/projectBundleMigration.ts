@@ -7,7 +7,7 @@ interface BundleEntry {path:string;binary:boolean;value:string}
 export interface BundleMigrationResult extends MigrationResult {archiveFiles:number;warnings:string[]}
 const roots=['candidates','drafts','deliveries','conversations','assets/images','assets/icons','assets/imports/fonts','assets/media','assets/history','tasks'];
 const maxFiles=5000,maxBytes=128*1024*1024,maxFileBytes=24*1024*1024;
-const textPath=(path:string)=>Boolean(taskArchiveLocation(path))||path==='candidates/current.json'||path==='conversations/index.json'||
+const textPath=(path:string)=>Boolean(taskArchiveLocation(path))||path==='candidates/current.json'||path==='conversations/index.json'||path==='tasks/index.json'||
  /^drafts\/draft-[a-z0-9-]+\.json$/.test(path)||
  /^conversations\/\d{4}-(?:0[1-9]|1[0-2])\.jsonl$/.test(path)||
  /^deliveries\/(?:screen-[a-f0-9]{8}\/delivery|restyle\/restyle|visual\/visual)-[a-z0-9-]+\.json$/.test(path);

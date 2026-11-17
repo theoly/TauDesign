@@ -32,8 +32,11 @@ test('separate-realm queue simulation still reaches real storage CAS and permits
  const f=fixture();class RealmA extends LocalStorageStorage{get scopeKey(){return 'realm-A-'+f.prefix;}}class RealmB extends LocalStorageStorage{get scopeKey(){return 'realm-B-'+f.prefix;}}
  const a=new RealmA(f.prefix),b=new RealmB(f.prefix),results=await Promise.allSettled([saveDesignTask(a,f.task,[{stepId:'body',html:'<main>A</main>',complete:true}]),saveDesignTask(b,f.task,[{stepId:'body',html:'<main>B</main>',complete:true}])]);expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);expect(results.filter(r=>r.status==='rejected')).toHaveLength(1);expect(await readDesignTask(a,'p',f.task.id)).toBeDefined();
 });
-test('the 40-task quota is serialized across different task identities as well',async()=>{
- const f=fixture();for(let i=0;i<39;i++)await f.a.writeTextAtomic(`tasks/design-quota-${i}/reserved.txt`,'reserved');
- const body=(id:string)=>JSON.stringify({version:1,id,projectId:'p',state:'draft'}),results=await Promise.allSettled([f.a.publishTaskManifest('design-quota-a',null,body('design-quota-a')),f.b.publishTaskManifest('design-quota-b',null,body('design-quota-b'))]);expect(results.filter(r=>r.status==='fulfilled')).toHaveLength(1);
- const identities=new Set((await f.a.listDir('tasks')).map(path=>path.split('/')[0]).filter(id=>id.startsWith('design-')));expect(identities.size).toBe(40);
+test('the soft byte budget blocks creating a new task identity when the archive is already full',async()=>{
+ const f=fixture(),{DESIGN_TASK_BYTE_BUDGET}=await import('../src/services/storage/designTaskIndex');
+ const pad='x'.repeat(Math.floor(DESIGN_TASK_BYTE_BUDGET.localStorage/2)+1024);
+ await f.a.writeTextAtomic('tasks/design-quota-seed/reserved.txt',pad);
+ await f.a.writeTextAtomic('tasks/design-quota-seed-2/reserved.txt',pad);
+ const body=(id:string)=>JSON.stringify({version:1,id,projectId:'p',state:'draft'});
+ await expect(f.a.publishTaskManifest('design-quota-a',null,body('design-quota-a'))).rejects.toThrow(/体积预算/);
 });

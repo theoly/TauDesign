@@ -13,6 +13,14 @@ import {candidateAuthorizationBinding} from '../ai/candidateInputBinding';
 import {sameRecordedHtml} from '../ai/taskProvenance';
 import {validTreeTaskCheckpoint,checkTreeLeafArtifact,type TreeTaskCheckpoint} from '../ai/treeTaskCheckpoint';
 import {readPublicationCommits,matchesPublicationCommit} from './projectPublicationRecord';
+import {
+ DESIGN_TASK_PAGE_SIZE,designTaskInvalidMessage,entryFromTask,estimateTaskDirBytes,
+ measureLiveTaskBytes,pageEntries,readCatalog,removeEntry,
+ taskByteBudget,upsertEntry,writeCatalog,type DesignTaskCatalog,type DesignTaskIndexEntry,
+} from './designTaskIndex';
+
+export {DESIGN_TASK_BYTE_BUDGET,DESIGN_TASK_PAGE_SIZE,taskByteBudget,TASK_INDEX_PATH} from './designTaskIndex';
+export type {DesignTaskIndexEntry,DesignTaskCatalog} from './designTaskIndex';
 
 export interface TaskPublication {id:string;kind:'candidate'|'batch';at:number;screenIds:string[]}
 
@@ -76,15 +84,28 @@ export async function saveDesignTask(storage:ProjectStorage,input:Omit<SavedDesi
   }
   if(!valid(task,input.projectId)||new TextEncoder().encode(JSON.stringify(task)).length>800000)throw Error('任务清单无效或过大。');
   const folders=await taskFolders(storage);
-  if(!folders.includes(task.id)&&folders.length>=40)throw Error('设计任务存档已达40项，请在任务记录中清理历史任务。');
+  if(!folders.includes(task.id))await assertTaskBudget(storage,bytes+new TextEncoder().encode(JSON.stringify(task)).length+(treeJson?new TextEncoder().encode(treeJson).length:0));
   await storage.ensureDir(`${dir(task.id)}/artifacts`);
   for(let i=0;i<parts.length;i++)await storage.writeTextAtomic(artifacts[i].path,parts[i].html);
   if(treeJson)await storage.writeTextAtomic(task.generationTree!.path,treeJson);
   if(storage.publishTaskManifest)await storage.publishTaskManifest(task.id,expected??null,JSON.stringify(task));else await storage.writeTextAtomic(`${dir(task.id)}/manifest.json`,JSON.stringify(task));
   const keep=new Set(artifacts.map(a=>a.path));
   for(const name of (await storage.listDir(`${dir(task.id)}/artifacts`)).slice(0,128)){const path=`${dir(task.id)}/artifacts/${name}`;if(/^[a-z0-9-]{1,80}-[a-f0-9]{64}\.html$/.test(name)&&!keep.has(path))await storage.remove(path).catch(()=>{});}
+  const taskBytes=await estimateTaskDirBytes(storage,task.id);
+  await mutateCatalog(storage,input.projectId,catalog=>upsertEntry(catalog,entryFromTask(task,taskBytes)));
   return task;
  });
+}
+async function assertTaskBudget(storage:ProjectStorage,incomingBytes:number){
+ const limit=taskByteBudget(storage.kind);
+ const existing=await readCatalog(storage);
+ const used=existing?.totalBytes??await measureLiveTaskBytes(storage);
+ if(used+Math.max(0,incomingBytes)>limit)throw Error(`设计任务存档已超过体积预算（${formatBudget(used)}/${formatBudget(limit)}），请在任务记录中清理历史任务。`);
+}
+function formatBudget(bytes:number){return bytes>=1024*1024*1024?`${(bytes/(1024*1024*1024)).toFixed(1)}GiB`:bytes>=1024*1024?`${Math.ceil(bytes/(1024*1024))}MiB`:`${Math.ceil(bytes/1024)}KiB`;}
+async function mutateCatalog(storage:ProjectStorage,projectId:string,update:(catalog:DesignTaskCatalog)=>DesignTaskCatalog){
+ const catalog=await ensureCatalog(storage,projectId);
+ await writeCatalog(storage,update(catalog));
 }
 async function readRecoveryClaim(storage:ProjectStorage,id:string):Promise<{newTaskId:string;createdAt:number}|undefined>{
  try{const raw=await boundedText(storage,`${dir(id)}/recovery-claim.json`,2048);if(!raw)return;const value=JSON.parse(raw);
@@ -111,23 +132,108 @@ export async function readDesignTask(storage:ProjectStorage,projectId:string,id:
  }catch{return;}
 }
 export async function listDesignTasks(storage:ProjectStorage,projectId:string,includeCompleted=false):Promise<SavedDesignTask[]>{
- return (await listDesignTaskIndex(storage,projectId,includeCompleted)).tasks;
+ const tasks:SavedDesignTask[]=[];let cursor:string|undefined,guard=0;
+ do{const page=await listDesignTaskPage(storage,projectId,{includeCompleted,limit:DESIGN_TASK_PAGE_SIZE,cursor});tasks.push(...page.tasks);cursor=page.hasMore?page.nextCursor:undefined;guard++;}while(cursor&&guard<200);
+ return tasks;
 }
-export interface DesignTaskIndex {tasks:SavedDesignTask[];invalid:Array<{id:string;message:string}>;hasMore:boolean;publications:Record<string,TaskPublication>}
+export interface DesignTaskIndex {
+ tasks:SavedDesignTask[];invalid:Array<{id:string;message:string}>;hasMore:boolean;publications:Record<string,TaskPublication>;
+ totalMatching:number;nextCursor?:string;budget:{used:number;limit:number;kind:ProjectStorage['kind']};entries:DesignTaskIndexEntry[];
+}
+/** Manifest-only read for index rebuild and list hydration; does not load HTML artifacts. */
+export async function readDesignTaskManifest(storage:ProjectStorage,projectId:string,id:string):Promise<SavedDesignTask|undefined>{
+ try{const raw=await boundedText(storage,`${dir(id)}/manifest.json`,800000);if(!raw)return;const task=JSON.parse(raw) as SavedDesignTask;if(task.id!==id||!valid(task,projectId))return;return task;}catch{return;}
+}
+async function ensureCatalog(storage:ProjectStorage,projectId:string):Promise<DesignTaskCatalog>{
+ const existing=await readCatalog(storage);
+ if(existing){
+  const folders=new Set(await taskFolders(storage));
+  const indexed=new Set([...existing.entries.map(e=>e.id),...existing.invalid.map(i=>i.id)]);
+  if(folders.size===indexed.size&&[...folders].every(id=>indexed.has(id)))return existing;
+ }
+ return rebuildDesignTaskCatalog(storage,projectId);
+}
+/** Scan task folders and rewrite `tasks/index.json` without loading artifact HTML. */
+export async function rebuildDesignTaskCatalog(storage:ProjectStorage,projectId:string):Promise<DesignTaskCatalog>{
+ const names=await taskFolders(storage),entries:DesignTaskIndexEntry[]=[],invalid:DesignTaskCatalog['invalid']=[];
+ for(const id of names){
+  const task=projectId?await readDesignTaskManifest(storage,projectId,id):undefined;
+  if(!task){
+   // Without projectId, still accept structurally valid manifests for byte accounting.
+   const raw=await boundedText(storage,`${dir(id)}/manifest.json`,800000).catch(()=>null);
+   let parsed:SavedDesignTask|undefined;
+   try{parsed=raw?JSON.parse(raw):undefined;}catch{parsed=undefined;}
+   if(parsed&&parsed.id===id&&validId(parsed.id)&&['draft','blocked','completed','cancelled'].includes(parsed.state)){
+    const bytes=await estimateTaskDirBytes(storage,id);
+    entries.push(entryFromTask(parsed as SavedDesignTask,bytes,{recoveryClaimed:Boolean(await readRecoveryClaim(storage,id)),deletionPending:await storage.exists(`tasks/.locks/${id}.deleted`)}));
+   }else invalid.push({id,message:designTaskInvalidMessage});
+   continue;
+  }
+  const bytes=await estimateTaskDirBytes(storage,id);
+  entries.push(entryFromTask(task,bytes,{recoveryClaimed:Boolean(await readRecoveryClaim(storage,id)),deletionPending:await storage.exists(`tasks/.locks/${id}.deleted`)}));
+ }
+ const catalog:DesignTaskCatalog={version:1,updatedAt:Date.now(),totalBytes:entries.reduce((sum,e)=>sum+e.bytes,0),entries,invalid};
+ await writeCatalog(storage,catalog).catch(()=>{/* Index write is auxiliary; readers can rebuild again. */});
+ return catalog;
+}
+async function enrichIndexEntry(storage:ProjectStorage,projectId:string,entry:DesignTaskIndexEntry):Promise<DesignTaskIndexEntry>{
+ if(entry.publication&&entry.recoveryClaimed!==undefined&&entry.deletionPending!==undefined)return entry;
+ const task=await readDesignTaskManifest(storage,projectId,entry.id);if(!task)return entry;
+ const recoveryClaimed=entry.recoveryClaimed??Boolean(await readRecoveryClaim(storage,entry.id));
+ const deletionPending=entry.deletionPending??await storage.exists(`tasks/.locks/${entry.id}.deleted`);
+ const publication=entry.publication??await publicationHint(storage,projectId,task).catch(()=>undefined);
+ return entryFromTask(task,entry.bytes,{...(publication?{publication}:{}),...(recoveryClaimed?{recoveryClaimed}:{}),...(deletionPending?{deletionPending}:{})});
+}
+export async function listDesignTaskPage(storage:ProjectStorage,projectId:string,opts:{includeCompleted?:boolean;limit?:number;cursor?:string}={}):Promise<DesignTaskIndex>{
+ const includeCompleted=Boolean(opts.includeCompleted),limit=Math.min(200,Math.max(1,opts.limit??DESIGN_TASK_PAGE_SIZE));
+ const catalog=await ensureCatalog(storage,projectId);
+ let source=catalog.entries;
+ if(!includeCompleted){
+  source=[];
+  for(const entry of catalog.entries){
+   if(entry.state==='completed'&&!entry.publication){source.push(entry);continue;}
+   source.push(await enrichIndexEntry(storage,projectId,entry));
+  }
+ }
+ const {page,hasMore,nextCursor,totalMatching}=pageEntries(source,{includeCompleted,limit,cursor:opts.cursor});
+ const tasks:SavedDesignTask[]=[],invalid=[...catalog.invalid],publications:Record<string,TaskPublication>={},outEntries:DesignTaskIndexEntry[]=[];
+ for(const entry of page){
+  const enriched=includeCompleted?await enrichIndexEntry(storage,projectId,entry):entry;
+  if(enriched.publication)publications[enriched.id]=enriched.publication;
+  const task=await readDesignTaskManifest(storage,projectId,enriched.id);
+  if(!task){invalid.push({id:enriched.id,message:designTaskInvalidMessage});continue;}
+  tasks.push(task);outEntries.push(enriched);
+ }
+ const limitBytes=taskByteBudget(storage.kind);
+ return {tasks,invalid:dedupeInvalid(invalid),hasMore,publications,totalMatching,nextCursor,budget:{used:catalog.totalBytes,limit:limitBytes,kind:storage.kind},entries:outEntries};
+}
+function dedupeInvalid(rows:Array<{id:string;message:string}>){
+ const seen=new Set<string>(),out:typeof rows=[];
+ for(const row of rows){if(seen.has(row.id))continue;seen.add(row.id);out.push(row);}
+ return out;
+}
 /** Directory identities and fixed diagnostics only; never surface damaged JSON or a Provider echo. */
 export async function listDesignTaskIndex(storage:ProjectStorage,projectId:string,includeCompleted=false):Promise<DesignTaskIndex>{
- const names=(await taskFolders(storage)).sort().reverse(),tasks:SavedDesignTask[]=[],invalid:DesignTaskIndex['invalid']=[],publications:Record<string,TaskPublication>={};
- for(const id of names.slice(0,100)){
-  const saved=await readDesignTask(storage,projectId,id);
-  if(!saved){invalid.push({id,message:'此任务缺失、格式不受支持、超出读取额度或文件完整性校验失败；不能恢复。'});continue;}
-  if(saved.publication)publications[id]=saved.publication;
-  if(includeCompleted||saved.task.state!=='completed'&&!saved.publication&&!saved.recoveryClaim&&!saved.deletionPending)tasks.push(saved.task);
- }
- const ordered=tasks.sort((a,b)=>b.updatedAt-a.updatedAt);return {tasks:ordered.slice(0,40),invalid,hasMore:names.length>100||ordered.length>40,publications};
+ return listDesignTaskPage(storage,projectId,{includeCompleted,limit:DESIGN_TASK_PAGE_SIZE});
 }
 function taskMatchesDelivery(task:SavedDesignTask,parts:Array<{stepId:string;html:string;complete:boolean}>,record:NonNullable<Awaited<ReturnType<DeliveryRepository['get']>>>){
  const contract=record.candidate.workflowContract,body=parts.find(part=>part.stepId==='page-body'&&part.complete);
  return task.contract.operation==='modify'&&Boolean(contract)&&candidateAuthorizationBinding(task.contract)===candidateAuthorizationBinding(contract)&&task.contextFingerprint===record.candidate.inputContextFingerprint&&Boolean(body&&sameRecordedHtml(body.html,record.after.htmlContent));
+}
+/** List/index hint: match delivery by task id without loading artifact HTML. Settlement still uses full verification. */
+async function publicationHint(storage:ProjectStorage,projectId:string,task:SavedDesignTask):Promise<TaskPublication|undefined>{
+ if(task.state==='completed'&&task.delivery)return {id:task.delivery.id,kind:'candidate',at:task.delivery.completedAt,screenIds:[task.delivery.screenId]};
+ const commits=await readPublicationCommits(storage,projectId);
+ if(task.treeCheckpoint?.delivery){
+  const commit=commits.find(row=>row.id===task.treeCheckpoint!.delivery.planId&&row.kind==='batch');
+  if(commit)return {id:commit.id,kind:'batch',at:commit.at,screenIds:task.treeCheckpoint.delivery.pages.map(page=>page.screenId)};
+ }
+ if(task.contract.operation!=='modify')return;
+ const repository=new DeliveryRepository(storage,projectId);
+ for(const commit of commits.filter(row=>row.kind==='candidate'&&row.screens.length===1).reverse()){
+  const record=await repository.get(commit.screens[0].id,commit.id);
+  if(record?.publicationId===commit.id&&record.status==='applied'&&record.candidate.workflowContract?.taskId===task.id)return {id:commit.id,kind:'candidate',at:commit.at,screenIds:[record.after.id]};
+ }
 }
 async function taskPublication(storage:ProjectStorage,projectId:string,task:SavedDesignTask,parts:Array<{stepId:string;html:string;complete:boolean}>,tree?:GenerationTree):Promise<TaskPublication|undefined>{
  if(!task.treeCheckpoint&&task.contract.operation!=='modify')return;
@@ -161,7 +267,10 @@ export async function settleDesignTaskPublication(storage:ProjectStorage,project
   if(current.task.state==='completed')return true;
   const completed={...current.task,state:'completed' as const,updatedAt:Math.max(Date.now(),current.task.updatedAt)};
   if(!valid(completed,projectId))throw Error('任务完成记录无效。');check();
-  if(!storage.publishTaskManifest)throw Error('当前存储不能安全同步任务状态。');await storage.publishTaskManifest(id,expected??null,JSON.stringify(completed));return true;
+  if(!storage.publishTaskManifest)throw Error('当前存储不能安全同步任务状态。');await storage.publishTaskManifest(id,expected??null,JSON.stringify(completed));
+  const bytes=await estimateTaskDirBytes(storage,id);
+  await mutateCatalog(storage,projectId,catalog=>upsertEntry(catalog,entryFromTask(completed,bytes,{publication:current.publication})));
+  return true;
  });
 }
 /** Historical settlement only. It neither adopts a candidate nor restores execution permission. */
@@ -188,7 +297,10 @@ export async function settleDesignTaskDelivery(storage:ProjectStorage,projectId:
   // Recheck after awaited reads; do not revive a manifest removed by cleanup.
   if(!await storage.exists(path)||await storage.exists(`${dir(contract.taskId)}/recovery-claim.json`))throw Error('任务已清理或被新恢复任务接替，未改写旧记录。');
   if(!isCurrent())throw Error('工程或任务选择已变化，未同步历史。');
-  if(storage.publishTaskManifest)await storage.publishTaskManifest(contract.taskId,expected??null,JSON.stringify(completed));else await storage.writeTextAtomic(path,JSON.stringify(completed));return true;
+  if(storage.publishTaskManifest)await storage.publishTaskManifest(contract.taskId,expected??null,JSON.stringify(completed));else await storage.writeTextAtomic(path,JSON.stringify(completed));
+  const bytes=await estimateTaskDirBytes(storage,contract.taskId);
+  await mutateCatalog(storage,projectId,catalog=>upsertEntry(catalog,entryFromTask(completed,bytes,{publication:{id:deliveryId,kind:'candidate',at:record.completedAt??Date.now(),screenIds:[screenId]}})));
+  return true;
  });
 }
 export async function readDesignTaskTraces(storage:ProjectStorage,projectId:string,id:string):Promise<{traces:TaskRequestTrace[];ignoredRows:number;lateBudget?:TaskBudgetSnapshot}>{
@@ -208,6 +320,7 @@ export async function claimDesignTaskRecovery(storage:ProjectStorage,source:Save
 export async function removeDesignTask(storage:ProjectStorage,projectId:string,id:string):Promise<void>{
  return serialized(storage,async()=>{const expected=storage.taskManifestIdentity?await storage.taskManifestIdentity(id):undefined;const saved=await readDesignTask(storage,projectId,id);if(!saved)throw Error('任务已损坏或不属于当前工程。');
   await removeTaskDirectory(storage,id,()=>true,expected);
+  await mutateCatalog(storage,projectId,catalog=>removeEntry(catalog,id));
  });
 }
 async function removeTaskDirectory(storage:ProjectStorage,id:string,isCurrent:()=>boolean=()=>true,expected?:string|null){
@@ -226,5 +339,6 @@ export async function removeCorruptDesignTask(storage:ProjectStorage,projectId:s
   if(!(await taskFolders(storage)).includes(id))throw Error('任务目录不存在，请刷新列表。');
   if(await readDesignTask(storage,projectId,id))throw Error('记录已恢复有效，请刷新列表后按普通任务检查和清理。');
   await removeTaskDirectory(storage,id,isCurrent,expected);
+  await mutateCatalog(storage,projectId,catalog=>removeEntry(catalog,id));
  });
 }

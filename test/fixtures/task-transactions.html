@@ -21,7 +21,7 @@ window.taskTransactionFixture={
  publish:async(expected,sequence)=>{try{await storage.publishTaskManifest(id,expected,body(id,sequence));return {ok:true};}catch(error){return {ok:false,message:error.message};}},
  remove:expected=>storage.deleteDesignTask(id,expected),
  late:async(expected)=>{const actions=[()=>storage.publishTaskManifest(id,expected,body(id,99)),()=>storage.writeTextAtomic(`tasks/${id}/artifacts/late.html`,'<main>late</main>'),()=>storage.appendLine(`tasks/${id}/attempts.jsonl`,'{}')],results=[];for(const action of actions)try{await action();results.push({ok:true});}catch(error){results.push({ok:false,message:error.message});}return {results,files:await storage.listDir(`tasks/${id}`)};},
- quotaSeed:async()=>{for(let n=0;n<39;n++)await storage.writeTextAtomic(`tasks/design-quota-${n}/reserved.txt`,'reserved');},
+ quotaSeed:async()=>{const pad='x'.repeat(4*1024*1024+1024);await storage.writeTextAtomic('tasks/design-quota-seed/reserved.txt',pad);await storage.writeTextAtomic('tasks/design-quota-seed-2/reserved.txt',pad);},
  quotaPublish:async suffix=>{const target='design-quota-'+suffix;try{await storage.publishTaskManifest(target,null,body(target));return {ok:true};}catch(error){return {ok:false,message:error.message};}},
  count:async()=>new Set((await storage.listDir('tasks')).map(path=>path.split('/')[0]).filter(id=>id.startsWith('design-'))).size
 };

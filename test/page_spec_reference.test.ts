@@ -29,6 +29,17 @@ test('quotation boundaries do not bridge lines or reinterpret escaped/nested clo
   expect(resolveScreenReferences(prompt,{}).unmatchedNames).toEqual([]);
  }
 });
+test('marketing or policy quotes after 沿用/复用现有 are not page references',()=>{
+ const prose='**布局要点**：不沿用现有“金融级”等未经验证安全宣传；不显示提现、钱包、金币或分享赚钱。';
+ expect(resolveScreenReferences(prose,{}).unmatchedNames).toEqual([]);
+ expect(resolveGenerationTarget({rawPrompt:prose,screens,activeScreenId:'home'}).action).toBe('create_screen');
+ for(const [opening,closing] of [['"','"'],['“','”'],['「','」']] as const){
+  expect(resolveScreenReferences(`禁止沿用现有${opening}金融级${closing}话术，新建合规说明页`,{}).unmatchedNames).toEqual([]);
+  expect(resolveScreenReferences(`不要复用现有${opening}金融级${closing}宣传文案`,screens).unmatchedNames).toEqual([]);
+  expect(resolveScreenReferences(`沿用现有页面${opening}订单详情 Order Detail${closing}`,screens).ids).toEqual(['detail']);
+  expect(resolveScreenReferences(`复用${opening}订单详情 Order Detail${closing}`,screens).ids).toEqual(['detail']);
+ }
+});
 test('genuine reference with missing closing quotes remains blocked without capturing the next line',()=>{
  for(const prompt of ['参考页面"缺少结束引号\n"下一行的文案"','参考页面“订单详情 Order Detail','@"订单详情 Order Detail']){
   const refs=resolveScreenReferences(prompt,screens);expect(refs.unmatchedNames).toEqual(['页名引号未闭合，请补全后重试']);expect(resolveGenerationTarget({rawPrompt:prompt,screens,activeScreenId:'home'}).action).toBe('needs_reference');

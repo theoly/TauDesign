@@ -14,7 +14,16 @@ const boundary=(value:string)=>!value || /^[\s，,。.!！？?；;：:、"“”
 
 interface QuotedText {name:string;start:number;end:number;unclosed?:true}
 const quotePairs:Record<string,string>={'"':'"','“':'”','「':'」','『':'』','《':'》'};
-const referenceCue=/(?:参考|基于|仿照|沿用|复用|读取|分析)(?:现有|原有|已有|原)?(?:页面|画框)?\s*$/;
+/**
+ * Page-reference cues immediately before a quote.
+ * - 参考/基于/… may omit 页面/画框 (`参考「登录页」`).
+ * - 沿用/复用 + 现有/原有 must name 页面/画框/页 — otherwise prose like
+ *   `不沿用现有“金融级”宣传` is marketing language, not a page reference.
+ * - Bare `沿用「登录页」` / `复用「首页」` remain valid.
+ */
+const referenceCue=/(?:(?:参考|基于|仿照|照着|借鉴|根据|读取|分析)(?:现有|原有|已有|原)?(?:页面|画框|页)?|(?:沿用|复用)(?:现有|原有|已有|原)?(?:页面|画框|页)|(?:沿用|复用))\s*$/;
+const negatedReferenceCue=/(?:不|勿|别|禁止|不要|无需|不用|并未)(?:再)?(?:参考|基于|仿照|照着|借鉴|根据|沿用|复用|读取|分析)(?:现有|原有|已有|原)?(?:页面|画框|页)?\s*$/;
+const bareReferencePrefix=/(?:参考|基于|仿照|照着|借鉴|根据)(?:现有|原有|已有|原)?(?:页面|画框|页)?\s*$|(?:沿用|复用)(?:现有|原有|已有|原)?(?:页面|画框|页)\s*$|(?:沿用|复用)\s*$/;
 /** Tokenize top-level pairs first: a closing ASCII quote is never a new reference opener. */
 function quotedText(text:string):QuotedText[]{
  const spans:QuotedText[]=[],stack:string[]=[];let start=-1;
@@ -30,8 +39,16 @@ function quotedText(text:string):QuotedText[]{
  if(stack.length)spans.push({name:text.slice(start+1).trim(),start,end:text.length,unclosed:true});
  return spans;
 }
-const cueBefore=(text:string,position:number)=>referenceCue.test(text.slice(0,position).trimEnd().slice(-32));
-const targetCueBefore=(text:string,position:number)=>/(?:参考|基于|仿照|沿用|复用|读取|分析|修改|调整|优化|润色|更新|重构|重做|改进|把|将)(?:现有|原有|已有|原)?(?:页面|画框)?\s*["“「『《]?\s*$/.test(text.slice(0,position).trimEnd().slice(-32));
+function cueBefore(text:string,position:number):boolean{
+ const before=text.slice(0,position).trimEnd();
+ if(negatedReferenceCue.test(before.slice(-40)))return false;
+ return referenceCue.test(before.slice(-32));
+}
+function targetCueBefore(text:string,position:number):boolean{
+ const before=text.slice(0,position).trimEnd();
+ if(negatedReferenceCue.test(before.slice(-40)))return false;
+ return /(?:参考|基于|仿照|照着|借鉴|根据|读取|分析|修改|调整|优化|润色|更新|重构|重做|改进|把|将)(?:现有|原有|已有|原)?(?:页面|画框|页)?\s*["“「『《]?\s*$|(?:沿用|复用)(?:现有|原有|已有|原)?(?:页面|画框|页)\s*["“「『《]?\s*$|(?:沿用|复用)\s*["“「『《]?\s*$/.test(before.slice(-32));
+}
 /** Shared by routing and context enrichment, including exact unknown-reference diagnostics. */
 export function quotedScreenReferences(text:string):QuotedText[]{
  return quotedText(text).filter(span=>(span.name||span.unclosed)&&cueBefore(text,span.start));
@@ -88,7 +105,7 @@ export function resolveScreenReferences(rawPrompt:string,screens:Record<string,R
         if(index>=createIndex)continue;
         // 2. 位于新建动词之前的名字，必须紧随参考语义前缀才构成参考源
         const prefix=text.slice(Math.max(0,index-24),index);
-        if(!/(?:参考|基于|仿照|照着|沿用|复用|借鉴|根据)\s*(?:现有|原有|已有|原)?(?:页面|画框)?\s*$/.test(prefix))continue;
+        if(negatedReferenceCue.test(prefix)||!bareReferencePrefix.test(prefix))continue;
       }
       candidates.push({name,start:index,end:index+name.length});
     }

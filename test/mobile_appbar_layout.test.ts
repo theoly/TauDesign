@@ -99,11 +99,15 @@ describe('CHK-F-04: 主体页面防重叠与防穿透保护', () => {
     expect(mobileCss).toContain('.row:has(> .badge, > .badge-soft, > .tag)');
   });
 
-  test('移动端默认页边距，全幅区可破出贴边', () => {
-    expect(mobileCss).toMatch(/body\s*\{[^}]*padding-left:\s*var\(--space-4/s);
-    expect(mobileCss).toMatch(/body\s*\{[^}]*padding-right:\s*var\(--space-4/s);
+  test('移动端默认页边距用 main margin，避免右贴边假象；全幅区可破出', () => {
+    expect(mobileCss).toMatch(/body\s*>\s*main[\s\S]*?margin-left:\s*var\(--space-4/);
+    expect(mobileCss).toMatch(/body\s*>\s*main[\s\S]*?margin-right:\s*var\(--space-4/);
+    expect(mobileCss).toMatch(/body\s*>\s*main[\s\S]*?max-width:\s*calc\(100% - 2 \* var\(--space-4/);
+    expect(mobileCss).toMatch(/body\s*\{[^}]*padding-left:\s*0/s);
+    expect(mobileCss).toMatch(/body\s*\{[^}]*padding-right:\s*0/s);
     expect(mobileCss).toContain('.full-bleed');
     expect(mobileCss).toMatch(/\.full-bleed[\s\S]*?margin-left:\s*calc\(-1 \* var\(--space-4/);
+    expect(mobileCss).toMatch(/body\s*>\s*\.appbar/);
     expect(mobileCss).toMatch(/\.tabbar:not\(\.tabbar-dock\)/);
     expect(mobileCss).toMatch(/\.hero-section/);
   });

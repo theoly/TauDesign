@@ -104,3 +104,7 @@ doc/page-request-scope/*
 !doc/project-reopen-recovery/
 doc/project-reopen-recovery/*
 !doc/project-reopen-recovery/*.md
+
+!doc/task-history-persistence/
+doc/task-history-persistence/*
+!doc/task-history-persistence/*.md

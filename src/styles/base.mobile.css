@@ -301,13 +301,39 @@
 html {
   overflow-x: clip;
 }
-/* 默认页边距：正文/卡片/按钮不贴窗口边缘；全幅区用破出规则 */
 body {
   max-width: 100%;
   overflow-x: clip;
   box-sizing: border-box;
-  padding-left: var(--space-4, 16px);
-  padding-right: var(--space-4, 16px);
+  /* 页边距不用 body padding：子项略超宽时会画进右侧 padding，再被 clip 成「右贴边、左留白」假象 */
+  padding-left: 0;
+  padding-right: 0;
+}
+/*
+ * 默认页边距：给页面根列加左右 margin（约 16px）。
+ * margin 在 overflow clip 边盒之外，超宽子项不会吞掉右侧呼吸区。
+ */
+body > main,
+body > .col {
+  box-sizing: border-box;
+  width: auto;
+  min-width: 0;
+  max-width: calc(100% - 2 * var(--space-4, 16px));
+  margin-left: var(--space-4, 16px);
+  margin-right: var(--space-4, 16px);
+  overflow-x: clip;
+}
+/* 直接挂在 body 的全幅壳层：不吃页边距 */
+body > .appbar,
+body > .status-bar,
+body > .tabbar,
+body > .cta-fixed,
+body > .hero-section,
+body > .full-bleed {
+  width: 100%;
+  max-width: 100%;
+  margin-left: 0;
+  margin-right: 0;
 }
 main,
 .col,
@@ -322,7 +348,7 @@ main,
   min-width: 0;
 }
 
-/* 全幅破出：英雄区、底栏、系统栏、显式 .full-bleed（全屏图等）贴齐视口边缘 */
+/* 全幅破出：在带页边距的 main/.col 内贴齐视口边缘 */
 .full-bleed,
 .hero-section,
 .tabbar:not(.tabbar-dock),

@@ -9,8 +9,25 @@ pub(crate) fn task_path(rel:&str)->Result<Option<(String,String)>,String>{
  let normalized=rel.replace('\\',"/");let parts=normalized.split('/').filter(|p|!p.is_empty()&&*p!=".").collect::<Vec<_>>();if parts.first()!=Some(&"tasks"){return Ok(None);}
  if rel.contains('\\')||parts.iter().any(|p|*p==".."){return Err("任务路径不能含反斜杠或相对跳转".into());}
  let id=parts.get(1).copied().unwrap_or("");if id==".locks"{return Err("任务锁记录只能由任务事务管理".into());}
+ if id=="index.json"&&parts.len()==2{return Ok(None);}
  if id.is_empty(){return Ok(None);}if !valid_id(id){return Err("任务目录标识无效".into());}
  Ok(Some((id.into(),parts.get(2..).unwrap_or(&[]).join("/"))))
+}
+#[cfg(not(test))]
+const TASK_BYTE_BUDGET:u64=2*1024*1024*1024;
+#[cfg(test)]
+const TASK_BYTE_BUDGET:u64=64*1024;
+fn dir_bytes(path:&PathBuf)->u64{
+ let Ok(meta)=fs::symlink_metadata(path) else{return 0;};
+ if meta.file_type().is_symlink(){return 0;}
+ if meta.is_file(){return meta.len();}
+ if !meta.is_dir(){return 0;}
+ let Ok(entries)=fs::read_dir(path) else{return 0;};
+ entries.filter_map(Result::ok).map(|entry|dir_bytes(&entry.path())).sum()
+}
+fn live_task_bytes(root:&PathBuf)->u64{
+ let Ok(entries)=fs::read_dir(root.join("tasks")) else{return 0;};
+ entries.filter_map(Result::ok).filter(|entry|entry.file_name().to_str().is_some_and(valid_id)).map(|entry|dir_bytes(&entry.path())).sum()
 }
 pub(crate) struct TaskGuard{_file:fs::File,root:PathBuf,id:String}
 impl TaskGuard{
@@ -21,8 +38,7 @@ impl TaskGuard{
  pub(crate) fn require_live(&self)->Result<(),String>{if self.deleted()?{Err("任务已被清理，拒绝迟到写入".into())}else{Ok(())}}
  pub(crate) fn require_capacity(&self)->Result<(),String>{
   if fs::symlink_metadata(self.root.join("tasks").join(&self.id)).is_ok(){return Ok(());}
-  let count=fs::read_dir(self.root.join("tasks")).map_err(|e|e.to_string())?.filter_map(Result::ok).filter(|entry|entry.file_name().to_str().is_some_and(valid_id)).count();
-  if count>=40{Err("设计任务存档已达40项，请清理历史记录".into())}else{Ok(())}
+  if live_task_bytes(&self.root)>=TASK_BYTE_BUDGET{Err("设计任务存档已超过体积预算，请清理历史记录".into())}else{Ok(())}
  }
  fn claimed(&self)->bool{self.root.join(format!("tasks/{}/recovery-claim.json",self.id)).exists()}
 }
@@ -148,9 +164,14 @@ mod tests{
   for rel in ["tasks","./tasks/./","tasks/.locks","tasks/design-a/manifest.json"]{assert!(project_delete(path.clone(),rel.into()).is_err(),"{rel}");}fs::remove_dir_all(root).unwrap();
  }
  #[test]
- fn project_task_quota_is_atomic_across_different_task_ids(){
-  let root=root();for n in 0..39{fs::create_dir_all(root.join(format!("tasks/design-quota-{n}"))).unwrap();}let path=root.to_str().unwrap().to_owned();let mut threads=Vec::new();
-  for id in ["design-quota-a","design-quota-b"]{let p=path.clone();threads.push(std::thread::spawn(move||project_publish_task_manifest(p,id.into(),None,manifest(id,"draft",1)).is_ok()));}assert_eq!(threads.into_iter().map(|t|t.join().unwrap()).filter(|ok|*ok).count(),1);assert_eq!(fs::read_dir(root.join("tasks")).unwrap().filter_map(Result::ok).filter(|entry|entry.file_name().to_str().is_some_and(valid_id)).count(),40);fs::remove_dir_all(root).unwrap();
+ fn project_task_byte_budget_blocks_new_folders_when_full(){
+  let root=root();let path=root.to_str().unwrap().to_owned();
+  // Seed one oversized task directory past the soft budget without going through publish.
+  let fat=root.join("tasks/design-fat");fs::create_dir_all(&fat).unwrap();fs::write(fat.join("pad.bin"),vec![b'x'; (TASK_BYTE_BUDGET as usize)+1]).unwrap();
+  assert!(project_publish_task_manifest(path.clone(),"design-new".into(),None,manifest("design-new","draft",1)).is_err());
+  fs::remove_dir_all(fat).unwrap();
+  project_publish_task_manifest(path,"design-new".into(),None,manifest("design-new","draft",1)).unwrap();
+  fs::remove_dir_all(root).unwrap();
  }
  #[test]
  fn child_lock_owner(){
@@ -189,8 +210,9 @@ mod tests{
  }
  #[test]
  fn archive_import_preserves_empty_directories_and_deletion_markers_without_consuming_folder_quota(){
-  let root=root();let path=root.to_str().unwrap().to_owned();for n in 0..40{project_import_task_archive(path.clone(),format!("design-empty-{n}"),vec![],None,true).unwrap();}
-  assert!(project_import_task_archive(path.clone(),"design-over-limit".into(),vec![],None,true).is_err());
+  let root=root();let path=root.to_str().unwrap().to_owned();
+  // Empty directories no longer hit a count cap; many empty folders remain importable.
+  for n in 0..120{project_import_task_archive(path.clone(),format!("design-empty-{n}"),vec![],None,true).unwrap();}
   project_import_task_archive(path.clone(),"design-old-deleted".into(),vec![],Some("historical marker\n".into()),false).unwrap();assert_eq!(fs::read_to_string(root.join("tasks/.locks/design-old-deleted.deleted")).unwrap(),"historical marker\n");
   assert!(project_import_task_archive(path,"design-old-deleted".into(),vec![],None,true).is_err());assert!(root.join("tasks/design-empty-0").is_dir());assert!(!root.join("tasks/design-old-deleted").exists());fs::remove_dir_all(root).unwrap();
  }

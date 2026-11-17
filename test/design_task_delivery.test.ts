@@ -55,7 +55,7 @@ test('a committed candidate sidecar is never restored twice; bytes and historica
 test('publication reads are strictly read-only; explicit settlement persists history without reviving execution',async()=>{
  const f=await setup(),path=`tasks/${f.saved.id}/manifest.json`,raw=await f.storage.readText(path),beforeHistory=structuredClone(useHistoryStore.getState().past),pages=JSON.stringify(useProjectStore.getState().screens);
  const saved=(await readDesignTask(f.storage,f.state.id,f.saved.id))!;expect(saved.task.state).toBe('draft');expect(saved.publication).toMatchObject({id:f.record.id,kind:'candidate',screenIds:['page']});
- expect((await listDesignTaskIndex(f.storage,f.state.id)).tasks).toHaveLength(0);const index=await listDesignTaskIndex(f.storage,f.state.id,true);expect(index.tasks[0].state).toBe('draft');expect(index.publications[f.saved.id]?.id).toBe(f.record.id);expect(await f.storage.readText(path)).toBe(raw);
+ expect((await listDesignTaskIndex(f.storage,f.state.id)).tasks).toHaveLength(0);const index=await listDesignTaskIndex(f.storage,f.state.id,true);expect(index.tasks[0].state).toBe('draft');expect(index.budget.limit).toBeGreaterThan(0);expect(await f.storage.readText(path)).toBe(raw);
  await expect(prepareTaskRecovery(f.storage,f.saved.id,useProjectStore.getState(),{id:'test'} as any,'m')).rejects.toThrow('已保存');
  await expect(settleDesignTaskPublication(f.storage,f.state.id,f.saved.id,()=>false)).rejects.toThrow('已变化');expect(await f.storage.readText(path)).toBe(raw);
  expect(await settleDesignTaskPublication(f.storage,f.state.id,f.saved.id)).toBe(true);const completed=(await readDesignTask(f.storage,f.state.id,f.saved.id))!;

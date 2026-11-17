@@ -21,6 +21,7 @@ import { captureScreenSnippetAsDataUrl } from '../../utils/screenCapture';
 import { Copy, Edit2, Smartphone, Monitor, Image as ImageIcon, Check } from 'lucide-react';
 
 import type {ContentTask} from '../../services/ai/explicitActionContent';
+import {ConfirmDialog} from '../common/ConfirmDialog';
 import {MediaDiagnosticsButton} from '../common/MediaDiagnosticsButton';
 interface ScreenFrameProps {
   contentTask?:ContentTask;
@@ -70,6 +71,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
 
   const [isCoverSetting, setIsCoverSetting] = useState(false);
   const [coverSetSuccess, setCoverSetSuccess] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const isActive = activeScreenId === screen.id;
   const frameWidth = settings.frameWidth;
@@ -761,18 +763,28 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (confirm(`确定删除画框 "${screen.name}" 吗？此操作不可恢复。`)) {
-                  removeScreen(screen.id);
-                }
+                setConfirmDelete(true);
               }}
               className="p-1 rounded transition text-sm leading-none text-slate-400 hover:text-red-400 hover:bg-slate-800"
               title="删除画框"
+              data-testid="screen-frame-delete"
             >
               ×
             </button>
           </div>
         )}
       </div>
+      {confirmDelete && (
+        <ConfirmDialog
+          title="删除画框"
+          message={<>将删除「<span className="font-medium text-slate-200">{screen.name}</span>」，此操作可通过撤销恢复，但仍请确认是否继续。</>}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => {
+            removeScreen(screen.id);
+            setConfirmDelete(false);
+          }}
+        />
+      )}
 
       {/* 原型画框卡片主体 (圆角无内嵌顶栏) */}
       {resourceFailure && <div role="alert" className="mb-2 rounded-lg border border-red-800 bg-red-950 p-2 text-xs text-red-200">

@@ -1,7 +1,7 @@
 import {ConversationStore,type ConversationTurn} from '../storage/conversationStore';
 import type {ProjectStorage} from '../storage/projectStorage';
 import {AttachmentStore} from '../storage/attachmentStore';
-import {listDesignTasks} from '../storage/designTaskRepository';
+import {listDesignTaskPage,readDesignTaskManifest} from '../storage/designTaskRepository';
 import type {ConversationFailure} from '../storage/conversationFailure';
 import type {DesignTaskContract} from './designWorkflow';
 import type {TaskBudgetSnapshot} from './taskBudget';
@@ -36,13 +36,20 @@ export async function archiveFailedConversation(source:FailureArchiveSource,resu
    assistant:{text:failure.message,failure,model:failure.model,durationMs:Math.max(0,Date.now()-source.startedAt),pageTaskHistory:capturePageTaskHistory(result.contract,source.request),designGuidanceHistory:captureDesignGuidanceHistory(result.contract,source.request)}});
  }catch{return false;}
 }
-/** Bounded by the existing task index (latest 40 valid entries); never recreates execution authority. */
+/** Bounded by the task index pages (manifest-only hydration); never recreates execution authority or loads artifact HTML. */
 export async function backfillFailedConversations(storage:ProjectStorage,projectId:string):Promise<boolean>{
- try{const tasks=await listDesignTasks(storage,projectId);const store=new ConversationStore(storage);let readable=false;
-  for(const task of tasks){if(!['blocked','cancelled'].includes(task.state)||!task.error)continue;
-   const failure=metadata({model:task.binding.model},{message:task.error,status:task.state==='cancelled'?'cancelled':'failed',contract:task.contract,budget:task.budget});
-   readable=await store.appendTurnIfAbsent({turnId:`failed-task-${task.id}`,ts:task.createdAt,user:{text:task.request,...(task.contract.target?{reference:{screen:{id:task.contract.target.id,name:task.contract.target.name}}}:{}),...(task.inputs?.attachment?{attachments:[task.inputs.attachment.relPath]}:{})},assistant:{text:failure.message,failure,model:failure.model,pageTaskHistory:capturePageTaskHistory(task.contract,task.request),designGuidanceHistory:captureDesignGuidanceHistory(task.contract,task.request)}})||readable;
-  }
+ try{const store=new ConversationStore(storage);let readable=false,cursor:string|undefined,guard=0;
+  do{
+   const page=await listDesignTaskPage(storage,projectId,{includeCompleted:false,limit:50,cursor});
+   for(const entry of page.entries){
+    if(!['blocked','cancelled'].includes(entry.state)||!entry.errorPreview)continue;
+    const task=await readDesignTaskManifest(storage,projectId,entry.id);
+    if(!task||!task.error||!['blocked','cancelled'].includes(task.state))continue;
+    const failure=metadata({model:task.binding.model},{message:task.error,status:task.state==='cancelled'?'cancelled':'failed',contract:task.contract,budget:task.budget});
+    readable=await store.appendTurnIfAbsent({turnId:`failed-task-${task.id}`,ts:task.createdAt,user:{text:task.request,...(task.contract.target?{reference:{screen:{id:task.contract.target.id,name:task.contract.target.name}}}:{}),...(task.inputs?.attachment?{attachments:[task.inputs.attachment.relPath]}:{})},assistant:{text:failure.message,failure,model:failure.model,pageTaskHistory:capturePageTaskHistory(task.contract,task.request),designGuidanceHistory:captureDesignGuidanceHistory(task.contract,task.request)}})||readable;
+   }
+   cursor=page.hasMore?page.nextCursor:undefined;guard++;
+  }while(cursor&&guard<40);
   return readable;
  }catch{/* Auxiliary history must not prevent the original conversation from opening. */return false;}
 }

@@ -12,7 +12,10 @@ test('quota failure rolls back only this import and leaves existing tasks unchan
 });
 for(const path of ['../outside.json','artifacts/../a.html','artifacts/deeper/a.html','/absolute.json','a\\b.json','.hidden.json'])test(`rejects archive path ${path}`,async()=>{await expect(storage().importTaskArchive('design-safe',[{path,contents:'x'}])).rejects.toThrow();});
 test('empty tasks remain diagnosable and cleanup removes their directory marker; standalone tombstones do not use live quota',async()=>{
- const target=storage();for(let i=0;i<40;i++)await target.importTaskArchive('design-empty-'+i,[]);await expect(target.importTaskArchive('design-extra',[])).rejects.toThrow('40');await target.importTaskArchive('design-deleted',[],'marker',false);expect(await target.exists('tasks/.locks/design-deleted.deleted')).toBe(true);await target.deleteDesignTask('design-empty-0',null);expect((await target.listDir('tasks')).some(path=>path==='design-empty-0')).toBe(false);await expect(target.importTaskArchive('design-deleted',[])).rejects.toThrow('删除标记');
+ const target=storage();for(let i=0;i<120;i++)await target.importTaskArchive('design-empty-'+i,[]);
+ const pad='x'.repeat(3*1024*1024);await target.importTaskArchive('design-fat-a',[{path:'pad.txt',contents:pad}]);await target.importTaskArchive('design-fat-b',[{path:'pad.txt',contents:pad}]);
+ await expect(target.importTaskArchive('design-extra',[{path:'pad.txt',contents:pad}])).rejects.toThrow(/体积预算/);
+ await target.importTaskArchive('design-deleted',[],'marker',false);expect(await target.exists('tasks/.locks/design-deleted.deleted')).toBe(true);await target.deleteDesignTask('design-empty-0',null);expect((await target.listDir('tasks')).some(path=>path==='design-empty-0')).toBe(false);await expect(target.importTaskArchive('design-deleted',[])).rejects.toThrow('删除标记');
 });
 test('native bridge receives migration-only payload and text reads preserve BOM and reject invalid UTF-8',async()=>{
  const calls:Array<{name:string;args:Record<string,unknown>}>=[];const bridge=new TauriFolderStorage('/virtual/project',async(name,args)=>{calls.push({name,args});return null as any;});await bridge.importTaskArchive('design-native',[{path:'manifest.json',contents:'raw'}],undefined,true);expect(calls[0].name).toBe('project_import_task_archive');expect(calls[0].args.directory).toBe(true);

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { HtmlImportDialog } from '../../canvas/HtmlImportDialog';
+import { ConfirmDialog } from '../../common/ConfirmDialog';
 import { useProjectStore } from '../../../stores/useProjectStore';
 import { Accordion } from '../Accordion';
 import { Copy, Plus, Search, Trash2, FileCode } from 'lucide-react';
@@ -22,6 +23,7 @@ export const ScreensPanel: React.FC = () => {
 
   const [search, setSearch] = useState('');
   const [showImport, setShowImport] = useState(false);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const filteredIds = screenOrder.filter((id) => {
     const s = screens[id];
@@ -110,10 +112,11 @@ export const ScreensPanel: React.FC = () => {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (confirm(`确定删除画框「${s.name}」吗？`)) removeScreen(id);
+                    setConfirmDeleteId(id);
                   }}
                   className={`p-0.5 rounded hover:text-red-300 ${isActive ? 'text-white/80' : 'text-slate-400'}`}
                   title="删除画框"
+                  data-testid="screens-panel-delete"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
@@ -123,6 +126,17 @@ export const ScreensPanel: React.FC = () => {
         })}
       </div>
     </Accordion>
+    {confirmDeleteId && screens[confirmDeleteId] && (
+      <ConfirmDialog
+        title="删除画框"
+        message={<>将删除「<span className="font-medium text-slate-200">{screens[confirmDeleteId].name}</span>」，此操作可通过撤销恢复，但仍请确认是否继续。</>}
+        onCancel={() => setConfirmDeleteId(null)}
+        onConfirm={() => {
+          removeScreen(confirmDeleteId);
+          setConfirmDeleteId(null);
+        }}
+      />
+    )}
     {showImport && createPortal(<HtmlImportDialog onClose={() => setShowImport(false)} />, document.body)}
     </>
   );

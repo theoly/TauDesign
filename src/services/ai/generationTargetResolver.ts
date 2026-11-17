@@ -205,12 +205,13 @@ export function resolveGenerationTarget(input: GenerationTargetInput): Generatio
       rawPrompt.includes('@') ||
       hasQuotedRef ||
       Boolean(reference) ||
-      resolution.ambiguousNames.some((name) =>
-        new RegExp(
-          `(?:参考|基于|仿照|照着|沿用|复用|借鉴|根据)\\s*(?:现有|原有|已有|原)?(?:页面|画框)?\\s*[@"“「『《]?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+      resolution.ambiguousNames.some((name) => {
+        const escaped=name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return new RegExp(
+          `(?<![不勿别])(?:参考|基于|仿照|照着|借鉴|根据)\\s*(?:现有|原有|已有|原)?(?:页面|画框|页)?\\s*[@"“「『《]?${escaped}|(?<![不勿别])(?:沿用|复用)\\s*(?:现有|原有|已有|原)?(?:页面|画框|页)\\s*[@"“「『《]?${escaped}|(?<![不勿别])(?:沿用|复用)\\s*[@"“「『《]?${escaped}`,
           'i'
-        ).test(rawPrompt)
-      ));
+        ).test(rawPrompt);
+      }));
 
   const hasExplicitUnmatched =
     resolution.unmatchedNames.length > 0 &&

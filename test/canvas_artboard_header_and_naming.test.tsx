@@ -251,4 +251,40 @@ describe('画框上方浮动标题、明暗可视性与 AI 命名测试', () => 
     expect(res.success).toBe(true);
     expect(res.screenName).toBe('送花表达心意 - 牵手币充值');
   });
+
+  test('CHK-F-06: 点击画框顶栏删除须先确认，取消不删，确认后才删除', async () => {
+    const mockScreen = {
+      id: 'screen-delete-confirm',
+      name: '待删页',
+      htmlContent: '<div data-nid="d001" class="p-4"></div>',
+      position: { x: 0, y: 0 },
+      width: 390,
+      measuredHeight: 600
+    };
+    useProjectStore.setState({
+      screens: { [mockScreen.id]: mockScreen as any },
+      screenOrder: [mockScreen.id],
+      activeScreenId: mockScreen.id,
+      settings: { ...useProjectStore.getState().settings, deviceProfile: 'mobile', frameWidth: 390 }
+    });
+    await act(async () => {
+      root.render(<ScreenFrame screen={mockScreen as any} lodLevel={2} />);
+    });
+    const deleteBtn = container.querySelector('[data-testid="screen-frame-delete"]') as HTMLButtonElement;
+    expect(deleteBtn).not.toBeNull();
+    await act(async () => { deleteBtn.click(); });
+    expect(document.querySelector('[data-testid="confirm-dialog"]')).not.toBeNull();
+    expect(useProjectStore.getState().screens[mockScreen.id]).toBeDefined();
+    await act(async () => {
+      (document.querySelector('[data-testid="confirm-dialog-cancel"]') as HTMLButtonElement).click();
+    });
+    expect(document.querySelector('[data-testid="confirm-dialog"]')).toBeNull();
+    expect(useProjectStore.getState().screens[mockScreen.id]).toBeDefined();
+    await act(async () => { deleteBtn.click(); });
+    await act(async () => {
+      (document.querySelector('[data-testid="confirm-dialog-confirm"]') as HTMLButtonElement).click();
+    });
+    expect(useProjectStore.getState().screens[mockScreen.id]).toBeUndefined();
+    expect(useProjectStore.getState().screenOrder).not.toContain(mockScreen.id);
+  });
 });
