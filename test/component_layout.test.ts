@@ -54,7 +54,30 @@ describe('组件内容布局契约', () => {
         expect(prompt).toContain('.row.wrap.gap-2');
         expect(prompt).toContain('职业位于姓名下方');
         expect(prompt).toContain('不新增或移动节点');
+        expect(prompt).toContain('跳转行.justify-between');
+        expect(prompt).toContain('文左箭头右');
+        expect(prompt).toContain('禁整组居中');
       }
     });
   }
+
+  test('mobile: .list-item 默认两端对齐，主文案左、尾部指示不挤在中间', () => {
+    const host = document.createElement('div');
+    const style = document.createElement('style');
+    style.textContent = getBaseCss('mobile');
+    document.head.append(style);
+    host.innerHTML = `<a class="list-item"><span class="flex-1 min-w-0">一、服务范围与账号</span><span class="icon" aria-hidden="true">›</span></a>`;
+    document.body.append(host);
+    try {
+      const row = getComputedStyle(host.querySelector('.list-item')!);
+      expect(row.display).toBe('flex');
+      expect(row.justifyContent).toBe('space-between');
+      expect(row.textAlign).toBe('left');
+      expect(getComputedStyle(host.querySelector('.flex-1')!).textAlign).toBe('left');
+      expect(getComputedStyle(host.querySelector('.icon')!).flexShrink).toBe('0');
+    } finally {
+      host.remove();
+      style.remove();
+    }
+  });
 });

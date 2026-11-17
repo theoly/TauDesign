@@ -428,12 +428,24 @@ main,
   justify-content: center;
 }
 
-/* 列表项：移动端标准高度与分隔 */
+/* 列表项：移动端标准高度与分隔；默认左主文案、右指示（箭头），勿整组居中 */
 .list-item {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-3, 12px);
   min-height: 56px;
   padding: var(--space-3, 12px) var(--space-4, 16px);
   border-bottom: 1px solid var(--color-border, #e2e8f0);
+  text-align: left;
+}
+.list-item > .flex-1,
+.list-item > .min-w-0 {
+  min-width: 0;
+  text-align: left;
+}
+.list-item > .icon,
+.list-item > .icon-mask,
+.list-item > .tap-target {
+  flex: 0 0 auto;
 }

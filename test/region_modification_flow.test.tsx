@@ -41,6 +41,23 @@ describe('区块分析授权',()=>{
  expect(getRegionModificationPlan(result,['suggestion-2'])).toEqual({targetNids:['title']});
  } finally {mock.mockRestore();}
  });
+ test('引用小区块后，模型误标整页/子节点目标时仍收敛为该区块计划',async()=>{
+  const html=`<main data-nid="root"><section data-nid="block">${Array.from({length:8},(_,i)=>`<article data-nid="c${i}"><h2 data-nid="t${i}">章${i}</h2><p data-nid="p${i}">正文${i}</p></article>`).join('')}</section><aside data-nid="other">${Array.from({length:20},(_,i)=>`<p data-nid="o${i}">外${i}</p>`).join('')}</aside></main>`;
+  const mock=spyOn(DefaultAIEngineCore.prototype,'generateObject').mockResolvedValue({
+   summary:'优化引用区',
+   items:[
+    {title:'精简章节文案',reason:'章节占位重复',change:'统一提示语',scope:'page',targetNids:['c0','c1','c2'],operations:[]},
+    {title:'标题分组',reason:'序号弱',change:'增加序号',scope:'region',targetNids:['t0','t1'],operations:[]},
+   ]
+  });
+  try {
+   const result=await analyzeScreenModification(new DefaultAIEngineCore({} as any),{...options,html,request:'优化此处UI',elementNid:'block'});
+   expect(result.items.map(item=>item.scope)).toEqual(['region','region']);
+   expect(result.items.every(item=>item.targetNids?.join()==='block')).toBe(true);
+   expect(getRegionModificationPlan(result,['suggestion-1'])).toEqual({targetNids:['block']});
+   expect(getRegionModificationPlan(result,['suggestion-1','suggestion-2'])).toEqual({targetNids:['block']});
+  } finally {mock.mockRestore();}
+ });
 });
 
 import React, { act } from 'react';
