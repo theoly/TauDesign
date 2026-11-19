@@ -15,12 +15,14 @@ import {
   textToBytes
 } from '../../utils/exportSaver';
 import { AlertCircle, Check, CheckCircle2, Copy, Download, FileCode, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { useT } from '../../stores/useLocaleStore';
 
 interface ExportModalProps {
   onClose: () => void;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
+  const t = useT();
   const { screens, activeScreenId, designSystem, settings, overrides } = useProjectStore();
   // T-AE-14: 业务导出默认不选风格样张页——新建工程时它是唯一画框且处于激活态，
   // 若直接作默认值，用户点导出拿到的会是设计规范而非自己的页面。
@@ -86,7 +88,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
         fileName: `${screen.name || 'design'}.html`,
         bytes: textToBytes(standaloneHtml),
         mimeType: 'text/html;charset=utf-8',
-        filterName: 'HTML 页面',
+        filterName: t('export.filterHtml'),
         extensions: ['html']
       });
 
@@ -102,14 +104,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
           fileName: `${screen.name || 'design'}.manifest.json`,
           bytes: textToBytes(JSON.stringify(manifest, null, 2)),
           mimeType: 'application/json',
-          filterName: 'JSON 清单',
+          filterName: t('export.filterManifest'),
           extensions: ['json']
         });
       }
 
       setSaveResult({ ...htmlRes, label: 'HTML' });
     } catch (err: any) {
-      setExportError(err?.message || 'HTML 保存失败');
+      setExportError(err?.message || t('export.htmlSaveFailed'));
     } finally {
       setIsSavingHtml(false);
     }
@@ -151,7 +153,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
         fileName: `${screen.name || 'design'}_${pngScale}x.png`,
         bytes: dataUrlToBytes(outcome.dataUrl),
         mimeType: 'image/png',
-        filterName: 'PNG 图片',
+        filterName: t('export.filterPng'),
         extensions: ['png']
       });
       setSaveResult({ ...pngRes, label: `PNG ${pngScale}x` });
@@ -164,7 +166,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
       setLastEngine(outcome.engine);
     } catch (err: any) {
       console.error('PNG export failed:', err);
-      setExportError(err?.message || 'PNG 渲染失败');
+      setExportError(err?.message || t('export.pngRenderFailed'));
     } finally {
       setIsExportingPng(false);
     }
@@ -177,9 +179,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <FileCode className="w-5 h-5 text-blue-400" />
-            <span className="font-semibold text-slate-100 text-sm">单页交付导出中心 (Export & Handoff)</span>
+            <span className="font-semibold text-slate-100 text-sm">{t('export.modalTitle')}</span>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 text-lg leading-none">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 text-lg leading-none" aria-label={t('common.close')}>
             ×
           </button>
         </div>
@@ -195,7 +197,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
             }`}
           >
             <FileCode className="w-4 h-4" />
-            <span>自包含 HTML 单页</span>
+            <span>{t('export.tabHtml')}</span>
           </button>
           <button
             onClick={() => setExportType('png')}
@@ -206,15 +208,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
             }`}
           >
             <ImageIcon className="w-4 h-4" />
-            <span>高保真 PNG 渲染图</span>
+            <span>{t('export.tabPng')}</span>
           </button>
         </div>
 
         <div className="p-6 space-y-4 overflow-y-auto text-xs">
-          {loadingResources && <p className="text-xs text-blue-300">正在读取页面资源…</p>}
+          {loadingResources && <p className="text-xs text-blue-300">{t('export.loadingResources')}</p>}
           {resourceError && <div role="alert" className="rounded-lg bg-red-950/40 p-3 text-xs text-red-200">
             <p>{resourceError}</p>
-            <button type="button" onClick={()=>{pageResources.retry();styleResources.retry();}} className="mt-2 rounded border border-red-700 px-2 py-1 hover:bg-red-900">重新读取导出资源</button>
+            <button type="button" onClick={()=>{pageResources.retry();styleResources.retry();}} className="mt-2 rounded border border-red-700 px-2 py-1 hover:bg-red-900">{t('export.retryResources')}</button>
             <MediaDiagnosticsButton/>
           </div>}
           {saveResult && !exportError && (
@@ -225,9 +227,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
               >
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-slate-500 shrink-0" />
-                  <span>已取消保存，未写入任何文件。</span>
+                  <span>{t('export.saveCanceled')}</span>
                 </div>
-                <button onClick={() => setSaveResult(null)} className="text-slate-500 hover:text-slate-300 text-sm leading-none px-1">
+                <button onClick={() => setSaveResult(null)} className="text-slate-500 hover:text-slate-300 text-sm leading-none px-1" aria-label={t('common.close')}>
                   ×
                 </button>
               </div>
@@ -239,11 +241,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2 font-medium">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>{saveResult.label} 已保存</span>
+                    <span>{t('export.savedLabel', { label: saveResult.label })}</span>
                   </div>
                   <button
                     onClick={() => setSaveResult(null)}
                     className="text-emerald-400 hover:text-emerald-200 text-sm leading-none px-1"
+                    aria-label={t('common.close')}
                   >
                     ×
                   </button>
@@ -256,7 +259,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                 </div>
                 {saveResult.status === 'downloaded' && (
                   <p className="text-[10px] text-emerald-400/70">
-                    当前为浏览器环境，文件已交由浏览器下载（通常在「下载」目录）。
+                    {t('export.browserDownloadHint')}
                   </p>
                 )}
               </div>
@@ -295,7 +298,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
 
           {/* Target Screen Selector */}
           <div className="flex items-center justify-between">
-            <span className="text-slate-300 font-semibold">选择目标画框页面：</span>
+            <span className="text-slate-300 font-semibold">{t('export.selectScreen')}</span>
             <select
               value={selectedScreenId}
               onChange={(e) => setSelectedScreenId(e.target.value)}
@@ -303,7 +306,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
             >
               {Object.values(screens).map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.name} ({settings.frameWidth}px){s.metadata?.kind === 'specimen' ? ' · 设计规范' : ''}
+                  {s.name} ({settings.frameWidth}px){s.metadata?.kind === 'specimen' ? t('export.specimenSuffix') : ''}
                 </option>
               ))}
             </select>
@@ -314,23 +317,23 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
             <>
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5 text-[11px] text-slate-400">
                 <div className="flex items-center gap-2 text-emerald-400 font-semibold">
-                  <span>✓ 零构建依赖单文件</span>
-                  <span>✓ 剥离 data-nid 标记</span>
-                  <span>✓ 内联专属 Token 与基座样式</span>
+                  <span>{t('export.htmlBenefitInline')}</span>
+                  <span>{t('export.htmlBenefitStripNid')}</span>
+                  <span>{t('export.htmlBenefitTokens')}</span>
                 </div>
                 <p className="leading-relaxed">
-                  双击即可在任意浏览器离线打开并渲染，可直接交接给前端工程师。
+                  {t('export.htmlBenefitHint')}
                 </p>
               </div>
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400 font-mono">产物代码预览</span>
+                  <span className="text-[11px] text-slate-400 font-mono">{t('export.previewLabel')}</span>
                   <span className="text-[11px] text-slate-500 font-mono">{(standaloneHtml.length / 1024).toFixed(1)} KB</span>
                 </div>
                 <pre className="p-3 bg-slate-950 border border-slate-800 rounded-xl max-h-48 overflow-auto text-[11px] font-mono text-slate-300 leading-relaxed">
                   {standaloneHtml.slice(0, 1200)}
-                  {standaloneHtml.length > 1200 && '\n... (后续代码已省略)'}
+                  {standaloneHtml.length > 1200 && `\n${t('export.previewTruncated')}`}
                 </pre>
               </div>
 
@@ -342,10 +345,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                     onChange={(e) => setIncludeManifest(e.target.checked)}
                     className="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-0 cursor-pointer"
                   />
-                  <span>同时导出 Manifest 元数据侧车文件 ({screen?.name || 'design'}.manifest.json)</span>
+                  <span>{t('export.includeManifest', { name: screen?.name || 'design' })}</span>
                 </label>
                 <p className="text-[11px] text-slate-500 pl-5 pt-0.5">
-                  默认关闭。仅在需要携带画框尺寸与层级元数据再次导回本工具或设计系统解析时建议开启。
+                  {t('export.includeManifestHint')}
                 </p>
               </div>
             </>
@@ -356,7 +359,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
-                  <span className="font-semibold text-slate-300 block">输出倍率 (Resolution Scale)</span>
+                  <span className="font-semibold text-slate-300 block">{t('export.scaleLabel')}</span>
                   <div className="grid grid-cols-3 gap-1.5">
                     {([1, 2, 3] as const).map((sc) => (
                       <button
@@ -375,7 +378,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                 </div>
 
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
-                  <span className="font-semibold text-slate-300 block">截取范围</span>
+                  <span className="font-semibold text-slate-300 block">{t('export.clipLabel')}</span>
                   <div className="space-y-1.5">
                     <label className="flex items-center gap-2 cursor-pointer text-slate-300">
                       <input
@@ -384,7 +387,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                         checked={!clipFirstScreen}
                         onChange={() => setClipFirstScreen(false)}
                       />
-                      <span>画框整页长图 ({screen?.measuredHeight || 800}px)</span>
+                      <span>{t('export.clipFull', { height: screen?.measuredHeight || 800 })}</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer text-slate-300">
                       <input
@@ -393,25 +396,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                         checked={clipFirstScreen}
                         onChange={() => setClipFirstScreen(true)}
                       />
-                      <span>仅导出首屏 ({referenceViewport.height}px)</span>
+                      <span>{t('export.clipFirst', { height: referenceViewport.height })}</span>
                     </label>
                   </div>
                 </div>
               </div>
 
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-[11px] text-slate-400 space-y-1">
-                <span className="font-semibold text-slate-300 block">渲染方式</span>
+                <span className="font-semibold text-slate-300 block">{t('export.renderLabel')}</span>
                 <p>
-                  桌面端由系统 WebView 整页渲染后栅格化，与画布所见一致；浏览器环境自动回退兼容渲染。
+                  {t('export.renderHint')}
                 </p>
                 <p>
                   输出宽度: {settings.frameWidth * pngScale}px ·
                   {clipFirstScreen
-                    ? ` 高度按首屏参考线裁切 ${referenceViewport.height * pngScale}px`
-                    : ' 高度于导出时实测整页内容，不受画布缓存值影响'}
+                    ? t('export.heightFirstClip', { height: referenceViewport.height * pngScale })
+                    : t('export.heightMeasured')}
                   {lastEngine && (
                     <span className="text-slate-500">
-                      {' '}· 上次引擎: {lastEngine === 'foreign-object' ? '兼容渲染' : '原生整页渲染'}
+                      {' '}· {t('export.lastEngine', {
+                        engine: lastEngine === 'foreign-object' ? t('export.engineCompat') : t('export.engineNative'),
+                      })}
                     </span>
                   )}
                 </p>
@@ -429,13 +434,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
               className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl text-xs transition border border-slate-700"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? '已复制' : '复制代码'}</span>
+              <span>{copied ? t('export.copied') : t('export.copyCode')}</span>
             </button>
           ) : <div />}
 
           <div className="flex items-center gap-2">
             <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-slate-200 text-xs transition">
-              取消
+              {t('common.cancel')}
             </button>
             {exportType === 'html' ? (
               <button
@@ -444,7 +449,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                 className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-xl text-xs transition shadow"
               >
                 {isSavingHtml ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                <span>{isSavingHtml ? '等待选择保存位置...' : '保存独立 HTML 文件'}</span>
+                <span>{isSavingHtml ? t('export.savingHtml') : t('export.saveHtml')}</span>
               </button>
             ) : (
               <button
@@ -453,7 +458,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                 className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-xl text-xs transition shadow"
               >
                 {isExportingPng ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                <span>{isExportingPng ? '正在渲染切片...' : '下载高清 PNG 图片'}</span>
+                <span>{isExportingPng ? t('export.exportingPng') : t('export.downloadPng')}</span>
               </button>
             )}
           </div>

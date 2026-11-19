@@ -1,23 +1,6 @@
-import React from 'react';
-import {
-  AlignHorizontalDistributeCenter,
-  AlignHorizontalDistributeEnd,
-  AlignHorizontalDistributeStart,
-  AlignHorizontalJustifyCenter,
-  AlignHorizontalJustifyEnd,
-  AlignHorizontalJustifyStart,
-  AlignVerticalDistributeCenter,
-  AlignVerticalJustifyCenter,
-  ArrowDown,
-  ArrowRight,
-  Grid,
-  LayoutGrid,
-  Maximize2,
-  Minimize2,
-  RotateCcw,
-  Rows,
-  WrapText
-} from 'lucide-react';
+import React, { useMemo } from 'react';
+import { ArrowDown, ArrowRight, Grid, Maximize2, RotateCcw, Rows, WrapText } from 'lucide-react';
+import { useT } from '../../stores/useLocaleStore';
 import { ComputedLayoutInfo } from '../../stores/useProjectStore';
 
 interface LayoutInspectorProps {
@@ -27,24 +10,31 @@ interface LayoutInspectorProps {
   onClearProp?: (prop: string) => void;
 }
 
-const GAP_TOKEN_OPTIONS = [
-  { label: '默认', value: '' },
-  { label: '0px (space-0)', value: 'var(--space-0)' },
-  { label: '4px (space-1)', value: 'var(--space-1)' },
-  { label: '8px (space-2)', value: 'var(--space-2)' },
-  { label: '12px (space-3)', value: 'var(--space-3)' },
-  { label: '16px (space-4)', value: 'var(--space-4)' },
-  { label: '20px (space-5)', value: 'var(--space-5)' },
-  { label: '24px (space-6)', value: 'var(--space-6)' },
-  { label: '32px (space-8)', value: 'var(--space-8)' }
-];
-
 export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
   computedLayout,
   declarations,
   onStyleChange,
   onClearProp
 }) => {
+  const t = useT();
+  const l = (key: string, params?: Record<string, string | number>) =>
+    t(`inspector.layout.${key}` as Parameters<typeof t>[0], params);
+
+  const GAP_TOKEN_OPTIONS = useMemo(
+    () => [
+      { label: l('gapDefault'), value: '' },
+      { label: l('gapSpace0'), value: 'var(--space-0)' },
+      { label: l('gapSpace1'), value: 'var(--space-1)' },
+      { label: l('gapSpace2'), value: 'var(--space-2)' },
+      { label: l('gapSpace3'), value: 'var(--space-3)' },
+      { label: l('gapSpace4'), value: 'var(--space-4)' },
+      { label: l('gapSpace5'), value: 'var(--space-5)' },
+      { label: l('gapSpace6'), value: 'var(--space-6)' },
+      { label: l('gapSpace8'), value: 'var(--space-8)' }
+    ],
+    [t]
+  );
+
   // Current effective values (override takes precedence over computed)
   const effectiveDisplay = String(declarations['display'] || computedLayout?.display || 'block').toLowerCase();
   const isFlex = effectiveDisplay === 'flex' || effectiveDisplay === 'inline-flex';
@@ -58,11 +48,34 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
 
   const isOverridden = (prop: string) => Boolean(declarations[prop]);
 
+  const justifyOptions = useMemo(
+    () =>
+      [
+        { val: 'flex-start', label: l('justifyStart'), tip: l('justifyStartTip') },
+        { val: 'center', label: l('justifyCenter'), tip: l('justifyCenterTip') },
+        { val: 'flex-end', label: l('justifyEnd'), tip: l('justifyEndTip') },
+        { val: 'space-between', label: l('justifyBetween'), tip: l('justifyBetweenTip') },
+        { val: 'space-around', label: l('justifyAround'), tip: l('justifyAroundTip') }
+      ] as const,
+    [t]
+  );
+
+  const alignOptions = useMemo(
+    () =>
+      [
+        { val: 'stretch', label: l('alignStretch'), tip: l('alignStretchTip') },
+        { val: 'flex-start', label: l('alignStart'), tip: l('alignStartTip') },
+        { val: 'center', label: l('alignCenter'), tip: l('alignCenterTip') },
+        { val: 'flex-end', label: l('alignEnd'), tip: l('alignEndTip') }
+      ] as const,
+    [t]
+  );
+
   return (
     <div className="space-y-3 pt-2 border-t border-slate-800" data-testid="layout-inspector">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-          布局与对齐 (Layout)
+          {l('sectionTitle')}
         </span>
         {(isOverridden('display') ||
           isOverridden('flex-direction') ||
@@ -76,11 +89,11 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
                 if (declarations[p]) onStyleChange(p, '');
               });
             }}
-            title="还原布局覆盖为基线"
+            title={l('resetLayoutTitle')}
             className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1"
           >
             <RotateCcw className="w-2.5 h-2.5" />
-            <span>还原布局</span>
+            <span>{l('resetLayout')}</span>
           </button>
         )}
       </div>
@@ -88,8 +101,8 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
       {/* Display Mode Switcher */}
       <div>
         <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[10px] text-slate-500">布局模式</span>
-          {isOverridden('display') && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" title="已手动覆盖" />}
+          <span className="text-[10px] text-slate-500">{l('displayMode')}</span>
+          {isOverridden('display') && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" title={l('overriddenTitle')} />}
         </div>
         <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-950 border border-slate-800 rounded-lg">
           <button
@@ -102,7 +115,7 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
             }`}
           >
             <Rows className="w-3 h-3" />
-            <span>Flex</span>
+            <span>{l('displayFlex')}</span>
           </button>
           <button
             type="button"
@@ -114,7 +127,7 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
             }`}
           >
             <Grid className="w-3 h-3" />
-            <span>Grid</span>
+            <span>{l('displayGrid')}</span>
           </button>
           <button
             type="button"
@@ -126,7 +139,7 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
             }`}
           >
             <Maximize2 className="w-3 h-3" />
-            <span>Block</span>
+            <span>{l('displayBlock')}</span>
           </button>
         </div>
       </div>
@@ -137,13 +150,13 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
           <div className="grid grid-cols-2 gap-2">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] text-slate-500">主轴方向</span>
+                <span className="text-[10px] text-slate-500">{l('mainAxisDirection')}</span>
                 {isOverridden('flex-direction') && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
               </div>
               <div className="grid grid-cols-2 gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
                 <button
                   type="button"
-                  title="横向排列 (Row)"
+                  title={l('rowTitle')}
                   onClick={() => onStyleChange('flex-direction', 'row')}
                   className={`py-1 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition ${
                     effectiveDirection === 'row'
@@ -152,11 +165,11 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
                   }`}
                 >
                   <ArrowRight className="w-3 h-3" />
-                  <span>Row</span>
+                  <span>{l('row')}</span>
                 </button>
                 <button
                   type="button"
-                  title="纵向排列 (Column)"
+                  title={l('colTitle')}
                   onClick={() => onStyleChange('flex-direction', 'column')}
                   className={`py-1 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition ${
                     effectiveDirection === 'column'
@@ -165,20 +178,20 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
                   }`}
                 >
                   <ArrowDown className="w-3 h-3" />
-                  <span>Col</span>
+                  <span>{l('col')}</span>
                 </button>
               </div>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] text-slate-500">自动换行</span>
+                <span className="text-[10px] text-slate-500">{l('flexWrap')}</span>
                 {isOverridden('flex-wrap') && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
               </div>
               <div className="grid grid-cols-2 gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
                 <button
                   type="button"
-                  title="不换行 (Nowrap)"
+                  title={l('nowrapTitle')}
                   onClick={() => onStyleChange('flex-wrap', 'nowrap')}
                   className={`py-1 rounded text-[10px] font-medium flex items-center justify-center transition ${
                     effectiveWrap === 'nowrap'
@@ -186,11 +199,11 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <span>单行</span>
+                  <span>{l('singleLine')}</span>
                 </button>
                 <button
                   type="button"
-                  title="换行 (Wrap)"
+                  title={l('wrapTitle')}
                   onClick={() => onStyleChange('flex-wrap', 'wrap')}
                   className={`py-1 rounded text-[10px] font-medium flex items-center justify-center gap-1 transition ${
                     effectiveWrap === 'wrap'
@@ -199,7 +212,7 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
                   }`}
                 >
                   <WrapText className="w-3 h-3" />
-                  <span>换行</span>
+                  <span>{l('wrap')}</span>
                 </button>
               </div>
             </div>
@@ -208,17 +221,11 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
           {/* Justify Content */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-slate-500">主轴对齐 (Justify)</span>
+              <span className="text-[10px] text-slate-500">{l('justifyLabel')}</span>
               {isOverridden('justify-content') && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
             </div>
             <div className="grid grid-cols-5 gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-              {[
-                { val: 'flex-start', label: '起点', tip: 'Start (左/上)' },
-                { val: 'center', label: '居中', tip: 'Center (居中)' },
-                { val: 'flex-end', label: '终点', tip: 'End (右/下)' },
-                { val: 'space-between', label: '两端', tip: 'Space Between (两端散开)' },
-                { val: 'space-around', label: '环绕', tip: 'Space Around (环绕均分)' }
-              ].map(({ val, label, tip }) => (
+              {justifyOptions.map(({ val, label, tip }) => (
                 <button
                   key={val}
                   type="button"
@@ -239,16 +246,11 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
           {/* Align Items */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-slate-500">交叉轴对齐 (Align)</span>
+              <span className="text-[10px] text-slate-500">{l('alignLabel')}</span>
               {isOverridden('align-items') && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
             </div>
             <div className="grid grid-cols-4 gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800">
-              {[
-                { val: 'stretch', label: '拉伸', tip: 'Stretch (拉伸填满)' },
-                { val: 'flex-start', label: '居顶', tip: 'Start (居顶/居左)' },
-                { val: 'center', label: '居中', tip: 'Center (垂直居中)' },
-                { val: 'flex-end', label: '居底', tip: 'End (居底/居右)' }
-              ].map(({ val, label, tip }) => (
+              {alignOptions.map(({ val, label, tip }) => (
                 <button
                   key={val}
                   type="button"
@@ -272,7 +274,7 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
       {(isFlex || isGrid) && (
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-slate-500">子项间距 (Gap)</span>
+            <span className="text-[10px] text-slate-500">{l('gapLabel')}</span>
             {isOverridden('gap') && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
           </div>
           <div className="flex items-center gap-1.5">
@@ -295,14 +297,14 @@ export const LayoutInspector: React.FC<LayoutInspectorProps> = ({
                 </option>
               ))}
               {!GAP_TOKEN_OPTIONS.some((o) => o.value === effectiveGap) && effectiveGap && (
-                <option value="custom">自定义 ({effectiveGap})</option>
+                <option value="custom">{l('gapCustom', { gap: effectiveGap })}</option>
               )}
             </select>
             {isOverridden('gap') && (
               <button
                 type="button"
                 onClick={() => onStyleChange('gap', '')}
-                title="清除自定义间距"
+                title={l('clearGapTitle')}
                 className="p-1.5 text-slate-500 hover:text-slate-300 rounded bg-slate-900 border border-slate-800"
               >
                 <RotateCcw className="w-3 h-3" />

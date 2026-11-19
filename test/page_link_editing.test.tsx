@@ -5,6 +5,7 @@ import { defaultTheme } from '../src/utils/themePresets';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { PropertyInspector } from '../src/components/inspector/PropertyInspector';
+import { t } from '../src/i18n';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 beforeEach(() => {
@@ -51,7 +52,7 @@ describe('页面关系编辑', () => {
     const host = document.createElement('div'); document.body.append(host);
     const root = createRoot(host);
     act(() => root.render(<PropertyInspector />));
-    const select = host.querySelector('[aria-label="跳转目标页面"]') as HTMLSelectElement;
+    const select = host.querySelector(`[aria-label="${t('inspector.sectionNav')}"]`) as HTMLSelectElement;
     expect(select).not.toBeNull();
     act(() => { select.value = target; select.dispatchEvent(new Event('change', { bubbles: true })); });
     expect(useProjectStore.getState().screens[source].htmlContent).toContain(`data-target-screen-id="${target}"`);

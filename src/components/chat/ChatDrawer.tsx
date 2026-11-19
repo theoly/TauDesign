@@ -33,6 +33,7 @@ import {
   extractCleanUserPrompt
 } from '../../services/ai/engine/react/useAIEngineChat';
 import { useUsageStore, formatTokenCount } from '../../stores/useUsageStore';
+import { useLocaleStore, useT } from '../../stores/useLocaleStore';
 import {
   Send,
   Bot,
@@ -88,15 +89,21 @@ interface ThinkingStep {
   status: 'pending' | 'active' | 'completed' | 'stopped' | 'error';
 }
 
-function getThinkingSteps(message:ChatMessageItem):ThinkingStep[] {
+function getThinkingSteps(
+  message: ChatMessageItem,
+  t: (key: string, params?: Record<string, string | number>) => string,
+  locale: string,
+): ThinkingStep[] {
   const status:ThinkingStep['status']=message.isStopped?'stopped':message.isGenerating?'active':message.isError||message.isGuardRejected?'error':'completed';
   if(message.executionEvents?.length)return message.executionEvents.map((event,index)=>({title:executionPhaseLabels[event.phase],
-    description:`记录于 ${new Date(event.at).toLocaleTimeString('zh-CN')}`,status:index===message.executionEvents!.length-1?status:'completed'}));
-  return [{title:message.isGenerating?userFacingMessage(message.generationProgress??'正在执行当前请求'):message.isStopped?'请求已停止':status==='error'?'本次请求未完成':'本次请求已结束',
-    description:'暂无详细进度记录，请查看最终结果和检查说明。',status}];
+    description:t('chat.executionRecordedAt',{time:new Date(event.at).toLocaleTimeString(locale)}),status:index===message.executionEvents!.length-1?status:'completed'}));
+  return [{title:message.isGenerating?userFacingMessage(message.generationProgress??t('chat.executingCurrentRequest')):message.isStopped?t('chat.requestStopped'):status==='error'?t('chat.requestIncomplete'):t('chat.requestFinished'),
+    description:t('chat.thinkingNoDetail'),status}];
 }
 
 export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
+  const t = useT();
+  const locale = useLocaleStore((s) => s.locale);
   const [input, setInput] = useState('');
   const [showTaskRecords,setShowTaskRecords]=useState(false);
   const [taskRecordsRevision,setTaskRecordsRevision]=useState(0);
@@ -512,9 +519,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   let streamingArtifactStatus: string | null = null;
   if (engine.isGenerating) {
     if (activeStreamText.includes('</artifact>')) {
-      streamingArtifactStatus = '构筑完成，正在执行结构守卫与安全规则验证';
+      streamingArtifactStatus = t('chat.streamingRunningGuards');
     } else if (activeStreamText.includes('<artifact')) {
-      streamingArtifactStatus = '正在构筑页面结构...';
+      streamingArtifactStatus = t('chat.streamingBuildingStructure');
     }
   }
 
@@ -590,7 +597,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         <div className="flex items-center gap-1.5 min-w-0">
           <div className="flex items-center gap-1.5 font-semibold text-slate-200 flex-shrink-0">
             <Bot className="w-4 h-4 text-blue-400" />
-            <span>AI 原生助手</span>
+            <span>{t('chat.assistantTitle')}</span>
           </div>
           <span
             className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono truncate max-w-[100px]"
@@ -599,9 +606,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             {bindings.code.modelId}
           </span>
         </div>
-        <button type="button" onClick={()=>setShowTaskRecords(true)} aria-label="查看设计任务记录" className="text-slate-400 hover:text-slate-200 text-[11px]">任务</button>
+        <button type="button" onClick={()=>setShowTaskRecords(true)} aria-label={t('chat.tasksAria')} className="text-slate-400 hover:text-slate-200 text-[11px]">{t('chat.tasks')}</button>
         <button onClick={() => onOpenSettings?.('provider')} className="text-blue-400 hover:underline text-[11px] flex-shrink-0">
-          AI 服务设置
+          {t('chat.aiSettings')}
         </button>
       </div>
 
@@ -614,12 +621,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           type="button"
           onClick={() => setShowUsageDetails(!showUsageDetails)}
           className="flex items-center gap-1 hover:text-slate-200 transition cursor-pointer"
-          title="点击查看 Token 消耗明细与历史总计"
+          title={t('chat.usageTitle')}
         >
           <Zap className="w-3 h-3 text-amber-400 shrink-0" />
-          <span>本轮: <strong className="text-slate-200 font-mono font-medium">{formatTokenCount(sessionInputTokens + sessionOutputTokens)}</strong></span>
+          <span>{t('chat.sessionTokens')}: <strong className="text-slate-200 font-mono font-medium">{formatTokenCount(sessionInputTokens + sessionOutputTokens)}</strong></span>
           <span className="text-slate-700">·</span>
-          <span>历史: <strong className="text-slate-300 font-mono font-medium">{formatTokenCount(totalInputTokens + totalOutputTokens)}</strong></span>
+          <span>{t('chat.historyTokens')}: <strong className="text-slate-300 font-mono font-medium">{formatTokenCount(totalInputTokens + totalOutputTokens)}</strong></span>
           <ChevronDown className={`w-3 h-3 transition-transform ${showUsageDetails ? 'rotate-180 text-blue-400' : 'text-slate-500'}`} />
         </button>
         {sessionCalls > 0 && (
@@ -627,9 +634,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             type="button"
             onClick={resetSessionUsage}
             className="text-slate-500 hover:text-slate-300 transition text-[9px] cursor-pointer"
-            title="重置本轮会话计数"
+            title={t('chat.resetSessionUsage')}
           >
-            重置本轮
+            {t('chat.resetSessionShort')}
           </button>
         )}
       </div>
@@ -638,11 +645,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       {currentUsage && (
         <div className="px-3 py-1 bg-slate-950/70 border-b border-slate-800/80 flex items-center gap-1.5 text-[10px] text-slate-400" aria-live="polite">
           <Zap className="w-3 h-3 text-amber-400 shrink-0" />
-          <span>{currentUsage.status === 'running' ? '本次请求' : '最近请求'}:</span>
+          <span>{currentUsage.status === 'running' ? t('chat.currentRequest') : t('chat.recentRequest')}:</span>
           <strong className="font-mono text-slate-200">{formatTokenCount(currentUsage.inputTokens + currentUsage.outputTokens)}</strong>
-          <span className="text-slate-500">入 {formatTokenCount(currentUsage.inputTokens)} / 出 {formatTokenCount(currentUsage.outputTokens)}</span>
+          <span className="text-slate-500">{t('chat.usageInOutInline', { input: formatTokenCount(currentUsage.inputTokens), output: formatTokenCount(currentUsage.outputTokens) })}</span>
           <span className="ml-auto shrink-0 text-amber-300/80">
-            {currentUsage.source === 'provider' ? '实际' : currentUsage.source === 'unknown' ? '未知' : '估算'}
+            {currentUsage.source === 'provider' ? t('chat.usageActual') : currentUsage.source === 'unknown' ? t('chat.usageUnknown') : t('chat.usageEstimated')}
           </span>
         </div>
       )}
@@ -651,11 +658,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           <div className="flex items-center justify-between font-medium text-slate-300">
             <div className="flex items-center gap-1.5">
               <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>Token 消耗明细</span>
+              <span>{t('chat.usageDetailsTitle')}</span>
             </div>
             <button
               onClick={() => setShowUsageDetails(false)}
               className="text-slate-500 hover:text-slate-300 cursor-pointer"
+              aria-label={t('common.close')}
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -664,28 +672,28 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           <div className="grid grid-cols-2 gap-2 text-[10px]">
             {/* 本轮会话 */}
             <div className="p-2 bg-slate-900/90 rounded-lg border border-slate-800 space-y-1">
-              <div className="text-slate-400 font-medium">本轮会话</div>
+              <div className="text-slate-400 font-medium">{t('chat.sessionUsageCard')}</div>
               <div className="text-sm font-semibold font-mono text-amber-300">
                 {formatTokenCount(sessionInputTokens + sessionOutputTokens)}
               </div>
               <div className="text-slate-500 flex justify-between pt-0.5">
-                <span>入: {formatTokenCount(sessionInputTokens)}</span>
-                <span>出: {formatTokenCount(sessionOutputTokens)}</span>
+                <span>{t('chat.usageIn', { count: formatTokenCount(sessionInputTokens) })}</span>
+                <span>{t('chat.usageOut', { count: formatTokenCount(sessionOutputTokens) })}</span>
               </div>
-              <div className="text-slate-500 text-[9px]">调用: {sessionCalls} 次</div>
+              <div className="text-slate-500 text-[9px]">{t('chat.usageCalls', { count: sessionCalls })}</div>
             </div>
 
             {/* 历史累计 */}
             <div className="p-2 bg-slate-900/90 rounded-lg border border-slate-800 space-y-1">
-              <div className="text-slate-400 font-medium">历史累计</div>
+              <div className="text-slate-400 font-medium">{t('chat.historyUsageCard')}</div>
               <div className="text-sm font-semibold font-mono text-blue-300">
                 {formatTokenCount(totalInputTokens + totalOutputTokens)}
               </div>
               <div className="text-slate-500 flex justify-between pt-0.5">
-                <span>入: {formatTokenCount(totalInputTokens)}</span>
-                <span>出: {formatTokenCount(totalOutputTokens)}</span>
+                <span>{t('chat.usageIn', { count: formatTokenCount(totalInputTokens) })}</span>
+                <span>{t('chat.usageOut', { count: formatTokenCount(totalOutputTokens) })}</span>
               </div>
-              <div className="text-slate-500 text-[9px]">调用: {totalCalls} 次</div>
+              <div className="text-slate-500 text-[9px]">{t('chat.usageCalls', { count: totalCalls })}</div>
             </div>
           </div>
         </div>
@@ -721,17 +729,17 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               <div className="flex items-center gap-1.5 font-semibold text-[11px] text-purple-200 min-w-0">
                 <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping shrink-0" />
                 <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                <span className="truncate">AI 新方案候选已就绪</span>
+                <span className="truncate">{t('chat.candidateReady')}</span>
               </div>
               <span className="shrink-0 text-[10px] font-medium text-purple-300 bg-purple-900/70 border border-purple-700/60 px-2 py-0.5 rounded-full whitespace-nowrap">
-                并排比选中
+                {t('chat.comparingBadge')}
               </span>
             </div>
             <p className="text-[11px] text-purple-300/90 leading-relaxed">
-              新方案已在右侧画框并排就绪，针对「{screens[stagedScreen.targetScreenId]?.name || '目标画框'}」请观测对比并选择：
+              {t('chat.candidateHint', { name: screens[stagedScreen.targetScreenId]?.name || t('chat.targetScreenFallback') })}
             </p>
-            {candidateDelivery && <p role="status" className="text-[10px] text-purple-300/80">交付检查 {candidateDelivery.checks.filter(check => check.status === 'passed').length}/{candidateDelivery.checks.length}{candidateDelivery.status !== 'ready' ? ` · ${candidateDelivery.checks.find(check => check.status === 'blocked' || check.status === 'pending')?.message ?? '检查未完成'}` : ''}</p>}
-            {stagedAdoptionStatus === 'saving' && <p role="status" className="text-[11px] text-slate-300">正在保存交付档案…</p>}
+            {candidateDelivery && <p role="status" className="text-[10px] text-purple-300/80">{t('chat.deliveryChecks', { passed: candidateDelivery.checks.filter(check => check.status === 'passed').length, total: candidateDelivery.checks.length })}{candidateDelivery.status !== 'ready' ? ` · ${candidateDelivery.checks.find(check => check.status === 'blocked' || check.status === 'pending')?.message ?? t('chat.checkIncomplete')}` : ''}</p>}
+            {stagedAdoptionStatus === 'saving' && <p role="status" className="text-[11px] text-slate-300">{t('chat.savingDelivery')}</p>}
             {stagedAdoptionError && <p role="alert" className="text-[11px] text-amber-300">{stagedAdoptionError}</p>}
             <CandidateRecheckControl />
             <div className="space-y-1.5 pt-0.5">
@@ -742,7 +750,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-900/30 transition cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
-                <span>采纳新版 (替换原版)</span>
+                <span>{t('chat.adoptReplace')}</span>
               </button>
               <div className="grid grid-cols-2 gap-2">
                 <button
@@ -752,7 +760,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   className="w-full px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-slate-700/70 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Copy className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span>两版都留</span>
+                  <span>{t('chat.keepBoth')}</span>
                 </button>
                 <button
                   type="button"
@@ -760,7 +768,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   className="w-full px-2.5 py-1.5 bg-slate-900/60 hover:bg-red-950/40 text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-900/50 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
                 >
                   <X className="w-3.5 h-3.5 text-slate-400 hover:text-red-400 shrink-0" />
-                  <span>保留原版</span>
+                  <span>{t('chat.keepOriginal')}</span>
                 </button>
               </div>
             </div>
@@ -772,17 +780,17 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           <div className="p-3 bg-amber-950/50 border border-amber-800/60 rounded-xl space-y-2 text-amber-200 shadow-md">
             <div className="flex items-center gap-1.5 font-semibold text-[11px]">
               <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-              <span>结构守卫拦截保护 (ISSUE-011)</span>
+              <span>{t('chat.guardBlockedTitle')}</span>
             </div>
             <p className="text-[11px] text-amber-300/90 leading-relaxed">
-              检测到新生成的画框存在关键结构变更或删除。若确认本次调整属于重构，可点击放行。
+              {t('chat.guardBlockedHint')}
             </p>
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => engine.forceApply()}
                 className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg text-[10px] transition"
               >
-                强制并排放行应用
+                {t('chat.forceApplySideBySide')}
               </button>
             </div>
           </div>
@@ -793,7 +801,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           const isExpanded = expandedThinkingIds[m.id] !== undefined
             ? expandedThinkingIds[m.id]
             : isCurrentGenerating;
-          const thinkingSteps = getThinkingSteps(m);
+          const thinkingSteps = getThinkingSteps(m, t, locale);
 
           return (
             <div key={m.id} className="space-y-2">
@@ -801,7 +809,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 {m.sender === 'user' ? (
                   <>
                     <User className="w-3.5 h-3.5 text-slate-400" />
-                    <span>您</span>
+                    <span>{t('chat.you')}</span>
                   </>
                 ) : (
                   <>
@@ -835,10 +843,10 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       <div className="flex items-center gap-2 truncate">
                         <span className="font-semibold text-slate-200 text-[11px]">
                           {isCurrentGenerating
-                            ? 'AI 正在执行请求…'
+                            ? t('chat.thinkingRunning')
                             : m.isStopped
-                            ? 'AI 思考过程 (已中止)'
-                            : 'AI 思考与反馈过程'}
+                            ? t('chat.thinkingStopped')
+                            : t('chat.thinkingDone')}
                         </span>
                         {m.elapsedSeconds !== undefined && (
                           <span className="text-[10px] text-slate-500 font-mono">
@@ -850,7 +858,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
                     <div className="flex items-center gap-1 text-slate-500 group-hover:text-slate-300 transition flex-shrink-0">
                       <span className="text-[10px]">
-                        {isExpanded ? '收起' : '展开'}
+                        {isExpanded ? t('chat.collapse') : t('chat.expand')}
                       </span>
                       {isExpanded ? (
                         <ChevronDown className="w-3.5 h-3.5" />
@@ -865,7 +873,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                     <div className="px-2 pb-1.5 flex items-center gap-1.5 text-[10px] leading-3 text-slate-400 overflow-hidden">
                       <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
                       <span className="truncate">
-                        {m.isGenerating?userFacingMessage(m.generationProgress??executionPhaseLabels[m.executionEvents?.at(-1)?.phase??'preparing']):m.isStopped?'请求已停止':m.isError||m.isGuardRejected?'结果未应用，请查看原因':'请求已结束，请查看结果与检查记录'}
+                        {m.isGenerating?userFacingMessage(m.generationProgress??executionPhaseLabels[m.executionEvents?.at(-1)?.phase??'preparing']):m.isStopped?t('chat.requestStopped'):m.isError||m.isGuardRejected?t('chat.resultNotApplied'):t('chat.requestEnded')}
                       </span>
                     </div>
                   )}
@@ -933,18 +941,18 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 <div className="p-3 bg-sky-950/40 border border-sky-800/50 rounded-xl space-y-2 text-sky-200">
                   <div className="flex items-center gap-1.5 font-semibold text-[11px]">
                     <Palette className="w-3.5 h-3.5 text-sky-400" />
-                    <span>识别到设计 Token 调整诉求</span>
+                    <span>{t('chat.tokenProposalTitle')}</span>
                   </div>
-                  <p className="text-[11px] text-sky-300/90 leading-relaxed">{m.pendingProposal.label || 'Token 预设调整'}</p>
+                  <p className="text-[11px] text-sky-300/90 leading-relaxed">{m.pendingProposal.label || t('chat.tokenProposalDefaultLabel')}</p>
                   {m.pendingProposal.resolved ? (
                     <div className="flex items-center gap-1 text-[10px] text-emerald-400 pt-1">
                       <Check className="w-3 h-3" />
                       <span>
                         {m.pendingProposal.resolved === 'applied'
-                          ? '已应用至全工程，所有画框实时联动（可撤销）'
+                          ? t('chat.tokenProposalResolvedApplied')
                           : m.pendingProposal.resolved === 'once'
-                          ? '仅本次生效，工程设计系统未改动'
-                          : '已忽略'}
+                          ? t('chat.tokenProposalResolvedOnce')
+                          : t('chat.tokenProposalResolvedIgnored')}
                       </span>
                     </div>
                   ) : (
@@ -953,19 +961,19 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                         onClick={() => engine.resolveProposal(m.id, 'applied')}
                         className="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white font-medium rounded-lg text-[10px] transition"
                       >
-                        应用到全工程
+                        {t('chat.tokenProposalApplyProject')}
                       </button>
                       <button
                         onClick={() => engine.resolveProposal(m.id, 'once')}
                         className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] transition"
                       >
-                        仅本次
+                        {t('chat.tokenProposalApplyOnce')}
                       </button>
                       <button
                         onClick={() => engine.resolveProposal(m.id, 'ignored')}
                         className="px-2 py-1 text-slate-400 hover:text-slate-200 text-[10px] transition"
                       >
-                        忽略
+                        {t('chat.tokenProposalIgnore')}
                       </button>
                     </div>
                   )}
@@ -977,7 +985,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 <div className="p-3 bg-amber-950/40 border border-amber-800/50 rounded-xl space-y-2 text-amber-200">
                   <div className="flex items-center gap-1.5 font-semibold text-[11px]">
                     <BookmarkPlus className="w-3.5 h-3.5 text-amber-400" />
-                    <span>自动提取候选设计约定 (D20)</span>
+                    <span>{t('chat.designDecisionExtractTitle')}</span>
                   </div>
                   <p className="text-[11px] text-amber-300/90 leading-relaxed">
                     “{m.candidateDecision}”
@@ -985,7 +993,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   {m.decisionConfirmed ? (
                     <div className="flex items-center gap-1 text-[10px] text-emerald-400 pt-1">
                       <Check className="w-3 h-3" />
-                      <span>已永久沉淀为工程设计约定，未来生成将自动遵从</span>
+                      <span>{t('chat.designDecisionConfirmed')}</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-2 pt-1">
@@ -993,13 +1001,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                         onClick={() => engine.confirmDecision(m.id, m.candidateDecision!)}
                         className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg text-[10px] transition"
                       >
-                        沉淀为工程约定
+                        {t('chat.designDecisionCommit')}
                       </button>
                       <button
                         onClick={() => engine.dismissDecision(m.id)}
                         className="text-slate-400 hover:text-slate-200 text-[10px]"
                       >
-                        忽略
+                        {t('chat.tokenProposalIgnore')}
                       </button>
                     </div>
                   )}
@@ -1011,14 +1019,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 <div className="p-3 bg-violet-950/40 border border-violet-800/50 rounded-xl space-y-2 text-violet-200">
                   <div className="flex items-center gap-1.5 font-semibold text-[11px]">
                     <GitBranch className="w-3.5 h-3.5 text-violet-400" />
-                    <span>检测到设计取舍</span>
+                    <span>{t('chat.deviationTitle')}</span>
                   </div>
                   <p className="text-[11px] text-violet-300/90 leading-relaxed">{m.deviationNote.conflict}</p>
-                  <p className="text-[11px] text-violet-300/70 leading-relaxed">当前方案：{m.deviationNote.chosen}</p>
+                  <p className="text-[11px] text-violet-300/70 leading-relaxed">{t('chat.deviationChosenLabel', { chosen: m.deviationNote.chosen })}</p>
                   {m.deviationChoice ? (
                     <div className="flex items-center gap-1 text-[10px] text-emerald-400 pt-1">
                       <Check className="w-3 h-3" />
-                      <span>{m.deviationChoice === 'switch' ? '已把参考图方案指令填入输入框，可编辑后发送' : '已保持当前方案'}</span>
+                      <span>{m.deviationChoice === 'switch' ? t('chat.deviationResolvedSwitch') : t('chat.deviationResolvedKeep')}</span>
                     </div>
                   ) : (
                     <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -1026,7 +1034,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                         onClick={() => engine.resolveDeviationChoice(m.id, 'keep')}
                         className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] transition"
                       >
-                        保持当前方案
+                        {t('chat.deviationKeepButton')}
                       </button>
                       <button
                         onClick={() => {
@@ -1035,7 +1043,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                         }}
                         className="px-2.5 py-1 bg-violet-600 hover:bg-violet-500 text-white font-medium rounded-lg text-[10px] transition"
                       >
-                        换成参考图方案（{m.deviationNote.alternative}）
+                        {t('chat.deviationSwitchButton', { alternative: m.deviationNote.alternative })}
                       </button>
                     </div>
                   )}
@@ -1175,7 +1183,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               <ReferenceEvidenceCard evidence={m.referenceEvidence??m.workflowContract?.referenceImage?.evidence} reused={m.referenceReused} busy={engine.isGenerating} onCorrect={text=>engine.retryTurn(m.id,{referenceCorrection:text})}/>
               <RequestActivityCard activity={m.executionActivity} running={m.isGenerating||m.qualityDraftBusy}/>
               {m.historicalFailure&&<HistoricalFailureCard failure={m.historicalFailure} busy={engine.isGenerating} onReuse={()=>{setInput(m.historicalFailureRequest??'');textareaRef.current?.focus();}}/>}
-              {m.failureHistoryState&&<p role="status" className={`text-[10px] ${m.failureHistoryState==='failed'?'text-amber-300':'text-slate-500'}`}>{m.failureHistoryState==='saved'?'失败记录已保存到对话历史。':'失败记录未能保存，请检查工程目录与存储空间。'}</p>}
+              {m.failureHistoryState&&<p role="status" className={`text-[10px] ${m.failureHistoryState==='failed'?'text-amber-300':'text-slate-500'}`}>{m.failureHistoryState==='saved'?t('chat.failureHistorySaved'):t('chat.failureHistorySaveFailed')}</p>}
               {m.isGenerating&&m.generationProgress&&<div role="status" className="text-[11px] leading-relaxed text-sky-300/80"><UserFacingNotice message={m.generationProgress}/></div>}
               {m.qualityReport && <QualityReportCard report={m.qualityReport} onLocate={m.screenId && m.htmlOutput && screens[m.screenId]?.htmlContent === m.htmlOutput
                 ? nid => handleLocateAuditTarget({type:'element',screenId:m.screenId!,screenName:screens[m.screenId!]!.name,label:'检查发现',nid}) : undefined}/>}
@@ -1252,12 +1260,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   ) : m.isStopped ? (
                     <div className="flex items-center gap-1.5 text-amber-300 text-xs">
                       <Square className="w-3.5 h-3.5 flex-shrink-0 fill-current" />
-                      <span>{m.text || '本次生成已由用户手动停止。'}</span>
+                      <span>{m.text || t('chat.generationStoppedDefault')}</span>
                     </div>
                   ) : isCurrentGenerating && !m.text ? (
                     <div className="flex items-center gap-2 text-slate-400 text-xs">
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
-                      <span>{m.executionEvents?.length?`${executionPhaseLabels[m.executionEvents.at(-1)!.phase]}…`:userFacingMessage(m.generationProgress??'正在执行请求，等待返回…')}</span>
+                      <span>{m.executionEvents?.length?`${executionPhaseLabels[m.executionEvents.at(-1)!.phase]}…`:userFacingMessage(m.generationProgress??t('chat.waitingForAiResponse'))}</span>
                     </div>
                   ) : m.qualityDraft ? null : m.htmlOutput ? (
                     (() => {
@@ -1285,25 +1293,25 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                   <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                                   <span className="truncate">
                                     {m.isGuardRejected
-                                      ? '结构守卫已拦截本次覆盖'
-                                      : 'AI 新方案候选已就绪'}
+                                      ? t('chat.guardRejectedTitle')
+                                      : t('chat.candidateReady')}
                                   </span>
                                 </div>
                                 <span className="shrink-0 text-[10px] font-medium text-purple-300 bg-purple-900/70 border border-purple-700/60 px-2 py-0.5 rounded-full whitespace-nowrap">
-                                  并排比选中
+                                  {t('chat.comparingBadge')}
                                 </span>
                               </div>
                               {m.isGuardRejected && (
                                 <div className="text-[11px] text-amber-300/90 leading-relaxed bg-amber-950/40 border border-amber-800/50 p-2 rounded-lg flex items-start gap-1.5">
                                   <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                                  <span>⚠️ 结构守卫提醒：检测到节点变动较大，已在右侧呈现新方案供直观对比观测。</span>
+                                  <span>{t('chat.guardRejectedHint')}</span>
                                 </div>
                               )}
                               <p className="text-[11px] text-purple-300/90 leading-relaxed">
-                                新方案已在右侧画框并排就绪，针对「{displayTitle}」请观测对比并选择：
+                                {t('chat.candidateHint', { name: displayTitle })}
                               </p>
                               {candidateDelivery && <p role="status" className="text-[10px] leading-relaxed text-slate-300">
-                                交付检查 {candidateDelivery.checks.filter(check => check.status === 'passed').length}/{candidateDelivery.checks.length}
+                                {t('chat.deliveryChecks', { passed: candidateDelivery.checks.filter(check => check.status === 'passed').length, total: candidateDelivery.checks.length })}
                                 {candidateDelivery.checks.find(check => check.status !== 'passed') && ` · ${candidateDelivery.checks.find(check => check.status !== 'passed')?.message}`}
                               </p>}
                               <div className="space-y-1.5 pt-0.5">
@@ -1316,8 +1324,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                   <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
                                   <span>
                                     {m.isGuardRejected
-                                      ? '强制放行并覆盖更新原画框'
-                                      : '采纳新版 (替换原版)'}
+                                      ? t('chat.forceOverwrite')
+                                      : t('chat.adoptReplace')}
                                   </span>
                                 </button>
                                 <div className="grid grid-cols-2 gap-2">
@@ -1326,19 +1334,19 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                     disabled={!candidateReady}
                                     onClick={engine.keepBothCandidates}
                                     className="w-full px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-slate-700/70 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer whitespace-nowrap active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                                    title="保留原画框，同时将新方案作为新画框添加到画板"
+                                    title={t('chat.keepBothTitle')}
                                   >
                                     <Copy className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                    <span>两版都留</span>
+                                    <span>{t('chat.keepBoth')}</span>
                                   </button>
                                   <button
                                     type="button"
                                     onClick={engine.discardCandidate}
                                     className="w-full px-2.5 py-1.5 bg-slate-900/60 hover:bg-red-950/40 text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-900/50 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap active:scale-[0.98]"
-                                    title="放弃新方案，保留原画框不变"
+                                    title={t('chat.discardTitle')}
                                   >
                                     <X className="w-3.5 h-3.5 text-slate-400 hover:text-red-400 shrink-0" />
-                                    <span>保留原版</span>
+                                    <span>{t('chat.keepOriginal')}</span>
                                   </button>
                                 </div>
                               </div>
@@ -1348,12 +1356,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                               {isModified ? (
                                 <div className="flex items-center gap-1.5 text-blue-400 font-medium text-[11px]">
                                   <Sparkles className="w-3.5 h-3.5" />
-                                  <span>已更新画框「{displayTitle}」</span>
+                                  <span>{t('chat.screenUpdated', { name: displayTitle })}</span>
                                 </div>
                               ) : (
                                 <div className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
                                   <CheckCircle2 className="w-3.5 h-3.5" />
-                                  <span>设计画框已挂载至画板</span>
+                                  <span>{t('chat.screenMounted')}</span>
                                 </div>
                               )}
                               <button
@@ -1365,7 +1373,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                     : 'bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/50'
                                 }`}
                               >
-                                <span>定位画框</span>
+                                <span>{t('chat.locateScreen')}</span>
                                 <ExternalLink className="w-2.5 h-2.5" />
                               </button>
                             </div>
@@ -1373,10 +1381,10 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             <div className="space-y-2">
                               <div className="flex items-center gap-1.5 text-amber-400 font-medium text-[11px]">
                                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                                <span>结构守卫已拦截本次覆盖，尚未写入画框</span>
+                                <span>{t('chat.guardNotWritten')}</span>
                               </div>
                               <div className="text-[11px] text-amber-300/80 leading-relaxed">
-                                {m.text || '检测到原有结构存在较大变动，为防止误删已暂缓覆盖。'}
+                                {m.text || t('chat.guardDefaultReason')}
                               </div>
                               <button
                                 type="button"
@@ -1385,14 +1393,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                 title={`放行并直接覆盖更新「${m.preActionSnapshot?.screenName || displayTitle}」`}
                               >
                                 <Sparkles className="w-3.5 h-3.5" />
-                                <span>强制放行并覆盖更新原画框</span>
+                                <span>{t('chat.forceOverwrite')}</span>
                               </button>
                             </div>
                           ) : (
                             <div className="space-y-2">
                               <div className="flex items-center gap-1.5 text-amber-400 font-medium text-[11px]">
                                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                                <span>{m.isError?'页面未通过应用检查':'页面设计代码已就绪，尚未挂载至画板'}</span>
+                                <span>{m.isError?t('chat.pageCheckFailed'):t('chat.pageReadyUnmounted')}</span>
                               </div>
                               {m.isError&&<p role="alert" className="text-[11px] leading-relaxed text-red-300">{m.text}</p>}
                               <button
@@ -1402,17 +1410,17 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                 className="w-full px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow transition cursor-pointer"
                               >
                                 <Sparkles className="w-3.5 h-3.5" />
-                                <span>{m.isError?'重新检查并挂载':'一键挂载至画板'}</span>
+                                <span>{m.isError?t('chat.remountAndCheck'):t('chat.mountToBoard')}</span>
                               </button>
                             </div>
                           )}
                           <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono bg-slate-950/60 p-2 rounded-lg border border-slate-800">
-                            <span>规格: {settings.frameWidth}px · {m.htmlOutput.length} 字符</span>
+                            <span>{t('chat.specLine', { width: settings.frameWidth, chars: m.htmlOutput.length })}</span>
                             {isStagedNow ? (
-                              <span className="text-purple-400/90 font-sans">并排比选中</span>
+                              <span className="text-purple-400/90 font-sans">{t('chat.comparingBadge')}</span>
                             ) : mountedScreenId && (
                               <span className={isModified ? 'text-blue-400/90 font-sans' : 'text-emerald-400/80 font-sans'}>
-                                {isModified ? '已就绪 (内容已覆盖更新)' : '已在画板就绪'}
+                                {isModified ? t('chat.readyUpdated') : t('chat.readyOnBoard')}
                               </span>
                             )}
                           </div>
@@ -1425,7 +1433,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       const match = m.text.match(artifactRegex);
                       const attrStr = match ? match[1] || '' : '';
                       const titleMatch = attrStr.match(/title=["']([^"']+)["']/i);
-                      const title = titleMatch ? titleMatch[1] : (m.screenName || '页面设计代码');
+                      const title = titleMatch ? titleMatch[1] : (m.screenName || t('chat.artifactTitleFallback'));
                       const codeSnippet = match ? match[2].trim() : '';
                       const preText = m.text.slice(0, match ? match.index : undefined).trim();
                       const isCodeExpanded = Boolean(expandedCodeIds[m.id]);
@@ -1448,19 +1456,19 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                   onClick={() => panToScreen(targetScreen.id)}
                                   className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/40 rounded transition"
                                 >
-                                  <span>定位画框</span>
+                                  <span>{t('chat.locateScreen')}</span>
                                   <ExternalLink className="w-2.5 h-2.5" />
                                 </button>
                               )}
                             </div>
                             <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800">
-                              <span>{settings.frameWidth}px 规格 · {codeSnippet.length} 字符</span>
+                              <span>{t('chat.specLine', { width: settings.frameWidth, chars: codeSnippet.length })}</span>
                               <button
                                 type="button"
                                 onClick={() => toggleCodeExpand(m.id)}
                                 className="text-blue-400 hover:text-blue-300 transition cursor-pointer"
                               >
-                                {isCodeExpanded ? '收起代码' : '查看代码'}
+                                {isCodeExpanded ? t('chat.collapseCode') : t('chat.viewCode')}
                               </button>
                             </div>
                             {isCodeExpanded && (
@@ -1510,46 +1518,46 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                     <div className="space-y-2.5 p-2 bg-red-950/40 border border-red-800/60 rounded-xl text-red-200">
                       <div className="flex items-center gap-1.5 font-semibold text-xs text-red-400">
                         <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                        <span>操作未成功完成</span>
+                        <span>{t('chat.errorActionIncomplete')}</span>
                       </div>
                       <div className="text-[11px] text-red-300/90 whitespace-pre-wrap leading-relaxed">
                         <UserFacingNotice message={m.text}/>
                       </div>
                       {m.text.includes('读取流数据异常') && (
                         <div className="text-[10px] text-red-400/80 bg-red-950/60 p-1.5 rounded border border-red-900/60">
-                          💡 提示：响应流在传输中断开；若完整页面尚未到达，可直接重试。
+                          {t('chat.hintStreamInterrupted')}
                         </div>
                       )}
                       {(m.text?.includes('数据流传输超时') || m.text?.includes('[timeout]')) && (
                         <div className="text-[10px] text-amber-400/90 bg-amber-950/40 p-1.5 rounded border border-amber-900/60 leading-relaxed">
-                          💡 提示：AI 长时间没有返回内容。若当前模型响应较慢或处理图片超时，建议在右上角指派更高效的模型；参考图已解析时可复用解析结果继续；尚未解析时，忽略图片会丢失图中未写明的细节。
+                          {t('chat.hintStreamTimeout')}
                         </div>
                       )}
                       {m.text?.includes('结构化输出达到输出上限') && (
                         <div className="text-[10px] text-amber-400/90 bg-amber-950/40 p-1.5 rounded border border-amber-900/60 leading-relaxed">
-                          💡 提示：业务规划内容过长或模型思考过程过长，导致回复不完整。可点击重试，系统会尝试用更精简的方式重新生成。
+                          {t('chat.hintStructuredOutputLimit')}
                         </div>
                       )}
                       {!isCurrentGenerating && (
                         <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-red-900/40">
-                          {m.continuationAvailable&&<button type="button" onClick={()=>engine.continueTurn(m.id)} className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px]" title="使用本次会话保留的片段继续，不重新生成已完成部分">{m.sectionedAvailable?'继续区块设计':'继续未完成设计'}</button>}
-                          {m.outputLimitReached&&!m.sectionedMode&&m.originalDecision?.action==='create_screen'&&<button type="button" onClick={()=>engine.sectionLargeTurn(m.id)} className="px-2.5 py-1 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 text-[11px]">按区块重建同一页</button>}
-                          {m.outputLimitReached&&m.originalDecision?.action==='create_screen'&&<button type="button" onClick={()=>engine.splitLargeTurn(m.id)} className="px-2.5 py-1 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 text-[11px]">拆分为多页设计</button>}
+                          {m.continuationAvailable&&<button type="button" onClick={()=>engine.continueTurn(m.id)} className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px]" title={t('chat.continueTurnTitle')}>{m.sectionedAvailable?t('chat.continueSectionDesign'):t('chat.continueIncompleteDesign')}</button>}
+                          {m.outputLimitReached&&!m.sectionedMode&&m.originalDecision?.action==='create_screen'&&<button type="button" onClick={()=>engine.sectionLargeTurn(m.id)} className="px-2.5 py-1 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 text-[11px]">{t('chat.rebuildSamePageBySection')}</button>}
+                          {m.outputLimitReached&&m.originalDecision?.action==='create_screen'&&<button type="button" onClick={()=>engine.splitLargeTurn(m.id)} className="px-2.5 py-1 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 text-[11px]">{t('chat.splitIntoMultiPage')}</button>}
                           <button
                             type="button"
                             onClick={() => engine.retryTurn(m.id)}
                             className="flex items-center gap-1 px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[11px] font-medium transition cursor-pointer shadow-sm"
-                            title={Boolean(m.pageTaskPlan || m.workflowContract?.pageTaskPlan) ? '复用已完成的功能与交互规划，直接重试页面生成' : '重新发起本次请求'}
+                            title={Boolean(m.pageTaskPlan || m.workflowContract?.pageTaskPlan) ? t('chat.retryTitleReusePlan') : t('chat.retryTitleFresh')}
                           >
                             <RefreshCw className="w-3 h-3" />
                             <span>
                               {m.outputLimitReached||m.sectionedMode
-                                ? '从头重新生成'
+                                ? t('chat.regenerateFromScratch')
                                 : (m.pageTaskPlan || m.workflowContract?.pageTaskPlan)
-                                ? '直接重试 (复用规划)'
+                                ? t('chat.retryWithPlanning')
                                 : m.text?.includes('结构化输出达到输出上限')
-                                ? '直接重试（精简回复）'
-                                : '直接重试'}
+                                ? t('chat.retryCompactOutput')
+                                : t('chat.retryDirect')}
                             </span>
                           </button>
                           {Boolean(m.pageTaskPlan || m.workflowContract?.pageTaskPlan) && !m.outputLimitReached && !m.sectionedMode && (
@@ -1557,9 +1565,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                               type="button"
                               onClick={() => engine.retryTurn(m.id, { rePlan: true })}
                               className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] transition cursor-pointer"
-                              title="不使用先前梳理的规划，重新分析需求并重新规划功能与交互"
+                              title={t('chat.replanFromScratchTitle')}
                             >
-                              <span>重新梳理规划</span>
+                              <span>{t('chat.replanFromScratch')}</span>
                             </button>
                           )}
                           {m.originalAttachment && (m.text?.includes('timeout') || m.text?.includes('数据流传输超时') || m.text?.includes('网络') || m.isError) && (
@@ -1567,21 +1575,21 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                               type="button"
                               onClick={() => engine.retryTurn(m.id, { withoutAttachment: true })}
                               className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] transition cursor-pointer"
-                              title={m.referenceEvidence||m.workflowContract?.referenceImage?.evidence?'保留已解析的字段、布局及功能规划，后续代码请求不重复发送图片':'放弃尚未解析的图片内容，仅按文字重新设计；不会保留图中未写明的细节'}
+                              title={m.referenceEvidence||m.workflowContract?.referenceImage?.evidence?t('chat.retryTitleKeepImage'):t('chat.retryTitleDropImage')}
                             >
-                              <span>{m.referenceEvidence||m.workflowContract?.referenceImage?.evidence?'继续生成（保留图片解析）':'忽略图片，按文字重新设计'}</span>
+                              <span>{m.referenceEvidence||m.workflowContract?.referenceImage?.evidence?t('chat.continueWithImageEvidence'):t('chat.retryTextOnlyNoImage')}</span>
                             </button>
                           )}
-                          {m.originalAttachment&&Boolean(m.referenceEvidence||m.workflowContract?.referenceImage?.evidence)&&<button type="button" onClick={()=>engine.retryTurn(m.id,{reparseReference:true})} className="px-2.5 py-1 rounded-lg border border-slate-700 text-slate-200 text-[11px]" title="重新观察原图并重新规划，不使用旧解析缓存">重新解析参考图</button>}
+                          {m.originalAttachment&&Boolean(m.referenceEvidence||m.workflowContract?.referenceImage?.evidence)&&<button type="button" onClick={()=>engine.retryTurn(m.id,{reparseReference:true})} className="px-2.5 py-1 rounded-lg border border-slate-700 text-slate-200 text-[11px]" title={t('chat.reparseReferenceTitle')}>{t('chat.reparseReferenceImage')}</button>}
                           {m.preActionSnapshot && (
                             <button
                               type="button"
                               onClick={() => engine.rollbackAndRetryTurn(m.id)}
                               className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] transition cursor-pointer"
-                              title={`回退「${m.preActionSnapshot.screenName}」至修改前版本并重新执行`}
+                              title={t('chat.rollbackAndRetryTitle', { name: m.preActionSnapshot.screenName })}
                             >
                               <Undo2 className="w-3 h-3 text-amber-400" />
-                              <span>回退修改前版本并重新操作</span>
+                              <span>{t('chat.rollbackAndRetry')}</span>
                             </button>
                           )}
                         </div>
@@ -1596,10 +1604,10 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             type="button"
                             onClick={() => engine.forceApply(m.htmlOutput, m.id)}
                             className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg text-[11px] flex items-center gap-1 transition cursor-pointer shadow"
-                            title="放行并直接合入本次生成的页面或元素修改"
+                            title={t('chat.forceApplyModificationTitle')}
                           >
                             <Sparkles className="w-3 h-3" />
-                            <span>强制放行并应用修改</span>
+                            <span>{t('chat.forceApplyModification')}</span>
                           </button>
                         </div>
                       ) : !isCurrentGenerating && (
@@ -1624,7 +1632,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           className="mt-1 px-2.5 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded-lg text-[11px] flex items-center gap-1 transition cursor-pointer"
                         >
                           <Sparkles className="w-3 h-3" />
-                          <span>生成完整页面</span>
+                          <span>{t('chat.generateFullPage')}</span>
                         </button>
                       )}
                     </div>
@@ -1692,13 +1700,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           data-testid="scroll-to-bottom-btn"
           onClick={() => scrollToBottom('smooth')}
           className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-3 py-1.5 bg-slate-850/95 hover:bg-slate-750 text-slate-200 hover:text-white border border-slate-700/80 rounded-full shadow-lg backdrop-blur-sm text-xs font-medium transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer group select-none"
-          title="滚动到最新内容"
+          title={t('chat.scrollToLatest')}
         >
           {engine.isGenerating && (
             <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping flex-shrink-0" />
           )}
           <ArrowDown className="w-3.5 h-3.5 text-blue-400 group-hover:translate-y-0.5 transition-transform" />
-          <span>最新内容</span>
+          <span>{t('chat.scrollToLatestLabel')}</span>
         </button>
       )}
     </div>
@@ -1708,7 +1716,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         <div className="p-2 bg-slate-950 border-t border-slate-800 max-h-32 overflow-y-auto space-y-1">
           <div className="text-[10px] text-slate-500 px-2 py-0.5 flex items-center gap-1 font-semibold uppercase tracking-wider">
             <AtSign className="w-3 h-3 text-blue-400" />
-            <span>引用工程页面上下文 (D18)</span>
+            <span>{t('chat.mentionMenuTitle')}</span>
           </div>
           {Object.values(screens).map((s) => (
             <div
@@ -1727,7 +1735,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       {/* TODO(E4c): optional mother enabled/disabled chip beside page/element refs — skip for now (invasive; wait for E5 mother inject wiring). */}
       {(activeScreen || selectedNode) && (
         <div className="px-3 py-2 border-t border-slate-800 bg-slate-900/60 flex items-center flex-wrap gap-2">
-          <span className="text-[10px] text-slate-500 mr-0.5 flex-shrink-0">引用</span>
+          <span className="text-[10px] text-slate-500 mr-0.5 flex-shrink-0">{t('chat.contextRefLabel')}</span>
           {activeScreen && (
             <div
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] border transition select-none ${
@@ -1743,8 +1751,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 className="flex items-center gap-1.5 transition disabled:opacity-40"
                 title={
                   isPageReferenced
-                    ? `已引用「${activeScreen.name}」，AI 将基于该画框进行修改（点击可停用）`
-                    : `未引用「${activeScreen.name}」，点击启用引用后 AI 将针对该画框修改`
+                    ? t('chat.pageRefOn', { name: activeScreen.name })
+                    : t('chat.pageRefOff', { name: activeScreen.name })
                 }
               >
                 {isPageReferenced ? (
@@ -1760,7 +1768,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       : 'bg-slate-800 text-slate-500 border border-slate-700/60'
                   }`}
                 >
-                  {isPageReferenced ? '已启用' : '未启用'}
+                  {isPageReferenced ? t('chat.refEnabled') : t('chat.refDisabled')}
                 </span>
               </button>
               {isPageReferenced && (
@@ -1769,7 +1777,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   onClick={() => setIsPageReferenced(false)}
                   disabled={engine.isGenerating}
                   className="p-0.5 text-blue-400/60 hover:text-blue-100 hover:bg-blue-500/20 rounded transition"
-                  title="停用页面引用"
+                  title={t('chat.pageRefDisableTitle')}
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -1792,8 +1800,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 className="flex items-center gap-1.5 transition disabled:opacity-40"
                 title={
                   isElementReferenced
-                    ? `已引用元素 <${selectedNode.tagName}> (nid: ${selectedNode.nid})，点击可停用`
-                    : `未引用元素 <${selectedNode.tagName}>，点击启用后将精准定位修改该元素`
+                    ? t('chat.elementRefOn', { tag: selectedNode.tagName, nid: selectedNode.nid })
+                    : t('chat.elementRefOff', { tag: selectedNode.tagName })
                 }
               >
                 {isElementReferenced ? (
@@ -1809,7 +1817,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       : 'bg-slate-800 text-slate-500 border border-slate-700/60'
                   }`}
                 >
-                  {isElementReferenced ? '已启用' : '未启用'}
+                  {isElementReferenced ? t('chat.refEnabled') : t('chat.refDisabled')}
                 </span>
               </button>
               {isElementReferenced && (
@@ -1818,7 +1826,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   onClick={handleDisableElementRef}
                   disabled={engine.isGenerating}
                   className="p-0.5 text-indigo-400/60 hover:text-indigo-100 hover:bg-indigo-500/20 rounded transition"
-                  title="停用元素引用"
+                  title={t('chat.elementRefDisableTitle')}
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -1861,7 +1869,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 <FileCode className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="truncate flex-1" title={file.name}>{file.name}</span>
                 <span className="text-blue-300/60">{file.content.length} 字</span>
-                <button type="button" onClick={() => setAttachedTextFiles((prev) => prev.filter((_, i) => i !== index))} title={`移除 ${file.name}`} disabled={engine.isGenerating}>
+                <button type="button" onClick={() => setAttachedTextFiles((prev) => prev.filter((_, i) => i !== index))} title={t('chat.removeFile', { name: file.name })} disabled={engine.isGenerating}>
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -1899,7 +1907,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 onClick={() => attachReference(null)}
                 disabled={engine.isGenerating}
                 className="text-slate-400 hover:text-slate-200 p-0.5 disabled:opacity-40 flex-shrink-0"
-                title="移除参考图"
+                title={t('chat.removeImage')}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -1918,7 +1926,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                     onClick={() => onOpenSettings?.('provider')}
                     className="underline text-amber-200 mx-1 font-medium hover:text-white"
                   >
-                    AI 服务设置
+                    {t('chat.aiSettings')}
                   </button>
                   为 Vision 档配置 Key，或移除图片仅发送文字。
                 </span>
@@ -1944,7 +1952,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               type="button"
               onClick={() => clearPendingNodeRef()}
               className="p-0.5 text-blue-400/60 hover:text-blue-200 transition flex-shrink-0"
-              title="取消引用"
+              title={t('chat.cancelRef')}
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -1954,7 +1962,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         {/* 快捷输入 (Quick Prompts) —— 点击快速插入到输入框（不提交）*/}
         <div className="mb-2 flex items-center justify-between gap-2 text-[10px] text-slate-400">
           <label className="flex items-center gap-1.5" title="自动按功能规模和容量选择生成方式。">
-            <span>生成方式</span><select aria-label="生成方式" value={writeStrategy} disabled={engine.isGenerating} onChange={e=>setWriteStrategy(e.target.value as typeof writeStrategy)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5"><option value="auto">自动选择</option><option value="atomic">一次生成页面</option><option value="patch">分区域生成（最多3区）</option></select>
+            <span>{t('chat.writeStrategy')}</span><select aria-label={t('chat.writeStrategy')} value={writeStrategy} disabled={engine.isGenerating} onChange={e=>setWriteStrategy(e.target.value as typeof writeStrategy)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5"><option value="auto">{t('chat.writeStrategyAuto')}</option><option value="atomic">{t('chat.writeStrategyAtomic')}</option><option value="patch">{t('chat.writeStrategyPatch')}</option></select>
           </label>
           <details ref={quickMenuRef} className="relative">
             <summary className="cursor-pointer list-none flex items-center gap-1 rounded border border-slate-700 px-2 py-1 hover:bg-slate-800 text-slate-300"><Sparkles className="w-3 h-3 text-amber-400" />快捷输入</summary>
@@ -2006,7 +2014,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             onClick={() => fileInputRef.current?.click()}
             disabled={engine.isGenerating || isReadingFiles}
             className="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-800 disabled:opacity-40 rounded-xl transition"
-            title="上传图片或 Markdown、TXT 等文本文件；也可粘贴文件或在对话中写本地路径"
+            title={t('chat.attachTitle')}
           >
             <ImageIcon className="w-4 h-4" />
           </button>
@@ -2028,8 +2036,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             }}
             placeholder={
               engine.isGenerating
-                ? 'AI 正在生成中，点击右侧按钮可立即停止...'
-                : '输入设计诉求，可上传/粘贴图片或文本文件，也可引用本地文本路径...'
+                ? t('chat.placeholderGenerating')
+                : t('chat.placeholder')
             }
             rows={4}
             className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 pr-20 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
@@ -2041,13 +2049,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               type="button"
               onClick={handleStopGenerating}
               className="absolute right-2.5 top-2.5 px-2.5 py-1.5 bg-blue-600/20 hover:bg-red-600/30 text-blue-400 hover:text-red-300 border border-blue-500/40 hover:border-red-500/50 rounded-xl transition-all flex items-center gap-1.5 group cursor-pointer shadow-sm select-none"
-              title="AI 正在生成中，点击可立即停止 (Stop)"
+              title={t('chat.stopTitle')}
             >
               <Loader2 className="w-3.5 h-3.5 animate-spin group-hover:hidden text-blue-400" />
               <Square className="w-3.5 h-3.5 hidden group-hover:block fill-current text-red-400" />
               <span className="text-[11px] font-medium transition">
-                <span className="group-hover:hidden animate-pulse">思考中</span>
-                <span className="hidden group-hover:inline text-red-300 font-semibold">停止</span>
+                <span className="group-hover:hidden animate-pulse">{t('chat.thinking')}</span>
+                <span className="hidden group-hover:inline text-red-300 font-semibold">{t('chat.stop')}</span>
               </span>
             </button>
           ) : (
@@ -2056,7 +2064,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               onClick={() => handleSendMessage()}
               disabled={(!input.trim() && !attachedImage && attachedTextFiles.length === 0) || isReadingFiles}
               className="absolute right-2.5 top-2.5 p-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl transition shadow"
-              title="发送设计诉求 (Enter)"
+              title={t('chat.sendTitle')}
             >
               <Send className="w-3.5 h-3.5" />
             </button>

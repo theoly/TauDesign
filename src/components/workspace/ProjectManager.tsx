@@ -2,18 +2,16 @@ import { ReferenceDeviceOption } from '../theme/ReferenceDeviceOption';
 import { defaultReferenceDevice, REFERENCE_DEVICES } from '../../utils/referenceDevice';
 import React, { useEffect, useMemo, useState } from 'react';
 import { BrandMark } from '../common/BrandMark';
+import { LanguageMenu } from '../common/LanguageMenu';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { themePresets } from '../../utils/themePresets';
 import {
   DEFAULT_STYLE_DNA,
-  DOMAIN_OPTIONS,
-  PERSONALITY_OPTIONS,
   SHAPE_OPTIONS,
-  resolveStyleDna,
   type Domain,
   type Shape,
-  type StyleDnaAnswers
 } from '../../utils/styleDna';
+import { localizedPresetLabel } from '../../utils/themePresetLabels';
 import { ProjectMeta } from '../../utils/projectRegistry';
 import { folderDisplayName, isDesktopRuntime, pickProjectFolder } from '../../services/storage/folderPicker';
 import { DesignSystemVisualPreview } from '../theme/DesignSystemVisualPreview';
@@ -21,6 +19,8 @@ import { useProjectStore } from '../../stores/useProjectStore';
 import { CustomDesignSystemBuilder } from './CustomDesignSystemBuilder';
 import { DEFAULT_CUSTOM_DESIGN_SYSTEM, generateCustomDesignSystems } from '../../utils/customDesignSystem';
 import type { DesignSystem } from '../../types/designSystem';
+import { t as tStatic } from '../../i18n';
+import { getUiLocale, useT } from '../../stores/useLocaleStore';
 import {
   AlertTriangle,
   Check,
@@ -43,6 +43,7 @@ import {
  * 3. 无页面或空白: 使用优雅微质感与工程名字作为封面展示。
  */
 const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
+  const t = useT();
   const isMobile = meta.deviceProfile === 'mobile' || (meta.frameWidth && meta.frameWidth <= 500);
 
   const srcDoc = useMemo(() => {
@@ -61,12 +62,12 @@ const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
       <div className="w-full h-full relative overflow-hidden bg-slate-950 flex items-center justify-center" data-testid="project-custom-cover">
         <img
           src={meta.coverImage}
-          alt={`${meta.name} 封面`}
+          alt={t('workspace.coverAlt', { name: meta.name })}
           className="w-full h-full object-contain select-none pointer-events-none transition-transform duration-300 group-hover:scale-105"
         />
         <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-slate-900/80 backdrop-blur-sm border border-slate-700/50 text-[10px] text-blue-400 font-medium flex items-center gap-1 shadow select-none pointer-events-none z-10">
           <Sparkles className="w-2.5 h-2.5" />
-          <span>自定义封面</span>
+          <span>{t('workspace.customCover')}</span>
         </div>
       </div>
     );
@@ -87,7 +88,7 @@ const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
             style={{ width: `${phoneW}px`, height: `${phoneH}px` }}
           >
             <iframe
-              title={`${meta.name} 预览`}
+              title={t('workspace.previewTitle', { name: meta.name })}
               sandbox="allow-same-origin"
               srcDoc={srcDoc}
               tabIndex={-1}
@@ -109,7 +110,7 @@ const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
     return (
       <div className="w-full h-full relative overflow-hidden bg-slate-950 flex items-start justify-center" data-testid="project-screen-cover">
         <iframe
-          title={`${meta.name} 预览`}
+          title={t('workspace.previewTitle', { name: meta.name })}
           sandbox="allow-same-origin"
           srcDoc={srcDoc}
           tabIndex={-1}
@@ -146,9 +147,9 @@ const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
         {meta.name}
       </div>
       <div className="text-[10px] text-slate-500 mt-1 z-10 flex items-center gap-1">
-        <span>{meta.deviceProfile === 'pc' ? 'PC 1440' : '移动端 390'}</span>
+        <span>{meta.deviceProfile === 'pc' ? t('workspace.devicePc1440') : t('workspace.deviceMobile390')}</span>
         <span>·</span>
-        <span>空白画板</span>
+        <span>{t('workspace.blankBoard')}</span>
       </div>
     </div>
   );
@@ -158,9 +159,10 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
   initialFolderPath,
   onClose
 }) => {
+  const t = useT();
   const { createProject } = useWorkspaceStore();
   const isDesktop = isDesktopRuntime();
-  const [name, setName] = useState(() => (initialFolderPath ? folderDisplayName(initialFolderPath) : '未命名工程'));
+  const [name, setName] = useState(() => (initialFolderPath ? folderDisplayName(initialFolderPath) : tStatic('workspace.untitledProject', undefined, getUiLocale())));
   const [folderPath, setFolderPath] = useState<string | undefined>(initialFolderPath);
   const [device, setDevice] = useState<'pc' | 'mobile'>('pc');
   const [useCustomNavigation, setUseCustomNavigation] = useState(false);
@@ -171,15 +173,23 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
   const [shape, setShape] = useState<Shape>('standard');
   const [domain, setDomain] = useState<Domain>('none');
   const [designSystemMode, setDesignSystemMode] = useState<'preset' | 'custom'>('preset');
-  const [customTheme, setCustomTheme] = useState<DesignSystem | null>(() => generateCustomDesignSystems(DEFAULT_CUSTOM_DESIGN_SYSTEM, 0)[0].theme);
+  const [customTheme, setCustomTheme] = useState<DesignSystem | null>(() =>
+    generateCustomDesignSystems(DEFAULT_CUSTOM_DESIGN_SYSTEM, 0, getUiLocale())[0].theme,
+  );
 
   const filteredPresets = useMemo(() => {
     const q = searchPreset.trim().toLowerCase();
     if (!q) return themePresets;
-    return themePresets.filter(
-      (p) => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q)
-    );
-  }, [searchPreset]);
+    return themePresets.filter((p) => {
+      const label = localizedPresetLabel(p.id) ?? { name: p.name, description: p.description };
+      return (
+        label.name.toLowerCase().includes(q) ||
+        label.description.toLowerCase().includes(q) ||
+        p.name.toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q)
+      );
+    });
+  }, [searchPreset, t]);
 
   const activePreset = useMemo(() => {
     return themePresets.find((p) => p.id === selectedPresetId) || themePresets[0];
@@ -203,10 +213,10 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
   }, [activePreset, shape, designSystemMode, customTheme]);
 
   const handlePickFolder = async () => {
-    const picked = await pickProjectFolder('选择新工程的保存目录');
+    const picked = await pickProjectFolder(t('workspace.pickFolderTitle'));
     if (picked) {
       setFolderPath(picked);
-      if (name === '未命名工程' || !name.trim()) {
+      if (name === t('workspace.untitledProject') || !name.trim()) {
         setName(folderDisplayName(picked));
       }
     }
@@ -214,7 +224,7 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
 
   const submit = () => {
     if (!currentTheme) return;
-    const trimmed = name.trim() || (folderPath ? folderDisplayName(folderPath) : '未命名工程');
+    const trimmed = name.trim() || (folderPath ? folderDisplayName(folderPath) : t('workspace.untitledProject'));
     const decisions: string[] = [];
     if (domain !== 'none') {
       const dMap: Record<string, string[]> = {
@@ -240,11 +250,11 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="font-bold text-slate-100 text-sm">新建工程</h2>
-              <p className="text-[11px] text-slate-400">配置工程属性与设计系统，工作区纯净无冗余样张</p>
+              <h2 className="font-bold text-slate-100 text-sm">{t('workspace.newDialogTitle')}</h2>
+              <p className="text-[11px] text-slate-400">{t('workspace.newDialogSubtitle')}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 p-1">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 p-1" aria-label={t('common.close')}>
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -255,7 +265,7 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
           <div className="w-[410px] border-r border-slate-800 flex flex-col p-5 space-y-4 overflow-y-auto shrink-0 bg-slate-900/60">
             {/* 1. Name */}
             <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">工程名称</label>
+              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{t('workspace.projectName')}</label>
               <input
                 autoFocus
                 value={name}
@@ -268,13 +278,13 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
             {/* 2. Device */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">设备档位</label>
-                <span className="text-[10px] text-amber-500/80">设备档位在工程创建后不可更改</span>
+                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{t('workspace.deviceProfile')}</label>
+                <span className="text-[10px] text-amber-500/80">{t('workspace.deviceImmutable')}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {([
-                  { key: 'pc', icon: Laptop, title: 'PC 桌面', desc: '1440px' },
-                  { key: 'mobile', icon: Smartphone, title: '移动端', desc: '390px' }
+                  { key: 'pc', icon: Laptop, title: t('workspace.devicePc'), desc: '1440px' },
+                  { key: 'mobile', icon: Smartphone, title: t('workspace.deviceMobile'), desc: '390px' }
                 ] as const).map((opt) => (
                   <button
                     key={opt.key}
@@ -297,13 +307,13 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
             </div>
 
             <ReferenceDeviceOption settings={{ deviceProfile: device, frameWidth: device === 'mobile' ? 390 : 1440, viewportGuideHeight: device === 'mobile' ? 844 : 900, referenceDevice, useCustomNavigation, showViewportGuide: true, colorMode: 'light', lodBudget: 12 }} onChange={setReferenceDeviceId} />
-            {device === 'mobile' && <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" aria-label="使用自定义导航栏" checked={useCustomNavigation} onChange={event => setUseCustomNavigation(event.target.checked)} />使用自定义导航栏<span className="text-[10px] text-slate-500">默认使用微信顶部栏预览</span></label>}
+            {device === 'mobile' && <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" aria-label={t('workspace.customNav')} checked={useCustomNavigation} onChange={event => setUseCustomNavigation(event.target.checked)} />{t('workspace.customNav')}<span className="text-[10px] text-slate-500">{t('workspace.customNavHint')}</span></label>}
             {/* 3. Folder Path (Desktop) */}
             {isDesktop && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    工程存放目录
+                    {t('workspace.projectFolder')}
                   </label>
                   {folderPath && (
                     <button
@@ -311,18 +321,18 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
                       onClick={() => setFolderPath(undefined)}
                       className="text-[10px] text-slate-500 hover:text-slate-300 underline transition"
                     >
-                      使用内置存储
+                      {t('workspace.useBuiltinStorage')}
                     </button>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
                   <div
                     className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs truncate flex items-center gap-2"
-                    title={folderPath || '未指定（保存至应用内置存储）'}
+                    title={folderPath || t('workspace.folderUnspecified')}
                   >
                     <FolderOpen className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                     <span className={`truncate ${folderPath ? 'text-slate-200 font-mono text-[11px]' : 'text-slate-500 italic'}`}>
-                      {folderPath ? folderPath : '默认内置存储'}
+                      {folderPath ? folderPath : t('workspace.defaultBuiltinStorage')}
                     </span>
                   </div>
                   <button
@@ -330,14 +340,14 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
                     onClick={handlePickFolder}
                     className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg text-xs transition shrink-0"
                   >
-                    {folderPath ? '更换' : '选择'}
+                    {folderPath ? t('workspace.changeFolder') : t('workspace.chooseFolder')}
                   </button>
                 </div>
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800" role="group" aria-label="设计系统来源">
-              {([{ value: 'preset', label: '现有预设' }, { value: 'custom', label: '自定义生成' }] as const).map(option => (
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800" role="group" aria-label={t('workspace.designSystemSource')}>
+              {([{ value: 'preset' as const, label: t('workspace.presetSource') }, { value: 'custom' as const, label: t('workspace.customSource') }]).map(option => (
                 <button key={option.value} type="button" aria-pressed={designSystemMode === option.value} onClick={() => setDesignSystemMode(option.value)} className={`py-2 rounded-lg text-xs transition ${designSystemMode === option.value ? 'bg-slate-800 text-slate-100 font-semibold' : 'text-slate-400 hover:text-slate-200'}`}>{option.label}</button>
               ))}
             </div>
@@ -349,9 +359,9 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
             <div hidden={designSystemMode !== 'preset'} className="space-y-2 pt-1 border-t border-slate-800/80">
               <div className="flex items-center justify-between">
                 <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                  设计系统预设
+                  {t('workspace.designSystemPresets')}
                 </label>
-                <span className="text-[10px] text-slate-500">点击右侧实时预览</span>
+                <span className="text-[10px] text-slate-500">{t('workspace.livePreviewHint')}</span>
               </div>
 
               {/* Search Presets */}
@@ -360,7 +370,7 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
                 <input
                   value={searchPreset}
                   onChange={(e) => setSearchPreset(e.target.value)}
-                  placeholder="搜索设计系统 (如 Modern, Airbnb, Ant...)"
+                  placeholder={t('workspace.searchPresets')}
                   className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-7 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
                 />
               </div>
@@ -370,6 +380,10 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
                 {filteredPresets.map((preset) => {
                   const isSelected = preset.id === selectedPresetId;
                   const isDefault = preset.id === 'neutral-modern';
+                  const label = localizedPresetLabel(preset.id) ?? {
+                    name: preset.name,
+                    description: preset.description,
+                  };
                   return (
                     <div
                       key={preset.id}
@@ -386,14 +400,14 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1">
-                          <span className="font-semibold text-slate-200 text-xs truncate">{preset.name}</span>
+                          <span className="font-semibold text-slate-200 text-xs truncate">{label.name}</span>
                           {isDefault && (
                             <span className="px-1.5 py-0.2 bg-blue-500/20 text-blue-300 text-[9px] rounded font-medium">
-                              默认
+                              {t('workspace.defaultBadge')}
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] text-slate-400 truncate mt-0.5">{preset.description}</p>
+                        <p className="text-[10px] text-slate-400 truncate mt-0.5">{label.description}</p>
                       </div>
                       {isSelected && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />}
                     </div>
@@ -404,12 +418,19 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
 
             {/* 5. Radius Tuning */}
             <div hidden={designSystemMode !== 'preset'} className="space-y-1.5 pt-1 border-t border-slate-800/80">
-              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">圆角微调</label>
+              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{t('workspace.radiusTune')}</label>
               <div className="grid grid-cols-3 gap-1.5">
                 {SHAPE_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
+                    title={t(
+                      opt.value === 'sharp'
+                        ? 'workspace.shapeSharpHint'
+                        : opt.value === 'round'
+                          ? 'workspace.shapeRoundHint'
+                          : 'workspace.shapeStandardHint',
+                    )}
                     onClick={() => setShape(opt.value)}
                     className={`py-1.5 px-2 rounded-lg border text-center transition text-xs ${
                       shape === opt.value
@@ -417,7 +438,13 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
                         : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
                     }`}
                   >
-                    {opt.label.split(' ')[0]}
+                    {t(
+                      opt.value === 'sharp'
+                        ? 'workspace.shapeSharp'
+                        : opt.value === 'round'
+                          ? 'workspace.shapeRound'
+                          : 'workspace.shapeStandard',
+                    )}
                   </button>
                 ))}
               </div>
@@ -426,21 +453,21 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
 
           {/* Right Column: Visual Preview */}
           <div className="flex-1 flex flex-col min-w-0 bg-slate-950 overflow-hidden">
-            {currentTheme ? <DesignSystemVisualPreview theme={currentTheme} device={device} /> : <div className="flex-1 flex items-center justify-center p-8 text-sm text-slate-400">请输入有效主色，以预览并创建自定义设计系统。</div>}
+            {currentTheme ? <DesignSystemVisualPreview theme={currentTheme} device={device} /> : <div className="flex-1 flex items-center justify-center p-8 text-sm text-slate-400">{t('workspace.customPreviewHint')}</div>}
           </div>
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 shrink-0 bg-slate-900/90">
           <div className="text-[11px] text-slate-500">
-            画布初始为纯净无画框状态，工作区仅存放真实业务交付物。
+            {t('workspace.canvasCleanHint')}
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
               className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs transition"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               onClick={submit}
@@ -448,7 +475,7 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
               className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-xs shadow transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>创建并进入工程</span>
+              <span>{t('workspace.createAndEnter')}</span>
             </button>
           </div>
         </div>
@@ -458,6 +485,7 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
 };
 
 export const ProjectManager: React.FC = () => {
+  const t = useT();
   const { projects, missingIds, refresh, openProject, renameProject, removeFromList, deleteProject, openLocalFolder, migrateProject,sourceTransitionError } =
     useWorkspaceStore();
   const [search, setSearch] = useState('');
@@ -485,10 +513,11 @@ export const ProjectManager: React.FC = () => {
       <div className="max-w-5xl mx-auto px-8 py-12">
         <header className="flex items-center gap-3 mb-8">
           <BrandMark size={40} className="shadow rounded-xl" />
-          <div>
-            <h1 className="text-lg font-bold text-slate-100">TauDesign</h1>
-            <p className="text-xs text-slate-500">选择一个工程继续，或新建一个开始。</p>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg font-bold text-slate-100">{t('app.name')}</h1>
+            <p className="text-xs text-slate-500">{t('workspace.tagline')}</p>
           </div>
+          <LanguageMenu />
         </header>
 
         <div className="flex items-center gap-3 mb-6">
@@ -497,7 +526,7 @@ export const ProjectManager: React.FC = () => {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索工程"
+              placeholder={t('workspace.searchProjects')}
               className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
             />
           </div>
@@ -507,6 +536,7 @@ export const ProjectManager: React.FC = () => {
               setNotice(null);
               setUninitFolder(null);
               const r = await openLocalFolder();
+              // '已取消' is a storage-layer protocol token, not UI copy
               if (!r.ok && r.message !== '已取消') {
                 if (r.notProject && r.folderPath) {
                   setUninitFolder(r.folderPath);
@@ -518,7 +548,7 @@ export const ProjectManager: React.FC = () => {
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg text-xs transition"
           >
             <FolderOpen className="w-3.5 h-3.5" />
-            <span>打开本地工程</span>
+            <span>{t('workspace.openLocalProject')}</span>
           </button>
           <button
             onClick={() => {
@@ -528,7 +558,7 @@ export const ProjectManager: React.FC = () => {
             className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-xs shadow transition"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>新建工程</span>
+            <span>{t('workspace.createProject')}</span>
           </button>
         </div>
 
@@ -537,10 +567,10 @@ export const ProjectManager: React.FC = () => {
             <div className="space-y-1">
               <div className="flex items-center gap-2 font-semibold text-blue-300">
                 <FolderOpen className="w-4 h-4 text-blue-400 shrink-0" />
-                <span>所选文件夹尚未初始化为工程</span>
+                <span>{t('workspace.uninitTitle')}</span>
               </div>
               <p className="text-[11px] text-slate-300 leading-relaxed">
-                目录 <code className="px-1.5 py-0.5 bg-slate-900 rounded text-blue-300 font-mono text-[10px]">{uninitFolder}</code> 中缺少 <code className="text-blue-300">project.json</code>。是否以此文件夹作为保存位置，直接新建工程？
+                {t('workspace.uninitBodyPrefix')} <code className="px-1.5 py-0.5 bg-slate-900 rounded text-blue-300 font-mono text-[10px]">{uninitFolder}</code> {t('workspace.uninitBodyMissing')} <code className="text-blue-300">project.json</code>{t('workspace.uninitBodySuffix')}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
@@ -548,7 +578,7 @@ export const ProjectManager: React.FC = () => {
                 onClick={() => setUninitFolder(null)}
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={() => {
@@ -560,7 +590,7 @@ export const ProjectManager: React.FC = () => {
                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-xs shadow transition flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>在此文件夹新建工程</span>
+                <span>{t('workspace.createInFolder')}</span>
               </button>
             </div>
           </div>
@@ -570,7 +600,7 @@ export const ProjectManager: React.FC = () => {
           <div className="mb-4 px-3 py-2 bg-amber-950/40 border border-amber-800/50 rounded-lg text-[11px] text-amber-200 flex items-center justify-between gap-3">
             <span className="leading-relaxed">{notice??sourceTransitionError}</span>
             <button onClick={() => {setNotice(null);useWorkspaceStore.setState({sourceTransitionError:null});}} className="text-amber-400 hover:text-amber-200 shrink-0">
-              知道了
+              {t('workspace.dismissNotice')}
             </button>
           </div>
         )}
@@ -579,16 +609,16 @@ export const ProjectManager: React.FC = () => {
           /* 空状态：首次启动给引导，而非一片空白 (PRD §3.0.1) */
           <div className="border border-dashed border-slate-800 rounded-2xl py-20 flex flex-col items-center text-center">
             <FolderOpen className="w-10 h-10 text-slate-700 mb-4" />
-            <h2 className="font-semibold text-slate-300 text-sm">还没有任何工程</h2>
+            <h2 className="font-semibold text-slate-300 text-sm">{t('workspace.emptyTitle')}</h2>
             <p className="text-xs text-slate-500 mt-1.5 max-w-xs leading-relaxed">
-              新建工程时选择设备档位与主题风格，随后即可用自然语言生成多页面设计。
+              {t('workspace.emptyHint')}
             </p>
             <button
               onClick={() => setShowNew(true)}
               className="mt-5 flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-xs shadow"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>新建第一个工程</span>
+              <span>{t('workspace.createFirstProject')}</span>
             </button>
           </div>
         ) : (
@@ -609,7 +639,7 @@ export const ProjectManager: React.FC = () => {
                     {missing ? (
                       <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 text-slate-600">
                         <AlertTriangle className="w-5 h-5 text-amber-600" />
-                        <span className="text-[11px]">工程数据已丢失</span>
+                        <span className="text-[11px]">{t('workspace.dataLost')}</span>
                       </div>
                     ) : (
                       <ProjectThumbnail meta={p} />
@@ -639,26 +669,27 @@ export const ProjectManager: React.FC = () => {
                             : 'bg-emerald-950/60 text-emerald-300'
                         }`}
                       >
-                        {p.deviceProfile === 'pc' ? 'PC 1440' : '移动端 390'}
+                        {p.deviceProfile === 'pc' ? t('workspace.devicePc1440') : t('workspace.deviceMobile390')}
                       </span>
-                      <span>{p.screenCount} 个页面</span>
+                      <span>{t('workspace.screenCount', { count: p.screenCount })}</span>
                       {/* T-AE-42: 未迁移的工程仍写 localStorage，受 ~5-10MB 配额限制 */}
                       {p.folderPath ? (
                         <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400" title={p.folderPath}>
-                          文件夹
+                          {t('workspace.folderBadge')}
                         </span>
                       ) : (
                         <button
                           onClick={async (e) => {
                             e.stopPropagation();
                             const r = await migrateProject(p.id);
+                            // '已取消' is a storage-layer protocol token, not UI copy
                             if (r.message !== '已取消') setNotice(r.message);
                           }}
-                          title="迁移到工程文件夹，摆脱浏览器存储配额限制"
+                          title={t('workspace.migrateTitle')}
                           className="px-1.5 py-0.5 rounded bg-amber-950/60 text-amber-300 hover:bg-amber-900/60 flex items-center gap-1"
                         >
                           <HardDriveDownload className="w-2.5 h-2.5" />
-                          迁移
+                          {t('workspace.migrate')}
                         </button>
                       )}
                     </div>
@@ -672,13 +703,13 @@ export const ProjectManager: React.FC = () => {
                     >
                       <button
                         onClick={() => {
-                          const next = window.prompt('重命名工程', p.name);
-                          if (next && next.trim())void renameProject(p.id,next.trim()).catch(error=>setNotice(error instanceof Error?error.message:'重命名失败，原数据保留。'));
+                          const next = window.prompt(t('workspace.renamePrompt'), p.name);
+                          if (next && next.trim())void renameProject(p.id,next.trim()).catch(error=>setNotice(error instanceof Error?error.message:t('workspace.renameFailed')));
                           setMenuFor(null);
                         }}
                         className="w-full text-left px-3 py-1.5 hover:bg-slate-700 text-slate-200"
                       >
-                        重命名
+                        {t('workspace.rename')}
                       </button>
                       <button
                         onClick={() => {
@@ -686,9 +717,9 @@ export const ProjectManager: React.FC = () => {
                           setMenuFor(null);
                         }}
                         className="w-full text-left px-3 py-1.5 hover:bg-slate-700 text-slate-300"
-                        title="仅移出列表，不删除工程数据"
+                        title={t('workspace.removeFromListTitle')}
                       >
-                        从列表移除
+                        {t('workspace.removeFromList')}
                       </button>
                       <button
                         onClick={() => {
@@ -698,7 +729,7 @@ export const ProjectManager: React.FC = () => {
                         className="w-full text-left px-3 py-1.5 hover:bg-red-950/60 text-red-400 flex items-center gap-1.5"
                       >
                         <Trash2 className="w-3 h-3" />
-                        <span>删除工程</span>
+                        <span>{t('workspace.deleteProject')}</span>
                       </button>
                     </div>
                   )}
@@ -725,27 +756,27 @@ export const ProjectManager: React.FC = () => {
           <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-5 text-xs">
             <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-red-400" />
-              <span>删除工程</span>
+              <span>{t('workspace.deleteProject')}</span>
             </h3>
             <p className="text-slate-400 mt-3 leading-relaxed">
-              将永久删除「<span className="text-slate-200 font-medium">{confirmDelete.name}</span>」
-              及其全部页面与资源，<span className="text-red-400">此操作不可恢复</span>。
+              {t('workspace.deleteConfirmBody', { name: confirmDelete.name })}
+              <span className="text-red-400">{t('workspace.deleteIrreversible')}</span>
             </p>
             <div className="flex justify-end gap-2 mt-5">
               <button
                 onClick={() => setConfirmDelete(null)}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 onClick={async () => {
                   try{await deleteProject(confirmDelete.id);setConfirmDelete(null);}
-                  catch(error){setNotice(error instanceof Error?error.message:'删除失败，原数据保留。');}
+                  catch(error){setNotice(error instanceof Error?error.message:t('workspace.deleteFailed'));}
                 }}
                 className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white font-medium rounded-lg"
               >
-                确认删除
+                {t('workspace.confirmDelete')}
               </button>
             </div>
           </div>

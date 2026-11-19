@@ -53,27 +53,29 @@ import { listActiveBuiltinMotherMeta } from '../../reference-pages/builtinMetaIn
 import { saveActiveScreenAsProjectMother } from '../../reference-pages/saveMother';
 import { createProjectStorage } from '../../services/storage/projectStorage';
 import type { MotherPageMeta } from '../../reference-pages/types';
+import { useT } from '../../stores/useLocaleStore';
 
 interface AssetModalProps {
   onClose: () => void;
 }
 
 const BUILTIN_LUCIDE_ICONS = [
-  { name: 'user', label: '用户 (User)', icon: User, svg: '<circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>' },
-  { name: 'shield', label: '安全盾牌 (Shield)', icon: Shield, svg: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>' },
-  { name: 'star', label: '收藏星星 (Star)', icon: Star, svg: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>' },
-  { name: 'lock', label: '密码锁 (Lock)', icon: Lock, svg: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>' },
-  { name: 'clock', label: '时钟 (Clock)', icon: Clock, svg: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' },
-  { name: 'bell', label: '通知提醒 (Bell)', icon: Bell, svg: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>' },
-  { name: 'mail', label: '邮件消息 (Mail)', icon: Mail, svg: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>' },
-  { name: 'activity', label: '动态走势 (Activity)', icon: Activity, svg: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>' },
-  { name: 'settings', label: '系统设置 (Settings)', icon: Settings, svg: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>' },
-  { name: 'database', label: '数据库 (Database)', icon: Database, svg: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>' },
-  { name: 'server', label: '服务器集群 (Server)', icon: Server, svg: '<rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>' },
-  { name: 'zap', label: '闪电效能 (Zap)', icon: Zap, svg: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' }
-];
+  { name: 'user', labelKey: 'assets.builtinIconUser', icon: User, svg: '<circle cx="12" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>' },
+  { name: 'shield', labelKey: 'assets.builtinIconShield', icon: Shield, svg: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>' },
+  { name: 'star', labelKey: 'assets.builtinIconStar', icon: Star, svg: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>' },
+  { name: 'lock', labelKey: 'assets.builtinIconLock', icon: Lock, svg: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>' },
+  { name: 'clock', labelKey: 'assets.builtinIconClock', icon: Clock, svg: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>' },
+  { name: 'bell', labelKey: 'assets.builtinIconBell', icon: Bell, svg: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>' },
+  { name: 'mail', labelKey: 'assets.builtinIconMail', icon: Mail, svg: '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>' },
+  { name: 'activity', labelKey: 'assets.builtinIconActivity', icon: Activity, svg: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>' },
+  { name: 'settings', labelKey: 'assets.builtinIconSettings', icon: Settings, svg: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>' },
+  { name: 'database', labelKey: 'assets.builtinIconDatabase', icon: Database, svg: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>' },
+  { name: 'server', labelKey: 'assets.builtinIconServer', icon: Server, svg: '<rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>' },
+  { name: 'zap', labelKey: 'assets.builtinIconZap', icon: Zap, svg: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>' }
+] as const;
 
 export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
+  const t = useT();
   const [activeTab, setActiveTab] = useState<'components' | 'images' | 'icons' | 'ai_svg' | 'mothers'>('components');
   const [iconSearch, setIconSearch] = useState('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -104,7 +106,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
   const { getActiveProviderForRole } = useAIConfigStore();
 
   // AI Image Generator State
-  const [imgPrompt, setImgPrompt] = useState('高端科技商业仪表盘核心指标卡片');
+  const [imgPrompt, setImgPrompt] = useState('');
   const [imgStyle, setImgStyle] = useState<'3d' | 'photo' | 'vector' | 'flat'>('3d');
   const [imgRatio, setImgRatio] = useState<'1:1' | '16:9' | '4:3' | '9:16'>('16:9');
   const [generatedImgUrl, setGeneratedImgUrl] = useState<string | null>(null);
@@ -116,7 +118,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
   const [generatedSvg, setGeneratedSvg] = useState<string | null>(null);
   const svgJob=useRef<AbortController|null>(null);
   const assetJob=useRef<AbortController|null>(null);
-  useEffect(()=>{setGeneratedSvg(null);setGeneratedImgUrl(null);setIsAiGenerating(false);return()=>{svgJob.current?.abort();assetJob.current?.abort();svgJob.current=null;assetJob.current=null;};},[projectId]);
+  useEffect(()=>{setGeneratedSvg(null);setGeneratedImgUrl(null);setIsAiGenerating(false);setImgPrompt(t('assets.defaultImagePrompt'));return()=>{svgJob.current?.abort();assetJob.current?.abort();svgJob.current=null;assetJob.current=null;};},[projectId,t]);
 
   // Notification / Feedback msg
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
@@ -133,12 +135,12 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
 
   const handleSaveActiveScreenAsMother = async () => {
     if (!activeScreenId) {
-      showFeedback('请先选中一个画框');
+      showFeedback(t('assets.toastSelectFrameFirst'));
       return;
     }
     const screen = screens[activeScreenId];
     if (!screen?.htmlContent) {
-      showFeedback('当前画框没有可保存的 HTML');
+      showFeedback(t('assets.toastNoHtmlToSave'));
       return;
     }
     const device = (settings?.deviceProfile === 'mobile' ? 'mobile' : 'pc') as 'pc' | 'mobile';
@@ -151,31 +153,36 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
         title: screen.name || activeScreenId
       });
       if (!result.ok) {
-        const detail = result.ingest.issues[0]?.message ?? result.error ?? '保存失败';
-        showFeedback(`存为母版失败：${detail}`);
+        const detail = result.ingest.issues[0]?.message ?? result.error ?? t('assets.toastSaveFailed');
+        showFeedback(t('assets.toastMotherSaveFailed', { detail }));
         return;
       }
-      showFeedback(`已存为工程母版：${result.mother?.meta.id}`);
+      showFeedback(t('assets.toastMotherSaved', { id: result.mother?.meta.id ?? '' }));
     } catch (error) {
-      showFeedback(`存为母版失败：${error instanceof Error ? error.message : String(error)}`);
+      showFeedback(
+        t('assets.toastMotherSaveFailedError', {
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
     } finally {
       setSavingMother(false);
     }
   };
 
   // Filter Lucide icons
-  const filteredIcons = BUILTIN_LUCIDE_ICONS.filter(
-    (i) => i.name.toLowerCase().includes(iconSearch.toLowerCase()) || i.label.includes(iconSearch)
-  );
+  const filteredIcons = BUILTIN_LUCIDE_ICONS.filter((i) => {
+    const q = iconSearch.toLowerCase();
+  return i.name.toLowerCase().includes(q) || t(i.labelKey).toLowerCase().includes(q);
+  });
 
   const handleCopySvg = async (svgContent: string, key: string) => {
     if(assetJob.current)return;const job=new AbortController();assetJob.current=job;
     try{
       const {reference}=await saveProjectIcon(svgContent,key==='ai-gen'?aiIconPrompt:key,key==='ai-gen'?'ai_generated':'builtin',job.signal);
       if(job.signal.aborted||useProjectStore.getState().id!==projectId)return;
-      await navigator.clipboard.writeText(reference);setCopiedKey(key);showFeedback('图标已独立保存，已复制页面引用。');
+      await navigator.clipboard.writeText(reference);setCopiedKey(key);showFeedback(t('assets.toastIconSavedCopied'));
       setTimeout(() => setCopiedKey(null), 2000);
-    }catch(error){if(!job.signal.aborted)showFeedback(error instanceof Error?error.message:'图标保存或复制失败。');}
+    }catch(error){if(!job.signal.aborted)showFeedback(error instanceof Error?error.message:t('assets.toastIconSaveCopyFailed'));}
     finally{if(assetJob.current===job)assetJob.current=null;}
   };
 
@@ -183,12 +190,12 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
   const handleGenerateAiSvg = async () => {
     if(!aiIconPrompt.trim()||svgJob.current)return;
     const binding=getActiveProviderForRole('code');
-    if(!binding?.provider||(!binding.provider.apiKey&&binding.provider.protocol!=='ollama_native')){showFeedback('请先配置可用的代码模型。');return;}
+    if(!binding?.provider||(!binding.provider.apiKey&&binding.provider.protocol!=='ollama_native')){showFeedback(t('assets.toastConfigureCodeModel'));return;}
     const job=new AbortController();svgJob.current=job;setIsAiGenerating(true);setGeneratedSvg('');
     try {
       const svg=await generateIconSvg(createAIEngineCore(),{provider:binding.provider,model:binding.modelId},aiIconPrompt,job.signal);
       if(!job.signal.aborted&&useProjectStore.getState().id===projectId)setGeneratedSvg(svg);
-    }catch(error){if(!job.signal.aborted)showFeedback(error instanceof Error?error.message:'图标生成失败。');}
+    }catch(error){if(!job.signal.aborted)showFeedback(error instanceof Error?error.message:t('assets.toastIconGenerateFailed'));}
     finally{if(svgJob.current===job){svgJob.current=null;setIsAiGenerating(false);}}
   };
 
@@ -215,34 +222,34 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
   const handleSaveImageToAssets = async () => {
     if (!generatedImgUrl) return;
     const state=useProjectStore.getState(),attachmentStore = state.getAttachmentStore();
-    const saved = await attachmentStore.save(imgPrompt.slice(0, 16) || 'AI 生成图片', generatedImgUrl);
+    const saved = await attachmentStore.save(imgPrompt.slice(0, 16) || t('assets.aiGeneratedImageName'), generatedImgUrl);
     const current=useProjectStore.getState();
     if (saved&&current.id===projectId&&current.folderPath===state.folderPath) {
       current.addAsset({
         ...saved,
         source: 'ai_generated'
       });
-      showFeedback(`图片素材已保存至工程资产库 (${saved.id})`);
+      showFeedback(t('assets.toastImageSavedToLibrary', { id: saved.id }));
     }
   };
 
   // Apply image to currently selected element in canvas
   const handleApplyImageToSelected = async (imgUrl: string) => {
     if (!activeScreenId || !selectedNode) {
-      alert('请先在画板中点击选中一个图片 (img) 或容器元素');
+      alert(t('assets.alertSelectImageOrContainer'));
       return;
     }
     try {
       const initial=useProjectStore.getState(),source=initial.screens[activeScreenId],nid=selectedNode.nid;
       if(!source)return;
       if(imgUrl.startsWith('data:')){
-        const saved=await initial.getAttachmentStore().save(imgPrompt.slice(0,16)||'生成图片',imgUrl);
-        if(!saved)throw Error('图片未能独立保存，页面未修改。');
-        const current=useProjectStore.getState();if(current.id!==projectId||current.folderPath!==initial.folderPath||current.screens[activeScreenId]?.htmlContent!==source.htmlContent||current.selectedNode?.nid!==nid)throw Error('工程、页面或选区已变化，未应用图片。');
+        const saved=await initial.getAttachmentStore().save(imgPrompt.slice(0,16)||t('assets.generatedImageShortName'),imgUrl);
+        if(!saved)throw Error(t('assets.errImageNotSaved'));
+        const current=useProjectStore.getState();if(current.id!==projectId||current.folderPath!==initial.folderPath||current.screens[activeScreenId]?.htmlContent!==source.htmlContent||current.selectedNode?.nid!==nid)throw Error(t('assets.errProjectChangedNoApply'));
         if(!Object.values(current.assets).some(a=>a.relPath===saved.relPath))current.addAsset({...saved,source:'ai_generated'});
         imgUrl=saved.relPath;
       }
-      if(mediaReferenceIssue(imgUrl)||imgUrl.startsWith('assets/')&&!Object.values(useProjectStore.getState().assets).some(a=>a.relPath===imgUrl))throw Error('请选用已登记的独立素材或HTTPS链接。');
+      if(mediaReferenceIssue(imgUrl)||imgUrl.startsWith('assets/')&&!Object.values(useProjectStore.getState().assets).some(a=>a.relPath===imgUrl))throw Error(t('assets.errUseRegisteredAsset'));
       const curScreen=useProjectStore.getState().screens[activeScreenId];
       const parsed = parseHtmlCopy(curScreen.htmlContent), doc = parsed.doc;
       const el = doc.querySelector(`[data-nid="${selectedNode.nid}"]`);
@@ -257,9 +264,9 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
       }
 
       updateScreenHtml(activeScreenId, parsed.serialize(), `应用素材图片到 #${selectedNode.nid}`);
-      showFeedback('素材图片已成功应用至选中元素');
+      showFeedback(t('assets.toastImageApplied'));
     } catch (e) {
-      showFeedback(e instanceof Error?e.message:'图片应用失败，页面未修改。');
+      showFeedback(e instanceof Error?e.message:t('assets.toastImageApplyFailed'));
     }
   };
 
@@ -279,7 +286,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
           const current=useProjectStore.getState();
           if (saved&&current.id===projectId&&current.folderPath===initial.folderPath) {
             current.addAsset(saved);
-            showFeedback(`上传成功: ${file.name}`);
+            showFeedback(t('assets.toastUploadSuccess', { name: file.name }));
           }
         }
       };
@@ -295,7 +302,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
           <div className="flex items-center gap-2">
             <Layers className="w-5 h-5 text-blue-400" />
             <span className="font-semibold text-slate-100 text-sm">
-              工程资源与组件中心 (Assets & Components)
+              {t('assets.title')}
             </span>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-200 text-lg leading-none">
@@ -314,10 +321,10 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
             }`}
           >
             <Boxes className="w-3.5 h-3.5 text-indigo-400" />
-            <span>组件库 (Components)</span>
+            <span>{t('assets.tabComponents')}</span>
             {repeatedCandidates.length > 0 && (
               <span className="px-1.5 py-0.2 bg-indigo-500/20 text-indigo-300 rounded-full text-[10px]">
-                {repeatedCandidates.length} 建议
+                {t('assets.suggestions', { count: repeatedCandidates.length })}
               </span>
             )}
           </button>
@@ -331,7 +338,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
             }`}
           >
             <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
-            <span>图片素材与生图 (Images)</span>
+            <span>{t('assets.tabImages')}</span>
           </button>
 
           <button
@@ -342,7 +349,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            内置矢量图标 (Lucide)
+            {t('assets.tabIcons')}
           </button>
 
           <button
@@ -354,7 +361,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
             }`}
           >
             <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span>AI 矢量图标设计器</span>
+            <span>{t('assets.tabAiSvg')}</span>
           </button>
 
           <button
@@ -366,7 +373,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
             }`}
           >
             <Library className="w-3.5 h-3.5 text-emerald-400" />
-            <span>母版</span>
+            <span>{t('assets.tabMothers')}</span>
           </button>
         </div>
 
@@ -390,10 +397,10 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                     <div className="flex items-center gap-2">
                       <Sparkles className="w-4 h-4 text-indigo-400" />
                       <span className="font-semibold text-indigo-200 text-xs">
-                        智能结构指纹检测：发现 {repeatedCandidates.length} 处高度复用结构
+                        {t('assets.fingerprintTitle', { count: repeatedCandidates.length })}
                       </span>
                     </div>
-                    <span className="text-[11px] text-indigo-300/70">PRD §3.7.1 自动重复识别</span>
+                    <span className="text-[11px] text-indigo-300/70">{t('assets.fingerprintPrd')}</span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
@@ -405,17 +412,17 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                         <div className="space-y-1 truncate pr-2">
                           <span className="font-semibold text-slate-200 block truncate">{cand.suggestedName}</span>
                           <span className="text-[10px] text-indigo-400 block font-mono">
-                            跨画板重复 {cand.count} 次
+                            {t('assets.repeatedAcrossFrames', { count: cand.count })}
                           </span>
                         </div>
                         <button
                           onClick={() => {
-                            const id = createComponent(cand.suggestedName, cand.templateHtml, '由结构指纹检测自动提取');
-                            showFeedback(`已将结构提取为工程组件「${cand.suggestedName}」`);
+                            createComponent(cand.suggestedName, cand.templateHtml, t('assets.extractedByFingerprint'));
+                            showFeedback(t('assets.toastExtractedComponent', { name: cand.suggestedName }));
                           }}
                           className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium whitespace-nowrap transition"
                         >
-                          提取为组件
+                          {t('assets.extractAsComponent')}
                         </button>
                       </div>
                     ))}
@@ -427,19 +434,19 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-slate-300 text-xs">
-                    当前工程组件库 ({Object.keys(components).length})
+                    {t('assets.componentLibraryTitle', { count: Object.keys(components).length })}
                   </span>
                   <span className="text-[11px] text-slate-500">
-                    在检查器选中任意元素点击「提取为组件」亦可快速添加
+                    {t('assets.extractViaInspectorHint')}
                   </span>
                 </div>
 
                 {Object.keys(components).length === 0 ? (
                   <div className="p-8 border-2 border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center text-slate-500 space-y-2">
                     <Boxes className="w-8 h-8 text-slate-600 mb-1" />
-                    <span className="font-medium text-slate-400">暂无已封装的工程组件</span>
+                    <span className="font-medium text-slate-400">{t('assets.emptyComponentsTitle')}</span>
                     <p className="text-[11px] max-w-sm leading-relaxed">
-                      在画板中点选任何按钮、卡片或导航栏，通过右侧属性面板「提取为组件」即可建立同步组。
+                      {t('assets.emptyComponentsBody')}
                     </p>
                   </div>
                 ) : (
@@ -466,38 +473,44 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                               onClick={() => {
                                 if (activeScreenId) {
                                   insertComponent(activeScreenId, comp.id);
-                                  showFeedback(`已向当前画板插入组件「${comp.name}」`);
+                                  showFeedback(t('assets.toastInsertedComponent', { name: comp.name }));
                                 } else {
-                                  alert('请先在画板上激活一个页面');
+                                  alert(t('assets.alertActivatePageFirst'));
                                 }
                               }}
                               className="px-2.5 py-1 bg-blue-600/80 hover:bg-blue-600 text-white rounded-lg text-[11px] font-medium transition"
                             >
-                              插入当前画板
+                              {t('assets.insertToActiveBoard')}
                             </button>
                             <button
                               onClick={() => {
                                 const res = syncComponentInstances(comp.id);
                                 if (res.skippedConflictCount > 0) {
-                                  showFeedback(`已同步 ${res.syncedCount} 处；跳过 ${res.skippedConflictCount} 处实例。${res.details[0]??'无法安全保留用户内容。'}`);
+                                  showFeedback(
+                                    t('assets.toastSyncPartial', {
+                                      synced: res.syncedCount,
+                                      skipped: res.skippedConflictCount,
+                                      detail: res.details[0] ?? t('assets.syncConflictFallback'),
+                                    }),
+                                  );
                                 } else {
-                                  showFeedback(`已成功批量同步 ${res.syncedCount} 处实例`);
+                                  showFeedback(t('assets.toastSyncSuccess', { count: res.syncedCount }));
                                 }
                               }}
                               className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] transition"
                             >
-                              批量同步
+                              {t('assets.syncBatch')}
                             </button>
                           </div>
                           <button
                             onClick={() => {
-                              if (confirm(`确认删除组件「${comp.name}」？已有画板实例将转为独立节点。`)) {
+                              if (confirm(t('assets.deleteComponentConfirm', { name: comp.name }))) {
                                 deleteComponent(comp.id);
                               }
                             }}
                             className="p-1 text-slate-500 hover:text-red-400 transition"
                             disabled={libraryMemberLocked({designLibraryBinding},'components',comp.id)}
-                            title={libraryMemberLocked({designLibraryBinding},'components',comp.id)?'设计库参考只读，请先转为项目副本':'删除组件'}
+                            title={libraryMemberLocked({designLibraryBinding},'components',comp.id)?t('assets.libraryReadonlyHint'):t('assets.deleteComponent')}
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -518,9 +531,9 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-blue-400" />
-                    <span className="font-semibold text-blue-200">AI 原生高清图像生成 (Image Generator)</span>
+                    <span className="font-semibold text-blue-200">{t('assets.aiImageGeneratorTitle')}</span>
                   </div>
-                  <span className="text-[11px] text-blue-300/70">PRD §3.4.1 自动落盘与复用</span>
+                  <span className="text-[11px] text-blue-300/70">{t('assets.aiImagePrd')}</span>
                 </div>
 
                 <div className="space-y-3">
@@ -529,7 +542,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                       type="text"
                       value={imgPrompt}
                       onChange={(e) => setImgPrompt(e.target.value)}
-                      placeholder="描述要生成的图片概念，例如：商业数据看板背景、极简立体插图..."
+                      placeholder={t('assets.imagePromptPlaceholder')}
                       className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleGenerateAiImage();
@@ -541,14 +554,14 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                       className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-medium rounded-xl transition shadow flex items-center gap-1.5 whitespace-nowrap"
                     >
                       <Wand2 className="w-3.5 h-3.5" />
-                      <span>{isImgGenerating ? '合成中...' : '生成图片'}</span>
+                      <span>{isImgGenerating ? t('assets.generatingImage') : t('assets.generateImage')}</span>
                     </button>
                   </div>
 
                   {/* Style & Aspect Ratio Controls */}
                   <div className="flex items-center gap-4 text-[11px] text-slate-400">
                     <div className="flex items-center gap-1.5">
-                      <span>风格预设:</span>
+                      <span>{t('assets.stylePreset')}</span>
                       {(['3d', 'photo', 'vector', 'flat'] as const).map((st) => (
                         <button
                           key={st}
@@ -557,13 +570,13 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                             imgStyle === st ? 'bg-blue-600 text-white font-medium' : 'bg-slate-900 text-slate-400 hover:text-slate-200'
                           }`}
                         >
-                          {st === '3d' ? '3D 立体' : st === 'photo' ? '摄影光影' : st === 'vector' ? '矢量概念' : '扁平 UI'}
+                          {st === '3d' ? t('assets.style3d') : st === 'photo' ? t('assets.stylePhoto') : st === 'vector' ? t('assets.styleVector') : t('assets.styleFlat')}
                         </button>
                       ))}
                     </div>
 
                     <div className="flex items-center gap-1.5">
-                      <span>比例:</span>
+                      <span>{t('assets.aspectRatio')}</span>
                       {(['16:9', '1:1', '4:3', '9:16'] as const).map((r) => (
                         <button
                           key={r}
@@ -583,12 +596,12 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                 {generatedImgUrl && (
                   <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-slate-300">生成图片预览</span>
-                      <span className="text-[10px] text-slate-500 font-mono">PNG 24bit · In-Memory DataURL</span>
+                      <span className="text-[11px] font-semibold text-slate-300">{t('assets.generatedPreview')}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">{t('assets.generatedPreviewMeta')}</span>
                     </div>
 
                     <div className="w-full max-h-48 overflow-hidden rounded-lg border border-slate-800 flex items-center justify-center bg-slate-900">
-                      <img src={generatedImgUrl} alt="Generated Asset" className="max-h-48 object-contain" />
+                      <img src={generatedImgUrl} alt={t('assets.generatedAssetAlt')} className="max-h-48 object-contain" />
                     </div>
 
                     <div className="flex items-center justify-end gap-2 pt-1">
@@ -596,13 +609,13 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                         onClick={() => handleApplyImageToSelected(generatedImgUrl)}
                         className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition"
                       >
-                        应用到当前选中元素
+                        {t('assets.applyToSelected')}
                       </button>
                       <button
                         onClick={handleSaveImageToAssets}
                         className="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-lg text-xs transition"
                       >
-                        保存入工程素材库
+                        {t('assets.saveToLibrary')}
                       </button>
                     </div>
                   </div>
@@ -623,9 +636,9 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                   className="hidden"
                 />
                 <Upload className="w-6 h-6 text-slate-500 mb-2" />
-                <span className="font-semibold text-slate-300">点击或拖拽上传本地图片 (JPG, PNG, WebP, SVG)</span>
+                <span className="font-semibold text-slate-300">{t('assets.uploadZoneTitle')}</span>
                 <span className="text-[11px] text-slate-500 mt-1">
-                  自动写入工程资产库并赋予 data-asset-id，支持全画板批量更新
+                  {t('assets.uploadZoneHint')}
                 </span>
               </div>
 
@@ -633,23 +646,23 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-slate-300 text-xs">
-                    工程图片资产列表 ({Object.keys(assets).length})
+                    {t('assets.imageAssetListTitle', { count: Object.keys(assets).length })}
                   </span>
                   {Object.keys(assets).length > 0 && (
                     <button
                       onClick={() => {
                         const cleaned = cleanupUnusedAssets();
-                        showFeedback(`已清理 ${cleaned} 个无引用图片素材`);
+                        showFeedback(t('assets.toastCleanupUnused', { count: cleaned }));
                       }}
                       className="text-[11px] text-slate-400 hover:text-slate-200"
                     >
-                      清理未引用素材
+                      {t('assets.cleanupUnused')}
                     </button>
                   )}
                 </div>
 
                 {Object.keys(assets).length === 0 ? (
-                  <span className="text-slate-500 block text-center py-4">暂无工程图片素材</span>
+                  <span className="text-slate-500 block text-center py-4">{t('assets.noProjectImages')}</span>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {Object.values(assets).map((ast) => (
@@ -673,22 +686,23 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                             onClick={() => handleApplyImageToSelected(ast.relPath)}
                             className="text-[10px] text-blue-400 hover:text-blue-300"
                           >
-                            选用
+                            {t('assets.useAsset')}
                           </button>
                           <button
                             onClick={() => {
-                              const newUrl = prompt('请输入已登记素材路径或 HTTPS 图片链接以执行全工程替换:');
+                              const newUrl = prompt(t('assets.replaceGloballyPrompt'));
                               if (newUrl) {
-                                try{const cnt = replaceAssetGlobally(ast.id, newUrl);showFeedback(`已全局替换 ${cnt} 处引用此素材的画板位置`);}
-                                catch(error){showFeedback(error instanceof Error?error.message:'素材替换失败。');}
+                                try{const cnt = replaceAssetGlobally(ast.id, newUrl);showFeedback(t('assets.toastReplaceGlobally', { count: cnt }));}
+                                catch(error){showFeedback(error instanceof Error?error.message:t('assets.toastReplaceAssetFailed'));}
                               }
                             }}
                             className="text-[10px] text-slate-400 hover:text-slate-200"
                           >
-                            全局替换
+                            {t('assets.replaceGlobally')}
                           </button>
                           <button
-                            disabled={libraryMemberLocked({designLibraryBinding},'assets',ast.id)} title={libraryMemberLocked({designLibraryBinding},'assets',ast.id)?'设计库参考只读，请先转为项目副本':'删除素材'}
+                            disabled={libraryMemberLocked({designLibraryBinding},'assets',ast.id)}
+                            title={libraryMemberLocked({designLibraryBinding},'assets',ast.id)?t('assets.libraryReadonlyHint'):t('assets.deleteAsset')}
                             onClick={() => removeAsset(ast.id)}
                             className="text-slate-500 hover:text-red-400 p-0.5"
                           >
@@ -710,7 +724,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                 <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
                 <input
                   type="text"
-                  placeholder="搜索图标名称（如 user, shield, star 或中文标签）..."
+                  placeholder={t('assets.searchIconsPlaceholder')}
                   value={iconSearch}
                   onChange={(e) => setIconSearch(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
@@ -731,7 +745,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                         <div className="p-2 bg-slate-900 border border-slate-800 rounded-lg text-blue-400 group-hover:text-blue-300">
                           <IconComp className="w-4 h-4" />
                         </div>
-                        <span className="text-slate-200 truncate">{item.label}</span>
+                        <span className="text-slate-200 truncate">{t(item.labelKey)}</span>
                       </div>
                       <button className="text-slate-500 group-hover:text-slate-300">
                         {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -749,10 +763,10 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
               <div className="p-4 bg-purple-950/30 border border-purple-800/40 rounded-xl space-y-3">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-purple-400" />
-                  <span className="font-semibold text-purple-200">AI 原生矢量图标生成</span>
+                  <span className="font-semibold text-purple-200">{t('assets.aiSvgTitle')}</span>
                 </div>
                 <p className="text-[11px] text-purple-300/80 leading-relaxed">
-                  通过大模型强大的 SVG 语法能力直接生成干净的 24×24 矢量代码，颜色自动绑定当前工程 Token。
+                  {t('assets.aiSvgDescription')}
                 </p>
                 <div className="flex items-center gap-2">
                   <input
@@ -762,7 +776,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleGenerateAiSvg();
                     }}
-                    placeholder="输入图标概念，例如：量子芯片计算核心、带对勾的认证勋章..."
+                    placeholder={t('assets.aiIconPlaceholder')}
                     className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-purple-500 text-xs"
                   />
                   <button
@@ -770,14 +784,14 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                     disabled={isAiGenerating || !aiIconPrompt.trim()}
                     className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-medium rounded-xl transition shadow"
                   >
-                    {isAiGenerating ? '生成中...' : '生成图标'}
+                    {isAiGenerating ? t('assets.generatingIcon') : t('assets.generateIcon')}
                   </button>
                 </div>
               </div>
 
               {generatedSvg && (
                 <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
-                  <span className="font-semibold text-slate-300 block">矢量预览与生成代码</span>
+                  <span className="font-semibold text-slate-300 block">{t('assets.vectorPreviewTitle')}</span>
                   <div className="flex items-center gap-6">
                     <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center text-purple-400 p-3 shadow-inner">
                       <svg
@@ -800,7 +814,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                         className="flex items-center justify-center gap-1.5 py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition"
                       >
                         {copiedKey === 'ai-gen' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        <span>{copiedKey === 'ai-gen' ? '已复制独立图标引用' : '保存图标并复制页面引用'}</span>
+                        <span>{copiedKey === 'ai-gen' ? t('assets.copiedIconRef') : t('assets.saveIconCopyRef')}</span>
                       </button>
                     </div>
                   </div>
@@ -816,10 +830,10 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                 <div>
                   <div className="flex items-center gap-2">
                     <Library className="w-4 h-4 text-emerald-400" />
-                    <span className="font-semibold text-slate-200">业务母版库</span>
+                    <span className="font-semibold text-slate-200">{t('assets.mothersTitle')}</span>
                   </div>
                   <p className="mt-1 text-[11px] text-slate-500 leading-relaxed">
-                    内置母版只读；可将当前画框经 ingest 后存入工程 `mothers/`。
+                    {t('assets.mothersDescription')}
                   </p>
                 </div>
                 <button
@@ -828,12 +842,12 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                   onClick={handleSaveActiveScreenAsMother}
                   className="shrink-0 px-3 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-xl text-[11px] font-medium transition"
                 >
-                  {savingMother ? '保存中…' : '将当前画框存为母版'}
+                  {savingMother ? t('assets.savingMother') : t('assets.saveMother')}
                 </button>
               </div>
 
               {builtinMothers.length === 0 ? (
-                <p className="text-[11px] text-slate-500 px-1 py-6 text-center">暂无可用内置母版</p>
+                <p className="text-[11px] text-slate-500 px-1 py-6 text-center">{t('assets.emptyBuiltinMothers')}</p>
               ) : (
                 <div className="space-y-1.5 max-h-[48vh] overflow-y-auto pr-1">
                   {builtinMothers.map((meta) => (
@@ -849,7 +863,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                         </div>
                       </div>
                       <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-slate-700 text-slate-500">
-                        只读
+                        {t('assets.readonly')}
                       </span>
                     </div>
                   ))}
@@ -862,7 +876,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
         {/* Footer */}
         <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end">
           <button onClick={onClose} className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl text-xs transition">
-            关闭
+            {t('common.close')}
           </button>
         </div>
       </div>

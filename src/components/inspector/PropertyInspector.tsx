@@ -17,6 +17,7 @@ import { clearInspectorPreview, findScreenElement, isEscapedInspectorValue, setI
 import React, { useEffect, useRef, useState } from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useAIConfigStore } from '../../stores/useAIConfigStore';
+import { useT } from '../../stores/useLocaleStore';
 import { TokenLintEngine, computeScreenAuditReport, getTokenLintContext } from '../../utils/tokenLint';
 import { setTextByNid, uneditableHint } from '../../utils/textNode';
 import { duplicateElementByNid, wrapElementByNid } from '../../utils/domPatcher';
@@ -76,6 +77,7 @@ export const PropertyInspector: React.FC = () => {
     setScreenDesignRole,
     postAuditReport
   } = useProjectStore();
+  const t = useT();
 
   const { getActiveProviderForRole } = useAIConfigStore();
 
@@ -122,9 +124,9 @@ export const PropertyInspector: React.FC = () => {
       <div className="w-full min-w-0 h-full bg-slate-900 p-5 flex flex-col gap-3 overflow-y-auto text-xs select-none">
         <div className="min-h-28 flex-1 flex flex-col items-center justify-center text-center text-slate-500">
           <Sliders className="w-8 h-8 text-slate-600 mb-3" />
-          <span className="font-medium text-slate-400">未选中任何元素</span>
+          <span className="font-medium text-slate-400">{t('inspector.emptyTitle')}</span>
           <p className="mt-1 text-[11px] leading-relaxed">
-            在中间画板内点击任意按钮、卡片或文本即可进行精准微调与局部 AI 重构。
+            {t('inspector.emptyHint')}
           </p>
         </div>
 
@@ -138,7 +140,7 @@ export const PropertyInspector: React.FC = () => {
         {lint && curScreen && (
           <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-300">当前页面 Token 合规度</span>
+              <span className="font-semibold text-slate-300">{t('inspector.tokenCompliance')}</span>
               <span className={`font-mono font-bold ${lint.complianceRate >= 95 ? 'text-emerald-400' : 'text-amber-400'}`}>
                 {lint.complianceRate}%
               </span>
@@ -154,7 +156,7 @@ export const PropertyInspector: React.FC = () => {
             <div className="space-y-1.5 pt-1">
               {curScreen.metadata?.importedHtml && <p className="text-[11px] leading-relaxed text-slate-400">导入页包含自带样式；Token 合规度仅衡量与项目基座的差异，不代表视觉还原度。保留原貌时无需自动统一这些差异。</p>}
               <span className="text-[10px] text-slate-400 block">
-                {lint.issues.length > 0 ? `检测到 ${lint.issues.length} 处风格逃逸` : '未检测到风格逃逸，规范度达标'}
+                {lint.issues.length > 0 ? t('inspector.lintIssues', { count: lint.issues.length }) : t('inspector.lintClean')}
               </span>
               <button
                 type="button"
@@ -163,10 +165,10 @@ export const PropertyInspector: React.FC = () => {
                   postAuditReport(report);
                 }}
                 className="w-full py-1.5 px-2 bg-blue-600/80 hover:bg-blue-600 text-white rounded-lg text-[11px] font-medium transition flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99]"
-                title="一键评测当前页面规范逃逸点并输出到对话列表（不修改原代码）"
+                title={t('inspector.auditTitle')}
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                <span>一键评测</span>
+                <span>{t('inspector.auditOnce')}</span>
               </button>
             </div>
           </div>
@@ -311,11 +313,11 @@ export const PropertyInspector: React.FC = () => {
           <span className="text-slate-500 font-mono text-[10px]">#{selectedNid}</span>
         </div>
         <div className="flex items-center justify-between text-[11px] text-slate-400">
-          <span>尺寸: {selectedNode.computedBox?.width ?? 0} × {selectedNode.computedBox?.height ?? 0}px</span>
+          <span>{t('inspector.sizeLabel', { width: selectedNode.computedBox?.width ?? 0, height: selectedNode.computedBox?.height ?? 0 })}</span>
           {currentOverride.escaped && (
             <span className="flex items-center gap-1 text-amber-400 bg-amber-950/60 border border-amber-800/40 px-1.5 py-0.5 rounded text-[10px]">
               <AlertTriangle className="w-3 h-3" />
-              <span>Token 逃逸</span>
+              <span>{t('inspector.tokenEscape')}</span>
             </span>
           )}
         </div>
@@ -327,7 +329,7 @@ export const PropertyInspector: React.FC = () => {
         <div className="p-3 bg-purple-950/40 border border-purple-800/50 rounded-xl space-y-2">
           <div className="flex items-center gap-1.5 text-purple-300 font-semibold text-[11px]">
             <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span>局部 AI 定向微调 (Point-and-Edit)</span>
+            <span>{t('inspector.pointEditTitle')}</span>
           </div>
           <div className="relative">
             <input
@@ -337,12 +339,12 @@ export const PropertyInspector: React.FC = () => {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handlePointAndEdit();
               }}
-              placeholder="对选中元素提要求，如：增加内边距"
+              placeholder={t('inspector.pointEditPlaceholder')}
               className="w-full bg-slate-950 border border-purple-800/60 rounded-lg px-2.5 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-purple-500 pr-8"
             />
             <button
               onClick={handlePointAndEdit}
-              aria-label="生成局部微调候选"
+              aria-label={t('inspector.pointEditAria')}
               disabled={isPointGenerating || !pointPrompt.trim()}
               className="absolute right-1.5 top-1.5 p-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded transition"
             >
@@ -350,7 +352,7 @@ export const PropertyInspector: React.FC = () => {
             </button>
           </div>
           {pointNotice&&<p role="status" className="text-[11px] leading-relaxed text-purple-200">{pointNotice}</p>}
-          {isPointGenerating&&<button type="button" aria-label="停止局部微调" onClick={stopPoint} className="text-[11px] text-amber-300">停止局部微调</button>}
+          {isPointGenerating&&<button type="button" aria-label={t('inspector.pointEditStop')} onClick={stopPoint} className="text-[11px] text-amber-300">{t('inspector.pointEditStop')}</button>}
           <RequestActivityCard activity={pointActivity} running={isPointGenerating}/>
         </div>
       </div>
@@ -366,13 +368,13 @@ export const PropertyInspector: React.FC = () => {
             <div className="space-y-1.5 pt-2 border-t border-slate-800">
               <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
                 <Type className="w-3.5 h-3.5 text-slate-400" />
-                <span>文本内容</span>
+                <span>{t('inspector.textContent')}</span>
               </label>
               <input
                 type="text"
                 value={textDraft}
                 disabled={!editable}
-                placeholder={editable ? '（空）' : ''}
+                placeholder={editable ? t('inspector.textEmpty') : ''}
                 onChange={(e) => setTextDraft(e.target.value)}
                 onBlur={(e) => handleTextChange(e.target.value)}
                 onKeyDown={(e) => {
@@ -393,29 +395,29 @@ export const PropertyInspector: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-3 pb-4" data-testid="property-sections">
         <div key={`${activeScreenId}:${selectedNid}`}>
           <DesignSections {...sectionProps} tagName={selectedNode.tagName}
-            width={selectedNode.computedBox.width} height={selectedNode.computedBox.height}
+            width={selectedNode.computedBox?.width ?? 0} height={selectedNode.computedBox?.height ?? 0}
             parentDisplay={snapshot?.parentDisplay} parentDirection={snapshot?.parentDirection} geometry={snapshot?.geometry} />
           {isTextNode && <TypographySection {...sectionProps} />}
           <ImageSection screenId={activeScreenId} nid={selectedNid} tagName={selectedNode.tagName} {...sectionProps} />
           <AppearanceSections {...sectionProps} />
         </div>
-        <Section title="页面跳转">
-          <label className="block text-[10px] text-slate-400" htmlFor="screen-link-target">画布预览中 Shift+点击此元素可跳转</label>
+        <Section title={t('inspector.sectionNav')}>
+          <label className="block text-[10px] text-slate-400" htmlFor="screen-link-target">{t('inspector.sectionNavHint')}</label>
           <select
             id="screen-link-target"
-            aria-label="跳转目标页面"
+            aria-label={t('inspector.sectionNav')}
             value={selectedLinkTarget}
             onChange={event => setScreenLinkTarget(activeScreenId, selectedNid, event.target.value || undefined)}
             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
           >
-            <option value="">不设置跳转</option>
+            <option value="">{t('inspector.sectionNavNone')}</option>
             {selectedLinkTarget && !availableTargets.some(screen => screen.id === selectedLinkTarget) && (
-              <option value={selectedLinkTarget}>失效目标：{selectedLinkTarget}</option>
+              <option value={selectedLinkTarget}>{t('inspector.sectionNavStaleTarget', { id: selectedLinkTarget })}</option>
             )}
             {availableTargets.map(screen => <option key={screen.id} value={screen.id}>{screen.name}</option>)}
           </select>
         </Section>
-        <Section title="组件与结构操作">
+        <Section title={t('inspector.sectionStructure')}>
         {/* Component Instance or Extract Banner (PRD §3.7 / D6) */}
         {selectedNode.componentId ? (
           <div className="p-3 bg-indigo-950/40 border border-indigo-800/50 rounded-xl space-y-2">
@@ -460,7 +462,7 @@ export const PropertyInspector: React.FC = () => {
                 onClick={() => setShowExtractInput(!showExtractInput)}
                 className="text-[10px] text-blue-400 hover:text-blue-300 transition"
               >
-                {showExtractInput ? '收起' : '+ 提取为组件'}
+                {showExtractInput ? t('inspector.extractCollapse') : t('inspector.extractComponent')}
               </button>
             </div>
             {showExtractInput && (

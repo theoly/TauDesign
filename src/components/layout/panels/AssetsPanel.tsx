@@ -5,6 +5,7 @@ import { Boxes, Image as ImageIcon, Library, Settings2, Shapes } from 'lucide-re
 import { parseHtmlCopy } from '../../../utils/htmlDocument';
 import { AssetPreviewImage } from '../../assets/AssetPreviewImage';
 import { listActiveBuiltinMotherMeta } from '../../../reference-pages/builtinMetaIndex';
+import { useT } from '../../../stores/useLocaleStore';
 
 interface AssetsPanelProps {
   /** 打开完整资源中心：上传、AI 生图、批量管理等重操作仍走弹窗 */
@@ -18,6 +19,7 @@ interface AssetsPanelProps {
  * 批量替换等重操作留在资源中心弹窗，避免把宽布局硬塞进 260px 侧栏。
  */
 export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) => {
+  const t = useT();
   const {
     assets,
     components,
@@ -69,13 +71,13 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
           className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-md text-[11px] transition"
         >
           <Settings2 className="w-3.5 h-3.5 text-purple-400" />
-          <span>资源中心（上传 / AI 生成）</span>
+          <span>{t('assets.openCenter')}</span>
         </button>
       </div>
 
-      <Accordion panelKey="assets.images" title="图片" badge={images.length}>
+      <Accordion panelKey="assets.images" title={t('assets.panelImages')} badge={images.length}>
         {images.length === 0
-          ? empty('还没有图片素材。在资源中心上传，或用 AI 生成。')
+          ? empty(t('assets.emptyImages'))
           : (
             <div className="grid grid-cols-3 gap-1.5 px-2">
               {images.map((a) => (
@@ -92,9 +94,9 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
           )}
       </Accordion>
 
-      <Accordion panelKey="assets.icons" title="图标" badge={icons.length}>
+      <Accordion panelKey="assets.icons" title={t('assets.panelIcons')} badge={icons.length}>
         {icons.length === 0
-          ? empty('还没有图标。在资源中心搜索内置图标库或上传 SVG。')
+          ? empty(t('assets.emptyIcons'))
           : (
             <div className="grid grid-cols-5 gap-1.5 px-2">
               {icons.map((a) => (
@@ -108,9 +110,9 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
           )}
       </Accordion>
 
-      <Accordion panelKey="assets.components" title="组件" badge={componentList.length}>
+      <Accordion panelKey="assets.components" title={t('assets.panelComponents')} badge={componentList.length}>
         {componentList.length === 0
-          ? empty('同一结构重复 3 次以上时，可在检查器中提取为组件。')
+          ? empty(t('assets.emptyComponents'))
           : (
             <div className="space-y-0.5 px-1.5">
               {componentList.map((c) => (
@@ -130,7 +132,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
                     className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white rounded text-[10px] transition shrink-0"
                     title="插入当前画板"
                   >
-                    插入
+                    {t('assets.insert')}
                   </button>
                 </div>
               ))}
@@ -138,9 +140,9 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
           )}
       </Accordion>
 
-      <Accordion panelKey="assets.mothers" title="母版" badge={builtinMothers.length} defaultOpen={false}>
+      <Accordion panelKey="assets.mothers" title={t('assets.panelMothers')} badge={builtinMothers.length} defaultOpen={false}>
         {builtinMothers.length === 0
-          ? empty('暂无内置母版。可在资源中心将当前画框存为工程母版。')
+          ? empty(t('assets.emptyMothers'))
           : (
             <div className="space-y-0.5 px-1.5">
               {builtinMothers.slice(0, 12).map((meta) => (
@@ -151,7 +153,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
                 >
                   <Library className="w-3.5 h-3.5 text-emerald-500/80 shrink-0" />
                   <span className="truncate">{meta.id}</span>
-                  <span className="ml-auto shrink-0 text-[10px] text-slate-600">只读</span>
+                  <span className="ml-auto shrink-0 text-[10px] text-slate-600">{t('assets.readonly')}</span>
                 </div>
               ))}
               {builtinMothers.length > 12 && (
@@ -168,10 +170,10 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
           )}
       </Accordion>
 
-      <Accordion panelKey="assets.media" title="音视频与字幕" badge={media.length} defaultOpen={false}>
+      <Accordion panelKey="assets.media" title={t('assets.panelMedia')} badge={media.length} defaultOpen={false}>
         {media.length?media.map(asset=><p key={asset.id} title={asset.relPath} className="break-words px-3 py-2 text-[11px] text-slate-400">{asset.name}<span className="block text-slate-500">{asset.mimeType}</span></p>):empty('导入页面引用的音视频与字幕会作为独立文件保存在工程中。')}
       </Accordion>
-      <Accordion panelKey="assets.fonts" title="字体" badge={fonts.length} defaultOpen={false}>
+      <Accordion panelKey="assets.fonts" title={t('assets.panelFonts')} badge={fonts.length} defaultOpen={false}>
         {fonts.map(asset=><p key={asset.id} title={asset.relPath} className="break-words px-3 py-2 text-[11px] text-slate-400">{asset.name}</p>)}
         <p className="px-3 py-3 text-[11px] text-slate-600 leading-relaxed flex items-start gap-1.5">
           <Shapes className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-700" />
@@ -182,7 +184,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
       {assetList.length === 0 && componentList.length === 0 && (
         <div className="px-3 py-6 text-center">
           <ImageIcon className="w-6 h-6 text-slate-700 mx-auto mb-2" />
-          <p className="text-[11px] text-slate-600">工程资源库为空</p>
+          <p className="text-[11px] text-slate-600">{t('assets.emptyLibrary')}</p>
         </div>
       )}
     </>

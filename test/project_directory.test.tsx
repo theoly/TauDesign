@@ -14,7 +14,7 @@ const runtimeKeys = ['__TAURI_INTERNALS__', '__TAURI_EVENT_PLUGIN_INTERNALS__', 
 let previousRuntime: Array<PropertyDescriptor | undefined>;
 const removeRuntime = () => runtimeKeys.forEach(key => Reflect.deleteProperty(window, key));
 const path = '/Users/test/项目文件夹/包含 空格的工程.aidesign';
-const button = () => container.querySelector('section button') as HTMLButtonElement;
+const button = () => container.querySelector('[data-testid="open-project-directory"]') as HTMLButtonElement;
 const render = () => act(() => root.render(<ProjectSettingsPanel />));
 beforeEach(() => {
   previousRuntime = runtimeKeys.map(key => Object.getOwnPropertyDescriptor(window, key));

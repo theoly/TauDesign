@@ -7,7 +7,7 @@ import { DesignSystem } from '../../types/designSystem';
 import { Asset, ComponentDefinition, Decision } from '../../types/project';
 import { compileTokensToCss, extractClassWhitelist } from '../../utils/cssCompiler';
 import { getBaseCss } from '../../styles/baseCss';
-import { GOLDEN_HIERARCHY, NEW_SCREEN_STATE_RULES, getDeviceAestheticRules } from './aestheticRules';
+import { buildGoldenHierarchy, NEW_SCREEN_STATE_RULES, getDeviceAestheticRules } from './aestheticRules';
 import { renderCraftSection } from './craft';
 import { buildContextualCraft,renderFrozenCraft } from './designKnowledge/promptAdapter';
 import type { RuleQuery } from './designKnowledge/types';
@@ -24,6 +24,8 @@ import {
 import { buildMotherReferenceExample } from '../../reference-pages/injector';
 import { matchMother } from '../../reference-pages/retriever';
 import type { MotherDensity, MotherPageKind, MotherSelection } from '../../reference-pages/types';
+import { contentLanguageDirective, type Locale } from '../../i18n';
+import { getUiLocale } from '../../stores/useLocaleStore';
 
 export type GenerationIntent = 'create_screen' | 'modify_screen' | 'change_theme' | 'question';
 
@@ -154,6 +156,12 @@ export interface PromptBuildOptions {
   visualStyleLock?: VisualStyleLock | null;
   /** 润色共享完整设计上下文，但使用自己的输出格式。 */
   outputContract?: string;
+  /**
+   * Locale for generated screen copy language (CONTENT / CONTENT LANGUAGE).
+   * Defaults to `getUiLocale()` so production follows the app locale;
+   * tests may pass an explicit value without touching the store.
+   */
+  contentLocale?: Locale;
 }
 
 function shortReferenceFallback(device: 'pc' | 'mobile'): string {
@@ -320,12 +328,33 @@ function fitSystemPromptToBudget(
     }
   }
 
+  // Locale CONTENT LANGUAGE is short but can tip list+brief creates over ≤12k;
+  // compress component-library HTML contracts while preserving registered media paths.
+  if (text.length > budget) {
+    const libIdx = sections.findIndex((s) => s.id === 'component_library');
+    if (libIdx >= 0) {
+      const current = sections[libIdx].content;
+      const mediaBlock = current.match(/\n已登记独立资源[\s\S]*$/)?.[0]
+        ?? (current.includes('当前未登记对应独立资源')
+          ? '\n图标结构示例未提供：当前未登记对应独立资源，不得猜测路径或改为内联SVG。'
+          : '');
+      const stub =
+        `### COMPONENT LIBRARY (REUSABLE PROJECT COMPONENTS)\n沿用 COMPONENT CONTRACTS；修改或润色只调整已授权节点。${mediaBlock}`;
+      if (current.length > stub.length + 24) {
+        sections[libIdx] = { ...sections[libIdx], content: stub };
+        text = joinSections(sections);
+        if (text.length <= budget) return text;
+      }
+    }
+  }
+
   return text;
 }
 
 export class PromptBuilder {
   public static buildSystemPrompt(options: PromptBuildOptions): string {
     const intent: GenerationIntent = options.intent ?? 'create_screen';
+    const contentLocale = options.contentLocale ?? getUiLocale();
     const sections: Array<{ id: PromptSectionId; content: string }> = [];
 
     const beautyInput: BeautyLaneInput = {
@@ -341,10 +370,11 @@ export class PromptBuilder {
         ? resolveMotherSelection(options, beauty)
         : null;
 
-    // 1. role_core
+    // 1. role_core — LANG only when non-default to protect ≤12k create budget; zh-CN covered by hierarchy CONTENT.
+    const langLine = contentLocale === 'zh-CN' ? '' : `${contentLanguageDirective(contentLocale)}\n`;
     const roleContent = `### ROLE & CORE CONSTRAINTS:
 TauDesign UI/UX引擎：生成精致语义HTML5。
-1. STYLING: 仅用白名单类与CSS变量；禁硬编码hex/rgb与<script>。
+${langLine}1. STYLING: 仅用白名单类与CSS变量；禁硬编码hex/rgb与<script>。
 2. ICONS & IMAGES: .icon/.icon-mask；输入用.input-group；媒体仅资源清单真实路径或HTTPS；禁data URL/base64/内联SVG媒体。优先.icon-mask+mask-image/-webkit-mask-image引用外部SVG，background-color:currentColor。禁无名图标按钮。参考图走Provider输入字段，不写入页面代码。
 3. DEVICE: Width ${options.frameWidth}px (${options.deviceProfile.toUpperCase()})；高度随内容。${referenceDevicePrompt({ ...options, viewportGuideHeight: options.viewportGuideHeight ?? (options.deviceProfile === 'mobile' ? 844 : 900) })}
 BACKGROUND ROLES: 新页body继承--background-page，根透明；.btn-primary: --background-primary-action；.bg-decorative-surface: --background-decorative-surface。explicit优先；local保留背景。
@@ -440,7 +470,7 @@ ${renderComponentContracts(false, requestText, assets)}${mediaNote}${
         : getDeviceAestheticRules(options.deviceProfile, options.useCustomNavigation);
       const includeCreateState =
         intent === 'create_screen' && !motherSelection && !sceneAppendix;
-      let craftContent = `${craftBase}${includeCreateState ? `\n\n${NEW_SCREEN_STATE_RULES}` : ''}\n\n#### 设备档位专属工艺约束 (${options.deviceProfile.toUpperCase()} Profile)\n${deviceRules}\n\n#### 视觉层次金律 (VISUAL HIERARCHY)\n${GOLDEN_HIERARCHY}`;
+      let craftContent = `${craftBase}${includeCreateState ? `\n\n${NEW_SCREEN_STATE_RULES}` : ''}\n\n#### 设备档位专属工艺约束 (${options.deviceProfile.toUpperCase()} Profile)\n${deviceRules}\n\n#### 视觉层次金律 (VISUAL HIERARCHY)\n${buildGoldenHierarchy(contentLocale)}`;
 
       if (sceneAppendix) craftContent += sceneAppendix;
 

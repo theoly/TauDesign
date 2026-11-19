@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, FileText, History, Image as ImageIcon, Palette, Sliders } from 'lucide-react';
 import { ProjectDocumentsPanel } from './panels/ProjectDocumentsPanel';
 import { ScreensPanel } from './panels/ScreensPanel';
@@ -8,16 +8,17 @@ import { HistoryPanel } from './panels/HistoryPanel';
 import { PropertyInspector } from '../inspector/PropertyInspector';
 import { ErrorBoundary } from '../common/ErrorBoundary';
 import { useProjectStore } from '../../stores/useProjectStore';
+import { useT } from '../../stores/useLocaleStore';
 
 export type SidebarView = 'screens' | 'assets' | 'design' | 'history' | 'inspector' | 'documents';
 
-const VIEWS: { key: SidebarView; icon: React.FC<{ className?: string }>; label: string }[] = [
-  { key: 'screens', icon: FileText, label: '页面' },
-  { key: 'documents', icon: BookOpen, label: '项目文档' },
-  { key: 'assets', icon: ImageIcon, label: '资源' },
-  { key: 'design', icon: Palette, label: '设计系统' },
-  { key: 'history', icon: History, label: '历史' },
-  { key: 'inspector', icon: Sliders, label: '元素属性' }
+const VIEW_DEFS: { key: SidebarView; icon: React.FC<{ className?: string }>; labelKey: string }[] = [
+  { key: 'screens', icon: FileText, labelKey: 'sidebar.screens' },
+  { key: 'documents', icon: BookOpen, labelKey: 'sidebar.documents' },
+  { key: 'assets', icon: ImageIcon, labelKey: 'sidebar.assets' },
+  { key: 'design', icon: Palette, labelKey: 'sidebar.design' },
+  { key: 'history', icon: History, labelKey: 'sidebar.history' },
+  { key: 'inspector', icon: Sliders, labelKey: 'sidebar.inspector' }
 ];
 
 const MIN_WIDTH = 200;
@@ -37,6 +38,7 @@ interface SideBarProps {
  * 侧边栏内容用折叠面板分组，宽度可拖拽。
  */
 export const SideBar: React.FC<SideBarProps> = ({ onOpenAssetCenter, onOpenThemeEditor , onOpenRestyle }) => {
+  const t = useT();
   const [view, setView] = useState<SidebarView>('screens');
   const [collapsed, setCollapsed] = useState(false);
   const [width, setWidth] = useState(340);
@@ -44,6 +46,11 @@ export const SideBar: React.FC<SideBarProps> = ({ onOpenAssetCenter, onOpenTheme
   const sidebarRef = useRef<HTMLDivElement>(null);
   const selectedNid = useProjectStore((state) => state.selectedNid);
   const activeScreenId = useProjectStore((state) => state.activeScreenId);
+
+  const views = useMemo(
+    () => VIEW_DEFS.map((v) => ({ ...v, label: t(v.labelKey) })),
+    [t],
+  );
 
   useEffect(() => {
     if (selectedNid) {
@@ -87,7 +94,7 @@ export const SideBar: React.FC<SideBarProps> = ({ onOpenAssetCenter, onOpenTheme
     <div ref={sidebarRef} className="flex flex-row-reverse h-full shrink-0" data-testid="resource-sidebar">
       {/* 活动栏 */}
       <div className="w-12 h-full bg-slate-950 border-l border-slate-800 flex flex-col items-center py-2 gap-1 z-20">
-        {VIEWS.map((v) => {
+        {views.map((v) => {
           const active = v.key === view && !collapsed;
           return (
             <button
@@ -111,7 +118,7 @@ export const SideBar: React.FC<SideBarProps> = ({ onOpenAssetCenter, onOpenTheme
       <div className="relative h-full bg-slate-900 border-l border-slate-800 flex flex-col z-20" style={{ width, display: collapsed ? 'none' : undefined }}>
         <div className="h-8 px-3 flex items-center border-b border-slate-800 shrink-0">
           <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-            {VIEWS.find((v) => v.key === view)?.label}
+            {views.find((v) => v.key === view)?.label}
           </span>
         </div>
 
@@ -125,8 +132,8 @@ export const SideBar: React.FC<SideBarProps> = ({ onOpenAssetCenter, onOpenTheme
           </div>
           <div className="h-full" style={{ display: view === 'inspector' ? undefined : 'none' }}>
             <ErrorBoundary
-              fallbackTitle="属性检查器渲染异常"
-              fallbackMessage="当前选中元素的属性解析或渲染遇到异常，已隔离保护。点击下方按钮可重置选区。"
+              fallbackTitle={t('sidebar.inspectorErrorTitle')}
+              fallbackMessage={t('sidebar.inspectorErrorMessage')}
               onReset={() => useProjectStore.getState().selectNode(null)}
             >
               <PropertyInspector />

@@ -2,8 +2,10 @@ import React from 'react';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useHistoryStore } from '../../stores/useHistoryStore';
 import { BrandMark } from '../common/BrandMark';
+import { LanguageMenu } from '../common/LanguageMenu';
 import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { TokenLintEngine, getTokenLintContext } from '../../utils/tokenLint';
+import { useT } from '../../stores/useLocaleStore';
 import {
   ArrowLeft,
   Download,
@@ -29,6 +31,7 @@ interface HeaderProps {
 
 /** 资源库与设计系统入口已移入右侧栏 (D22)，顶栏不再重复提供 */
 export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) => {
+  const t = useT();
   const {
     name,
     setName,
@@ -66,13 +69,21 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
     setViewportTransform({ x: 60, y: 60, scale: 0.6 });
   };
 
+  const deviceLabel = settings.deviceProfile === 'pc' ? t('header.devicePc') : t('header.deviceMobile');
+  const colorModeLabel = settings.colorMode === 'light' ? t('header.lightMode') : t('header.darkMode');
+  const lintTitle = lint
+    ? `${t('header.lintTitle', { rate: lint.complianceRate, count: lint.issues.length })}${
+        curScreen?.metadata?.importedHtml ? t('header.lintImportedSuffix') : ''
+      }`
+    : undefined;
+
   return (
     <header className="h-12 bg-slate-900 border-b border-slate-800 px-4 flex items-center justify-between z-30 select-none text-xs">
       {/* Left: Brand & Project Name */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2">
           <BrandMark size={28} className="shadow rounded-lg" />
-          <span className="font-bold text-slate-100 hidden sm:inline">TauDesign</span>
+          <span className="font-bold text-slate-100 hidden sm:inline">{t('app.name')}</span>
         </div>
 
         <div className="h-4 w-px bg-slate-800" />
@@ -88,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
             放一个不可用的切换控件只会误导用户以为可以切 */}
         <span
           className="flex items-center gap-1 px-2 py-1 rounded-md bg-slate-950 border border-slate-800 text-slate-400 cursor-default"
-          title={`设备档位：${settings.deviceProfile === 'pc' ? 'PC 桌面' : '移动端'}（画框宽度 ${settings.frameWidth}px）。档位在新建工程时确定，不可更改。`}
+          title={t('header.deviceBadgeTitle', { device: deviceLabel, width: settings.frameWidth })}
         >
           {settings.deviceProfile === 'pc' ? (
             <Laptop className="w-3.5 h-3.5 text-blue-400" />
@@ -98,12 +109,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
           <span className="font-medium">{settings.frameWidth}</span>
         </span>
         {(saveStatus==='failed'||saveStatus==='readonly')&&<details className="relative text-amber-300">
-          <summary className="cursor-pointer rounded border border-amber-700/60 px-2 py-1" aria-label="查看工程保存问题">{saveStatus==='readonly'?'只读恢复':'保存未确认'}</summary>
+          <summary className="cursor-pointer rounded border border-amber-700/60 px-2 py-1" aria-label={t('header.saveIssuesAria')}>{saveStatus==='readonly'?t('header.saveReadonly'):t('header.saveUnconfirmed')}</summary>
           <div role="alert" className="absolute left-0 top-full z-50 mt-2 w-80 rounded-lg border border-amber-800 bg-slate-950 p-3 text-xs leading-relaxed shadow-xl">
-            <p>{saveError}</p><p className="mt-2 text-slate-400">当前设计仍保留在窗口。请先导出需要保留的页面，再重新打开工程。</p>
+            <p>{saveError}</p><p className="mt-2 text-slate-400">{t('header.saveKeepHint')}</p>
           </div>
         </details>}
-        {saveStatus==='saving'&&<span role="status" className="text-slate-500">正在保存…</span>}
+        {saveStatus==='saving'&&<span role="status" className="text-slate-500">{t('header.saving')}</span>}
       </div>
 
       {/* Middle: 视图开关 / 撤销重做 / 缩放 */}
@@ -117,27 +128,27 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
               ? 'border-blue-500/50 bg-blue-950/40 text-blue-300'
               : 'border-slate-800 bg-slate-950 text-slate-500 hover:text-slate-300'
           }`}
-          title="首屏设备视口辅助线"
+          title={t('header.viewportGuideTitle')}
         >
           <Eye className="w-3.5 h-3.5" />
-          <span>首屏线</span>
+          <span>{t('header.viewportGuide')}</span>
         </button>
 
         {/* Light/Dark Color Mode Switch (PRD §3.5.2) */}
         <button
           onClick={toggleColorMode}
           className="flex items-center gap-1 px-2 py-1 rounded-lg border border-slate-800 bg-slate-950 hover:bg-slate-850 text-slate-300 transition"
-          title={`当前为 ${settings.colorMode === 'light' ? '浅色模式' : '深色模式'}，点击切换`}
+          title={t('header.colorModeTitle', { mode: colorModeLabel })}
         >
           {settings.colorMode === 'light' ? (
             <>
               <Sun className="w-3.5 h-3.5 text-amber-400" />
-              <span>浅色</span>
+              <span>{t('header.light')}</span>
             </>
           ) : (
             <>
               <Moon className="w-3.5 h-3.5 text-indigo-400" />
-              <span>深色</span>
+              <span>{t('header.dark')}</span>
             </>
           )}
         </button>
@@ -147,10 +158,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
         {lint && (
           <div
             className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-[11px]"
-            title={`Token 合规率: ${lint.complianceRate}% (${lint.issues.length} 处差异)${curScreen?.metadata?.importedHtml ? '；导入页包含自带样式，此分数不代表视觉还原度' : ''}`}
+            title={lintTitle}
           >
             <ShieldCheck className={`w-3.5 h-3.5 ${lint.complianceRate >= 95 ? 'text-emerald-400' : 'text-amber-400'}`} />
-            <span className="text-slate-400">合规率:</span>
+            <span className="text-slate-400">{t('header.complianceRate')}</span>
             <span className={`font-mono font-bold ${lint.complianceRate >= 95 ? 'text-emerald-400' : 'text-amber-400'}`}>
               {lint.complianceRate}%
             </span>
@@ -165,7 +176,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
             onClick={() => undo()}
             disabled={!canUndo()}
             className="p-1.5 rounded-lg text-slate-300 hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-transparent transition"
-            title="撤销 (Cmd/Ctrl+Z)"
+            title={t('header.undoTitle')}
           >
             <Undo2 className="w-4 h-4" />
           </button>
@@ -173,7 +184,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
             onClick={() => redo()}
             disabled={!canRedo()}
             className="p-1.5 rounded-lg text-slate-300 hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-transparent transition"
-            title="重做 (Cmd/Ctrl+Shift+Z)"
+            title={t('header.redoTitle')}
           >
             <Redo2 className="w-4 h-4" />
           </button>
@@ -183,19 +194,19 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
 
         {/* Zoom Controls */}
         <div className="flex items-center gap-1 text-slate-400">
-          <button onClick={() => handleZoom(0.85)} className="p-1 hover:text-slate-200" title="缩小">
+          <button onClick={() => handleZoom(0.85)} className="p-1 hover:text-slate-200" title={t('header.zoomOut')}>
             <ZoomOut className="w-3.5 h-3.5" />
           </button>
-          <button onClick={handleResetZoom} className="px-1.5 py-0.5 font-mono hover:text-slate-200" title="复位 100%">
+          <button onClick={handleResetZoom} className="px-1.5 py-0.5 font-mono hover:text-slate-200" title={t('header.zoomReset')}>
             {zoomPercent}%
           </button>
-          <button onClick={() => handleZoom(1.15)} className="p-1 hover:text-slate-200" title="放大">
+          <button onClick={() => handleZoom(1.15)} className="p-1 hover:text-slate-200" title={t('header.zoomIn')}>
             <ZoomIn className="w-3.5 h-3.5" />
           </button>
-          <button onClick={handleFitAll} className="p-1 hover:text-slate-200 ml-1" title="适应全部">
+          <button onClick={handleFitAll} className="p-1 hover:text-slate-200 ml-1" title={t('header.fitAll')}>
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
-          <button onClick={arrangeScreens} className="p-1 hover:text-slate-200" title="整理排列画板 (PRD §3.3.2)">
+          <button onClick={arrangeScreens} className="p-1 hover:text-slate-200" title={t('header.arrange')}>
             <LayoutGrid className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -208,14 +219,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg shadow transition"
         >
           <Download className="w-3.5 h-3.5" />
-          <span>交付导出</span>
+          <span>{t('header.exportDelivery')}</span>
         </button>
+
+        <LanguageMenu />
 
         <button
           onClick={onOpenSettings}
           className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition"
-          title="设置"
-          aria-label="设置"
+          title={t('header.settings')}
+          aria-label={t('header.settings')}
         >
           <Settings className="w-4 h-4" />
         </button>
@@ -225,10 +238,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenExport, onOpenSettings }) 
         <button
           onClick={backToManager}
           className="flex items-center gap-1 px-2 py-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition"
-          title="保存并返回工程管理"
+          title={t('header.backToProjectsTitle')}
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          <span>工程</span>
+          <span>{t('header.projects')}</span>
         </button>
       </div>
     </header>

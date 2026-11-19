@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { useQuickPromptsStore } from '../../stores/useQuickPromptsStore';
 import { useProjectStore } from '../../stores/useProjectStore';
+import { useT } from '../../stores/useLocaleStore';
 import { QuickPromptItem, QuickPromptScope } from '../../types/quickPrompt';
 import { Sparkles, Plus, Trash2, Edit2, RotateCcw, Check, X, Globe, FolderGit2 } from 'lucide-react';
 
 export const QuickPromptsConfigPanel: React.FC = () => {
+  const t = useT();
   const { globalPrompts, addGlobalPrompt, updateGlobalPrompt, deleteGlobalPrompt, resetGlobalPrompts } =
     useQuickPromptsStore();
   const {
@@ -40,11 +42,11 @@ export const QuickPromptsConfigPanel: React.FC = () => {
 
   const handleSave = () => {
     if (!title.trim()) {
-      setErrorMsg('请输入短语标题 / 按钮名称');
+      setErrorMsg(t('settings.promptErrTitle'));
       return;
     }
     if (!content.trim()) {
-      setErrorMsg('请输入插入对话框的具体文字内容');
+      setErrorMsg(t('settings.promptErrContent'));
       return;
     }
 
@@ -99,10 +101,9 @@ export const QuickPromptsConfigPanel: React.FC = () => {
         <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl flex items-start gap-3">
           <Sparkles className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
           <div className="space-y-1 text-slate-300">
-            <h4 className="text-slate-100 font-semibold text-sm">对话快捷输入短语配置 (Quick Prompts)</h4>
+            <h4 className="text-slate-100 font-semibold text-sm">{t('settings.quickPromptsPanelTitle')}</h4>
             <p className="text-[11px] text-slate-400 leading-relaxed">
-              快捷输入将常驻在 AI 对话输入框上方。点击芯片可快速将预设文字插入对话框中（不自动发送），方便继续编辑补充。
-              支持为当前工程独立定制（默认），或设定为全局可用（所有工程通用）。
+              {t('settings.quickPromptsIntro')}
             </p>
           </div>
         </div>
@@ -112,7 +113,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
           <div className="flex items-center justify-between">
             <span className="font-semibold text-slate-200 flex items-center gap-1.5">
               {editingItem ? <Edit2 className="w-3.5 h-3.5 text-blue-400" /> : <Plus className="w-3.5 h-3.5 text-blue-400" />}
-              <span>{editingItem ? '编辑快捷短语' : '添加快捷短语'}</span>
+              <span>{editingItem ? t('settings.editQuickPrompt') : t('settings.addQuickPrompt')}</span>
             </span>
             {editingItem && (
               <button
@@ -121,7 +122,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                 className="text-slate-400 hover:text-slate-200 text-[11px] flex items-center gap-1"
               >
                 <X className="w-3 h-3" />
-                <span>取消编辑</span>
+                <span>{t('settings.cancelEdit')}</span>
               </button>
             )}
           </div>
@@ -129,7 +130,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Title Input */}
             <div className="space-y-1">
-              <label className="text-[11px] text-slate-400 font-medium">短语显示名称 (按钮文案)</label>
+              <label className="text-[11px] text-slate-400 font-medium">{t('settings.promptTitleLabel')}</label>
               <input
                 type="text"
                 value={title}
@@ -137,14 +138,14 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                   setTitle(e.target.value);
                   if (errorMsg) setErrorMsg(null);
                 }}
-                placeholder="例如：📱 移动端适配"
+                placeholder={t('settings.promptTitlePlaceholder')}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-blue-500 text-xs"
               />
             </div>
 
             {/* Scope Selector */}
             <div className="space-y-1 md:col-span-2">
-              <label className="text-[11px] text-slate-400 font-medium">适用范围 (作用域)</label>
+              <label className="text-[11px] text-slate-400 font-medium">{t('settings.promptScopeLabel')}</label>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -157,8 +158,8 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                 >
                   <FolderGit2 className="w-3.5 h-3.5 flex-shrink-0" />
                   <div className="min-w-0">
-                    <div className="text-[11px] font-medium leading-tight truncate">当前项目 (默认)</div>
-                    <div className="text-[9px] text-slate-500 truncate">仅在「{projectName || '当前工程'}」可用</div>
+                    <div className="text-[11px] font-medium leading-tight truncate">{t('settings.promptScopeProject')}</div>
+                    <div className="text-[9px] text-slate-500 truncate">{t('settings.promptScopeProjectHint', { name: projectName || t('settings.currentProjectFallback') })}</div>
                   </div>
                 </button>
 
@@ -173,8 +174,8 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                 >
                   <Globe className="w-3.5 h-3.5 flex-shrink-0" />
                   <div className="min-w-0">
-                    <div className="text-[11px] font-medium leading-tight truncate">全局可用</div>
-                    <div className="text-[9px] text-slate-500 truncate">所有工程共享，全局持久化</div>
+                    <div className="text-[11px] font-medium leading-tight truncate">{t('settings.promptScopeGlobal')}</div>
+                    <div className="text-[9px] text-slate-500 truncate">{t('settings.promptScopeGlobalHint')}</div>
                   </div>
                 </button>
               </div>
@@ -183,7 +184,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
 
           {/* Content Input */}
           <div className="space-y-1">
-            <label className="text-[11px] text-slate-400 font-medium">插入对话框的具体文字内容</label>
+            <label className="text-[11px] text-slate-400 font-medium">{t('settings.promptContentLabel')}</label>
             <textarea
               rows={2}
               value={content}
@@ -191,7 +192,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                 setContent(e.target.value);
                 if (errorMsg) setErrorMsg(null);
               }}
-              placeholder="点击快捷输入芯片后，自动填入输入框的提示词文字..."
+              placeholder={t('settings.promptContentPlaceholder')}
               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-blue-500 text-xs"
             />
           </div>
@@ -205,7 +206,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                 onClick={handleCancelEdit}
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
               >
-                取消
+                {t('common.cancel')}
               </button>
             )}
             <button
@@ -214,7 +215,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
               className="flex items-center gap-1 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition shadow-sm"
             >
               <Check className="w-3.5 h-3.5" />
-              <span>{editingItem ? '保存修改' : '添加短语'}</span>
+              <span>{editingItem ? t('common.save') : t('settings.addQuickPrompt')}</span>
             </button>
           </div>
         </div>
@@ -224,17 +225,17 @@ export const QuickPromptsConfigPanel: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FolderGit2 className="w-4 h-4 text-blue-400" />
-              <span className="font-semibold text-slate-200">当前项目专属短语</span>
+              <span className="font-semibold text-slate-200">{t('settings.projectPrompts')}</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 font-mono">
-                {projectPrompts.length} 条
+                {t('settings.promptCount', { count: projectPrompts.length })}
               </span>
             </div>
-            <span className="text-[10px] text-slate-500">仅保存在当前工程「{projectName || 'Untitled'}」中</span>
+            <span className="text-[10px] text-slate-500">{t('settings.promptProjectStoredIn', { name: projectName || 'Untitled' })}</span>
           </div>
 
           {projectPrompts.length === 0 ? (
             <div className="p-4 bg-slate-950/40 border border-slate-800/80 rounded-xl text-center text-slate-500 text-[11px]">
-              当前工程暂无专属快捷短语。上方添加短语时选择「当前项目 (默认)」即可添加。
+              {t('settings.promptProjectEmpty')}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -247,7 +248,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <span className="font-medium text-slate-100">{item.title}</span>
                       <span className="text-[9px] px-1.5 py-0.2 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded">
-                        项目专属
+                        {t('settings.promptBadgeProject')}
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">{item.content}</p>
@@ -257,7 +258,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                       type="button"
                       onClick={() => handleStartEdit(item)}
                       className="p-1 text-slate-400 hover:text-blue-300 hover:bg-slate-850 rounded transition"
-                      title="编辑该短语"
+                      title={t('settings.promptEditTitle')}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
@@ -265,7 +266,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                       type="button"
                       onClick={() => handleDelete(item)}
                       className="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-850 rounded transition"
-                      title="删除该短语"
+                      title={t('settings.promptDeleteTitle')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -281,19 +282,19 @@ export const QuickPromptsConfigPanel: React.FC = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-amber-400" />
-              <span className="font-semibold text-slate-200">全局通用短语</span>
+              <span className="font-semibold text-slate-200">{t('settings.globalPrompts')}</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
-                {globalPrompts.length} 条
+                {t('settings.promptCount', { count: globalPrompts.length })}
               </span>
             </div>
             <button
               type="button"
               onClick={resetGlobalPrompts}
               className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1 transition"
-              title="重置为默认内置快捷短语"
+              title={t('settings.promptResetDefaultsTitle')}
             >
               <RotateCcw className="w-3 h-3" />
-              <span>恢复默认内置短语</span>
+              <span>{t('settings.promptResetDefaults')}</span>
             </button>
           </div>
 
@@ -307,7 +308,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <span className="font-medium text-slate-100">{item.title}</span>
                     <span className="text-[9px] px-1.5 py-0.2 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">
-                      全局共享
+                      {t('settings.promptBadgeGlobal')}
                     </span>
                   </div>
                   <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">{item.content}</p>
@@ -317,7 +318,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                     type="button"
                     onClick={() => handleStartEdit(item)}
                     className="p-1 text-slate-400 hover:text-blue-300 hover:bg-slate-850 rounded transition"
-                    title="编辑该短语"
+                    title={t('settings.promptEditTitle')}
                   >
                     <Edit2 className="w-3.5 h-3.5" />
                   </button>
@@ -325,7 +326,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                     type="button"
                     onClick={() => handleDelete(item)}
                     className="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-850 rounded transition"
-                    title="删除该短语"
+                    title={t('settings.promptDeleteTitle')}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

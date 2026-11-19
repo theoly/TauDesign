@@ -5,6 +5,8 @@ import { DesignSystem, DENSITY_SCALE } from '../../types/designSystem';
 import { compileTokensToCss } from '../../utils/cssCompiler';
 import { resolveColorRoles } from '../../utils/colorHarmony';
 import { Check, Copy, Eye, Moon, Sun, Terminal } from 'lucide-react';
+import { useT } from '../../stores/useLocaleStore';
+import { localizedPresetLabel } from '../../utils/themePresetLabels';
 
 interface DesignSystemVisualPreviewProps {
   theme: DesignSystem;
@@ -23,9 +25,15 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
   compact = false,
   device = 'pc'
 }) => {
+  const t = useT();
   const [internalMode, setInternalMode] = useState<'light' | 'dark'>('light');
   const [viewTab, setViewTab] = useState<'visual' | 'token'>('visual');
   const [copied, setCopied] = useState(false);
+  const displayName = localizedPresetLabel(theme.id)?.name ?? theme.name;
+  const subtitle =
+    theme.id === 'theme-neutral-modern' || theme.id === 'neutral-modern'
+      ? t('workspace.previewNeutralSubtitle')
+      : t('workspace.previewSandboxSubtitle');
 
   const mode = controlledMode ?? internalMode;
   const setMode = (m: 'light' | 'dark') => {
@@ -62,13 +70,9 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
               className="w-3.5 h-3.5 rounded-full border border-white/20 shrink-0"
               style={{ backgroundColor: primaryHex }}
             />
-            <h3 className="min-w-0 break-words font-semibold text-slate-100 text-sm">{theme.name}</h3>
+            <h3 className="min-w-0 break-words font-semibold text-slate-100 text-sm">{displayName}</h3>
           </div>
-          <p className="text-[11px] text-slate-400 mt-0.5">
-            {theme.id === 'theme-neutral-modern'
-              ? '现代全栈中性风 · 默认主题：克制冷灰阶、精致微质感阴影、自然圆角'
-              : '设计系统可视化沙盒 · 调色板、排版尺度与组件渲染'}
-          </p>
+          <p className="text-[11px] text-slate-400 mt-0.5">{subtitle}</p>
         </div>
 
         {/* Controls: Mode & View Toggle */}
@@ -84,7 +88,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
               }`}
             >
               <Eye className="w-3.5 h-3.5 shrink-0" />
-              <span>可视化</span>
+              <span>{t('workspace.previewVisual')}</span>
             </button>
             <button
               onClick={() => setViewTab('token')}
@@ -103,7 +107,9 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
           <button
             onClick={() => setMode(mode === 'light' ? 'dark' : 'light')}
             className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 text-slate-400 hover:text-slate-200 hover:border-slate-700 transition"
-            title={`切换为${mode === 'light' ? '深色' : '浅色'}模式预览`}
+            title={t('workspace.previewToggleMode', {
+              mode: mode === 'light' ? t('header.dark') : t('header.light'),
+            })}
           >
             {mode === 'light' ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5 text-amber-400" />}
           </button>
@@ -125,7 +131,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
           >
             {/* Section 1: Palette */}
             <div className="mb-6">
-              <h4 className="text-[11px] font-bold uppercase tracking-wider mb-3 opacity-60">调色板 (Palette)</h4>
+              <h4 className="text-[11px] font-bold uppercase tracking-wider mb-3 opacity-60">{t('workspace.previewPalette')}</h4>
               <div className={`grid gap-2.5 ${compact ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-4 md:grid-cols-6'}`}>
                 {[
                   { label: 'Primary', role: 'accent', hex: primaryHex, bg: primaryHex, text: roles.onPrimary },
@@ -156,7 +162,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
 
             {/* Section 2: Typography */}
             <div className="mb-6">
-              <h4 className="text-[11px] font-bold uppercase tracking-wider mb-3 opacity-60">排版标尺 (Typography)</h4>
+              <h4 className="text-[11px] font-bold uppercase tracking-wider mb-3 opacity-60">{t('workspace.previewTypography')}</h4>
               <div
                 className="p-4 rounded-xl space-y-3"
                 style={{
@@ -171,7 +177,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
                 <div className="pt-2 border-t" style={{ borderColor: borderHex }}>
                   <span className="text-[9px] uppercase tracking-wider font-mono opacity-50 block mb-1">Body</span>
                   <div data-design-sample="body" className="opacity-85" style={{ fontSize: tokens.typography.sizes.md, lineHeight: tokens.typography.lineHeights.normal }}>
-                    标准正文文本采用高可读性字族与严谨行高，克制与韵律在设计系统中优于盲目繁复。
+                    {t('workspace.previewBodySample')}
                   </div>
                 </div>
                 <div className="pt-2 border-t" style={{ borderColor: borderHex }}>
@@ -183,11 +189,11 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
               </div>
             </div>
 
-            <iframe title="主题真实组件预览" srcDoc={buildThemePreview(tokens, mode, device)}
+            <iframe title={t('workspace.previewIframeTitle')} srcDoc={buildThemePreview(tokens, mode, device)}
               className="w-full rounded-xl border-0 mb-6" style={{ height: compact ? 480 : 620 }} />
             {/* Section 3: Components */}
             <div>
-              <h4 className="text-[11px] font-bold uppercase tracking-wider mb-3 opacity-60">核心组件 (Components)</h4>
+              <h4 className="text-[11px] font-bold uppercase tracking-wider mb-3 opacity-60">{t('workspace.previewComponents')}</h4>
               <div
                 data-design-sample="card"
                 className="p-5 transition shadow-sm"
@@ -219,7 +225,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
 
                 <h5 className="font-semibold text-sm mb-1">Production-quality artifact</h5>
                 <p className="text-xs mb-4 leading-relaxed" style={{ color: roles.textSecondary }}>
-                  展示当前设计系统在卡片底色、边框细微透明度、间距节奏与主色调交互下的综合真实质感。
+                  {t('workspace.previewCardBlurb')}
                 </p>
 
                 {/* Interactive Controls Sandbox */}
@@ -237,7 +243,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
                       lineHeight: tokens.typography.lineHeights.normal
                     }}
                   >
-                    主操作 (Primary)
+                    {t('workspace.previewPrimaryBtn')}
                   </button>
 
                   <button
@@ -250,7 +256,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
                       borderRadius: tokens.radius.md
                     }}
                   >
-                    次级操作 (Secondary)
+                    {t('workspace.previewSecondaryBtn')}
                   </button>
 
                   <button
@@ -260,13 +266,13 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
                       color: roles.primaryText
                     }}
                   >
-                    幽灵链接 (Link →)
+                    {t('workspace.previewLinkBtn')}
                   </button>
 
                   <div className="flex-1 min-w-[140px]">
                     <input
                       readOnly
-                      placeholder="表单输入框效果..."
+                      placeholder={t('workspace.previewInputPlaceholder')}
                       className="w-full text-xs px-3 py-1.5 outline-none transition"
                       style={{
                         backgroundColor: bgHex,
@@ -290,7 +296,7 @@ export const DesignSystemVisualPreview: React.FC<DesignSystemVisualPreviewProps>
                 className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-xs transition"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copied ? '已复制' : '复制 CSS'}</span>
+                <span>{copied ? t('workspace.previewCopied') : t('workspace.previewCopyCss')}</span>
               </button>
             </div>
             <pre className="p-4 bg-slate-900 border border-slate-800 rounded-xl text-[11px] font-mono text-blue-300 overflow-x-auto max-h-[500px]">

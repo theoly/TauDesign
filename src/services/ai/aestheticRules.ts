@@ -1,6 +1,7 @@
 import { mobileNavigationPrompt, normalizeMobileNavigation } from '../../utils/mobileNavigation';
 import { colorUsageRules } from '../../utils/semanticColors';
 import type { DeviceProfile } from '../../styles/baseCss';
+import { DEFAULT_LOCALE, type Locale } from '../../i18n';
 import {FORM_PRESENTATION_RULES} from './formPresentationRules';
 
 /**
@@ -14,15 +15,28 @@ import {FORM_PRESENTATION_RULES} from './formPresentationRules';
  * 参见 doc/aesthetic/spec.md 第四章 PC / Mobile 设备美学对照。
  */
 
+/** Locale-aware CONTENT line for generated screen copy (keeps create ≤12k). */
+export function contentAestheticRule(locale: Locale = DEFAULT_LOCALE): string {
+  if (locale === 'en') {
+    return 'CONTENT: Natural English UI copy; ban placeholders/Lorem/"Title 1". Button text defaults to nowrap: .btn already has white-space: nowrap; no <br>. Prefer enough width or wrap the button group; do not rewrite/truncate specified copy; use white-space: normal only when user asks.';
+  }
+  return 'CONTENT: 真实感中文；禁占位/Lorem/“标题1”。按钮文字默认不换行：.btn 已设 white-space: nowrap；不插<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal。';
+}
+
 /** 与设备无关的黄金视觉层级准则 (spec §1.1)；E5 压缩以保住 create ≤12k。 */
-export const GOLDEN_HIERARCHY = `VISUAL HIERARCHY (MANDATORY):
+export function buildGoldenHierarchy(locale: Locale = DEFAULT_LOCALE): string {
+  return `VISUAL HIERARCHY (MANDATORY):
 - 配色可见性与美观度：文字、图标和关键控件必须与实际背景清晰区分，严禁同色或近似色导致内容难以辨认。更换背景时同步检查并调整前景色；图片、渐变、半透明背景按叠加效果判断，必要时用Token底色或遮罩。浅/深模式均保持品牌色协调、语义一致和主次层级，不为柔和、低饱和或装饰效果牺牲可见性。
 - COLOR ROLES: bg/surface/surface-alt；品牌5–10%主操作；.text-primary主色字，.btn-primary主按钮；勿写死白字、蓝链接或整段彩色正文。
 - ${colorUsageRules()}
 - TYPE/SPACE: 标题/正文/辅助；组内.gap-1/.gap-2，组间更大。ICONS: Lucide/Heroicons风格图标仅引用已登记外部文件，.icon/.icon-mask继承currentColor；禁止内联SVG、猜路径或符号占位。没有已登记资源时保留完整文字控件，不删功能；禁无名图标按钮。
-- CONTENT: 真实感中文；禁占位/Lorem/“标题1”。按钮文字默认不换行：.btn 已设 white-space: nowrap；不插<br>。优先留足宽度或让按钮组整体换行，不改写、截断指定文案；仅用户明确要求时用 white-space: normal。
+- ${contentAestheticRule(locale)}
 - COMPONENT LAYOUT CONTRACT: .nowrap管flex、.text-nowrap管文字。标签.row.wrap.gap-2不设.flex-1；姓名单行、职业位于姓名下方；润色不新增或移动节点；长文/勾选.flex-1.min-w-0.break-words禁竖排；角标.relative+.absolute。.badge-soft。跳转行.justify-between：文左箭头右，禁整组居中。
 ${FORM_PRESENTATION_RULES}`;
+}
+
+/** Default zh-CN snapshot for legacy imports / unit asserts. Prefer `buildGoldenHierarchy(locale)`. */
+export const GOLDEN_HIERARCHY = buildGoldenHierarchy(DEFAULT_LOCALE);
 
 /** Only new pages should proactively diversify repeated controls' business states. */
 export const NEW_SCREEN_STATE_RULES = `新页面同组控件多状态：尽量利用现有实例展示代表性不同状态，如输入框空值/已填/错误/禁用、选项未选/选中、按钮可用/加载/禁用。不额外堆砌控件；状态须与业务一致，互斥组最多一个选中；遵守用户指定状态和参考图，移动端不依赖hover。`;

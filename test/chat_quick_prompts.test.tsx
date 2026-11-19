@@ -3,6 +3,7 @@ import React, { act } from 'react';
 import { createRoot, Root } from 'react-dom/client';
 import { ChatDrawer } from '../src/components/chat/ChatDrawer';
 import { QuickPromptsConfigPanel } from '../src/components/settings/QuickPromptsConfigPanel';
+import { t } from '../src/i18n';
 import { useProjectStore } from '../src/stores/useProjectStore';
 import { useQuickPromptsStore, DEFAULT_BUILTIN_PROMPTS } from '../src/stores/useQuickPromptsStore';
 import { useAIConfigStore, defaultProviders, defaultBindings } from '../src/stores/useAIConfigStore';
@@ -123,7 +124,7 @@ describe('Chat Quick Prompts (对话快捷输入与分级配置)', () => {
     const titleInput = container.querySelector('input[type="text"]') as HTMLInputElement;
     const contentInput = container.querySelector('textarea') as HTMLTextAreaElement;
     const submitBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('添加短语')
+      b.textContent?.includes(t('settings.addQuickPrompt'))
     );
 
     expect(titleInput).not.toBeNull();
@@ -156,7 +157,7 @@ describe('Chat Quick Prompts (对话快捷输入与分级配置)', () => {
 
     // 面板中当前项目列表应显示此短语
     expect(container.textContent).toContain('🎯 强化主按钮');
-    expect(container.textContent).toContain('项目专属');
+    expect(container.textContent).toContain(t('settings.promptBadgeProject'));
   });
 
   test('CHK-F-05: 设置面板中可新增全局通用快捷短语（scope = global），切换工程后依然存在', () => {
@@ -166,7 +167,7 @@ describe('Chat Quick Prompts (对话快捷输入与分级配置)', () => {
 
     // 切换作用域为全局可用
     const globalScopeBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('全局可用')
+      b.textContent?.includes(t('settings.promptScopeGlobal'))
     );
     expect(globalScopeBtn).toBeDefined();
 
@@ -177,7 +178,7 @@ describe('Chat Quick Prompts (对话快捷输入与分级配置)', () => {
     const titleInput = container.querySelector('input[type="text"]') as HTMLInputElement;
     const contentInput = container.querySelector('textarea') as HTMLTextAreaElement;
     const submitBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-      b.textContent?.includes('添加短语')
+      b.textContent?.includes(t('settings.addQuickPrompt'))
     );
 
     expect(titleInput).not.toBeNull();

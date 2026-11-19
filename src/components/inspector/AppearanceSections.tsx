@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useT } from '../../stores/useLocaleStore';
 import { PropertyField, Section, type DesignSectionProps, type PropertyPatch } from './PropertyFields';
 const choice = (items: string[]) => items.map(value => ({
   label: value,
@@ -36,6 +37,9 @@ function splitShadows(input: string) {
   return result.filter(v => v && v !== 'none');
 }
 export function AppearanceSections(props: DesignSectionProps) {
+  const t = useT();
+  const tr = (key: string, params?: Record<string, string | number>) =>
+    t(`inspector.appearance.${key}` as Parameters<typeof t>[0], params);
   const {
     declarations: d,
     computed: c,
@@ -95,11 +99,11 @@ export function AppearanceSections(props: DesignSectionProps) {
   };
   const field = (label: string, property: string, extra: Partial<React.ComponentProps<typeof PropertyField>> = {}) => <PropertyField key={property} label={label} property={property} value={d[property] || ''} computed={c[property] || ''} onChange={onChange} onPreview={props.onPreview} {...extra} />;
   const small = 'rounded border border-slate-700 bg-slate-800 px-2 py-1 text-[11px] text-slate-300';
-  const colorOptions = (property: string) => <details className="pl-16 text-[10px] text-slate-400"><summary className="cursor-pointer">工程 Token / 页面颜色</summary><div className="flex flex-wrap gap-1 pt-2">{Object.entries(tokens).filter(([key, value]) => key.includes('color') || /^(#|rgb|hsl)/.test(value)).map(([key, value]) => <button key={key} type="button" title={`${key}: ${value}`} aria-label={`${property} ${key}`} className="w-5 h-5 rounded border border-slate-600" style={{
+  const colorOptions = (property: string) => <details className="pl-16 text-[10px] text-slate-400"><summary className="cursor-pointer">{tr('tokenPageColors')}</summary><div className="flex flex-wrap gap-1 pt-2">{Object.entries(tokens).filter(([key, value]) => key.includes('color') || /^(#|rgb|hsl)/.test(value)).map(([key, value]) => <button key={key} type="button" title={`${key}: ${value}`} aria-label={`${property} ${key}`} className="w-5 h-5 rounded border border-slate-600" style={{
         background: value
       }} onClick={() => onChange({
         [property]: `var(${key})`
-      })} />)}{pageColors.map(value => <button type="button" key={value} title={`页面颜色 ${value}`} aria-label={`${property} 页面颜色 ${value}`} className="w-5 h-5 rounded border border-slate-600" style={{
+      })} />)}{pageColors.map(value => <button type="button" key={value} title={tr('pageColorTitle', { color: value })} aria-label={tr('pageColorAria', { property, color: value })} className="w-5 h-5 rounded border border-slate-600" style={{
         background: value
       }} onClick={() => onChange({
         [property]: value
@@ -108,15 +112,16 @@ export function AppearanceSections(props: DesignSectionProps) {
       type: 'color'
     })}{colorOptions(property)}</div>;
   const mini = (label: string, value: string, change: (value: string) => void, type = 'text') => <label key={label} className="flex min-w-0 gap-1 items-center text-[10px] text-slate-400">{label}<input aria-label={label} type={type} className="w-full min-w-0 rounded bg-slate-800 p-1 text-slate-200" value={value} onChange={e => change(e.target.value)} /></label>;
+  const layerHidden = d.display === 'none' || c.display === 'none' || d.visibility === 'hidden' || c.visibility === 'hidden';
   return <>
- <Section title="图层" onReset={reset(['opacity', 'display', 'visibility', 'pointer-events', 'mix-blend-mode'])}>
- {field('透明度 0–1', 'opacity', {
+ <Section title={tr('sectionLayer')} onReset={reset(['opacity', 'display', 'visibility', 'pointer-events', 'mix-blend-mode'])}>
+ {field(tr('opacity'), 'opacity', {
         type: 'number',
         min: 0,
         max: 1,
         step: 0.01
       })}
- <div className="flex items-center justify-between"><span className="text-[11px] text-slate-400">可见性</span><button type="button" className={small} onClick={() => {
+ <div className="flex items-center justify-between"><span className="text-[11px] text-slate-400">{tr('visibility')}</span><button type="button" className={small} onClick={() => {
           if (d.display === 'none' || c.display === 'none') {
             onChange({
               display: d.display === 'none' ? '' : 'revert'
@@ -139,14 +144,14 @@ export function AppearanceSections(props: DesignSectionProps) {
               'pointer-events': 'none'
             });
           }
-        }}>{d.display === 'none' || c.display === 'none' || d.visibility === 'hidden' || c.visibility === 'hidden' ? '显示图层' : '隐藏图层'}</button></div>
- {field('混合模式', 'mix-blend-mode', {
+        }}>{layerHidden ? tr('showLayer') : tr('hideLayer')}</button></div>
+ {field(tr('mixBlendMode'), 'mix-blend-mode', {
         options: choice(['normal', 'multiply', 'screen', 'overlay', 'darken', 'lighten', 'color-dodge', 'color-burn', 'hard-light', 'soft-light', 'difference', 'exclusion', 'hue', 'saturation', 'color', 'luminosity'])
       })}
  </Section>
- <Section title="填充" onReset={reset(backgroundKeys)}>
- {color('背景颜色', 'background-color')}
- <div className="flex items-center gap-2"><label className="text-[11px] text-slate-400 w-16 shrink-0">填充透明度</label><input aria-label="填充透明度" type="range" min="0" max="100" value={alpha} className="w-full" onChange={e => {
+ <Section title={tr('sectionFill')} onReset={reset(backgroundKeys)}>
+ {color(tr('bgColor'), 'background-color')}
+ <div className="flex items-center gap-2"><label className="text-[11px] text-slate-400 w-16 shrink-0">{tr('fillAlpha')}</label><input aria-label={tr('fillAlpha')} type="range" min="0" max="100" value={alpha} className="w-full" onChange={e => {
           const n = Number(e.target.value);
           alphaChanged.current = true;
           setAlpha(n);
@@ -162,16 +167,16 @@ export function AppearanceSections(props: DesignSectionProps) {
             props.onPreview?.(null);
           }
         }} /><span className="text-[10px] text-slate-400">{alpha}%</span></div>
- <details className="text-xs text-slate-400"><summary className="cursor-pointer">渐变工具</summary><div className="space-y-2 pt-2"><select aria-label="渐变类型" className={small} value={gradient.kind} onChange={e => setGradient({
+ <details className="text-xs text-slate-400"><summary className="cursor-pointer">{tr('gradientTool')}</summary><div className="space-y-2 pt-2"><select aria-label={tr('gradientKindAria')} className={small} value={gradient.kind} onChange={e => setGradient({
             ...gradient,
             kind: e.target.value
-          })}><option value="linear">线性渐变</option><option value="radial">径向渐变</option></select><div className="grid grid-cols-2 gap-2">{mini('起始色', gradient.from, v => setGradient({
+          })}><option value="linear">{tr('gradientLinear')}</option><option value="radial">{tr('gradientRadial')}</option></select><div className="grid grid-cols-2 gap-2">{mini(tr('gradientFrom'), gradient.from, v => setGradient({
               ...gradient,
               from: v
-            }))}{mini('结束色', gradient.to, v => setGradient({
+            }))}{mini(tr('gradientTo'), gradient.to, v => setGradient({
               ...gradient,
               to: v
-            }))}{mini('渐变角度', gradient.angle, v => setGradient({
+            }))}{mini(tr('gradientAngle'), gradient.angle, v => setGradient({
               ...gradient,
               angle: v
             }), 'number')}</div><button type="button" className={small} onClick={() => {
@@ -185,39 +190,39 @@ export function AppearanceSections(props: DesignSectionProps) {
             if (from.color && to.color && probe.backgroundImage) onChange({
               'background-image': value
             });
-          }}>应用渐变</button></div></details>
- {field('背景图层', 'background-image')}
- <details className="text-xs text-slate-400"><summary className="cursor-pointer">图片背景</summary><div className="space-y-2 pt-2">{mini('图片地址', imageUrl, setImageUrl)}<button type="button" className={small} onClick={() => {
+          }}>{tr('applyGradient')}</button></div></details>
+ {field(tr('bgImage'), 'background-image')}
+ <details className="text-xs text-slate-400"><summary className="cursor-pointer">{tr('imageBg')}</summary><div className="space-y-2 pt-2">{mini(tr('imageUrl'), imageUrl, setImageUrl)}<button type="button" className={small} onClick={() => {
             if (imageUrl.trim() && !/[\n\r]/.test(imageUrl) && !/^\s*(javascript|data):/i.test(imageUrl)) onChange({
               'background-image': `url(${JSON.stringify(imageUrl.trim())})`,
               'background-size': 'cover',
               'background-position': 'center',
               'background-repeat': 'no-repeat'
             });
-          }}>应用图片背景</button>{field('背景尺寸', 'background-size', {
+          }}>{tr('applyImageBg')}</button>{field(tr('bgSize'), 'background-size', {
             options: choice(['cover', 'contain', 'auto'])
-          })}{field('背景位置', 'background-position')}{field('背景重复', 'background-repeat', {
+          })}{field(tr('bgPosition'), 'background-position')}{field(tr('bgRepeat'), 'background-repeat', {
             options: choice(['no-repeat', 'repeat', 'repeat-x', 'repeat-y'])
           })}</div></details>
  </Section>
- <Section title="描边" onReset={reset(borderKeys)}>
- <select aria-label="描边边向" className={`${small} w-full`} value={borderMode} onChange={e => setBorderMode(e.target.value)}><option value="all">全部边</option><option value="top">上边</option><option value="right">右边</option><option value="bottom">下边</option><option value="left">左边</option></select>
- {field('宽度', borderMode === 'all' ? 'border-width' : `border-${borderMode}-width`, {
+ <Section title={tr('sectionStroke')} onReset={reset(borderKeys)}>
+ <select aria-label={tr('borderSideAria')} className={`${small} w-full`} value={borderMode} onChange={e => setBorderMode(e.target.value)}><option value="all">{tr('borderAll')}</option><option value="top">{tr('borderTop')}</option><option value="right">{tr('borderRight')}</option><option value="bottom">{tr('borderBottom')}</option><option value="left">{tr('borderLeft')}</option></select>
+ {field(tr('borderWidth'), borderMode === 'all' ? 'border-width' : `border-${borderMode}-width`, {
         type: 'number',
         min: 0,
         unit: 'px'
       })}
- {field('样式', borderMode === 'all' ? 'border-style' : `border-${borderMode}-style`, {
+ {field(tr('borderStyle'), borderMode === 'all' ? 'border-style' : `border-${borderMode}-style`, {
         options: choice(['none', 'solid', 'dashed', 'dotted', 'double'])
       })}
- {color('描边颜色', borderMode === 'all' ? 'border-color' : `border-${borderMode}-color`)}
+ {color(tr('borderColor'), borderMode === 'all' ? 'border-color' : `border-${borderMode}-color`)}
  </Section>
- <Section title="效果" onReset={reset(['box-shadow', 'filter', 'backdrop-filter'])}>
- {field('阴影', 'box-shadow')}
+ <Section title={tr('sectionEffects')} onReset={reset(['box-shadow', 'filter', 'backdrop-filter'])}>
+ {field(tr('boxShadow'), 'box-shadow')}
  <div className="flex gap-1 flex-wrap">{Object.entries(tokens).filter(([key]) => key.includes('shadow')).map(([key, value]) => <button type="button" key={key} title={value} className={small} onClick={() => onChange({
           'box-shadow': `var(${key})`
         })}>{key.replace('--shadow-', '')}</button>)}</div>
- <details className="text-xs text-slate-400"><summary className="cursor-pointer">阴影参数</summary><div className="space-y-2 pt-2"><select aria-label="编辑阴影层" className={small} value={editingShadow} onChange={e => {
+ <details className="text-xs text-slate-400"><summary className="cursor-pointer">{tr('shadowParams')}</summary><div className="space-y-2 pt-2"><select aria-label={tr('editShadowLayerAria')} className={small} value={editingShadow} onChange={e => {
             const i = Number(e.target.value);
             setEditingShadow(i);
             if (i >= 0) {
@@ -233,21 +238,21 @@ export function AppearanceSections(props: DesignSectionProps) {
                 inset: original.includes('inset')
               });
             }
-          }}><option value={-1}>新增阴影</option>{splitShadows(d['box-shadow'] || c['box-shadow'] || '').map((_, i) => <option key={i} value={i}>编辑第 {i + 1} 层</option>)}</select><div className="grid grid-cols-2 gap-2">{(['x', 'y', 'blur', 'spread'] as const).map(key => mini({
-              x: '水平',
-              y: '垂直',
-              blur: '模糊半径',
-              spread: '扩展'
+          }}><option value={-1}>{tr('shadowNew')}</option>{splitShadows(d['box-shadow'] || c['box-shadow'] || '').map((_, i) => <option key={i} value={i}>{tr('shadowEditLayer', { n: i + 1 })}</option>)}</select><div className="grid grid-cols-2 gap-2">{(['x', 'y', 'blur', 'spread'] as const).map(key => mini({
+              x: tr('shadowX'),
+              y: tr('shadowY'),
+              blur: tr('shadowBlur'),
+              spread: tr('shadowSpread')
             }[key], shadow[key], v => setShadow({
               ...shadow,
               [key]: v
-            })))}{mini('阴影颜色', shadow.color, v => setShadow({
+            })))}{mini(tr('shadowColor'), shadow.color, v => setShadow({
               ...shadow,
               color: v
             }))}</div><label className="flex gap-2"><input type="checkbox" checked={shadow.inset} onChange={e => setShadow({
               ...shadow,
               inset: e.target.checked
-            })} />内阴影</label><button type="button" className={small} onClick={() => {
+            })} />{tr('shadowInset')}</label><button type="button" className={small} onClick={() => {
             const parts = [shadow.x, shadow.y, shadow.blur, shadow.spread].map(v => v.trim());
             if (parts.some(v => !/^-?(?:\d*\.)?\d+(?:px|rem|em)?$/.test(v)) || parseFloat(parts[2]) < 0) return;
             const next = `${shadow.inset ? 'inset ' : ''}${parts.map(v => /[a-z]$/.test(v) ? v : `${v}px`).join(' ')} ${shadow.color}`;
@@ -262,19 +267,19 @@ export function AppearanceSections(props: DesignSectionProps) {
                 'box-shadow': layers.join(', ')
               });
             }
-          }}>{editingShadow >= 0 ? '更新此层阴影' : '添加一层阴影'}</button></div></details>
- {splitShadows(d['box-shadow'] || c['box-shadow'] || '').map((s, i) => <div key={`${i}-${s}`} className="flex gap-2 text-[10px] text-slate-400"><span className="truncate flex-1" title={s}>{s}</span><button type="button" aria-label={`删除第${i + 1}层阴影`} onClick={() => {
+          }}>{editingShadow >= 0 ? tr('shadowUpdateLayer') : tr('shadowAddLayer')}</button></div></details>
+ {splitShadows(d['box-shadow'] || c['box-shadow'] || '').map((s, i) => <div key={`${i}-${s}`} className="flex gap-2 text-[10px] text-slate-400"><span className="truncate flex-1" title={s}>{s}</span><button type="button" aria-label={tr('shadowDeleteAria', { n: i + 1 })} onClick={() => {
           const next = splitShadows(d['box-shadow'] || c['box-shadow'] || '').filter((_, index) => index !== i);
           onChange({
             'box-shadow': next.length ? next.join(', ') : 'none'
           });
-        }}>删除</button></div>)}
- {field('元素滤镜', 'filter')}{field('背景滤镜', 'backdrop-filter')}
+        }}>{t('common.delete')}</button></div>)}
+ {field(tr('filter'), 'filter')}{field(tr('backdropFilter'), 'backdrop-filter')}
  <div className="flex gap-1"><button type="button" className={small} onClick={() => onChange({
           filter: 'blur(4px)'
-        })}>元素模糊 4px</button><button type="button" className={small} onClick={() => onChange({
+        })}>{tr('blurElement4')}</button><button type="button" className={small} onClick={() => onChange({
           'backdrop-filter': 'blur(12px)'
-        })}>背景模糊 12px</button></div>
+        })}>{tr('blurBackdrop12')}</button></div>
  </Section>
  </>;
 }

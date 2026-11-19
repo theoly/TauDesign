@@ -18,6 +18,7 @@ import { useWorkspaceStore } from './stores/useWorkspaceStore';
 import { useProjectStore } from './stores/useProjectStore';
 import { flushHistorySave } from './services/storage/historyPersistence';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { useLocaleStore, useT } from './stores/useLocaleStore';
 
 interface RecoveryBannerProps {
   uncleanShutdownAt: number;
@@ -25,6 +26,8 @@ interface RecoveryBannerProps {
 }
 
 export const RecoveryBanner: React.FC<RecoveryBannerProps> = ({ uncleanShutdownAt, onDismiss }) => {
+  const t = useT();
+  const locale = useLocaleStore((s) => s.locale);
   const [countdown, setCountdown] = useState(10);
 
   useEffect(() => {
@@ -49,15 +52,14 @@ export const RecoveryBanner: React.FC<RecoveryBannerProps> = ({ uncleanShutdownA
       className="px-4 py-2 bg-amber-950/60 border-b border-amber-800/50 text-[11px] text-amber-200 flex items-center justify-between gap-3"
     >
       <span>
-        检测到上次未正常关闭（{new Date(uncleanShutdownAt).toLocaleString('zh-CN')}）。
-        已恢复至最后一次自动保存；会话记录为追加写入，最多丢失最后一轮。
+        {t('app.recoveryDetected', { time: new Date(uncleanShutdownAt).toLocaleString(locale) })}
       </span>
       <button
         onClick={onDismiss}
         className="text-amber-400 hover:text-amber-200 shrink-0 font-medium px-2 py-0.5 rounded hover:bg-amber-900/40 transition cursor-pointer"
-        title="点击提前关闭提示"
+        title={t('app.recoveryDismissTitle')}
       >
-        知道了 ({countdown}s)
+        {t('app.recoveryDismiss', { seconds: countdown })}
       </button>
     </div>
   );

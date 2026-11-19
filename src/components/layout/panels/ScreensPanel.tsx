@@ -3,11 +3,13 @@ import { createPortal } from 'react-dom';
 import { HtmlImportDialog } from '../../canvas/HtmlImportDialog';
 import { ConfirmDialog } from '../../common/ConfirmDialog';
 import { useProjectStore } from '../../../stores/useProjectStore';
+import { useT } from '../../../stores/useLocaleStore';
 import { Accordion } from '../Accordion';
 import { Copy, Plus, Search, Trash2, FileCode } from 'lucide-react';
 
 /** 侧边栏「页面」视图 (PRD §3.0.3 / §3.3.2) */
 export const ScreensPanel: React.FC = () => {
+  const t = useT();
   const {
     screens,
     screenOrder,
@@ -41,15 +43,15 @@ export const ScreensPanel: React.FC = () => {
   return (
     <><Accordion
       panelKey="screens.list"
-      title="页面画框"
+      title={t('layout.screensTitle')}
       badge={screenOrder.length}
       actions={
         <>
-        <button onClick={() => setShowImport(true)} className="p-0.5 text-slate-400 hover:text-blue-400 rounded" title="导入 HTML 页面" aria-label="导入 HTML 页面"><FileCode className="w-3.5 h-3.5" /></button>
+        <button onClick={() => setShowImport(true)} className="p-0.5 text-slate-400 hover:text-blue-400 rounded" title={t('layout.importHtml')} aria-label={t('layout.importHtml')}><FileCode className="w-3.5 h-3.5" /></button>
         <button
           onClick={handleAddNewScreen}
           className="p-0.5 text-slate-400 hover:text-blue-400 rounded"
-          title="新建空白画框"
+          title={t('layout.newScreen')}
         >
           <Plus className="w-3.5 h-3.5" />
         </button>
@@ -61,7 +63,7 @@ export const ScreensPanel: React.FC = () => {
           <Search className="w-3 h-3 text-slate-500 absolute left-2" />
           <input
             type="text"
-            placeholder="搜索页面"
+            placeholder={t('layout.searchScreens')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-slate-950 border border-slate-800 rounded-md pl-6 pr-2 py-1 text-slate-300 text-[11px] focus:outline-none focus:border-blue-500"
@@ -71,7 +73,7 @@ export const ScreensPanel: React.FC = () => {
 
       <div className="space-y-0.5 px-1.5">
         {filteredIds.length === 0 && (
-          <p className="px-2 py-3 text-[11px] text-slate-600">没有匹配的页面</p>
+          <p className="px-2 py-3 text-[11px] text-slate-600">{t('layout.noMatchingScreens')}</p>
         )}
         {filteredIds.map((id) => {
           const s = screens[id];
@@ -84,7 +86,7 @@ export const ScreensPanel: React.FC = () => {
               key={id}
               onClick={() => handleSelectScreen(id)}
               onDoubleClick={() => {
-                const next = window.prompt('重命名页面', s.name);
+                const next = window.prompt(t('layout.renameScreen'), s.name);
                 if (next && next.trim()) renameScreen(id, next.trim());
               }}
               className={`group px-2 py-1.5 rounded-md cursor-pointer transition flex items-center justify-between text-[11px] ${
@@ -105,7 +107,7 @@ export const ScreensPanel: React.FC = () => {
                     duplicateScreen(id);
                   }}
                   className={`p-0.5 rounded hover:text-blue-200 ${isActive ? 'text-white/80' : 'text-slate-400'}`}
-                  title="复制画框"
+                  title={t('layout.duplicateScreen')}
                 >
                   <Copy className="w-3 h-3" />
                 </button>
@@ -115,7 +117,7 @@ export const ScreensPanel: React.FC = () => {
                     setConfirmDeleteId(id);
                   }}
                   className={`p-0.5 rounded hover:text-red-300 ${isActive ? 'text-white/80' : 'text-slate-400'}`}
-                  title="删除画框"
+                  title={t('layout.deleteScreen')}
                   data-testid="screens-panel-delete"
                 >
                   <Trash2 className="w-3 h-3" />
@@ -128,8 +130,8 @@ export const ScreensPanel: React.FC = () => {
     </Accordion>
     {confirmDeleteId && screens[confirmDeleteId] && (
       <ConfirmDialog
-        title="删除画框"
-        message={<>将删除「<span className="font-medium text-slate-200">{screens[confirmDeleteId].name}</span>」，此操作可通过撤销恢复，但仍请确认是否继续。</>}
+        title={t('layout.deleteScreen')}
+        message={<>{t('layout.deleteScreenConfirm', { name: screens[confirmDeleteId].name })}</>}
         onCancel={() => setConfirmDeleteId(null)}
         onConfirm={() => {
           removeScreen(confirmDeleteId);

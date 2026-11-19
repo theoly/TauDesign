@@ -1,4 +1,6 @@
 import type { DesignSystem, DesignSystemTokens } from '../types/designSystem';
+import { t, type Locale } from '../i18n';
+import { getUiLocale } from '../stores/useLocaleStore';
 import { applyBrandColor, mixColor } from './colorHarmony';
 import { minimalistSlateTheme, techIndigoTheme, warmCoralTheme } from './themePresets';
 
@@ -14,6 +16,7 @@ export interface CustomDesignSystemCandidate {
   options: CustomDesignSystemOptions;
   seed: number;
   description: string;
+  variant: 'clear' | 'mist' | 'layered';
 }
 
 export const DEFAULT_CUSTOM_DESIGN_SYSTEM: CustomDesignSystemOptions = {
@@ -21,10 +24,12 @@ export const DEFAULT_CUSTOM_DESIGN_SYSTEM: CustomDesignSystemOptions = {
 };
 
 export const CUSTOM_STYLE_OPTIONS = [
-  { value: 'minimal', label: '克制极简' },
-  { value: 'modern', label: '现代微光' },
-  { value: 'warm', label: '温润柔和' }
-] as const;
+  { value: 'minimal' as const, labelKey: 'workspace.customStyleMinimal' },
+  { value: 'modern' as const, labelKey: 'workspace.customStyleModern' },
+  { value: 'warm' as const, labelKey: 'workspace.customStyleWarm' },
+];
+
+const VARIANTS = ['clear', 'mist', 'layered'] as const;
 
 export function normalizeCustomPrimary(value: string): string | null {
   const color = value.trim().toLowerCase();
@@ -39,21 +44,37 @@ const radiusScales: Record<CustomDesignSystemOptions['radius'], DesignSystemToke
   rounded: { none: '0px', sm: '8px', md: '14px', lg: '20px', xl: '28px', full: '9999px' }
 };
 
-// A stable seed makes candidate batches reproducible without a Provider or mutable presets.
 function hash(value: string): number {
   let result = 2166136261;
   for (const char of value) result = Math.imul(result ^ char.charCodeAt(0), 16777619);
   return result >>> 0;
 }
 
+function styleLabel(style: CustomDesignSystemOptions['style'], locale: Locale): string {
+  const key = CUSTOM_STYLE_OPTIONS.find(s => s.value === style)!.labelKey;
+  return t(key, undefined, locale);
+}
+
+function variantLabel(variant: (typeof VARIANTS)[number], locale: Locale): string {
+  const key =
+    variant === 'clear' ? 'workspace.customVariantClear'
+      : variant === 'mist' ? 'workspace.customVariantMist'
+        : 'workspace.customVariantLayered';
+  return t(key, undefined, locale);
+}
+
 /** Generate three complete, independent light/dark themes; the brand seed stays exact. */
-export function generateCustomDesignSystems(input: CustomDesignSystemOptions, seed: number): CustomDesignSystemCandidate[] {
+export function generateCustomDesignSystems(
+  input: CustomDesignSystemOptions,
+  seed: number,
+  locale: Locale = getUiLocale(),
+): CustomDesignSystemCandidate[] {
   const primary = normalizeCustomPrimary(input.primary);
-  if (!primary) throw new Error('请输入有效的主色，例如 #42658c');
+  if (!primary) throw new Error(t('workspace.customPrimaryError', undefined, locale));
   const options = { ...input, primary };
   const source = { minimal: minimalistSlateTheme, modern: techIndigoTheme, warm: warmCoralTheme }[options.style];
-  const styleLabel = CUSTOM_STYLE_OPTIONS.find(s => s.value === options.style)!.label;
-  return ['清透', '柔雾', '层叠'].map((variant, index) => {
+  const style = styleLabel(options.style, locale);
+  return VARIANTS.map((variant, index) => {
     const key = hash(JSON.stringify([options, seed, index]));
     const amount = (key % 1000) / 1000;
     const tokens = applyBrandColor(structuredClone(source.tokens), primary, true);
@@ -76,14 +97,25 @@ export function generateCustomDesignSystems(input: CustomDesignSystemOptions, se
       light: `0 ${Math.ceil(depth / 3)}px ${depth * 3}px -${depth}px rgba(20, 24, 32, ${options.style === 'minimal' ? '0.09' : '0.15'})`,
       dark: `0 ${Math.ceil(depth / 3)}px ${depth * 3}px -${depth}px rgba(0, 0, 0, 0.65)`
     };
-    // Keep the style's scale and line heights; candidates vary heading emphasis coherently.
     tokens.typography.weights.semibold = index === 2 ? 650 : 600;
     tokens.typography.sizes['3xl'] += index * 2;
     tokens.typography.sizes['4xl'] += index * 2;
+    const variantText = variantLabel(variant, locale);
+    const finish = t(
+      options.style === 'minimal' ? 'workspace.customDescLightShadow' : 'workspace.customDescSoftLayers',
+      undefined,
+      locale,
+    );
     return {
-      theme: { id: `theme-custom-${key.toString(36)}`, name: `${styleLabel} · ${variant} ${seed + 1}`, tokens },
-      options: { ...options }, seed,
-      description: `${variant}表面 · ${options.style === 'minimal' ? '轻投影' : '柔和层次'}`
+      theme: {
+        id: `theme-custom-${key.toString(36)}`,
+        name: t('workspace.customCandidateName', { style, variant: variantText, batch: seed + 1 }, locale),
+        tokens,
+      },
+      options: { ...options },
+      seed,
+      variant,
+      description: t('workspace.customCandidateDesc', { variant: variantText, finish }, locale),
     };
   });
 }

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Move, Ruler } from 'lucide-react';
+import { useT } from '../../stores/useLocaleStore';
 import { ComputedBoxModel, ComputedLayoutInfo } from '../../stores/useProjectStore';
 import { SpacingNumberInput } from './BoxModelInspector';
 
@@ -16,28 +17,6 @@ export interface PositionSizeInspectorProps {
   declarations: Record<string, string>;
   onStyleChange: (prop: string, val: string, isCustom?: boolean) => void;
 }
-
-const POSITION_OPTIONS: Array<{ value: string; label: string }> = [
-  { value: '', label: '默认' },
-  { value: 'static', label: 'Static 常规流' },
-  { value: 'relative', label: 'Relative 相对' },
-  { value: 'absolute', label: 'Absolute 绝对' },
-  { value: 'fixed', label: 'Fixed 固定' },
-  { value: 'sticky', label: 'Sticky 粘性' }
-];
-
-const OFFSET_FIELDS: Array<{ prop: 'top' | 'right' | 'bottom' | 'left'; label: string }> = [
-  { prop: 'top', label: 'T' },
-  { prop: 'right', label: 'R' },
-  { prop: 'bottom', label: 'B' },
-  { prop: 'left', label: 'L' }
-];
-
-const SIZE_PRESETS: Array<{ label: string; value: string; title: string }> = [
-  { label: '自动', value: 'auto', title: '由内容与布局决定' },
-  { label: '撑满', value: '100%', title: '占满父容器可用宽度/高度' },
-  { label: '适应内容', value: 'fit-content', title: '收缩到内容尺寸' }
-];
 
 const INPUT_CLS =
   'w-full bg-slate-950 border border-slate-700 rounded-md px-1.5 py-1 text-center text-slate-200 text-[11px] font-mono focus:outline-none focus:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed';
@@ -58,12 +37,46 @@ export function isOffsetDisabled(declaredPosition: string, computedPosition?: st
   return effective === 'static';
 }
 
+const OFFSET_FIELDS: Array<{ prop: 'top' | 'right' | 'bottom' | 'left'; label: string }> = [
+  { prop: 'top', label: 'T' },
+  { prop: 'right', label: 'R' },
+  { prop: 'bottom', label: 'B' },
+  { prop: 'left', label: 'L' }
+];
+
 export const PositionSizeInspector: React.FC<PositionSizeInspectorProps> = ({
   computedBox,
   computedLayout,
   declarations,
   onStyleChange
 }) => {
+  const t = useT();
+  const l = (key: string, params?: Record<string, string | number>) =>
+    t(`inspector.layout.${key}` as Parameters<typeof t>[0], params);
+
+  const POSITION_OPTIONS = useMemo(
+    () =>
+      [
+        { value: '', label: l('positionDefault') },
+        { value: 'static', label: l('positionStatic') },
+        { value: 'relative', label: l('positionRelative') },
+        { value: 'absolute', label: l('positionAbsolute') },
+        { value: 'fixed', label: l('positionFixed') },
+        { value: 'sticky', label: l('positionSticky') }
+      ] as const,
+    [t]
+  );
+
+  const SIZE_PRESETS = useMemo(
+    () =>
+      [
+        { label: l('presetAuto'), value: 'auto', title: l('presetAutoTitle') },
+        { label: l('presetFill'), value: '100%', title: l('presetFillTitle') },
+        { label: l('presetFitContent'), value: 'fit-content', title: l('presetFitContentTitle') }
+      ] as const,
+    [t]
+  );
+
   const declaredPosition = declarations['position'] || '';
   const offsetsDisabled = isOffsetDisabled(declaredPosition, computedLayout?.position);
 
@@ -73,14 +86,14 @@ export const PositionSizeInspector: React.FC<PositionSizeInspectorProps> = ({
       <div className="space-y-2">
         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
           <Ruler className="w-3.5 h-3.5 text-slate-400" />
-          <span>尺寸 (SIZE)</span>
+          <span>{l('sectionSize')}</span>
         </span>
 
         <div className="grid grid-cols-2 gap-2">
           {(['width', 'height'] as const).map((prop) => (
             <div key={prop}>
               <span className="text-[10px] text-slate-500 block mb-1">
-                {prop === 'width' ? '宽度 W' : '高度 H'}
+                {prop === 'width' ? l('widthW') : l('heightH')}
                 <span className="text-slate-600 ml-1 font-mono">
                   {prop === 'width'
                     ? `${Math.round(computedBox?.width ?? 0)}px`
@@ -95,7 +108,7 @@ export const PositionSizeInspector: React.FC<PositionSizeInspectorProps> = ({
                 allowAuto
                 onChange={(v) => onStyleChange(prop, v)}
                 className={INPUT_CLS}
-                title={prop === 'width' ? '宽度' : '高度'}
+                title={prop === 'width' ? l('widthTitle') : l('heightTitle')}
                 data-testid={`size-${prop}`}
               />
             </div>
@@ -103,7 +116,7 @@ export const PositionSizeInspector: React.FC<PositionSizeInspectorProps> = ({
         </div>
 
         <div className="flex items-center gap-1">
-          <span className="text-[10px] text-slate-500 shrink-0">快捷:</span>
+          <span className="text-[10px] text-slate-500 shrink-0">{l('sizeShortcuts')}</span>
           {SIZE_PRESETS.map((p) => (
             <button
               key={p.value}
@@ -122,29 +135,31 @@ export const PositionSizeInspector: React.FC<PositionSizeInspectorProps> = ({
       <div className="space-y-2 pt-2 border-t border-slate-800/80">
         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
           <Move className="w-3.5 h-3.5 text-slate-400" />
-          <span>定位 (POSITION)</span>
+          <span>{l('sectionPosition')}</span>
         </span>
 
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <span className="text-[10px] text-slate-500 block mb-1">定位方式</span>
+            <span className="text-[10px] text-slate-500 block mb-1">{l('positionMode')}</span>
             <select
               value={declaredPosition}
               onChange={(e) => onStyleChange('position', e.target.value)}
-              aria-label="定位方式"
+              aria-label={l('positionMode')}
               data-testid="position-mode"
               className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs"
             >
               {POSITION_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
-                  {o.value === '' && computedLayout?.position ? `（当前 ${computedLayout.position}）` : ''}
+                  {o.value === '' && computedLayout?.position
+                    ? l('positionCurrent', { position: computedLayout.position })
+                    : ''}
                 </option>
               ))}
             </select>
           </div>
           <div>
-            <span className="text-[10px] text-slate-500 block mb-1">层级 z-index</span>
+            <span className="text-[10px] text-slate-500 block mb-1">{l('zIndexLabel')}</span>
             <SpacingNumberInput
               value={declarations['z-index'] || ''}
               placeholder={toPlaceholder(computedLayout?.zIndex)}
@@ -153,7 +168,7 @@ export const PositionSizeInspector: React.FC<PositionSizeInspectorProps> = ({
               disabled={offsetsDisabled}
               onChange={(v) => onStyleChange('z-index', v)}
               className={INPUT_CLS}
-              title="层级"
+              title={l('zIndexTitle')}
               data-testid="position-zindex"
             />
           </div>
@@ -187,7 +202,7 @@ export const PositionSizeInspector: React.FC<PositionSizeInspectorProps> = ({
 
         {offsetsDisabled && (
           <p className="text-[10px] text-slate-500 leading-tight" data-testid="offset-static-hint">
-            当前为 static 常规流，四向偏移与层级不会生效。改为 Relative / Absolute 后可用。
+            {l('offsetStaticHint')}
           </p>
         )}
       </div>
