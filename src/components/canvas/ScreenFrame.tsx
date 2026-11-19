@@ -793,17 +793,19 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
         <MediaDiagnosticsButton/>
       </div>}
       <div
-        className={`relative w-full overflow-hidden transition-shadow duration-200 ${
+        className={`relative w-full overflow-hidden ${
           isStaged
-            ? 'ring-4 ring-purple-500 shadow-2xl rounded-2xl'
+            ? 'ring-4 ring-purple-500 rounded-2xl'
             : isActive
-            ? 'ring-2 ring-blue-500 shadow-2xl rounded-2xl'
-            : 'ring-1 ring-slate-800 hover:ring-slate-700 shadow-xl rounded-2xl'
+            ? 'ring-2 ring-blue-500 rounded-2xl'
+            : 'ring-1 ring-slate-800 hover:ring-slate-700 rounded-2xl'
         }`}
         style={{
           width: `${frameWidth}px`,
           height: `${measuredHeight}px`,
-          background: frameBg
+          background: frameBg,
+          // Isolate iframe paints from canvas pan/zoom compositing.
+          contain: 'layout paint style'
         }}
       >
         {lodLevel === 0 && screen.thumbnail ? (

@@ -56,9 +56,14 @@ for(const size of [30000,50000,100000])test(`${size}-character layout redesign u
  expect(validContextManifest(result.workflowContract?.contextManifest)).toBe(true);const records=result.workflowContract!.contextManifest!.sources;expect(records.find(row=>row.id==='source')?.status).toBe('summary');expect(records.find(row=>row.id==='source:business')).toMatchObject({required:true,status:'full'});expect(capturePageTaskHistory(result.workflowContract,f.options.input.rawPrompt)).toBeDefined();
 });
 
-for(const missing of ['text','media','protected','form'] as const)test(`complete-looking redesign missing ${missing} is rejected before candidate application`,async()=>{
- const f=fixture(),body=[...pieces];if(missing==='text')body[1]=body[1].replace('业务信息4','');if(missing==='media')body[2]=body[2].replace(photo,'');if(missing==='protected')body[2]=body[2].replace('btn btn-primary','btn');if(missing==='form')body[2]=body[2].replace(' required','');queue(f,body);
+for(const missing of ['text','media','form'] as const)test(`complete-looking redesign missing ${missing} is rejected before candidate application`,async()=>{
+ const f=fixture(),body=[...pieces];if(missing==='text')body[1]=body[1].replace('业务信息4','');if(missing==='media')body[2]=body[2].replace(photo,'');if(missing==='form')body[2]=body[2].replace(' required','');queue(f,body);
  const result=await PipelineExecutor.execute(f.options);expect(result.status).toBe('rejected_by_quality');expect(result.stagedScreen).toBeUndefined();expect(result.qualityReport?.passed).toBe(false);expect(f.options.screens.source.htmlContent).toBe(f.html);
+});
+
+test('protected class drift is deterministically restored once and can pass without a model retry loop',async()=>{
+ const f=fixture(),body=[...pieces];body[2]=body[2].replace('btn btn-primary','btn');queue(f,body);
+ const result=await PipelineExecutor.execute(f.options);expect(result.status).toBe('staged_side_by_side');expect(result.extractedHtml).toContain('btn btn-primary');expect(f.options.screens.source.htmlContent).toBe(f.html);
 });
 
 test('oversized atomic request or an element reference cannot silently become a whole-page rewrite',async()=>{
@@ -117,6 +122,26 @@ test('唯一主按钮明确重命名按确认的新文案核验，不扩展其�
  expect(inspectRedesignContent(source,next.replace('保留标题','别的标题'),'将主按钮文案改为“保存并完善”',old).some(f=>f.nid==='title')).toBe(true);
 });
 
+test('确认的合并精简：保留句落地后允许改写近义原文并删除同级重复说明，不扩大到其它业务文案',()=>{
+ const old=`<main><section data-nid="hint"><p data-nid="a">至少输入一句话或添加一份材料后可用；未登录提交前会先提示登录与用途。</p><p data-nid="b">只有材料没有问题也可以整理，提交后系统用一个问题确认你的意图。</p></section><p data-nid="keep">本机草稿</p></main>`;
+ const keep='至少输入一句话或添加一份材料后可用；未登录提交前会提示登录与用途';
+ const next=`<main><section data-nid="hint"><p data-nid="a">${keep}。</p></section><p data-nid="keep">本机草稿</p></main>`;
+ const request='1. 精简开始整理区说明文案：将两段说明合并为一句，保留“'+keep+'”，删除重复的意图确认说明。\n2. 统一草稿卡标题层级。';
+ const source=buildPageRedesignSource(old,{deviceProfile:'pc'});
+ expect(inspectRedesignContent(source,next,request,old).filter(f=>f.code==='redesign_content_missing')).toEqual([]);
+ expect(inspectRedesignContent(source,next.replace('本机草稿','其它标题'),request,old).some(f=>f.code==='redesign_content_missing'&&f.nid==='keep')).toBe(true);
+ expect(inspectRedesignContent(source,next.replace(keep,'完全无关的新说明'),request,old).some(f=>f.code==='redesign_content_missing')).toBe(true);
+});
+
+test('确认的合并说明：无完整保留句时，只要合并后的实质信息仍在页面且同级兄弟保留，不阻断',()=>{
+ const old=`<main><section data-nid="box"><p data-nid="p1">文字保存在本机草稿；未登录不会自动上传或识别。</p><p data-nid="p2">支持 JPG／PNG、PDF／DOCX／TXT。选取只在本机，上传前会说明用途并要求登录。</p></section><p data-nid="keep">独立卡片标题</p></main>`;
+ const next=`<main><section data-nid="box"><p data-nid="merged">文字保存在本机草稿，未登录不会自动上传或识别；支持 JPG／PNG、PDF／DOCX／TXT，选取只在本机，上传前会说明用途并要求登录。</p></section><p data-nid="keep">独立卡片标题</p></main>`;
+ const request='2. 合并输入卡内两条格式与隐私说明：将格式支持与上传说明合并进输入框下方提示，减少一处独立说明段落。';
+ const source=buildPageRedesignSource(old,{deviceProfile:'pc'});
+ expect(inspectRedesignContent(source,next,request,old).filter(f=>f.code==='redesign_content_missing')).toEqual([]);
+ expect(inspectRedesignContent(source,next.replace('>独立卡片标题</p>','>其它标题</p>'),request,old).some(f=>f.nid==='keep')).toBe(true);
+});
+
 test('整页分区草稿逐项确认文案后只修复一个区域，合同随失败重开和候选复验保留',async()=>{
  const f=fixture(),body=[...pieces];f.html=f.html.replace('业务信息4</p>','原有进度摘要</p>');f.options.screens.source.htmlContent=f.html;
  // Give the original business text a stable identity, independent of its reconstructed target.
@@ -137,4 +162,29 @@ test('整页分区草稿逐项确认文案后只修复一个区域，合同随�
  if(fixed.status!=='staged_side_by_side')throw Error(fixed.errorMessage);expect(calls).toBe(1);expect(draft.html).toBe(original);expect(fixed.workflowContract?.request).toBe(first.workflowContract?.request);
  expect(checkGenerationQuality(fixed.extractedHtml!,{baselineHtml:f.html,protectedNids:['save'],deviceProfile:'mobile',contentTask:fixed.workflowContract,wholePageRedesign:fixed.workflowContract!.wholePageRedesign}).passed).toBe(true);
  const changed=fixed.extractedHtml!.replace('新进度摘要','另一段文案');expect(checkGenerationQuality(changed,{baselineHtml:f.html,protectedNids:['save'],deviceProfile:'mobile',contentTask:fixed.workflowContract,wholePageRedesign:fixed.workflowContract!.wholePageRedesign}).passed).toBe(false);
+});
+
+test('修复 block 复用原业务规划时，不因新任务知识指纹与合同外壳变化而误报身份失效',async()=>{
+ const f=fixture(),body=[...pieces];
+ body[1]=body[1].replace('业务信息4</p>','被改写的文案</p>');
+ queue(f,body);
+ const first=await PipelineExecutor.execute(f.options);
+ expect(first.status).toBe('rejected_by_quality');
+ const draft=first.failedDraft!;
+ expect(draft.pageTaskSource?.pageTaskPlan).toBeDefined();
+ const {draftRegionChoices}=await import('../src/services/ai/draftRegionRepair');
+ const region=draftRegionChoices(draft)[0]?.nid;
+ expect(region).toBeTruthy();
+ let calls=0;
+ const repaired=await PipelineExecutor.execute({
+  ...f.options,
+  knowledgeFingerprint:'deadbeef',
+  knowledgeSources:[{kind:'document',id:'assembled-drift',fingerprint:'cafebabe'}],
+  pageTaskPlanning:{snapshot:draft.pageTaskSource!.pageTaskPlan},
+  qualityRepair:{draft,labels:[],region:{nids:[region!],instruction:`保留原节点业务文案，依据原业务片段恢复，不扩大修改范围。`}},
+  engineCore:{generateObject:async()=>{calls++;const el=parseHtmlCopy(draft.html).doc.querySelector(`[data-nid="${region}"]`);return {nid:region!,html:el!.outerHTML};},streamText:()=>{throw Error('不应重新生成整页');}} as any,
+ });
+ expect(repaired.errorMessage??'').not.toContain('业务规划正文或输入身份已变化');
+ expect(calls).toBe(1);
+ expect(['staged_side_by_side','rejected_by_quality']).toContain(repaired.status);
 });

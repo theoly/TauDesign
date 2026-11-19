@@ -114,6 +114,8 @@ export interface ChatMessageItem {
   qualityDraft?: SavedQualityDraft;
   qualityDraftSaved?: boolean;
   qualityDraftBusy?: boolean;
+  /** Caps FailedDraft "Regenerate from scratch" to avoid empty retry loops. */
+  qualityRegenAttempts?: number;
   qualityDraftNotice?: string;
   workflowContract?: DesignTaskContract;
   /** Session-only original generation inputs; never reconstructed from a reopened conversation. */
@@ -1044,6 +1046,17 @@ export function useAIEngineChat() {
             await saveQualityDraft(value,requestState.folderPath);saved=true;
           }catch(error){notice=`草稿仅保留于当前会话，保存失败：${error instanceof Error?error.message:String(error)}`;}
         }
+        // Placeholder compare: stage the blocked draft beside the pre-modify page; delivery checks keep adoption blocked.
+        if(!repairing&&output.failedDraft?.html&&decision.action==='modify_screen'&&decision.targetScreenId){
+          const compare=useProjectStore.getState().screens[decision.targetScreenId];
+          if(compare){
+            try{
+              stageScreenChange(decision.targetScreenId,NidEngine.injectNids(output.failedDraft.html),`${compare.name}（未通过验收的对比稿）`,textToSend,output.workflowContract,output.executionRecord);
+              useProjectStore.getState().panToScreen(decision.targetScreenId);
+              notice=[notice,'已在画布打开与修改前页面的对比稿；验收通过前不能采纳。'].filter(Boolean).join('\n');
+            }catch(error){notice=[notice,`对比稿未能挂载：${error instanceof Error?error.message:String(error)}`].filter(Boolean).join('\n');}
+          }
+        }
         if(controller.signal.aborted || useProjectStore.getState().id!==requestState.id || useProjectStore.getState().folderPath!==requestState.folderPath)return;
         setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, isGenerating: false, isError: true, text: value?'页面已生成，暂未通过验收。原页面未改变。':`本次结果未应用：${output.errorMessage}`,
           qualityReport: output.qualityReport,qualityDraft:value,qualityDraftSaved:saved,qualityDraftNotice:notice } : m));
@@ -1637,6 +1650,11 @@ export function useAIEngineChat() {
     if(target.retryContext&&target.retryContext.projectContext!==pageCreationContext(useProjectStore.getState())){
       setMessages(prev=>prev.map(m=>m.id===msgId?{...m,text:'工程、原页或设计规则已变化，不能按旧输入重试。请按当前页面重新发送要求。',isError:true}:m));return;
     }
+    const regenAttempts=target.qualityRegenAttempts??0;
+    if(target.qualityDraft&&regenAttempts>=2){
+      setMessages(prev=>prev.map(m=>m.id===msgId?{...m,qualityDraftNotice:'已连续重新生成仍未通过验收。请改用上方局部修复或缩小修改范围，避免重复空转。'}:m));
+      return;
+    }
     const hasEvidence=Boolean(target.referenceEvidence??target.workflowContract?.referenceImage?.evidence);
     const ignore=retryOptions?.ignoreReference||retryOptions?.withoutAttachment&&!hasEvidence;
     if(target.structuredRetry){const retry=target.structuredRetry;return confirmModification(retry.reviewId,retry.selected,[retry.extra,retryOptions?.referenceCorrection].filter(Boolean).join('\n'),retry.mode,{...retryOptions,ignoreReference:ignore});}
@@ -1645,8 +1663,16 @@ export function useAIEngineChat() {
     if(planToReuse&&(target.originalAttachment&&!hasEvidence||planToReuse.request.providerId!==codeBinding?.provider.id||planToReuse.request.model!==codeBinding?.modelId))planToReuse=undefined;
     const attachmentToUse = ignore ? undefined : target.originalAttachment;
     const original=target.retryContext?.options??{};
-    return sendMessage(target.originalUserPrompt+(retryOptions?.referenceCorrection?'\n[用户对参考图解析的补充/更正]\n'+retryOptions.referenceCorrection.slice(0,2000):''), attachmentToUse, {
+    const protectedNids=(target.qualityDraft?.draft.pageTaskSource??target.qualityDraft?.draft.guidanceSource??target.workflowContract)?.protectedNids??[];
+    const repairHint=target.qualityDraft&&retryOptions?.rePlan?[
+      '[验收回修约束：重新规划一次，勿扩大范围]',
+      protectedNids.length?`必须原样保留受保护节点及其 class/style（${protectedNids.slice(0,12).map(id=>`nid="${id}"`).join('、')}${protectedNids.length>12?'…':''}），不得删除底部导航。`:'',
+      '已授权合并/精简的说明文案可改写，但关键业务信息须保留在页面中；未授权文案不得删除。',
+    ].filter(Boolean).join('\n'):'';
+    if(target.qualityDraft)setMessages(prev=>prev.map(m=>m.id===msgId?{...m,qualityRegenAttempts:regenAttempts+1}:m));
+    return sendMessage([target.originalUserPrompt,repairHint,retryOptions?.referenceCorrection?'\n[用户对参考图解析的补充/更正]\n'+retryOptions.referenceCorrection.slice(0,2000):''].filter(Boolean).join('\n\n'), attachmentToUse, {
       ...original,writeStrategy:original.writeStrategy??'auto',
+      wholePageRedesign:original.wholePageRedesign??Boolean((target.qualityDraft?.draft.pageTaskSource??target.qualityDraft?.draft.guidanceSource)?.wholePageRedesign),
       sectioned:target.sectionedMode??original.sectioned,
       reusedPageTaskPlan: planToReuse,
       referenceEvidence:ignore?undefined:target.referenceEvidence??target.workflowContract?.referenceImage?.evidence,

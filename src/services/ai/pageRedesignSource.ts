@@ -61,6 +61,63 @@ function permitted(text:string,nid:string|undefined,request:string,removalOnly=f
   return (text.length>1&&clause.includes(text))||Boolean(nid&&clause.includes(`nid="${nid}"`));
  });
 }
+/** Near-duplicate copy (merge target vs slightly edited keep sentence). */
+function relatedCopy(a:string,b:string):boolean{
+ const x=normalized(a),y=normalized(b);if(!x||!y)return false;if(x.includes(y)||y.includes(x))return true;
+ let i=0;while(i<x.length&&i<y.length&&x[i]===y[i])i++;return i>=12;
+}
+/** Split instructions without cutting 保留「…；…」 quoted keep sentences. */
+function instructionClauses(request:string):string[]{
+ const parts:string[]=[];let buf='',quote:string|null=null;
+ for(const ch of request){
+  if(quote){buf+=ch;if((quote==='“'&&ch==='”')||(quote==='「'&&ch==='」')||(quote==='"'&&ch==='"')||(quote==="'"&&ch==="'"))quote=null;continue;}
+  if(ch==='“'||ch==='「'||ch==='"'||ch==="'"){quote=ch;buf+=ch;continue;}
+  if(/[。；;\n]/.test(ch)){if(buf.trim())parts.push(buf);buf='';continue;}
+  buf+=ch;
+ }
+ if(buf.trim())parts.push(buf);return parts;
+}
+/** True when a meaningful substring of `needle` still appears in `haystack` (merged/rewritten copy). */
+function sharesSubstance(needle:string,haystack:string):boolean{
+ const x=normalized(needle),y=normalized(haystack);if(!x||!y)return false;if(y.includes(x)||x.includes(y))return true;
+ for(let len=Math.min(12,x.length);len>=8;len--){for(let i=0;i<=x.length-len;i++)if(y.includes(x.slice(i,i+len)))return true;}
+ return relatedCopy(x,y);
+}
+const mergeSimplify=/(?:精简|合并|压缩|弱化|删减)|将两段|两条.{0,16}合并|删除重复|(?:删除|移除|去掉).{0,16}(?:重复|说明|文案|段落)|减少一处/i;
+/**
+ * Modification-review style authorization: merge/simplify with an explicit 保留「…」 keep sentence.
+ * Rewrites the related original paragraph; may drop only its baseline siblings when删除/合并 is also stated.
+ */
+function permitsRetainedCopyChange(item:{nid?:string;text:string},sourceTexts:Array<{nid?:string;text:string}>,request:string,visible:string,baseline?:Document):boolean{
+ return instructionClauses(request).some(clause=>{
+  if(/(?:不要|不能|不得|禁止|无需|不改|勿|\b(?:not|never)\b)/i.test(clause))return false;
+  if(!mergeSimplify.test(clause))return false;
+  const retained=[...clause.matchAll(/保留\s*[“「"]([^”」"]{1,400})[”」"]/g)].map(m=>m[1].trim()).filter(Boolean);
+  if(retained.length){
+   if(!retained.some(text=>visible.includes(normalized(text))))return false;
+   if(retained.some(text=>relatedCopy(item.text,text)||item.text.includes(text)||sharesSubstance(item.text,text)))return true;
+   if(!baseline||!item.nid||!/(?:删除|移除|去掉)|将两段|合并|精简|删除重复|压缩|弱化/i.test(clause))return false;
+   const node=Array.from(baseline.querySelectorAll('[data-nid]')).find(el=>el.getAttribute('data-nid')===item.nid);
+   const parent=node?.parentElement;if(!parent)return false;
+   return sourceTexts.some(row=>{
+    if(!row.nid||row.nid===item.nid||!retained.some(text=>relatedCopy(row.text,text)||row.text.includes(text)||sharesSubstance(row.text,text)))return false;
+    const keep=Array.from(baseline.querySelectorAll('[data-nid]')).find(el=>el.getAttribute('data-nid')===row.nid);
+    return Boolean(keep&&keep.parentElement===parent);
+   });
+  }
+  // Merge/compress without a full keep quote: substance must still appear in the page, or a same-parent sibling's substance must.
+  if(!/(?:合并|压缩|弱化|精简|减少一处|将两段|两条)/i.test(clause))return false;
+  if(sharesSubstance(item.text,visible))return true;
+  if(!baseline||!item.nid)return false;
+  const node=Array.from(baseline.querySelectorAll('[data-nid]')).find(el=>el.getAttribute('data-nid')===item.nid);
+  const parent=node?.parentElement;if(!parent)return false;
+  return sourceTexts.some(row=>{
+   if(!row.nid||row.nid===item.nid)return false;
+   const sibling=Array.from(baseline.querySelectorAll('[data-nid]')).find(el=>el.getAttribute('data-nid')===row.nid);
+   return Boolean(sibling&&sibling.parentElement===parent&&sharesSubstance(row.text,visible));
+  });
+ });
+}
 function permitsAttribute(control:PageRedesignSource['controls'][number],rule:string,request:string):boolean{
  const names=[control.label,control.attributes.name,control.attributes.id].filter((value):value is string=>Boolean(value&&value.length>1));
  const aliases:Record<string,RegExp>={value:/默认值|预填|取值|文本值|\bvalue\b/i,pattern:/正则|校验规则|\bpattern\b/i,min:/最小|下限|范围|\bmin\b/i,max:/最大|上限|范围|\bmax\b/i,minlength:/最短|最小长度|长度范围|\bminlength\b/i,maxlength:/最长|最大长度|长度限制|\bmaxlength\b/i,step:/步长|步进|\bstep\b/i,name:/字段名|提交键|\bname\b/i,checked:/默认选中|默认项|取消选中|\bchecked\b/i,selected:/默认选中|默认项|取消选中|\bselected\b/i};
@@ -107,7 +164,7 @@ export function inspectRedesignContent(source:PageRedesignSource,html:string,req
  const explicitEdits=compileBusinessTextEdits(source.texts,request);
  const editApplied=(edit:typeof explicitEdits[number])=>{const nodes=Array.from(doc.querySelectorAll('[data-nid]')).filter(el=>el.getAttribute('data-nid')===edit.nid);return nodes.length===1?normalized(nodes[0].textContent??'')===normalized(edit.after):nodes.length===0&&visible.includes(normalized(edit.after));};
  for(const edit of explicitEdits){if(!editApplied(edit))findings.push({code:'redesign_text_change_missing',severity:'error',nid:edit.nid,message:'未落实用户明确确认的新业务文案。',actual:edit.before,expected:edit.after});}
- for(const item of source.texts){if(item.nid&&(reviewed.has(item.nid)||replacedEntries.has(item.nid))||explicitEdits.some(edit=>edit.nid===item.nid&&editApplied(edit)))continue;if(!normalized(item.text)||visible.includes(normalized(item.text))||permitted(item.text.trim(),item.nid,request))continue;
+ for(const item of source.texts){if(item.nid&&(reviewed.has(item.nid)||replacedEntries.has(item.nid))||explicitEdits.some(edit=>edit.nid===item.nid&&editApplied(edit)))continue;if(!normalized(item.text)||visible.includes(normalized(item.text))||permitted(item.text.trim(),item.nid,request)||permitsRetainedCopyChange(item,source.texts,request,visible,baseline))continue;
   const originalNode=item.nid&&baseline?Array.from(baseline.querySelectorAll('[data-nid]')).find(el=>el.getAttribute('data-nid')===item.nid):undefined;
   if(oldPrimary.length===1&&newPrimary.length===1&&originalNode&&oldPrimary[0].contains(originalNode)&&approvedPrimaryLabel.length===1&&actionLabel(newPrimary[0])===approvedPrimaryLabel[0])continue;
   findings.push({code:'redesign_content_missing',severity:'error',nid:item.nid,message:'整页重设计遗漏了未经授权删除或改写的原业务文案。',actual:item.text.slice(0,200),expected:'保留完整业务信息；文字变更必须有明确授权'});

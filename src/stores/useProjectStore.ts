@@ -84,8 +84,8 @@ import {
   CANVAS_LAYOUT_CONSTANTS
 } from '../utils/canvasLayout';
 import { deleteElementByNid } from '../utils/domPatcher';
-import { checkGenerationQuality, checkGenerationSourceSafety } from '../services/ai/generationQuality';
-import {formRuleScope} from '../services/ai/formBehaviorChanges';
+import { checkGenerationSourceSafety } from '../services/ai/generationQuality';
+import { checkStagedCandidateQuality } from '../services/ai/stagedCandidateQuality';
 import type { RenderedQualityReport } from '../utils/renderedQuality';
 import { buildScreenDocument } from '../utils/screenDocument';
 import { getBaseCss } from '../styles/baseCss';
@@ -614,24 +614,45 @@ function projectAssetAuditFingerprint(state: ProjectState): string {
     Object.values(state.assets).map(asset => [asset.id, asset.name, asset.relPath]).sort(([a], [b]) => a.localeCompare(b))]));
 }
 
+/** Viewport pan/zoom must not invalidate these — keys omit viewportTransform. */
+let stagedDeliveryCache:{token:string;report:StagedDeliveryReport;quality:ReturnType<typeof checkStagedCandidateQuality>}|null=null;
+let stagedRenderContextKeyCache:{
+  id:string;revision:number;staged:unknown;target:unknown;settings:unknown;
+  designSystem:unknown;overrides:unknown;assets:unknown;key:string;
+}|null=null;
+
+function stagedDeliveryCacheToken(state:ProjectState,renderKey:string):string{
+  const staged=state.stagedScreen;const rendered=state.stagedRenderQuality;const files=state.stagedAssetFiles;
+  return contentFingerprint(JSON.stringify([
+    renderKey,state.stagedRepairStatus,staged?.candidateId,staged?.baselineFingerprint,staged?.projectFingerprint,
+    rendered?.key,rendered?.report?.status,rendered?.report&&contentFingerprint(JSON.stringify(rendered.report.findings)),
+    files?.key,files?.status,files?.issues?.map(i=>[i.code,i.entityId,i.message]),
+    state.stagedProjectAssetAudit?.key,state.stagedProjectAssetAudit?.contextFingerprint,
+    state.stagedProjectAssetAudit?.report&&contentFingerprint(JSON.stringify(state.stagedProjectAssetAudit.report)),
+  ]));
+}
+
 function stagedDeliveryReport(state: ProjectState): StagedDeliveryReport {
   const staged = state.stagedScreen;
   const target = staged && state.screens[staged.targetScreenId];
-  if (!staged || !target) return { status: 'blocked', checks: [{ id: 'task', status: 'blocked', message: '候选或目标页面不存在。' }] };
+  if (!staged || !target){stagedDeliveryCache=null;return { status: 'blocked', checks: [{ id: 'task', status: 'blocked', message: '候选或目标页面不存在。' }] };}
+  const renderKey=state.getStagedRenderContextKey();
+  const token=stagedDeliveryCacheToken(state,renderKey);
+  if(stagedDeliveryCache?.token===token)return stagedDeliveryCache.report;
   const draftSourceIssue=draftExecutionIssue(staged.executionRecord,staged.newHtml);
-  if(draftSourceIssue)return {status:'blocked',checks:[{id:'task',status:'blocked',message:draftSourceIssue}]};
-  if(state.stagedRepairStatus)return {status:'blocked',checks:[{id:'task',status:'blocked',message:'候选正在受控修复与复验，暂不能采纳。'}]};
+  if(draftSourceIssue){const report={status:'blocked' as const,checks:[{id:'task' as const,status:'blocked' as const,message:draftSourceIssue}]};stagedDeliveryCache={token,report,quality:{passed:false,findings:[]}};return report;}
+  if(state.stagedRepairStatus){const report={status:'blocked' as const,checks:[{id:'task' as const,status:'blocked' as const,message:'候选正在受控修复与复验，暂不能采纳。'}]};stagedDeliveryCache={token,report,quality:{passed:false,findings:[]}};return report;}
   const checks: StagedDeliveryReport['checks'] = [];
   const referenceIssue=libraryReferenceIssue(state);
-  if(referenceIssue)return {status:'blocked',checks:[{id:'task',status:'blocked',message:referenceIssue}]};
+  if(referenceIssue){const report={status:'blocked' as const,checks:[{id:'task' as const,status:'blocked' as const,message:referenceIssue}]};stagedDeliveryCache={token,report,quality:{passed:false,findings:[]}};return report;}
   const taskCurrent = isStagedTaskCurrent(state);
   const taskPlan=resolveWorkflowValidation(staged.workflowContract,'candidate');
   checks.push({ id: 'task', status: taskCurrent ? 'passed' : 'blocked', message: !taskPlan.ok?taskPlan.message:taskCurrent ? '任务基线与项目上下文仍有效。' : candidateInputIssue(staged,state)??'原页面、设计来源、设备、Token 或项目资料已变化。' });
   const options = { requireExternalMedia:true,mediaCss:screenForAssetAudit(target,state.overrides).scopedCss,deviceProfile: state.settings.deviceProfile, useCustomNavigation: state.settings.useCustomNavigation, designSystem: state.designSystem };
   const safety = checkGenerationSourceSafety(staged.newHtml, options);
   checks.push({ id: 'source', status: safety.passed ? 'passed' : 'blocked', message: safety.passed ? 'HTML 源安全检查通过。' : safety.findings.find(item => item.severity === 'error')?.message ?? 'HTML 源不安全。' });
-  const quality = checkGenerationQuality(staged.newHtml, { ...options,wholePageRedesign:staged.workflowContract?.wholePageRedesign, contentTask:staged.workflowContract, baselineHtml: target.htmlContent,
-    protectedNids: state.getProtectedNids(staged.targetScreenId), modificationRequest: staged.modificationRequest,formRuleRoots:formRuleScope(staged.workflowContract) });
+  const quality = checkStagedCandidateQuality(staged.newHtml, { ...options, baselineHtml: target.htmlContent,
+    protectedNids: state.getProtectedNids(staged.targetScreenId), modificationRequest: staged.modificationRequest, workflowContract: staged.workflowContract });
   checks.push({ id: 'quality', status: quality.passed ? 'passed' : 'blocked', message: quality.passed ? '结构、文案与样式规则检查通过。' : quality.findings.find(item => item.severity === 'error')?.message ?? '静态质量检查未通过。' });
   if(taskPlan.ok&&taskPlan.plan.stages.includes('structure')&&staged.workflowContract){
     const structure=inspectWorkflowStructure(staged.workflowContract,target.htmlContent,staged.newHtml,options);
@@ -642,12 +663,12 @@ function stagedDeliveryReport(state: ProjectState): StagedDeliveryReport {
   const assetIssues = candidateBrokenAssetReferences(state);
   checks.push({ id: 'assets', status: assetIssues.length ? 'blocked' : 'passed', message: assetIssues[0]?.message ?? '候选本地资源引用均已登记。' });
   const usedAssetFiles = stagedReferencedAssetFiles(state);
-  const fileAudit = state.stagedAssetFiles?.key === state.getStagedRenderContextKey() ? state.stagedAssetFiles : null;
+  const fileAudit = state.stagedAssetFiles?.key === renderKey ? state.stagedAssetFiles : null;
   checks.push({ id: 'asset_files', status: fileAudit?.status==='blocked'?'blocked':!usedAssetFiles.length ? 'passed' : fileAudit?.status ?? 'pending',
     message: fileAudit?.status==='blocked'?fileAudit.issues[0]?.message??'资源文件读取未通过。':!usedAssetFiles.length ? '图片/图标登记检查通过；实际页面资源在交付前重新读取。' : !fileAudit ? '正在核对候选引用的全部资源文件。'
       : fileAudit.issues[0]?.message ?? '候选引用的全部资源文件已核对存在。' });
   const rendered = state.stagedRenderQuality;
-  const currentReport = rendered?.key === state.getStagedRenderContextKey() ? rendered.report : null;
+  const currentReport = rendered?.key === renderKey ? rendered.report : null;
   checks.push({ id: 'render', status: !currentReport || currentReport.status === 'pending' ? 'pending'
     : !isPassedRender(currentReport) ? 'blocked' : 'passed',
   message: !currentReport || currentReport.status === 'pending' ? '当前候选的 iframe 渲染检查尚未完成。'
@@ -659,7 +680,15 @@ function stagedDeliveryReport(state: ProjectState): StagedDeliveryReport {
     'asset-references':proof('assets'),'asset-files':proof('asset_files'),render:proof('render'),'design-entities':proof('entities')}):undefined;
   const unimplemented=workflow?.checks.find(check=>check.status==='blocked'&&!['source-safety','quality','structure','asset-references','asset-files','render','design-entities'].includes(check.id));
   if(unimplemented&&checks[0].status==='passed'){checks[0].status='blocked';checks[0].message=unimplemented.message;}
-  return { status: checks.some(item => item.status === 'blocked')||workflow?.status==='blocked' ? 'blocked' : checks.some(item => item.status === 'pending')||workflow?.status==='pending' ? 'pending' : 'ready', checks,workflow };
+  const report={ status: checks.some(item => item.status === 'blocked')||workflow?.status==='blocked' ? 'blocked' as const : checks.some(item => item.status === 'pending')||workflow?.status==='pending' ? 'pending' as const : 'ready' as const, checks,workflow };
+  stagedDeliveryCache={token,report,quality};
+  return report;
+}
+
+/** Shared with compare toolbar — same gate as delivery, without a second HTML parse. */
+export function getCachedStagedCandidateQuality(state:ProjectState){
+  stagedDeliveryReport(state);
+  return stagedDeliveryCache?.quality??null;
 }
 
 function canAdoptStagedScreen(state: ProjectState): boolean {
@@ -2472,13 +2501,24 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
   // Side-by-side adoption (D17)
   getStagedRenderContextKey: () => {
     const state = get(), staged = state.stagedScreen;
-    if (!staged) return '';
+    if (!staged){stagedRenderContextKeyCache=null;return '';}
     const target = state.screens[staged.targetScreenId];
+    if(stagedRenderContextKeyCache
+      &&stagedRenderContextKeyCache.id===state.id
+      &&stagedRenderContextKeyCache.revision===state.stagedRenderRevision
+      &&stagedRenderContextKeyCache.staged===staged
+      &&stagedRenderContextKeyCache.target===target
+      &&stagedRenderContextKeyCache.settings===state.settings
+      &&stagedRenderContextKeyCache.designSystem===state.designSystem
+      &&stagedRenderContextKeyCache.overrides===state.overrides
+      &&stagedRenderContextKeyCache.assets===state.assets)return stagedRenderContextKeyCache.key;
     const renderSubject = [staged.targetScreenId, staged.newHtml, staged.navigationTitle, staged.modificationRequest];
-    return JSON.stringify([state.id, state.stagedRenderRevision, renderSubject, state.settings,renderEvidenceIdentity(state.settings.deviceProfile),pageCreationContext(state),
+    const key=JSON.stringify([state.id, state.stagedRenderRevision, renderSubject, state.settings,renderEvidenceIdentity(state.settings.deviceProfile),pageCreationContext(state),
       isTaskContractShape(staged.workflowContract)?taskInputBinding(staged.workflowContract):staged.workflowContract===undefined?'legacy':'invalid-task',
       state.designSystem.tokens, state.overrides, target?.htmlContent, target?.scopedCss, target?.metadata,
       Object.values(state.assets).map(asset => [asset.id, asset.relPath]).sort(([a], [b]) => a.localeCompare(b))]);
+    stagedRenderContextKeyCache={id:state.id,revision:state.stagedRenderRevision,staged,target,settings:state.settings,designSystem:state.designSystem,overrides:state.overrides,assets:state.assets,key};
+    return key;
   },
 
   refreshStagedRender: reason => {
@@ -2550,8 +2590,8 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
       viewport: { profile: state.settings.deviceProfile, width: viewport.width, height: viewport.height },
       designSystem: { id: state.designSystem.id, tokenFingerprint: designTokenFingerprint(state.designSystem.tokens) },
       ...(state.designLibraryBinding ? { designLibrary: state.designLibraryBinding } : {}), source,
-      quality: checkGenerationQuality(candidate.newHtml, { ...options,wholePageRedesign:candidate.workflowContract?.wholePageRedesign, contentTask:candidate.workflowContract, baselineHtml: target.htmlContent,
-        protectedNids: state.getProtectedNids(candidate.targetScreenId), modificationRequest: candidate.modificationRequest,formRuleRoots:formRuleScope(candidate.workflowContract) }),
+      quality: checkStagedCandidateQuality(candidate.newHtml, { ...options, baselineHtml: target.htmlContent,
+        protectedNids: state.getProtectedNids(candidate.targetScreenId), modificationRequest: candidate.modificationRequest, workflowContract: candidate.workflowContract }),
       delivery: stagedDeliveryReport(state), ...(render ? { render } : {}), ...(projectAssets ? { projectAssets } : {}) });
     set({ stagedValidationEvidence: evidence, stagedCandidateSaveStatus: 'pending' });
     const stillCurrent = () => get().id === state.id && get().stagedScreen === candidate && get().stagedValidationEvidence === evidence;

@@ -2,6 +2,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { FailedDraftCard } from '../src/components/chat/FailedDraftCard';
+import { findingSummary } from '../src/components/chat/QualityFindings';
 import { makeFailedPageDraft } from '../src/services/ai/qualityDraft';
 import type { SavedQualityDraft } from '../src/services/storage/qualityDraftRepository';
 import { t } from '../src/i18n';
@@ -69,11 +70,8 @@ describe('i18n FailedDraftCard', () => {
       const section = host.querySelector('section');
       expect(section?.getAttribute('aria-label')).toBe(t('failedDraft.sectionAria', undefined, 'zh-CN'));
       expect(host.textContent).toContain(t('failedDraft.titleBlocked', undefined, 'zh-CN'));
-      expect(host.textContent).toContain(
-        t('failedDraft.blockerCount', { count: value.draft.quality.findings.filter((f) => f.severity === 'error').length }, 'zh-CN'),
-      );
-      expect(host.textContent).toContain(
-        t('failedDraft.warningCount', { count: value.draft.quality.findings.filter((f) => f.severity === 'warning').length }, 'zh-CN'),
+      expect(host.querySelector('[data-testid="failed-draft-finding-summary"]')?.textContent).toBe(
+        findingSummary(value.draft.quality.findings),
       );
       expect(host.textContent).toContain(t('failedDraft.savedHint', undefined, 'zh-CN'));
       expect(host.textContent).toContain(t('failedDraft.adoptionHint', undefined, 'zh-CN'));
@@ -82,6 +80,8 @@ describe('i18n FailedDraftCard', () => {
       expect(host.textContent).toContain(t('failedDraft.localRepairSummary', undefined, 'zh-CN'));
       expect(host.textContent).toContain(t('failedDraft.viewSource', undefined, 'zh-CN'));
       expect(host.textContent).toContain(t('failedDraft.regenerate', undefined, 'zh-CN'));
+      expect(host.textContent).toContain(t('failedDraft.fixBlockers', undefined, 'zh-CN'));
+      expect(host.textContent).toContain(t('failedDraft.fixBlockersHint', undefined, 'zh-CN'));
       expect(host.querySelector('input[placeholder]')?.getAttribute('placeholder')).toBe(
         t('failedDraft.labelPlaceholder', undefined, 'zh-CN'),
       );
@@ -98,11 +98,8 @@ describe('i18n FailedDraftCard', () => {
 
       expect(section?.getAttribute('aria-label')).toBe(t('failedDraft.sectionAria', undefined, 'en'));
       expect(host.textContent).toContain(t('failedDraft.titleBlocked', undefined, 'en'));
-      expect(host.textContent).toContain(
-        t('failedDraft.blockerCount', { count: value.draft.quality.findings.filter((f) => f.severity === 'error').length }, 'en'),
-      );
-      expect(host.textContent).toContain(
-        t('failedDraft.warningCount', { count: value.draft.quality.findings.filter((f) => f.severity === 'warning').length }, 'en'),
+      expect(host.querySelector('[data-testid="failed-draft-finding-summary"]')?.textContent).toBe(
+        findingSummary(value.draft.quality.findings),
       );
       expect(host.textContent).toContain(t('failedDraft.savedHint', undefined, 'en'));
       expect(host.textContent).toContain(t('failedDraft.adoptionHint', undefined, 'en'));
@@ -111,6 +108,8 @@ describe('i18n FailedDraftCard', () => {
       expect(host.textContent).toContain(t('failedDraft.localRepairSummary', undefined, 'en'));
       expect(host.textContent).toContain(t('failedDraft.viewSource', undefined, 'en'));
       expect(host.textContent).toContain(t('failedDraft.regenerate', undefined, 'en'));
+      expect(host.textContent).toContain(t('failedDraft.fixBlockers', undefined, 'en'));
+      expect(host.textContent).toContain(t('failedDraft.fixBlockersHint', undefined, 'en'));
       expect(host.querySelector('input[placeholder]')?.getAttribute('placeholder')).toBe(
         t('failedDraft.labelPlaceholder', undefined, 'en'),
       );
@@ -130,6 +129,66 @@ describe('i18n FailedDraftCard', () => {
       });
       expect(host.textContent).toContain(t('failedDraft.hideSource', undefined, 'en'));
       expect(host.querySelector(`[aria-label="${t('failedDraft.draftSourceAria', undefined, 'en')}"]`)).toBeTruthy();
+    } finally {
+      act(() => root.unmount());
+      host.remove();
+    }
+  });
+
+  test('fix blockers button repairs only mapped error regions', () => {
+    const html =
+      '<main data-nid="root"><section data-nid="region" aria-label="基础资料"><h2>基础资料</h2><p data-nid="keep-a">改写甲</p></section><section data-nid="other">' +
+      Array.from({ length: 15 }, (_, i) => `<p data-nid="p${i}">保留${i}</p>`).join('') +
+      '</section></main>';
+    const draft = makeFailedPageDraft(html, 'context', 'binding', { designSystem: defaultTheme })!;
+    draft.quality = {
+      passed: false,
+      findings: [
+        {
+          code: 'redesign_content_missing',
+          severity: 'error',
+          nid: 'keep-a',
+          message: '整页重设计遗漏了未经授权删除或改写的原业务文案。',
+          actual: '原文甲',
+          expected: '保留',
+        },
+      ],
+    };
+    const value: SavedQualityDraft = {
+      ...blockedDraft(),
+      draft,
+      request: '修复业务文案',
+    };
+    const repairs: Array<{ labels: unknown; region?: { nids: string[]; instruction: string } }> = [];
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = createRoot(host);
+    try {
+      act(() => {
+        root.render(
+          <FailedDraftCard
+            value={value}
+            saved
+            onSuggest={() => {}}
+            onRepair={(labels, region) => repairs.push({ labels, region })}
+            onRegenerate={() => {}}
+          />,
+        );
+      });
+      const button = Array.from(host.querySelectorAll('button')).find((btn) =>
+        btn.textContent?.includes(t('failedDraft.fixBlockers', undefined, 'zh-CN')),
+      );
+      expect(button).toBeTruthy();
+      expect((button as HTMLButtonElement).disabled).toBe(false);
+      act(() => {
+        button!.click();
+      });
+      expect(repairs).toHaveLength(1);
+      expect(repairs[0].labels).toEqual([]);
+      expect(repairs[0].region).toEqual({
+        nids: ['region'],
+        instruction: expect.stringContaining('keep-a'),
+      });
     } finally {
       act(() => root.unmount());
       host.remove();

@@ -276,7 +276,15 @@ export class PipelineExecutor {
           attachment:input.attachment,useCustomNavigation:options.useCustomNavigation,wholePageRedesign:options.wholePageRedesign,signal,
           maxTokens: planning.maxTokens ?? 3072,
           isCurrent:()=>!signal?.aborted&&(options.isCurrent?.()??true)});
-        const issue=pageTaskPlanIssue(workflowContract);if(issue)throw Error(issue);
+        // Local draft repair reuses a frozen plan bound to pageTaskSource — do not rebind against a new taskId/knowledge surface.
+        if(options.qualityRepair){
+          const origin=options.qualityRepair.draft.pageTaskSource;
+          if(!origin?.pageTaskPlan)throw Error('继续任务缺少原业务规划，请重新生成。');
+          const originIssue=pageTaskPlanIssue(origin);if(originIssue)throw Error(originIssue);
+          if(contentFingerprint(JSON.stringify(origin.pageTaskPlan))!==contentFingerprint(JSON.stringify(workflowContract.pageTaskPlan)))throw Error('草稿业务规划与复用快照不一致，请重新生成。');
+        }else{
+          const issue=pageTaskPlanIssue(workflowContract);if(issue)throw Error(issue);
+        }
         if(signal?.aborted||options.isCurrent?.()===false)throw Error('任务或工程已变化，未使用业务规划。');
         if(workflowContract.pageTaskPlan.request.providerId!==provider.id||workflowContract.pageTaskPlan.request.model!==model)throw Error('业务规划的 Provider 或模型已变化，请重新生成。');
         options.onTaskPlan?.(structuredClone(workflowContract.pageTaskPlan));
@@ -427,7 +435,13 @@ export class PipelineExecutor {
     phase(options.qualityRepair?'local-repair':'generating');
     if (options.qualityRepair) {
       const {draft,labels} = options.qualityRepair;
-      if (draft.contextKey !== contextKey || draft.bindingKey !== continuationBindingKey({provider,model})) return attachContract({status:'error',rawResponse:'',usage:{inputTokens:0,outputTokens:0},errorMessage:'草稿的工程、原页或模型上下文已变化，请重新生成。'});
+      // Draft identity is frozen at failure time; chat-side projectContext/binding already gate project drift.
+      // Rebuilt contextKey may differ (knowledge assembly, new task shell) while the draft and plan remain valid.
+      if (draft.bindingKey !== continuationBindingKey({provider,model})) return attachContract({status:'error',rawResponse:'',usage:{inputTokens:0,outputTokens:0},errorMessage:'草稿的工程、原页或模型上下文已变化，请重新生成。'});
+      if (draft.contextKey !== contextKey) {
+        const origin=draft.pageTaskSource??draft.guidanceSource;
+        if(!origin||draftGuidanceIssue(draft))return attachContract({status:'error',rawResponse:'',usage:{inputTokens:0,outputTokens:0},errorMessage:'草稿的工程、原页或模型上下文已变化，请重新生成。'});
+      }
       try {
         const previous=(draft.pageTaskSource??draft.guidanceSource)?.businessTextReview;
         const choices=options.qualityRepair.region?.textChanges??[];

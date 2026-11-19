@@ -5,6 +5,7 @@ import { checkGenerationQuality, checkGenerationSourceSafety, qualitySummary, ty
 import { ensureActionAccessibleNames } from './actionIntegrity';
 import type { ContinuationResult } from './boundedContinuation';
 import { isOutputLimit } from './generationContinuation';
+import { restoreProtectedNodes } from './restoreProtectedNodes';
 
 export interface ModelHtmlResult {
   status: 'valid' | 'error' | 'no_html' | 'rejected_by_quality';
@@ -12,6 +13,8 @@ export interface ModelHtmlResult {
   artifact?: NonNullable<ReturnType<typeof extractArtifact>>;
   qualityReport?: QualityReport;
   message?: string;
+  /** Deterministic protected-node restore ran once before quality (no model retry loop). */
+  autoRepaired?: boolean;
 }
 
 /** Shared terminal validation. Never parse/normalize a truncated or unsafe stream into an apparently valid page. */
@@ -37,8 +40,12 @@ export function finalizeModelHtml(result: ContinuationResult, options: QualityOp
   const policy={...options,requireExternalMedia:true};
   const source = checkGenerationSourceSafety(raw, policy);
   if (!source.passed) return { status: 'rejected_by_quality', artifact: artifact ?? undefined, qualityReport: source, message: qualitySummary(source) };
-  const html = ensureActionAccessibleNames(normalizeMobileNavigation(raw, options).html);
+  let html = ensureActionAccessibleNames(normalizeMobileNavigation(raw, options).html);
+  // One-shot deterministic correction only — never recursively re-generate or loop on failure.
+  const restored = restoreProtectedNodes(html, options.baselineHtml, options.protectedNids);
+  const autoRepaired = restored !== html;
+  html = restored;
   const qualityReport = checkGenerationQuality(html, policy);
-  return { status: qualityReport.passed ? 'valid' : 'rejected_by_quality', artifact: artifact ?? undefined, html, qualityReport,
+  return { status: qualityReport.passed ? 'valid' : 'rejected_by_quality', artifact: artifact ?? undefined, html, qualityReport, autoRepaired,
     ...(!qualityReport.passed ? { message: qualitySummary(qualityReport) } : {}) };
 }

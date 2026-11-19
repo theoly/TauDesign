@@ -1,7 +1,7 @@
 import {UserFacingNotice} from '../common/UserFacingNotice';
 import {userFacingMessage} from '../../utils/userFacingMessage';
 import {parseHtmlCopy} from '../../utils/htmlDocument';
-import {draftRegionChoices,type DraftRegionRequest} from '../../services/ai/draftRegionRepair';
+import {blockerRegionRepairPlan,draftRegionChoices,type DraftRegionRequest} from '../../services/ai/draftRegionRepair';
 import React, { useEffect, useState, useMemo } from 'react';
 import type { SavedQualityDraft } from '../../services/storage/qualityDraftRepository';
 import { draftRepairTargets, type DraftLabel } from '../../services/ai/qualityDraft';
@@ -9,6 +9,8 @@ import { useProjectStore } from '../../stores/useProjectStore';
 import { useT } from '../../stores/useLocaleStore';
 import {buildPageRedesignSource} from '../../services/ai/pageRedesignSource';
 import {businessTextReviewChoices,type BusinessTextChoice} from '../../services/ai/businessTextReview';
+import {findingSummary} from './QualityFindings';
+import {findingDisposition} from '../../services/ai/findingPolicy';
 
 export function FailedDraftCard({value,saved,busy,notice,onSuggest,onRepair,onRegenerate}: {
   value:SavedQualityDraft;saved?:boolean;busy?:boolean;notice?:string;
@@ -21,9 +23,11 @@ export function FailedDraftCard({value,saved,busy,notice,onSuggest,onRepair,onRe
   const [labels,setLabels]=useState<Record<string,string>>(defaults),[focus,setFocus]=useState<string>(),[code,setCode]=useState(false);
   const suggestionKey=JSON.stringify(value.suggestions);
   useEffect(()=>setLabels(defaults()),[value.draft.fingerprint,suggestionKey]);
-  const errors=value.draft.quality.findings.filter(f=>f.severity==='error'),warnings=value.draft.quality.findings.filter(f=>f.severity==='warning');
+  const findings=value.draft.quality.findings;
+  const errors=findings.filter(f=>findingDisposition(f)==='blocker'||findingDisposition(f)==='layout-risk');
   const locked=busy||value.status==='resolved';
   const regions=draftRegionChoices(value.draft);
+  const blockerPlan=useMemo(()=>errors.length?blockerRegionRepairPlan(value.draft,baseline):null,[value.draft,baseline,findings]);
   const [selected,setSelected]=useState<string[]>([]),[instruction,setInstruction]=useState('');
   const [textChoices,setTextChoices]=useState<Record<string,{confirmed:boolean;targetNid:string;after:string}>>({});
   useEffect(()=>{setTextChoices({});setSelected([]);setInstruction('');},[value.id,value.draft.fingerprint]);
@@ -39,6 +43,7 @@ export function FailedDraftCard({value,saved,busy,notice,onSuggest,onRepair,onRe
   const groups=Array.from(new Set(errors.map(f=>f.code))).map(code=>({code,items:errors.filter(f=>f.code===code)}));
   const sourceNode=(html:string|undefined,nid:string)=>{if(!html)return;const nodes=Array.from(parseHtmlCopy(html).doc.querySelectorAll('[data-nid]')).filter(el=>el.getAttribute('data-nid')===nid);return nodes.length===1?nodes[0].outerHTML:undefined;};
   const focused=useMemo(()=>{if(!focus)return;const current=sourceNode(value.draft.html,focus);if(current)return {label:'草稿节点',html:current};const original=sourceNode(baseline,focus);return original?{label:'原页面节点（草稿中未找到同一身份）',html:original}:undefined;},[focus,value.draft.html,baseline]);
+  const applyBlockerPlan=()=>{if(!blockerPlan||locked)return;setSelected(blockerPlan.nids);setInstruction(blockerPlan.instruction);onRepair([],blockerPlan);};
   const findingRow=(f:typeof errors[number],index:number)=><div key={index} className="space-y-1 text-[11px] text-rose-200">
     <div><UserFacingNotice message={f.message}/> {f.nid&&<button type="button" onClick={()=>{setCode(true);setFocus(f.nid);}} className="text-blue-300 underline">查看问题位置 [{f.nid}]</button>}</div>
     <details data-technical-details className="text-slate-400"><summary className="cursor-pointer">查看检查详情</summary>
@@ -50,10 +55,19 @@ export function FailedDraftCard({value,saved,busy,notice,onSuggest,onRepair,onRe
 
   return <section aria-label={t('failedDraft.sectionAria')} className="mt-2 p-3 space-y-3 rounded-xl border border-amber-700/50 bg-slate-900 text-xs text-slate-300">
     <div className="font-semibold text-slate-100">{value.status==='resolved'?t('failedDraft.titleResolved'):t('failedDraft.titleBlocked')}</div>
-    <p><span className="text-rose-300">{t('failedDraft.blockerCount',{count:errors.length})}</span> · <span className="text-amber-300">{t('failedDraft.warningCount',{count:warnings.length})}</span></p>
+    <p className="text-[11px] text-amber-200" data-testid="failed-draft-finding-summary">{findingSummary(findings)}</p>
     <p className="text-[11px] text-slate-400">{saved?t('failedDraft.savedHint'):t('failedDraft.unsavedHint')} {t('failedDraft.adoptionHint')}</p>
     {historicalReview&&<details className="rounded border border-slate-700 p-2"><summary>已确认的逐项文案 · {historicalReview.changes.length} 项</summary>{historicalReview.changes.map(c=><p key={c.sourceNid} className="mt-2 whitespace-pre-wrap break-words">[{c.sourceNid} → {c.targetNid}] {c.before} → {c.after}</p>)}<p className="mt-1 text-slate-500">历史确认仍需当前来源和整页验收，不自动执行。</p></details>}
     {groups.map(group=>group.items.length>1?<details key={group.code} className="rounded border border-slate-700 p-2"><summary className="cursor-pointer text-rose-200">{group.code==='redesign_content_missing'?'原业务文案待核对':userFacingMessage(group.items[0].message)} · {group.items.length} 项</summary><div className="mt-2 space-y-3">{group.items.map(findingRow)}</div></details>:<div key={group.code}>{findingRow(group.items[0],0)}</div>)}
+    {errors.length>0&&regions.length>0&&<div className="space-y-2 rounded-lg border border-rose-800/50 bg-rose-950/20 p-2">
+      <p className="text-[11px] text-slate-400">{t('failedDraft.fixBlockersHint')}</p>
+      <button type="button" disabled={locked||!blockerPlan} onClick={applyBlockerPlan}
+        title={blockerPlan?blockerPlan.nids.map(id=>regions.find(r=>r.nid===id)?.label??id).join('、'):t('failedDraft.fixBlockersUnavailable')}
+        className="rounded bg-rose-600 px-3 py-1.5 font-medium text-white disabled:opacity-40">
+        {t('failedDraft.fixBlockers')}{blockerPlan?` · ${blockerPlan.nids.length}`:''}
+      </button>
+      {!blockerPlan&&<p className="text-[11px] text-amber-200">{t('failedDraft.fixBlockersUnavailable')}</p>}
+    </div>}
     {targets.length>0&&<div className="space-y-2">
       <p className="text-[11px] text-slate-400">{t('failedDraft.labelHint')}</p>
       {targets.map(target=><label key={target.nid} className="block space-y-1 text-[11px]">
@@ -68,7 +82,7 @@ export function FailedDraftCard({value,saved,busy,notice,onSuggest,onRepair,onRe
           disabled={locked||targets.some(target=>!labels[target.nid]?.trim())} className="px-2 py-1.5 rounded bg-blue-600 text-white disabled:opacity-40">{t('failedDraft.confirmLabelsRepair')}</button>
       </div>
     </div>}
-    {regions.length>0&&<details className="rounded border border-slate-700 p-2">
+    {regions.length>0&&<details className="rounded border border-slate-700 p-2" open={Boolean(blockerPlan&&selected.length)}>
       <summary className="cursor-pointer">{t('failedDraft.localRepairSummary')}</summary>
       <p className="mt-2 text-slate-400">{t('failedDraft.localRepairHint')}</p>
       <div className="max-h-36 overflow-y-auto">{regions.map(r=><label key={r.nid} className="flex items-center gap-2 py-1"><input type="checkbox" disabled={locked||(!selected.includes(r.nid)&&selected.length>=3)} checked={selected.includes(r.nid)} onChange={e=>setSelected(v=>e.target.checked?[...v,r.nid]:v.filter(n=>n!==r.nid))}/>{r.label} · {r.nid}</label>)}</div>

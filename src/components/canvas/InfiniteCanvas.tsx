@@ -1,8 +1,7 @@
 import {CandidateRecheckControl} from './CandidateRecheckControl';
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { useProjectStore } from '../../stores/useProjectStore';
+import { getCachedStagedCandidateQuality, useProjectStore } from '../../stores/useProjectStore';
 import { handleHistoryShortcut } from '../../utils/historyShortcuts';
-import { checkGenerationQuality } from '../../services/ai/generationQuality';
 import type { RenderedQualityReport } from '../../utils/renderedQuality';
 import { RenderedQualityCard } from '../chat/RenderedQualityCard';
 import { QualityReportCard } from '../chat/QualityReportCard';
@@ -12,7 +11,6 @@ import { CandidateEvidencePanel } from './CandidateEvidencePanel';
 import { TextLayoutRepairDialog } from './TextLayoutRepairDialog';
 import { repairCompressedBodyCards } from '../../utils/textLayoutRepair';
 import { contentFingerprint } from '../../services/ai/designWorkflow';
-import { knowledgeFingerprint } from '../../services/ai/projectKnowledge';
 import { canConfirmCandidateStructure } from '../../services/ai/candidateValidation';
 import { Check, Copy, Plus, Sparkles, X } from 'lucide-react';
 
@@ -21,36 +19,78 @@ interface InfiniteCanvasProps {
   onPolish?: (screenId: string) => void;
 }
 
+/** Only re-render canvas when scale crosses LOD thresholds — not on every pan/zoom tick. */
+function viewportLodBucket(scale: number): 0 | 1 | 2 {
+  if (scale < 0.25) return 0;
+  if (scale < 0.55) return 1;
+  return 2;
+}
+
 export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const worldLayerRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef(useProjectStore.getState().viewportTransform);
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
   const [isSpacePressed, setIsSpacePressed] = useState(false);
   const [confirmedStructureKey, setConfirmedStructureKey] = useState<string | null>(null);
   const [layoutRepair,setLayoutRepair]=useState<{screenId:string;textNids:string[]}|null>(null);
 
-  const {
-    id: projectId,
-    screens,
-    screenOrder,
-    activeScreenId,
-    settings,
-    designSystem,
-    overrides,
-    viewportTransform,
-    setViewportTransform,
-    stagedScreen,
-    stagedCandidateSaveStatus,
-    stagedAdoptionStatus,
-    stagedAdoptionError,
-    stagedValidationEvidence,
-    stagedRenderQuality,
-    recheckStagedAssetFiles,
-    discardStagedChange,
-    activeSnapGuides
-  } = useProjectStore();
+  const projectId = useProjectStore(s => s.id);
+  const screens = useProjectStore(s => s.screens);
+  const screenOrder = useProjectStore(s => s.screenOrder);
+  const activeScreenId = useProjectStore(s => s.activeScreenId);
+  const settings = useProjectStore(s => s.settings);
+  const designSystem = useProjectStore(s => s.designSystem);
+  const overrides = useProjectStore(s => s.overrides);
+  const setViewportTransform = useProjectStore(s => s.setViewportTransform);
+  const stagedScreen = useProjectStore(s => s.stagedScreen);
+  const stagedCandidateSaveStatus = useProjectStore(s => s.stagedCandidateSaveStatus);
+  const stagedAdoptionStatus = useProjectStore(s => s.stagedAdoptionStatus);
+  const stagedAdoptionError = useProjectStore(s => s.stagedAdoptionError);
+  const stagedValidationEvidence = useProjectStore(s => s.stagedValidationEvidence);
+  const stagedRenderQuality = useProjectStore(s => s.stagedRenderQuality);
+  const recheckStagedAssetFiles = useProjectStore(s => s.recheckStagedAssetFiles);
+  const discardStagedChange = useProjectStore(s => s.discardStagedChange);
+  const activeSnapGuides = useProjectStore(s => s.activeSnapGuides);
+  const lodBucket = useProjectStore(s => viewportLodBucket(s.viewportTransform.scale));
 
-  const { x, y, scale } = viewportTransform;
+  /** Apply pan/zoom on the GPU layer without re-rendering iframe ScreenFrames every wheel tick. */
+  const applyViewportDom = useCallback((t: { x: number; y: number; scale: number }) => {
+    viewportRef.current = t;
+    if (worldLayerRef.current) worldLayerRef.current.style.transform = `translate3d(${t.x}px, ${t.y}px, 0) scale(${t.scale})`;
+    if (gridRef.current) {
+      gridRef.current.style.backgroundSize = `${32 * t.scale}px ${32 * t.scale}px`;
+      gridRef.current.style.backgroundPosition = `${t.x}px ${t.y}px`;
+    }
+  }, []);
+
+  const commitViewport = useCallback((t: { x: number; y: number; scale: number }) => {
+    applyViewportDom(t);
+    const cur = useProjectStore.getState().viewportTransform;
+    if (cur.x === t.x && cur.y === t.y && cur.scale === t.scale) return;
+    setViewportTransform(t);
+  }, [applyViewportDom, setViewportTransform]);
+
+  const scheduleViewportCommit = useCallback(() => {
+    if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    commitTimerRef.current = setTimeout(() => {
+      commitTimerRef.current = null;
+      commitViewport(viewportRef.current);
+    }, 100);
+  }, [commitViewport]);
+
+  // Own transform via DOM + store subscribe — do not React-subscribe to viewportTransform.
+  useEffect(() => {
+    applyViewportDom(useProjectStore.getState().viewportTransform);
+    return useProjectStore.subscribe((state, prev) => {
+      if (state.viewportTransform !== prev.viewportTransform) applyViewportDom(state.viewportTransform);
+    });
+  }, [applyViewportDom]);
+
+  useEffect(() => () => { if (commitTimerRef.current) clearTimeout(commitTimerRef.current); }, []);
 
   // Global Keyboard Shortcuts (PRD §3.3.1 / §3.8.1)
   useEffect(() => {
@@ -71,19 +111,21 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
       // Cmd+0: Reset zoom to 100%
       if ((e.metaKey || e.ctrlKey) && e.key === '0') {
         e.preventDefault();
-        setViewportTransform({ x: 100, y: 100, scale: 1.0 });
+        commitViewport({ x: 100, y: 100, scale: 1.0 });
       }
 
       // Cmd+= / Cmd++: Zoom In
       if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) {
         e.preventDefault();
-        setViewportTransform({ x, y, scale: Math.min(scale * 1.15, 4.0) });
+        const cur = viewportRef.current;
+        commitViewport({ x: cur.x, y: cur.y, scale: Math.min(cur.scale * 1.15, 4.0) });
       }
 
       // Cmd+-: Zoom Out
       if ((e.metaKey || e.ctrlKey) && e.key === '-') {
         e.preventDefault();
-        setViewportTransform({ x, y, scale: Math.max(scale * 0.85, 0.1) });
+        const cur = viewportRef.current;
+        commitViewport({ x: cur.x, y: cur.y, scale: Math.max(cur.scale * 0.85, 0.1) });
       }
 
       // Delete / Backspace: 快捷删除选中节点及其全部子树 (ISSUE-021 / T-DNC-04)
@@ -115,70 +157,66 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [scale, x, y, setViewportTransform]);
+  }, [commitViewport]);
 
-  // Mouse wheel zoom
+  // Mouse wheel zoom — DOM-only during the gesture; store commits after idle.
   const handleWheel = (e: React.WheelEvent) => {
+    const cur = viewportRef.current;
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       const zoomFactor = 1 - e.deltaY * 0.002;
-      const newScale = Math.min(Math.max(scale * zoomFactor, 0.1), 4.0);
-
-      // Zoom centered at cursor
+      const newScale = Math.min(Math.max(cur.scale * zoomFactor, 0.1), 4.0);
       const rect = containerRef.current?.getBoundingClientRect();
       if (rect) {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        const newX = mouseX - (mouseX - x) * (newScale / scale);
-        const newY = mouseY - (mouseY - y) * (newScale / scale);
-        setViewportTransform({ x: newX, y: newY, scale: newScale });
+        applyViewportDom({
+          x: mouseX - (mouseX - cur.x) * (newScale / cur.scale),
+          y: mouseY - (mouseY - cur.y) * (newScale / cur.scale),
+          scale: newScale
+        });
+        scheduleViewportCommit();
       }
     } else {
-      // Normal 2-finger scroll panning
-      setViewportTransform({
-        x: x - e.deltaX,
-        y: y - e.deltaY,
-        scale
-      });
+      applyViewportDom({ x: cur.x - e.deltaX, y: cur.y - e.deltaY, scale: cur.scale });
+      scheduleViewportCommit();
     }
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (isSpacePressed || e.button === 1) { // Space or middle mouse
+      const cur = viewportRef.current;
       setIsPanning(true);
-      setStartPan({ x: e.clientX - x, y: e.clientY - y });
+      setStartPan({ x: e.clientX - cur.x, y: e.clientY - cur.y });
     }
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isPanning) {
-      setViewportTransform({
+      applyViewportDom({
         x: e.clientX - startPan.x,
         y: e.clientY - startPan.y,
-        scale
+        scale: viewportRef.current.scale
       });
     }
   };
 
   const handleMouseUp = () => {
+    if (isPanning) commitViewport(viewportRef.current);
     setIsPanning(false);
   };
 
   // Find target screen position for staged screen
   const targetScreen = stagedScreen ? screens[stagedScreen.targetScreenId] : null;
-  const candidateQuality = useMemo(() => stagedScreen ? checkGenerationQuality(stagedScreen.newHtml, {
-    deviceProfile: settings.deviceProfile, useCustomNavigation: settings.useCustomNavigation, designSystem, baselineHtml: targetScreen?.htmlContent,
-    modificationRequest: stagedScreen.modificationRequest,
-    protectedNids: useProjectStore.getState().getProtectedNids(stagedScreen.targetScreenId)
-  }) : null, [stagedScreen, targetScreen?.htmlContent, settings.deviceProfile, settings.useCustomNavigation, designSystem, overrides]);
-
   const [renderReports, setRenderReports] = useState<Record<string, { key: string; report: RenderedQualityReport }>>({});
   const [qualityFocus, setQualityFocus] = useState<{ screenId: string; nid: string } | null>(null);
-  const activeRenderKey = useMemo(() => JSON.stringify([projectId, settings.deviceProfile, settings.useCustomNavigation, settings.colorMode, designSystem.tokens, overrides,
-    activeScreenId, screens[activeScreenId || '']?.htmlContent, screens[activeScreenId || '']?.scopedCss,
-    stagedScreen?.targetScreenId, stagedScreen?.newHtml, targetScreen?.scopedCss]),
-    [projectId, settings.deviceProfile, settings.useCustomNavigation, settings.colorMode, designSystem.tokens, overrides, activeScreenId, screens, stagedScreen, targetScreen?.scopedCss]);
-  const renderKey = stagedScreen ? useProjectStore.getState().getStagedRenderContextKey() : activeRenderKey;
+  const activeRenderKey = useMemo(() => {
+    if (stagedScreen) return '';
+    return JSON.stringify([projectId, settings.deviceProfile, settings.useCustomNavigation, settings.colorMode, designSystem.tokens, overrides,
+      activeScreenId, screens[activeScreenId || '']?.htmlContent, screens[activeScreenId || '']?.scopedCss]);
+  }, [stagedScreen, projectId, settings.deviceProfile, settings.useCustomNavigation, settings.colorMode, designSystem.tokens, overrides, activeScreenId, screens]);
+  const renderKey = useMemo(() => stagedScreen ? useProjectStore.getState().getStagedRenderContextKey() : activeRenderKey,
+    [stagedScreen, activeRenderKey, stagedRenderQuality, stagedValidationEvidence, settings, designSystem, overrides, targetScreen?.htmlContent, targetScreen?.scopedCss, targetScreen?.metadata]);
   const currentRenderKey = useRef(renderKey);
   currentRenderKey.current = renderKey;
   const receiveRenderReport = useCallback((id: string, key: string, report: RenderedQualityReport) => {
@@ -199,14 +237,43 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
     });
   },[renderedReport,stagedScreen,activeScreenId,screens,overrides]);
   const renderIncomplete = Boolean(stagedScreen && renderedReport && !['complete', 'pending'].includes(renderedReport.status));
-  const taskCurrent = !stagedScreen || useProjectStore.getState().isStagedTaskCurrent();
-  const stagedAssetIssues = stagedScreen ? useProjectStore.getState().getStagedAssetIssues() : [];
-  const deliveryReport = stagedScreen ? useProjectStore.getState().getStagedDeliveryReport() : null;
+  const deliverySnapshot = useMemo(() => {
+    if (!stagedScreen) return null;
+    const state = useProjectStore.getState();
+    return {
+      deliveryReport: state.getStagedDeliveryReport(),
+      candidateQuality: getCachedStagedCandidateQuality(state),
+      taskCurrent: state.isStagedTaskCurrent(),
+      stagedAssetIssues: state.getStagedAssetIssues(),
+      renderKey: state.getStagedRenderContextKey(),
+    };
+    // Omit screens/viewport/save-status — measure, pan, and candidate archive must not reopen the gate.
+  }, [stagedScreen, stagedRenderQuality, stagedValidationEvidence, settings, designSystem, overrides, targetScreen?.htmlContent, targetScreen?.scopedCss, targetScreen?.metadata]);
+  const deliveryReport = deliverySnapshot?.deliveryReport ?? null;
+  const candidateQuality = useMemo(() => {
+    if (!stagedScreen || !targetScreen) return null;
+    const evidence = stagedValidationEvidence;
+    if (evidence
+      && evidence.candidateFingerprint === contentFingerprint(stagedScreen.newHtml)
+      && evidence.baselineFingerprint === contentFingerprint(targetScreen.htmlContent)
+      && (!stagedScreen.projectFingerprint || evidence.projectFingerprint === stagedScreen.projectFingerprint)) {
+      return evidence.quality;
+    }
+    return deliverySnapshot?.candidateQuality ?? null;
+  }, [stagedScreen, targetScreen, stagedValidationEvidence, deliverySnapshot]);
+  const taskCurrent = deliverySnapshot?.taskCurrent ?? true;
+  const stagedAssetIssues = deliverySnapshot?.stagedAssetIssues ?? [];
   const blockers = deliveryReport?.checks.filter(c => c.status !== 'passed') ?? [];
   const canConfirmStructure = canConfirmCandidateStructure(deliveryReport);
   const structureConfirmed = canConfirmStructure && confirmedStructureKey === renderKey;
   const adoptionBlocked = deliveryReport?.status !== 'ready' && !structureConfirmed;
   const blockedDescription = blockers.map(c => c.message).join('；');
+  const evidenceStale = Boolean(stagedValidationEvidence && stagedScreen && (
+    stagedValidationEvidence.contextFingerprint !== contentFingerprint(renderKey)
+    || (stagedScreen.projectFingerprint
+      ? stagedValidationEvidence.projectFingerprint !== stagedScreen.projectFingerprint
+      : false)
+  ));
   const locateRenderIssue = (nid: string) => {
     if (!reportId) return;
     setQualityFocus({ screenId: reportId, nid });
@@ -220,12 +287,12 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
     if (!width) return;
     const pairWidth = (settings.frameWidth || 390) * 2 + (settings.deviceProfile === 'mobile' ? 40 : 60);
     const compareScale = Math.max(0.1, Math.min(1, (width - 64) / pairWidth));
-    setViewportTransform({
+    commitViewport({
       x: (width - pairWidth * compareScale) / 2 - targetScreen.position.x * compareScale,
       y: 120 - targetScreen.position.y * compareScale,
       scale: compareScale
     });
-  }, [stagedScreen, targetScreen?.id, settings.frameWidth, settings.deviceProfile, setViewportTransform]);
+  }, [stagedScreen, targetScreen?.id, settings.frameWidth, settings.deviceProfile, commitViewport]);
 
   return (
     <div
@@ -238,38 +305,44 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      {/* Background Grid Dots */}
+      {/* Background Grid Dots — position owned by applyViewportDom */}
       <div
+        ref={gridRef}
         className="absolute inset-0 pointer-events-none opacity-20"
-        style={{
-          backgroundImage: 'radial-gradient(#475569 1px, transparent 1px)',
-          backgroundSize: `${32 * scale}px ${32 * scale}px`,
-          backgroundPosition: `${x}px ${y}px`
-        }}
+        style={{ backgroundImage: 'radial-gradient(#475569 1px, transparent 1px)' }}
       />
 
-      {/* World Transform Layer */}
+      {/* World Transform Layer — transform owned by applyViewportDom */}
       <div
+        ref={worldLayerRef}
         className="absolute top-0 left-0 will-change-transform origin-top-left"
-        style={{
-          transform: `translate3d(${x}px, ${y}px, 0) scale(${scale})`
-        }}
       >
-        {stagedScreen && targetScreen && <div data-testid="comparison-backdrop" aria-hidden="true"
-          className="absolute bg-slate-950/75 z-20"
-          style={{ left: `${-x / scale}px`, top: `${-y / scale}px`, width: `calc(100vw / ${scale})`, height: `calc(100vh / ${scale})` }}
-          onClick={event => event.stopPropagation()} />}
+        {/* Dim only around the compare pair — avoid a 100k² layer under every pan/zoom. */}
+        {stagedScreen && targetScreen && (() => {
+          const frameW = settings.frameWidth || (settings.deviceProfile === 'mobile' ? 390 : 1440);
+          const gapX = settings.deviceProfile === 'mobile' ? 40 : 60;
+          const height = Math.max(targetScreen.measuredHeight || 800, 800);
+          const pad = 120;
+          return <div data-testid="comparison-backdrop" aria-hidden="true"
+            className="absolute bg-slate-950/75 z-20 pointer-events-none rounded-3xl"
+            style={{
+              left: targetScreen.position.x - pad,
+              top: targetScreen.position.y - pad,
+              width: frameW * 2 + gapX + pad * 2,
+              height: height + pad * 2,
+            }} />;
+        })()}
         {screenOrder.map((id) => {
           const screen = screens[id];
           if (!screen) return null;
           const isActive = id === activeScreenId;
+          const inComparePair = Boolean(stagedScreen && targetScreen?.id === id);
 
-          // LOD 调度策略：
-          // isActive -> L2 (可交互 iframe: 点选、行内编辑)
-          // else -> L1 (冻结 iframe: pointer-events: none，GPU 硬件加速高质量缩放，确保缩小时页面内容高保真可见)
-          // 仅在存在预先生成的位图缩略图且超小比例时降级为 L0
+          // LOD：对比时仅对照对保留 iframe；背景画框 L0，避免多文档合成拖慢手势。
+          // 平时：isActive -> L2；其它 L1；有缩略图且超小比例 -> L0。
           let lodLevel: 0 | 1 | 2 = 1;
-          if (screen.thumbnail && scale < 0.25) lodLevel = 0;
+          if (stagedScreen) lodLevel = inComparePair ? (isActive && lodBucket === 2 ? 2 : 1) : 0;
+          else if (lodBucket === 0 && screen.thumbnail) lodLevel = 0;
           else if (isActive) lodLevel = 2;
 
           return <ScreenFrame key={id} screen={screen} lodLevel={lodLevel} onPolish={onPolish}
@@ -283,6 +356,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
         {stagedScreen && targetScreen && (() => {
           const currentFrameWidth = settings.frameWidth || (settings.deviceProfile === 'mobile' ? 390 : 1440);
           const gapX = settings.deviceProfile === 'mobile' ? 40 : 60;
+          const stagedLod: 0 | 1 | 2 = lodBucket === 2 ? 2 : 1;
           return (
             <ScreenFrame
               key="staged-screen"
@@ -299,7 +373,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
                 metadata: { ...targetScreen.metadata, ...(stagedScreen.navigationTitle ? { navigationTitle: stagedScreen.navigationTitle } : {}) },
                 measuredHeight: targetScreen.measuredHeight
               }}
-              lodLevel={2}
+              lodLevel={stagedLod}
               isStaged={true}
               renderQualityKey={renderKey} onRenderQuality={receiveRenderReport}
               qualityFocusNid={qualityFocus?.screenId === 'staged-screen-preview' ? qualityFocus.nid : undefined}
@@ -347,7 +421,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
       {stagedScreen && (
         <div data-testid="candidate-actions-toolbar" onMouseDown={e=>e.stopPropagation()} onPointerDown={e=>e.stopPropagation()} onWheel={e=>e.stopPropagation()} onKeyDown={e=>{if(e.code==='Space')e.stopPropagation();}} className="absolute top-6 left-1/2 -translate-x-1/2 z-50 w-max max-w-[calc(100%_-_2rem)] bg-slate-900/90 backdrop-blur-md border border-purple-500/50 shadow-2xl rounded-2xl px-4 py-3 flex flex-wrap justify-center items-center gap-3 text-xs">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping" />
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-400" />
             <span className="font-semibold text-purple-200">AI 新方案已在右侧画框并排就绪</span>
           </div>
           {stagedCandidateSaveStatus && <span role={stagedCandidateSaveStatus === 'failed' ? 'alert' : 'status'}
@@ -359,8 +433,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
             <CandidateRecheckControl />
           <CandidateEvidencePanel current={stagedValidationEvidence}
             historical={stagedScreen.restoredFromDisk ? stagedScreen.validationEvidence : undefined}
-            currentIsStale={Boolean(stagedValidationEvidence && (stagedValidationEvidence.contextFingerprint !== contentFingerprint(renderKey) ||
-              stagedValidationEvidence.projectFingerprint !== knowledgeFingerprint(useProjectStore.getState())))} />
+            currentIsStale={evidenceStale} />
           {candidateQuality && candidateQuality.findings.length > 0 && <QualityReportCard report={candidateQuality} />}
           {renderPending && <span role="status" className="text-slate-300">正在检查当前方案渲染…</span>}
           {renderIncomplete && <span role="alert" className="text-amber-300">渲染检查未完成，暂不能采纳；请重新加载候选画框后再试。</span>}

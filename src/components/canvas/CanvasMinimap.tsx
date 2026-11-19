@@ -35,11 +35,20 @@ const PagePreview = React.memo(function PagePreview({ screen, device, tokensCss,
 });
 
 export const CanvasMinimap: React.FC<{ canvasRef: React.RefObject<HTMLDivElement> }> = ({ canvasRef }) => {
-  const { screens, screenOrder, settings, viewportTransform, activeScreenId, designSystem, overrides,
-    setViewportTransform, setActiveScreen } = useProjectStore();
+  const screens = useProjectStore(s => s.screens);
+  const screenOrder = useProjectStore(s => s.screenOrder);
+  const settings = useProjectStore(s => s.settings);
+  const activeScreenId = useProjectStore(s => s.activeScreenId);
+  const designSystem = useProjectStore(s => s.designSystem);
+  const overrides = useProjectStore(s => s.overrides);
+  const setViewportTransform = useProjectStore(s => s.setViewportTransform);
+  const setActiveScreen = useProjectStore(s => s.setActiveScreen);
+  const comparing = useProjectStore(s => Boolean(s.stagedScreen));
   const [expanded, setExpanded] = useState(true);
   const [size, setSize] = useState({ width: 1, height: 1 });
   const [dragProjection, setDragProjection] = useState<MapProjection | null>(null);
+  const [viewRect, setViewRect] = useState({ x: 0, y: 0, width: 1, height: 1 });
+  const [scalePercent, setScalePercent] = useState(() => Math.round(useProjectStore.getState().viewportTransform.scale * 100));
   const dragRef = useRef<{ pointerId: number; projection: MapProjection } | null>(null);
 
   useEffect(() => {
@@ -58,13 +67,31 @@ export const CanvasMinimap: React.FC<{ canvasRef: React.RefObject<HTMLDivElement
   }, [canvasRef]);
 
   const frameWidth = settings.frameWidth || (settings.deviceProfile === 'mobile' ? 390 : 1440);
-  const frames = screenOrder.flatMap((id) => screens[id] ? [{
+  const frames = useMemo(() => screenOrder.flatMap((id) => screens[id] ? [{
     screen: screens[id], x: screens[id].position.x, y: screens[id].position.y,
     width: frameWidth, height: screens[id].measuredHeight || 800
-  }] : []);
-  const viewport = getWorldViewport(viewportTransform, size);
-  const projection = dragProjection ?? createMapProjection([...frames, viewport], MAP_WIDTH, MAP_HEIGHT);
-  const viewRect = projectMapRect(viewport, projection);
+  }] : []), [screenOrder, screens, frameWidth]);
+
+  const projection = useMemo(() => {
+    const viewport = getWorldViewport(useProjectStore.getState().viewportTransform, size);
+    return dragProjection ?? createMapProjection([...frames, viewport], MAP_WIDTH, MAP_HEIGHT);
+  }, [frames, size, dragProjection, screenOrder, screens]);
+
+  useEffect(() => {
+    const syncView = () => {
+      const viewport = getWorldViewport(useProjectStore.getState().viewportTransform, size);
+      const map = createMapProjection([...frames, viewport], MAP_WIDTH, MAP_HEIGHT);
+      const next = projectMapRect(viewport, map);
+      setViewRect(prev => prev.x === next.x && prev.y === next.y && prev.width === next.width && prev.height === next.height ? prev : next);
+      const percent = Math.round(useProjectStore.getState().viewportTransform.scale * 100);
+      setScalePercent(prev => prev === percent ? prev : percent);
+    };
+    syncView();
+    return useProjectStore.subscribe((state, prev) => {
+      if (state.viewportTransform !== prev.viewportTransform) syncView();
+    });
+  }, [frames, size]);
+
   const tokensCss = useMemo(() => compileTokensToCss(designSystem.tokens, settings.colorMode), [designSystem.tokens, settings.colorMode]);
   const overridesByScreen = useMemo(() => {
     const result: Record<string, string> = {};
@@ -130,16 +157,16 @@ export const CanvasMinimap: React.FC<{ canvasRef: React.RefObject<HTMLDivElement
               }}
               className={`absolute overflow-hidden rounded-[1px] bg-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-white ${activeScreenId === frame.screen.id ? 'ring-1 ring-blue-400 z-10' : 'ring-1 ring-slate-600 hover:ring-slate-300'}`}
               style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}>
-              <div className="absolute top-0 left-0 origin-top-left pointer-events-none" style={{ transform: `scale(${projection.scale})` }}>
+              {!comparing && <div className="absolute top-0 left-0 origin-top-left pointer-events-none" style={{ transform: `scale(${projection.scale})` }}>
                 <PagePreview screen={frame.screen} device={settings.deviceProfile} tokensCss={tokensCss} overridesCss={overridesByScreen[frame.screen.id] || ''} width={frameWidth} height={frame.height} />
-              </div>
+              </div>}
             </button>;
           })}
           <div data-testid="minimap-viewport" className="absolute pointer-events-none z-20 border border-blue-300 bg-blue-400/10 rounded-[1px]"
             style={{ left: viewRect.x, top: viewRect.y, width: viewRect.width, height: viewRect.height }} />
           {!frames.length && <span className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-500 pointer-events-none">暂无画框</span>}
         </div>
-        <div className="flex justify-between text-[9px] text-slate-500"><span>{frames.length} 个画框 · 点击或拖动定位</span><span>{Math.round(viewportTransform.scale * 100)}%</span></div>
+        <div className="flex justify-between text-[9px] text-slate-500"><span>{frames.length} 个画框 · 点击或拖动定位{comparing?' · 对比中':''}</span><span>{scalePercent}%</span></div>
       </>}
     </div>
   );

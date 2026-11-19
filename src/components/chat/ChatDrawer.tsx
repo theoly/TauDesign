@@ -1188,7 +1188,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               {m.qualityReport && <QualityReportCard report={m.qualityReport} onLocate={m.screenId && m.htmlOutput && screens[m.screenId]?.htmlContent === m.htmlOutput
                 ? nid => handleLocateAuditTarget({type:'element',screenId:m.screenId!,screenName:screens[m.screenId!]!.name,label:'检查发现',nid}) : undefined}/>}
               {m.qualityDraft && <FailedDraftCard value={m.qualityDraft} saved={m.qualityDraftSaved} busy={engine.isGenerating||m.qualityDraftBusy} notice={m.qualityDraftNotice}
-                onSuggest={()=>engine.suggestQualityTurn(m.id)} onRepair={(labels,region)=>engine.repairQualityTurn(m.id,labels,region)} onRegenerate={()=>engine.retryTurn(m.id)}/>}
+                onSuggest={()=>engine.suggestQualityTurn(m.id)} onRepair={(labels,region)=>engine.repairQualityTurn(m.id,labels,region)} onRegenerate={()=>engine.retryTurn(m.id,{rePlan:true})}/>}
               {m.creationRepairNotice&&<p role="status" className="rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-2 text-[11px] leading-relaxed text-emerald-300">{m.creationRepairNotice}</p>}
 
               {/* Text / Result Bubble */}

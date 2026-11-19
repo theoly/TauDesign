@@ -14,6 +14,45 @@ export function draftRegionChoices(draft:FailedPageDraft){
  const {doc}=parseHtmlCopy(draft.html);const total=doc.body.querySelectorAll('*').length;
  return Array.from(doc.body.querySelectorAll('[data-nid]')).filter(el=>el.matches('section,article,footer,form,fieldset,div.card,[role="group"]')&&el.querySelectorAll('*').length+1<=total*.6).map(el=>({nid:el.getAttribute('data-nid')!,label:(el.querySelector('h1,h2,h3,legend')?.textContent??el.getAttribute('aria-label')??el.textContent?.replace(/\s+/g,' ')??el.localName).trim().slice(0,80)}));
 }
+/** Map severity=error findings to ≤3 draft region roots + a scoped repair instruction. */
+export function blockerRegionRepairPlan(draft:FailedPageDraft,baselineHtml?:string):DraftRegionRequest|null{
+ const regions=draftRegionChoices(draft);if(!regions.length)return null;
+ const errors=draft.quality.findings.filter(f=>f.severity==='error'&&f.nid);if(!errors.length)return null;
+ const regionSet=new Set(regions.map(r=>r.nid));
+ const draftDoc=parseHtmlCopy(draft.html).doc;
+ const baselineDoc=baselineHtml?parseHtmlCopy(baselineHtml).doc:undefined;
+ const containingRegion=(start:Element|null|undefined)=>{
+  for(let node:Element|null=start??null;node;node=node.parentElement){
+   const id=node.getAttribute('data-nid');if(id&&regionSet.has(id))return id;
+  }
+ };
+ const resolveRegion=(nid:string)=>{
+  const inDraft=Array.from(draftDoc.querySelectorAll('[data-nid]')).find(el=>el.getAttribute('data-nid')===nid);
+  const fromDraft=containingRegion(inDraft);if(fromDraft)return fromDraft;
+  if(!baselineDoc)return;
+  const inBaseline=Array.from(baselineDoc.querySelectorAll('[data-nid]')).find(el=>el.getAttribute('data-nid')===nid);
+  for(let node:Element|null=inBaseline??null;node;node=node.parentElement){
+   const id=node.getAttribute('data-nid');if(!id)continue;
+   if(regionSet.has(id)&&Array.from(draftDoc.querySelectorAll('[data-nid]')).some(el=>el.getAttribute('data-nid')===id))return id;
+   const draftAncestor=Array.from(draftDoc.querySelectorAll('[data-nid]')).find(el=>el.getAttribute('data-nid')===id);
+   const via=containingRegion(draftAncestor);if(via)return via;
+  }
+ };
+ const picked:string[]=[];
+ const covered:typeof errors=[];
+ for(const finding of errors){
+  const region=resolveRegion(finding.nid!);if(!region)continue;
+  if(!picked.includes(region)){if(picked.length>=3)continue;picked.push(region);}
+  covered.push(finding);
+ }
+ if(!picked.length||!covered.length)return null;
+ const lines=covered.map(f=>{
+  if(f.code==='redesign_content_missing')return `保留原节点 ${f.nid} 的业务文案与语义${f.actual?`（原文：${f.actual.slice(0,120)}）`:''}，依据原业务片段恢复到对应区域，不扩大修改范围。`;
+  if(f.code==='protected_style_changed')return `恢复受保护节点 ${f.nid} 的 class/style 与子树，不得改动手动覆盖样式。`;
+  return `仅修复阻断项 [${f.nid}] ${f.message}${f.actual?`；差异：${f.actual.slice(0,80)}`:''}，不扩大范围。`;
+ });
+ return {nids:picked,instruction:lines.join('\n').slice(0,2000)};
+}
 /** A repair changes explicitly selected private draft roots; final whole-page acceptance remains in the pipeline. */
 export async function repairDraftRegions(core:AIEngineCore,options:StreamTextOptions,draftInput:FailedPageDraft,repairInput:DraftRegionRequest,protectedInput:string[],beforeRequest:(messages:EngineMessage[])=>void,baselineHtml?:string,textReview?:BusinessTextReview,prepareGeneratedHtml?:PrepareGeneratedHtml):Promise<string>{
  const draft=structuredClone(draftInput),repair=structuredClone(repairInput),protectedNids=[...protectedInput];

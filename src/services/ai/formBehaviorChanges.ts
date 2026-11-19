@@ -10,8 +10,10 @@ export function formRuleChanges(request:string):FormRuleChange[]{
  for(const clause of userRequest.split(/[，,。；;\n]|并(?:且)?|同时|以及|\band\b/i)){
   const instruction=clause.replace(/“[^”]*”|「[^」]*」|"[^"]*"|'[^']*'/g,'');
   if(protectedClause.test(instruction)||/文案|文本内容|label text|wording|caption/i.test(instruction))continue;
+  // Visual “disabled hint/style” copy is not a native disabled attribute change.
+  if(/禁用(?:语义|提示|色|态|样式)|语义提示|aria-disabled|disabled\s*(?:hint|style|look|appearance)|disable\s+(?:color|shadow|style)/i.test(instruction))continue;
   const explicitState=/(?:设(?:置)?(?:为|成)?|改(?:为|成)|调整(?:为|成)|变(?:为|成)).{0,8}(?:必填|选填|可选|非必填|强制填写|只读|可编辑|不可编辑|可用|不可用|禁用)\s*$|\b(?:make|set|change).{0,45}\b(?:required|optional|read[ -]?only|editable|enabled|disabled)\s*$/i.test(instruction);
-  if(/文字|字体|字号|颜色|配色|背景|阴影|边框|间距|color|background|shadow|spacing/i.test(instruction)&&!explicitState)continue;
+  if(/文字|字体|字号|颜色|配色|背景|阴影|边框|间距|样式|视觉|color|background|shadow|spacing|style|visual/i.test(instruction)&&!explicitState)continue;
   const change=/(?:设(?:置)?(?:为|成)?|改(?:为|成)|调整(?:为|成)|变(?:为|成)|切换(?:为|成)|取消|允许|启用|禁用|make|set|change|switch|convert|enable|disable)/i.test(instruction);
   if(!change)continue;
   const add=(rule:FormRuleChange['rule'],enabled:boolean)=>result.push({clause,rule,enabled});
@@ -19,8 +21,8 @@ export function formRuleChanges(request:string):FormRuleChange[]{
   else if(/(?:设(?:置)?(?:为|成)?|改(?:为|成)|调整(?:为|成)|变(?:为|成)).{0,8}(?:必填|强制填写)|\b(?:make|set|change).{0,45}\brequired\s*$/i.test(instruction))add('required',true);
   if(!/不可编辑/.test(instruction)&&/取消只读|允许.{0,8}编辑|(?:设(?:置)?(?:为|成)?|改(?:为|成)|调整(?:为|成)|变(?:为|成)).{0,8}可编辑|\b(?:make|set|change).{0,45}\beditable\s*$/i.test(instruction))add('readonly',false);
   else if(/(?:设(?:置)?(?:为|成)?|改(?:为|成)|调整(?:为|成)|变(?:为|成)).{0,8}(?:只读|不可编辑)|\b(?:make|set|change).{0,45}\bread[ -]?only\s*$/i.test(instruction))add('readonly',true);
-  if(!/不可用/.test(instruction)&&/取消禁用|启用|(?:设(?:置)?(?:为|成)?|改(?:为|成)|调整(?:为|成)|变(?:为|成)).{0,8}可用|\benable\b|\b(?:make|set|change).{0,45}\benabled\s*$/i.test(instruction))add('disabled',false);
-  else if(/禁用|(?:设(?:置)?(?:为|成)?|改(?:为|成)|调整(?:为|成)|变(?:为|成)).{0,8}不可用|\bdisable\b|\b(?:make|set|change).{0,45}\bdisabled\s*$/i.test(instruction))add('disabled',true);
+  if(!/不可用/.test(instruction)&&/取消禁用|启用(?:按钮|控件|字段|输入|保存|提交)|启用.{0,12}(?:按钮|控件|字段)|(?:设(?:置)?(?:为|成)?|改(?:为|成)|调整(?:为|成)|变(?:为|成)).{0,8}可用|\benable\b|\b(?:make|set|change).{0,45}\benabled\s*$/i.test(instruction))add('disabled',false);
+  else if(/禁用(?:按钮|控件|字段|输入|提交|保存)|(?:把|将|让).{0,16}禁用|(?:设(?:置)?(?:为|成)?|改(?:为|成)|调整(?:为|成)|变(?:为|成)).{0,8}(?:不可用|禁用)\s*$|\bdisable\b|\b(?:make|set|change).{0,45}\bdisabled\s*$/i.test(instruction))add('disabled',true);
   if(/单选.{0,30}(?:改为|改成|调整为|变为|变成|切换为).{0,8}多选|(?:改为|改成|调整为|切换为).{0,6}多选|\b(?:change|switch|convert).{0,45}\bto\s+(?:a\s+)?(?:multi[ -]?select|multiple selection)\b/i.test(instruction))add('multiple',true);
   else if(/多选.{0,30}(?:改为|改成|调整为|变为|变成|切换为).{0,8}单选|(?:改为|改成|调整为|切换为).{0,6}单选|\b(?:change|switch|convert).{0,45}\bto\s+(?:a\s+)?(?:single[ -]?select|single selection)\b/i.test(instruction))add('multiple',false);
  }

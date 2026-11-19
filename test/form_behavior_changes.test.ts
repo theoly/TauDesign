@@ -17,7 +17,9 @@ test('explicit form rule adjustments plan directly while visual, quoted and prot
  for(const request of ['把邮箱设为必填','将邮箱改为可选','将资料设为只读','把手机改成可编辑','把提交按钮设为不可用','启用保存按钮','把单选套餐改为可多选并显示合计','把套餐多选改为单选','make email required','change optional email to required','change required email to optional','change editable email to read-only','change read-only email to editable','switch single-select to multi-select','change multi-select to single-select']){
   expect(requiresFunctionalPlanning(request)).toBe(true);expect(requiresModificationReview(request)).toBe(false);
  }
- for(const request of ['不要将邮箱设为必填','保留单选，调整按钮颜色','把按钮文案改为“将邮箱设为必填”','将标题改为“必填”','将必填星号颜色改为红色','调整禁用按钮的背景颜色','把按钮颜色改为禁用色','优化表单','make label text required','disable button shadow'])expect(formRuleChanges(request)).toEqual([]);
+ for(const request of ['不要将邮箱设为必填','保留单选，调整按钮颜色','把按钮文案改为“将邮箱设为必填”','将标题改为“必填”','将必填星号颜色改为红色','调整禁用按钮的背景颜色','把按钮颜色改为禁用色','优化表单','make label text required','disable button shadow','加禁用语义提示','保持次级文字样式并加禁用语义提示','当「管理已选资料」为 0 时保持次级文字样式并加禁用语义提示','主按钮继续描边样式，只调整尺寸与文案','为页签组容器补充 aria-label 描述，并为每个页签补上 is-selected 样式类'])expect(formRuleChanges(request)).toEqual([]);
+ expect(formRuleChanges('对 @P01 决策首页 做两处设计优化：1) 为页签组容器补充 aria-label 描述，并为每个页签补上 is-selected 样式类，使选中态视觉可区分，不改动受保护的底部导航。2) 优化输入卡片主次操作视觉层级：当「管理已选资料」为 0 时保持次级文字样式并加禁用语义提示；主按钮「添加图片/文档」继续描边样式，只调整尺寸与文案。')).toEqual([]);
+ expect(requiresFunctionalPlanning('对 @P01 决策首页 做两处设计优化：1) 为页签组容器补充 aria-label，并为每个页签补上 is-selected 样式类。2) 当「管理已选资料」为 0 时保持次级文字样式并加禁用语义提示；主按钮继续描边样式。')).toBe(false);
  expect(formRuleChanges('把保存按钮设为不可用')[0]).toMatchObject({rule:'disabled',enabled:true});expect(formRuleChanges('把邮箱设为不可编辑')[0]).toMatchObject({rule:'readonly',enabled:true});
  expect(formRuleChanges('change multi-select to single-select')[0]).toMatchObject({rule:'multiple',enabled:false});
  expect(formRuleChanges('[引用元素 nid="section1" 画框="资料页" 标签=<section>]\n元素片段:\n<section><button>禁用保存</button></section>\n\n把标题加粗')).toEqual([]);
