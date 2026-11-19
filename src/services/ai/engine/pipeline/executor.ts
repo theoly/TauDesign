@@ -27,7 +27,7 @@ import {pageRuleFeatures,targetRuleFeatures} from '../../designKnowledge/targetF
 import {TaskBudget,withTaskBudget} from '../../taskBudget';
 import {createChatTaskBudget} from '../../taskBudgetPolicy';
 import {inheritContinuationTask,continuationProof} from '../../continuationTask';
-import {preparePageTaskPlan,pageTaskPlanIssue,bindConfirmedPageTaskPlan,type PageTaskSnapshot,type PageTaskPlan} from '../../pageTaskPlan';
+import {preparePageTaskPlan,pageTaskPlanIssue,bindConfirmedPageTaskPlan,adoptFrozenPageTaskBinding,type PageTaskSnapshot,type PageTaskPlan} from '../../pageTaskPlan';
 import {artifactThinkingOptions} from '../../structuredRequestPolicy';
 import { finalizeModelHtml } from '../../modelHtmlResult';
 import { makeFailedPageDraft, repairDraftLabels, draftGuidanceIssue, type FailedPageDraft, type DraftLabel } from '../../qualityDraft';
@@ -276,12 +276,14 @@ export class PipelineExecutor {
           attachment:input.attachment,useCustomNavigation:options.useCustomNavigation,wholePageRedesign:options.wholePageRedesign,signal,
           maxTokens: planning.maxTokens ?? 3072,
           isCurrent:()=>!signal?.aborted&&(options.isCurrent?.()??true)});
-        // Local draft repair reuses a frozen plan bound to pageTaskSource — do not rebind against a new taskId/knowledge surface.
+        // Local draft repair reuses a frozen plan: keep a new taskId, but restore the origin binding surface so candidate adoption still validates.
         if(options.qualityRepair){
           const origin=options.qualityRepair.draft.pageTaskSource;
           if(!origin?.pageTaskPlan)throw Error('继续任务缺少原业务规划，请重新生成。');
           const originIssue=pageTaskPlanIssue(origin);if(originIssue)throw Error(originIssue);
           if(contentFingerprint(JSON.stringify(origin.pageTaskPlan))!==contentFingerprint(JSON.stringify(workflowContract.pageTaskPlan)))throw Error('草稿业务规划与复用快照不一致，请重新生成。');
+          adoptFrozenPageTaskBinding(workflowContract,origin);
+          const issue=pageTaskPlanIssue(workflowContract);if(issue)throw Error(issue);
         }else{
           const issue=pageTaskPlanIssue(workflowContract);if(issue)throw Error(issue);
         }

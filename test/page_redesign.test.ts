@@ -173,6 +173,8 @@ test('修复 block 复用原业务规划时，不因新任务知识指纹与合�
  const draft=first.failedDraft!;
  expect(draft.pageTaskSource?.pageTaskPlan).toBeDefined();
  const {draftRegionChoices}=await import('../src/services/ai/draftRegionRepair');
+ const {pageTaskPlanIssue}=await import('../src/services/ai/pageTaskPlan');
+ const {resolveWorkflowValidation}=await import('../src/services/ai/workflowValidation');
  const region=draftRegionChoices(draft)[0]?.nid;
  expect(region).toBeTruthy();
  let calls=0;
@@ -182,9 +184,18 @@ test('修复 block 复用原业务规划时，不因新任务知识指纹与合�
   knowledgeSources:[{kind:'document',id:'assembled-drift',fingerprint:'cafebabe'}],
   pageTaskPlanning:{snapshot:draft.pageTaskSource!.pageTaskPlan},
   qualityRepair:{draft,labels:[],region:{nids:[region!],instruction:`保留原节点业务文案，依据原业务片段恢复，不扩大修改范围。`}},
-  engineCore:{generateObject:async()=>{calls++;const el=parseHtmlCopy(draft.html).doc.querySelector(`[data-nid="${region}"]`);return {nid:region!,html:el!.outerHTML};},streamText:()=>{throw Error('不应重新生成整页');}} as any,
+  engineCore:{generateObject:async()=>{
+   calls++;
+   const baseline=parseHtmlCopy(f.html).doc.querySelector(`[data-nid="${region}"]`);
+   const el=baseline??parseHtmlCopy(draft.html).doc.querySelector(`[data-nid="${region}"]`);
+   return {nid:region!,html:el!.outerHTML};
+  },streamText:()=>{throw Error('不应重新生成整页');}} as any,
  });
  expect(repaired.errorMessage??'').not.toContain('业务规划正文或输入身份已变化');
  expect(calls).toBe(1);
+ expect(pageTaskPlanIssue(repaired.workflowContract!)).toBeUndefined();
+ const candidate=resolveWorkflowValidation(repaired.workflowContract!,'candidate');
+ expect(candidate.ok).toBe(true);
+ // Contract must stay adoptable even when quality still blocks; identity drift must not poison delivery checks.
  expect(['staged_side_by_side','rejected_by_quality']).toContain(repaired.status);
 });

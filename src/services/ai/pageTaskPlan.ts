@@ -52,6 +52,30 @@ export function pageTaskBinding(c:DesignTaskContract):string {
   return contentFingerprint(JSON.stringify([c.request,c.workflowId,c.operation,c.strategy,c.target,c.elementNid,c.device,c.designSystem,c.designSystemOrigin,
     c.librarySource,c.referenceImage?[c.referenceImage.name,c.referenceImage.fingerprint,c.referenceImage.region,...(c.referenceImage.evidence?[c.referenceImage.evidence.fingerprint]:[])]:undefined,c.allowedChanges,c.protectedNids,c.knowledgeSources,c.knowledgeFingerprint,c.multiPage,...(c.regionSubdivision?[c.regionSubdivision]:[]),...(c.wholePageRedesign?[c.wholePageRedesign]:[])]));
 }
+/** Local draft repair keeps a new taskId but must rehydrate the frozen plan's binding surface so adoption/coverage still validate. */
+export function adoptFrozenPageTaskBinding(contract:DesignTaskContract,origin:DesignTaskContract):void {
+  contract.request=origin.request;
+  contract.workflowId=origin.workflowId;
+  contract.operation=origin.operation;
+  contract.strategy=origin.strategy;
+  contract.target=origin.target?structuredClone(origin.target):undefined;
+  contract.elementNid=origin.elementNid;
+  contract.device=structuredClone(origin.device);
+  contract.designSystem=origin.designSystem?structuredClone(origin.designSystem):undefined;
+  contract.designSystemOrigin=origin.designSystemOrigin?structuredClone(origin.designSystemOrigin):undefined;
+  contract.librarySource=origin.librarySource?structuredClone(origin.librarySource):undefined;
+  if(origin.referenceImage)contract.referenceImage=structuredClone(origin.referenceImage);else delete contract.referenceImage;
+  contract.allowedChanges=structuredClone(origin.allowedChanges);
+  contract.protectedNids=structuredClone(origin.protectedNids);
+  contract.knowledgeSources=structuredClone(origin.knowledgeSources);
+  if(origin.knowledgeFingerprint)contract.knowledgeFingerprint=origin.knowledgeFingerprint;else delete contract.knowledgeFingerprint;
+  if(origin.multiPage)contract.multiPage=structuredClone(origin.multiPage);else delete contract.multiPage;
+  if(origin.regionSubdivision)contract.regionSubdivision=structuredClone(origin.regionSubdivision);else delete contract.regionSubdivision;
+  if(origin.wholePageRedesign)contract.wholePageRedesign=structuredClone(origin.wholePageRedesign);else delete contract.wholePageRedesign;
+  if(origin.pageTaskPlan)contract.pageTaskPlan=structuredClone(origin.pageTaskPlan);
+  if(origin.validationPlan)contract.validationPlan=structuredClone(origin.validationPlan);else delete contract.validationPlan;
+  if(origin.businessTextReview)contract.businessTextReview=structuredClone(origin.businessTextReview);
+}
 function sourceMap(contract:DesignTaskContract):Map<string,string>{
   return new Map([['user:request','user'],...contract.knowledgeSources.filter(s=>!s.stale&&['document','page','text-reference'].includes(s.kind))
     .map(s=>[s.id,s.kind==='text-reference'?'document':s.kind] as [string,string]),
