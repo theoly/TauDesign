@@ -105,7 +105,7 @@ import {assertExternalMedia,mediaReferenceIssue} from '../services/ai/externalMe
 import {settleDesignTaskDelivery} from '../services/storage/designTaskRepository';
 import { assertDesignLibraryCopyCompatible, type DesignLibraryCopy } from '../services/ai/designLibraryCopy';
 import { saveStagedCandidate, removeStagedCandidate, type StagedCandidateData } from '../services/storage/candidateRepository';
-import { canConfirmCandidateStructure, type CandidateDeliveryReport, type CandidateValidationEvidence } from '../services/ai/candidateValidation';
+import { canConfirmCandidateOverride, canConfirmCandidateStructure, type CandidateDeliveryReport, type CandidateValidationEvidence } from '../services/ai/candidateValidation';
 import {backgroundScreenUpdates,styleApplicationKey} from '../services/import/styleApplication';
 import { DeliveryRepository, type DeliveryMode, type DeliveryRecord } from '../services/storage/deliveryRepository';
 import { DeliveryPreviewCapture } from '../services/storage/deliveryPreview';
@@ -623,8 +623,10 @@ let stagedRenderContextKeyCache:{
 
 function stagedDeliveryCacheToken(state:ProjectState,renderKey:string):string{
   const staged=state.stagedScreen;const rendered=state.stagedRenderQuality;const files=state.stagedAssetFiles;
+  const origin=state.designSystemOrigin;
   return contentFingerprint(JSON.stringify([
     renderKey,state.stagedRepairStatus,staged?.candidateId,staged?.baselineFingerprint,staged?.projectFingerprint,
+    knowledgeFingerprint(state),origin?.kind,origin?.sourceId,origin?.sourceFingerprint,origin?.tokenVersion,origin?.tokenFingerprint,
     rendered?.key,rendered?.report?.status,rendered?.report&&contentFingerprint(JSON.stringify(rendered.report.findings)),
     files?.key,files?.status,files?.issues?.map(i=>[i.code,i.entityId,i.message]),
     state.stagedProjectAssetAudit?.key,state.stagedProjectAssetAudit?.contextFingerprint,
@@ -700,7 +702,7 @@ function canAdoptStagedScreen(state: ProjectState): boolean {
 function canForceAdoptStagedScreen(state: ProjectState): boolean {
   if(projectAuthoringNotice(state.projectAuthoringSession))return false;
   const report=stagedDeliveryReport(state);
-  if(report.status!=='ready'&&!canConfirmCandidateStructure(report))return false;
+  if(report.status!=='ready'&&!canConfirmCandidateStructure(report)&&!canConfirmCandidateOverride(report))return false;
   const staged = state.stagedScreen;
   if (!staged || !state.screens[staged.targetScreenId] || !isStagedTaskCurrent(state) || candidateBrokenAssetReferences(state).length > 0) return false;
   const usedAssetFiles = stagedReferencedAssetFiles(state);
@@ -2771,7 +2773,7 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
     const allowed = () => {
       if (structureConfirmation) {
         const report = get().getStagedDeliveryReport();
-        return (report.status === 'ready' || canConfirmCandidateStructure(report)) && canForceAdoptStagedScreen(get());
+        return (report.status === 'ready' || canConfirmCandidateStructure(report) || canConfirmCandidateOverride(report)) && canForceAdoptStagedScreen(get());
       }
       return mode === 'force-replace' ? canForceAdoptStagedScreen(get()) : canAdoptStagedScreen(get());
     };

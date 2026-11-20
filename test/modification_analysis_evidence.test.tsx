@@ -8,6 +8,7 @@ import {buildDesignTaskContract} from '../src/services/ai/designWorkflow';
 import {defaultTheme} from '../src/utils/themePresets';
 import {defaultProviders} from '../src/stores/useAIConfigStore';
 import type {AIEngineCore} from '../src/services/ai/engine/core/types';
+import {t} from '../src/i18n';
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
 let root:Root|undefined,host:HTMLDivElement|undefined;
 afterEach(()=>{if(root)act(()=>root!.unmount());host?.remove();root=undefined;});
@@ -22,7 +23,7 @@ async function fixture(){
 }
 test('分析卡展示真实纠正次数和不安全局部操作降级原因',async()=>{
   const {result}=await fixture();await render(<ModificationReviewCard review={{...result,status:'ready'}} onConfirm={()=>{}} onCancel={()=>{}}/>);
-  expect(host!.textContent).toContain('查看分析检查记录');expect(host!.textContent).toContain('共请求 2 次');
+  expect(host!.textContent).toContain(t('plan.modEvidenceSummary',undefined,'zh-CN'));expect(host!.textContent).toContain('共请求 2 次');
   expect(host!.textContent).toContain('含一次格式纠正');expect(host!.textContent).toContain(result.evidence!.downgrades[0].reason);
   expect(host!.textContent).toContain('不代表视觉验收');
 });

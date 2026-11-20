@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { useQuickPromptsStore } from '../../stores/useQuickPromptsStore';
+import { resolveQuickPrompt, useQuickPromptsStore } from '../../stores/useQuickPromptsStore';
 import { useProjectStore } from '../../stores/useProjectStore';
-import { useT } from '../../stores/useLocaleStore';
+import { useLocaleStore, useT } from '../../stores/useLocaleStore';
 import { QuickPromptItem, QuickPromptScope } from '../../types/quickPrompt';
 import { Sparkles, Plus, Trash2, Edit2, RotateCcw, Check, X, Globe, FolderGit2 } from 'lucide-react';
 
 export const QuickPromptsConfigPanel: React.FC = () => {
   const t = useT();
+  const locale = useLocaleStore((s) => s.locale);
   const { globalPrompts, addGlobalPrompt, updateGlobalPrompt, deleteGlobalPrompt, resetGlobalPrompts } =
     useQuickPromptsStore();
+  const localizedGlobal = globalPrompts.map((item) => resolveQuickPrompt(item, locale));
   const {
     quickPrompts: projectPrompts = [],
     addProjectQuickPrompt,
@@ -25,9 +27,10 @@ export const QuickPromptsConfigPanel: React.FC = () => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const handleStartEdit = (item: QuickPromptItem) => {
+    const resolved = resolveQuickPrompt(item, locale);
     setEditingItem({ id: item.id, scope: item.scope });
-    setTitle(item.title);
-    setContent(item.content);
+    setTitle(resolved.title);
+    setContent(resolved.content);
     setScope(item.scope);
     setErrorMsg(null);
   };
@@ -284,7 +287,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
               <Globe className="w-4 h-4 text-amber-400" />
               <span className="font-semibold text-slate-200">{t('settings.globalPrompts')}</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
-                {t('settings.promptCount', { count: globalPrompts.length })}
+                {t('settings.promptCount', { count: localizedGlobal.length })}
               </span>
             </div>
             <button
@@ -299,7 +302,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {globalPrompts.map((item) => (
+            {localizedGlobal.map((item) => (
               <div
                 key={item.id}
                 className="p-3 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl flex flex-col justify-between gap-2 group transition"

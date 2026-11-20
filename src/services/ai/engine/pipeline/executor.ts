@@ -382,11 +382,27 @@ export class PipelineExecutor {
     if(['create','modify'].includes(workflowContract.operation))await options.onTaskDraft?.({phase:'started',contract:workflowContract,budget:taskBudget?.snapshot()});
 
     if(workflowContract.referenceImage?.evidence){const last=enriched.messages.at(-1);if(!last||last.role!=='user')return attachContract({status:'error',rawResponse:'',errorMessage:'图片证据缺少当前用户请求。'});delete last.imageUrl;last.content+=renderReferenceEvidence(workflowContract.referenceImage.evidence);}
-    const originalReference=options.qualityRepair?.draft.referenceImage;
-    if(options.qualityRepair && workflowContract.referenceImage && originalReference?.inputReceipt && originalReference.fingerprint===workflowContract.referenceImage.fingerprint && options.qualityRepair.draft.sourceTaskId) {
-      workflowContract.referenceImage.inputReceipt={...originalReference.inputReceipt,reusedFromTaskId:options.qualityRepair.draft.sourceTaskId};
+    if(options.qualityRepair && workflowContract.referenceImage) {
+      const draft=options.qualityRepair.draft;
+      const image=workflowContract.referenceImage;
+      const same=(candidate:typeof draft.referenceImage)=>Boolean(candidate&&candidate.fingerprint===image.fingerprint
+        &&(!candidate.evidence||!image.evidence||candidate.evidence.fingerprint===image.evidence.fingerprint));
+      const original=[draft.referenceImage,draft.pageTaskSource?.referenceImage,draft.guidanceSource?.referenceImage].find(c=>same(c)&&c?.inputReceipt);
+      if(original?.inputReceipt && draft.sourceTaskId) {
+        image.inputReceipt={...original.inputReceipt,reusedFromTaskId:draft.sourceTaskId};
+      } else if(!image.inputReceipt) {
+        // Legacy / style-only drafts may lack a frozen receipt; rebind from the evidence already on this repair turn.
+        recordReferenceInput(workflowContract,enriched.messages,provider.id,model);
+        const rebound=workflowContract.referenceImage?.inputReceipt;
+        if(rebound && draft.sourceTaskId)image.inputReceipt={...rebound,reusedFromTaskId:draft.sourceTaskId};
+      } else if(draft.sourceTaskId && !image.inputReceipt.reusedFromTaskId) {
+        // adoptFrozen already restored a receipt — mark this repair as reuse of the source task.
+        image.inputReceipt={...image.inputReceipt,reusedFromTaskId:draft.sourceTaskId};
+      }
     }
-    const referenceError=options.qualityRepair ? (workflowContract.referenceImage&&!workflowContract.referenceImage.inputReceipt?'缺少草稿原始参考图输入记录，请重新生成。':undefined) : recordReferenceInput(workflowContract,enriched.messages,provider.id,model);
+    const referenceError=options.qualityRepair
+      ? (workflowContract.referenceImage&&!workflowContract.referenceImage.inputReceipt?'缺少草稿原始参考图输入记录，请重新生成。':undefined)
+      : recordReferenceInput(workflowContract,enriched.messages,provider.id,model);
     if(referenceError)return attachContract({status:'error',rawResponse:'',errorMessage:referenceError});
 
     if(intentResult.intent==='create_screen'){

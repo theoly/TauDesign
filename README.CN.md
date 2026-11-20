@@ -16,7 +16,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Status-Developer%20Preview-amber" alt="开发者预览版" />
   <img src="https://img.shields.io/badge/Stack-Tauri%202%20%2B%20React-blue" alt="Tauri 2 与 React" />
-  <img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="Apache 2.0 许可证" />
+  <img src="https://img.shields.io/badge/License-LGPL%203.0-green" alt="LGPL 3.0 许可证" />
 </p>
 
 TauDesign 将产品需求、参考图片和已有 HTML 转换为可编辑的高保真界面。你可以在同一画布排列多个页面，点选元素调整细节，对比 AI 候选方案，并导出 HTML 或 PNG。桌面工程存储在本地 `.aidesign` 文件夹中。
@@ -251,4 +251,4 @@ PACKAGE_DMG=1 PACKAGE_ZIP=1 pnpm run package:desktop
 
 ## 许可证
 
-[Apache License 2.0](./LICENSE)。软件按“现状”提供，具体条款与责任限制以许可证为准。
+[GNU Lesser General Public License v3.0 only](./LICENSE)。软件按“现状”提供，具体条款与责任限制以许可证为准。

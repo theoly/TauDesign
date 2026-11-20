@@ -1,18 +1,17 @@
-import {CandidateRecheckControl} from './CandidateRecheckControl';
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { getCachedStagedCandidateQuality, useProjectStore } from '../../stores/useProjectStore';
 import { handleHistoryShortcut } from '../../utils/historyShortcuts';
 import type { RenderedQualityReport } from '../../utils/renderedQuality';
 import { RenderedQualityCard } from '../chat/RenderedQualityCard';
-import { QualityReportCard } from '../chat/QualityReportCard';
 import { ScreenFrame } from './ScreenFrame';
 import { CanvasMinimap } from './CanvasMinimap';
-import { CandidateEvidencePanel } from './CandidateEvidencePanel';
+import { CandidateAdoptionPanel } from './CandidateAdoptionPanel';
 import { TextLayoutRepairDialog } from './TextLayoutRepairDialog';
 import { repairCompressedBodyCards } from '../../utils/textLayoutRepair';
 import { contentFingerprint } from '../../services/ai/designWorkflow';
-import { canConfirmCandidateStructure } from '../../services/ai/candidateValidation';
-import { Check, Copy, Plus, Sparkles, X } from 'lucide-react';
+import { canConfirmCandidateOverride, canConfirmCandidateStructure } from '../../services/ai/candidateValidation';
+import { Plus, Sparkles } from 'lucide-react';
+import { useT } from '../../stores/useLocaleStore';
 
 interface InfiniteCanvasProps {
   /** T-AE-26: 单画框质感润色入口，由 App 层承接以复用 RestylePanel */
@@ -27,10 +26,13 @@ function viewportLodBucket(scale: number): 0 | 1 | 2 {
 }
 
 export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
+  const t = useT();
   const containerRef = useRef<HTMLDivElement>(null);
   const worldLayerRef = useRef<HTMLDivElement>(null);
+  const frozenWorldRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef(useProjectStore.getState().viewportTransform);
+  const frozenViewportRef = useRef<{ x: number; y: number; scale: number } | null>(null);
   const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPanning, setIsPanning] = useState(false);
   const [startPan, setStartPan] = useState({ x: 0, y: 0 });
@@ -57,13 +59,25 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
   const activeSnapGuides = useProjectStore(s => s.activeSnapGuides);
   const lodBucket = useProjectStore(s => viewportLodBucket(s.viewportTransform.scale));
 
+  const paintLayer = (el: HTMLDivElement | null, t: { x: number; y: number; scale: number }) => {
+    if (el) el.style.transform = `translate3d(${t.x}px, ${t.y}px, 0) scale(${t.scale})`;
+  };
+  const paintGrid = (t: { x: number; y: number; scale: number }) => {
+    if (!gridRef.current) return;
+    gridRef.current.style.backgroundSize = `${32 * t.scale}px ${32 * t.scale}px`;
+    gridRef.current.style.backgroundPosition = `${t.x}px ${t.y}px`;
+  };
   /** Apply pan/zoom on the GPU layer without re-rendering iframe ScreenFrames every wheel tick. */
   const applyViewportDom = useCallback((t: { x: number; y: number; scale: number }) => {
     viewportRef.current = t;
-    if (worldLayerRef.current) worldLayerRef.current.style.transform = `translate3d(${t.x}px, ${t.y}px, 0) scale(${t.scale})`;
-    if (gridRef.current) {
-      gridRef.current.style.backgroundSize = `${32 * t.scale}px ${32 * t.scale}px`;
-      gridRef.current.style.backgroundPosition = `${t.x}px ${t.y}px`;
+    paintLayer(worldLayerRef.current, t);
+    const frozen = frozenViewportRef.current;
+    if (frozen) {
+      // Compare mode: live pan/zoom only moves the compare pair; backdrop world + grid stay put.
+      paintLayer(frozenWorldRef.current, frozen);
+      paintGrid(frozen);
+    } else {
+      paintGrid(t);
     }
   }, []);
 
@@ -265,7 +279,10 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
   const stagedAssetIssues = deliverySnapshot?.stagedAssetIssues ?? [];
   const blockers = deliveryReport?.checks.filter(c => c.status !== 'passed') ?? [];
   const canConfirmStructure = canConfirmCandidateStructure(deliveryReport);
-  const structureConfirmed = canConfirmStructure && confirmedStructureKey === renderKey;
+  const canConfirmOverride = canConfirmCandidateOverride(deliveryReport);
+  const canConfirmDelivery = canConfirmStructure || canConfirmOverride;
+  const structureOnlyConfirm = canConfirmStructure && !deliveryReport?.checks.some(c => c.id === 'quality' && c.status === 'blocked');
+  const structureConfirmed = canConfirmDelivery && confirmedStructureKey === renderKey;
   const adoptionBlocked = deliveryReport?.status !== 'ready' && !structureConfirmed;
   const blockedDescription = blockers.map(c => c.message).join('；');
   const evidenceStale = Boolean(stagedValidationEvidence && stagedScreen && (
@@ -280,9 +297,18 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
     if (!stagedScreen) useProjectStore.getState().panToScreen(reportId);
   };
 
-  // 新候选出现时让两版同时进入视口；后续平移/缩放仍由用户控制。
+  // Entering compare: freeze the current world under a full-window mask; fit only the compare pair.
   useEffect(() => {
-    if (!stagedScreen || !targetScreen) return;
+    if (!stagedScreen || !targetScreen) {
+      frozenViewportRef.current = null;
+      applyViewportDom(viewportRef.current);
+      return;
+    }
+    if (!frozenViewportRef.current) {
+      frozenViewportRef.current = { ...viewportRef.current };
+      paintLayer(frozenWorldRef.current, frozenViewportRef.current);
+      paintGrid(frozenViewportRef.current);
+    }
     const width = containerRef.current?.getBoundingClientRect().width || 0;
     if (!width) return;
     const pairWidth = (settings.frameWidth || 390) * 2 + (settings.deviceProfile === 'mobile' ? 40 : 60);
@@ -292,7 +318,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
       y: 120 - targetScreen.position.y * compareScale,
       scale: compareScale
     });
-  }, [stagedScreen, targetScreen?.id, settings.frameWidth, settings.deviceProfile, commitViewport]);
+  }, [stagedScreen, targetScreen?.id, settings.frameWidth, settings.deviceProfile, commitViewport, applyViewportDom]);
 
   return (
     <div
@@ -305,190 +331,129 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
     >
-      {/* Background Grid Dots — position owned by applyViewportDom */}
+      {/* Background Grid Dots — frozen under compare mask; live otherwise */}
       <div
         ref={gridRef}
         className="absolute inset-0 pointer-events-none opacity-20"
         style={{ backgroundImage: 'radial-gradient(#475569 1px, transparent 1px)' }}
       />
 
-      {/* World Transform Layer — transform owned by applyViewportDom */}
-      <div
-        ref={worldLayerRef}
-        className="absolute top-0 left-0 will-change-transform origin-top-left"
-      >
-        {/* Dim only around the compare pair — avoid a 100k² layer under every pan/zoom. */}
-        {stagedScreen && targetScreen && (() => {
-          const frameW = settings.frameWidth || (settings.deviceProfile === 'mobile' ? 390 : 1440);
-          const gapX = settings.deviceProfile === 'mobile' ? 40 : 60;
-          const height = Math.max(targetScreen.measuredHeight || 800, 800);
-          const pad = 120;
-          return <div data-testid="comparison-backdrop" aria-hidden="true"
-            className="absolute bg-slate-950/75 z-20 pointer-events-none rounded-3xl"
-            style={{
-              left: targetScreen.position.x - pad,
-              top: targetScreen.position.y - pad,
-              width: frameW * 2 + gapX + pad * 2,
-              height: height + pad * 2,
-            }} />;
-        })()}
-        {screenOrder.map((id) => {
+      {(() => {
+        const comparing = Boolean(stagedScreen && targetScreen);
+        const renderScreen = (id: string, mode: 'normal' | 'compare-target' | 'compare-background') => {
           const screen = screens[id];
           if (!screen) return null;
           const isActive = id === activeScreenId;
-          const inComparePair = Boolean(stagedScreen && targetScreen?.id === id);
-
-          // LOD：对比时仅对照对保留 iframe；背景画框 L0，避免多文档合成拖慢手势。
-          // 平时：isActive -> L2；其它 L1；有缩略图且超小比例 -> L0。
           let lodLevel: 0 | 1 | 2 = 1;
-          if (stagedScreen) lodLevel = inComparePair ? (isActive && lodBucket === 2 ? 2 : 1) : 0;
+          if (mode === 'compare-background') lodLevel = 0;
+          else if (mode === 'compare-target') lodLevel = isActive && lodBucket === 2 ? 2 : 1;
           else if (lodBucket === 0 && screen.thumbnail) lodLevel = 0;
           else if (isActive) lodLevel = 2;
-
           return <ScreenFrame key={id} screen={screen} lodLevel={lodLevel} onPolish={onPolish}
             renderQualityKey={renderKey} onRenderQuality={receiveRenderReport}
             qualityFocusNid={qualityFocus?.screenId === id ? qualityFocus.nid : undefined}
-            isComparisonTarget={Boolean(stagedScreen && targetScreen?.id === id)}
-            isComparisonBackground={Boolean(stagedScreen && targetScreen && targetScreen.id !== id)} />;
-        })}
-
-        {/* Staged Screen (Side-by-side D17 preview) */}
-        {stagedScreen && targetScreen && (() => {
-          const currentFrameWidth = settings.frameWidth || (settings.deviceProfile === 'mobile' ? 390 : 1440);
-          const gapX = settings.deviceProfile === 'mobile' ? 40 : 60;
-          const stagedLod: 0 | 1 | 2 = lodBucket === 2 ? 2 : 1;
-          return (
-            <ScreenFrame
-              key="staged-screen"
-              contentTask={stagedScreen.workflowContract??(stagedScreen.modificationRequest?{request:stagedScreen.modificationRequest}:undefined)}
-              screen={{
-                id: 'staged-screen-preview',
-                name: stagedScreen.screenName,
-                position: {
-                  x: targetScreen.position.x + currentFrameWidth + gapX,
-                  y: targetScreen.position.y
-                },
-                htmlContent: stagedScreen.newHtml,
-                scopedCss: targetScreen.scopedCss,
-                metadata: { ...targetScreen.metadata, ...(stagedScreen.navigationTitle ? { navigationTitle: stagedScreen.navigationTitle } : {}) },
-                measuredHeight: targetScreen.measuredHeight
-              }}
-              lodLevel={stagedLod}
-              isStaged={true}
-              renderQualityKey={renderKey} onRenderQuality={receiveRenderReport}
-              qualityFocusNid={qualityFocus?.screenId === 'staged-screen-preview' ? qualityFocus.nid : undefined}
-              overrideSourceScreenId={targetScreen.id}
-            />
-          );
-        })()}
-
-        {/* 对齐吸附网格参考线 (BR-ALIGN-01 ~ BR-ALIGN-03) */}
-        {activeSnapGuides && activeSnapGuides.active && (
+            isComparisonTarget={mode === 'compare-target'}
+            isComparisonBackground={mode === 'compare-background'} />;
+        };
+        const snapGuides = activeSnapGuides && activeSnapGuides.active && (
           <div className="absolute inset-0 pointer-events-none z-50">
             {activeSnapGuides.horizontalY !== undefined && (
-              <div
-                data-testid="snap-guide-horizontal"
+              <div data-testid="snap-guide-horizontal"
                 className="absolute left-[-10000px] border-t-2 border-dashed border-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)] flex items-center"
-                style={{
-                  top: `${activeSnapGuides.horizontalY}px`,
-                  width: '40000px'
-                }}
-              >
+                style={{ top: `${activeSnapGuides.horizontalY}px`, width: '40000px' }}>
                 <div className="ml-[10080px] -mt-6 bg-sky-600/90 text-sky-100 text-[11px] font-mono px-2 py-0.5 rounded shadow backdrop-blur-sm border border-sky-400/40">
                   同行顶部对齐 Y: {activeSnapGuides.horizontalY}px
                 </div>
               </div>
             )}
             {activeSnapGuides.verticalX !== undefined && (
-              <div
-                data-testid="snap-guide-vertical"
+              <div data-testid="snap-guide-vertical"
                 className="absolute top-[-10000px] border-l-2 border-dashed border-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)] flex flex-col"
-                style={{
-                  left: `${activeSnapGuides.verticalX}px`,
-                  height: '40000px'
-                }}
-              >
+                style={{ left: `${activeSnapGuides.verticalX}px`, height: '40000px' }}>
                 <div className="mt-[10080px] ml-2 bg-sky-600/90 text-sky-100 text-[11px] font-mono px-2 py-0.5 rounded shadow backdrop-blur-sm border border-sky-400/40 whitespace-nowrap">
                   同列对齐 X: {activeSnapGuides.verticalX}px
                 </div>
               </div>
             )}
           </div>
-        )}
-      </div>
+        );
 
-      {/* Side-by-Side Floating Adoption Toolbar (D17 / §3.2.9) */}
+        if (!comparing) {
+          return <div ref={worldLayerRef} className="absolute top-0 left-0 will-change-transform origin-top-left">
+            {screenOrder.map(id => renderScreen(id, 'normal'))}
+            {snapGuides}
+          </div>;
+        }
+
+        const currentFrameWidth = settings.frameWidth || (settings.deviceProfile === 'mobile' ? 390 : 1440);
+        const gapX = settings.deviceProfile === 'mobile' ? 40 : 60;
+        const stagedLod: 0 | 1 | 2 = lodBucket === 2 ? 2 : 1;
+        return <>
+          {/* Frozen under-mask world: other screens stay put while the pair pans/zooms. */}
+          <div ref={frozenWorldRef} data-testid="comparison-frozen-world"
+            className="absolute top-0 left-0 will-change-transform origin-top-left z-10">
+            {screenOrder.filter(id => id !== targetScreen!.id).map(id => renderScreen(id, 'compare-background'))}
+          </div>
+          {/* Full-window mask — viewport-fixed, not part of the live transform. */}
+          <div data-testid="comparison-backdrop" aria-hidden="true"
+            className="absolute inset-0 z-20 pointer-events-none bg-slate-950/75" />
+          {/* Live compare pair only */}
+          <div ref={worldLayerRef} data-testid="comparison-live-world"
+            className="absolute top-0 left-0 will-change-transform origin-top-left z-30">
+            {renderScreen(targetScreen!.id, 'compare-target')}
+            <ScreenFrame
+              key="staged-screen"
+              contentTask={stagedScreen!.workflowContract??(stagedScreen!.modificationRequest?{request:stagedScreen!.modificationRequest}:undefined)}
+              screen={{
+                id: 'staged-screen-preview',
+                name: stagedScreen!.screenName,
+                position: {
+                  x: targetScreen!.position.x + currentFrameWidth + gapX,
+                  y: targetScreen!.position.y
+                },
+                htmlContent: stagedScreen!.newHtml,
+                scopedCss: targetScreen!.scopedCss,
+                metadata: { ...targetScreen!.metadata, ...(stagedScreen!.navigationTitle ? { navigationTitle: stagedScreen!.navigationTitle } : {}) },
+                measuredHeight: targetScreen!.measuredHeight
+              }}
+              lodLevel={stagedLod}
+              isStaged={true}
+              renderQualityKey={renderKey} onRenderQuality={receiveRenderReport}
+              qualityFocusNid={qualityFocus?.screenId === 'staged-screen-preview' ? qualityFocus.nid : undefined}
+              overrideSourceScreenId={targetScreen!.id}
+            />
+          </div>
+        </>;
+      })()}
+
+      {/* Side-by-Side Floating Adoption Panel (D17 / §3.2.9) */}
       {stagedScreen && (
-        <div data-testid="candidate-actions-toolbar" onMouseDown={e=>e.stopPropagation()} onPointerDown={e=>e.stopPropagation()} onWheel={e=>e.stopPropagation()} onKeyDown={e=>{if(e.code==='Space')e.stopPropagation();}} className="absolute top-6 left-1/2 -translate-x-1/2 z-50 w-max max-w-[calc(100%_-_2rem)] bg-slate-900/90 backdrop-blur-md border border-purple-500/50 shadow-2xl rounded-2xl px-4 py-3 flex flex-wrap justify-center items-center gap-3 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-purple-400" />
-            <span className="font-semibold text-purple-200">AI 新方案已在右侧画框并排就绪</span>
-          </div>
-          {stagedCandidateSaveStatus && <span role={stagedCandidateSaveStatus === 'failed' ? 'alert' : 'status'}
-            className={stagedCandidateSaveStatus === 'failed' ? 'text-amber-300' : 'text-slate-400'}>
-            {stagedCandidateSaveStatus === 'pending' ? '正在保存候选…' : stagedCandidateSaveStatus === 'saved' ? '候选已存档' : '候选存档失败；关闭工程后将无法恢复'}
-          </span>}
-          {stagedAdoptionStatus === 'saving' && <span role="status" className="text-slate-300">正在保存交付档案…</span>}
-          {stagedAdoptionError && <span role="alert" className="text-amber-300">{stagedAdoptionError}</span>}
-            <CandidateRecheckControl />
-          <CandidateEvidencePanel current={stagedValidationEvidence}
-            historical={stagedScreen.restoredFromDisk ? stagedScreen.validationEvidence : undefined}
-            currentIsStale={evidenceStale} />
-          {candidateQuality && candidateQuality.findings.length > 0 && <QualityReportCard report={candidateQuality} />}
-          {renderPending && <span role="status" className="text-slate-300">正在检查当前方案渲染…</span>}
-          {renderIncomplete && <span role="alert" className="text-amber-300">渲染检查未完成，暂不能采纳；请重新加载候选画框后再试。</span>}
-          {!taskCurrent && <span role="alert" className="text-amber-300">原页面或项目资料已变化，候选已过期，请重新生成。</span>}
-          {stagedAssetIssues.length > 0 && <span role="alert" className="text-amber-300">候选资源引用未通过：{stagedAssetIssues[0].message}{stagedAssetIssues.length > 1 ? `；另有 ${stagedAssetIssues.length - 1} 项` : ''}</span>}
-          {deliveryReport?.checks.find(check=>check.id==='entities')?.status==='blocked'&&<span role="alert" className="max-w-md break-words text-amber-300">设计实体引用未通过：{deliveryReport.checks.find(check=>check.id==='entities')!.message}</span>}
-          {deliveryReport?.checks.find(check => check.id === 'asset_files')?.status !== 'passed' && <span role="alert" className="text-amber-300 flex items-center gap-1">
-            {deliveryReport?.checks.find(check => check.id === 'asset_files')?.message}
-            <button type="button" onClick={recheckStagedAssetFiles} className="underline text-blue-300 hover:text-blue-200">重新核对</button>
-          </span>}
-          {deliveryReport && <span role="status" className={deliveryReport.status === 'ready' ? 'text-emerald-300' : 'text-slate-300'}
-            title={deliveryReport.checks.map(check => `${check.id}: ${check.message}`).join('\n')}>
-            交付检查 {deliveryReport.checks.filter(check => check.status === 'passed').length}/{deliveryReport.checks.length}
-          </span>}
-          {blockers.length > 0 && <div id="candidate-delivery-blockers" data-testid="candidate-delivery-blockers" role={deliveryReport?.status === 'blocked' ? 'alert' : 'status'} className="order-last basis-full max-w-full rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-amber-200 break-words">
-            <span className="font-medium">{structureConfirmed ? '已确认结构变更：' : '暂不能采纳：'}</span>{blockedDescription}
-            {canConfirmStructure && <label className="mt-2 flex items-start gap-2 text-slate-200 cursor-pointer">
-              <input type="checkbox" aria-label="我已检查并接受这次结构变化" checked={structureConfirmed} disabled={stagedAdoptionStatus === 'saving'}
-                onChange={e=>setConfirmedStructureKey(e.target.checked ? renderKey : null)} className="mt-0.5" />
-              <span>我已检查并接受这次结构变化；确认后可替换原版或保留两版，其它交付检查仍须通过。</span>
-            </label>}
-          </div>}
-          {renderedReport?.findings.some(f => f.severity === 'error') && <span role="alert" className="text-red-300">存在严重渲染问题，请修复后采纳。</span>}
-          {renderedReport && <RenderedQualityCard report={renderedReport} onLocate={locateRenderIssue} />}
-          <div className="h-4 w-px bg-slate-700" />
-          <div className="flex flex-wrap justify-center items-center gap-2">
-            <button
-              disabled={adoptionBlocked || stagedAdoptionStatus === 'saving'}
-              onClick={()=>void useProjectStore.getState().commitStagedDelivery(structureConfirmed ? 'confirm-structure-replace' : 'replace', renderKey)}
-              aria-describedby={blockers.length ? 'candidate-delivery-blockers' : undefined}
-              title={adoptionBlocked ? blockedDescription : structureConfirmed ? '已确认当前结构变化，替换原版前仍会完整复验' : '采纳当前方案'}
-              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 bg-blue-600 enabled:hover:bg-blue-500 text-white font-medium px-4 py-1.5 rounded-lg shadow transition disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed disabled:shadow-none"
-            >
-              <Check className="w-4 h-4" />
-              <span>采纳新版 (替换原版)</span>
-            </button>
-            <button
-              disabled={adoptionBlocked || stagedAdoptionStatus === 'saving'}
-              onClick={()=>void useProjectStore.getState().commitStagedDelivery(structureConfirmed ? 'confirm-structure-keep-both' : 'keep-both', renderKey)}
-              aria-describedby={blockers.length ? 'candidate-delivery-blockers' : undefined}
-              title={adoptionBlocked ? blockedDescription : '保留原版并新增当前方案'}
-              className="flex shrink-0 whitespace-nowrap items-center gap-1.5 bg-slate-800 enabled:hover:bg-slate-700 text-slate-200 font-medium px-4 py-1.5 rounded-lg border border-slate-700 transition disabled:text-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Copy className="w-4 h-4" />
-              <span>两版都留</span>
-            </button>
-            <button
-              onClick={discardStagedChange}
-              className="flex shrink-0 whitespace-nowrap items-center gap-1 text-slate-400 hover:text-red-400 font-medium px-3 py-1.5 rounded-lg transition"
-            >
-              <X className="w-4 h-4" />
-              <span>保留原版</span>
-            </button>
-          </div>
-        </div>
+        <CandidateAdoptionPanel
+          deliveryReport={deliveryReport}
+          blockers={blockers}
+          blockedDescription={blockedDescription}
+          adoptionBlocked={adoptionBlocked}
+          structureConfirmed={structureConfirmed}
+          canConfirmDelivery={canConfirmDelivery}
+          structureOnlyConfirm={structureOnlyConfirm}
+          renderKey={renderKey}
+          stagedCandidateSaveStatus={stagedCandidateSaveStatus}
+          stagedAdoptionStatus={stagedAdoptionStatus}
+          stagedAdoptionError={stagedAdoptionError}
+          renderPending={renderPending}
+          renderIncomplete={renderIncomplete}
+          taskCurrent={taskCurrent}
+          stagedAssetIssues={stagedAssetIssues}
+          candidateQuality={candidateQuality}
+          renderedReport={renderedReport}
+          stagedValidationEvidence={stagedValidationEvidence}
+          evidenceStale={evidenceStale}
+          historicalEvidence={stagedScreen.restoredFromDisk ? stagedScreen.validationEvidence : undefined}
+          onConfirmStructure={(checked) => setConfirmedStructureKey(checked ? renderKey : null)}
+          onRecheckAssets={recheckStagedAssetFiles}
+          onDiscard={discardStagedChange}
+          onLocate={locateRenderIssue}
+        />
       )}
 
       {!stagedScreen && activeScreenId && renderedReport && <div className="absolute right-4 top-4 z-40 max-w-sm">

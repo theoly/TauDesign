@@ -55,12 +55,23 @@ test('其它门禁阻断不能通过结构确认放行',async()=>{
  await mount();await act(async()=>useProjectStore.getState().setStagedRenderQuality(key(),{status:'unavailable',findings:[],inspected:0,reason:'渲染未完成'}));
  expect(host.querySelector('input[aria-label="我已检查并接受这次结构变化"]')).toBeNull();expect(btn('采纳新版').disabled).toBe(true);expect(await (useProjectStore.getState().commitStagedDelivery as any)('confirm-structure-keep-both',key())).toBe(false);
 });
-test('严格结构确认不能绕过静态质量、资源或缺少确认上下文',async()=>{
+test('缺少确认上下文时不能采纳；资源硬门禁仍不可通过确认放行',async()=>{
  expect(await useProjectStore.getState().commitStagedDelivery('confirm-structure-replace')).toBe(false);
- stage(candidate.replace('登录查看',''));expect(useProjectStore.getState().getStagedDeliveryReport().checks.find(c=>c.id==='quality')?.status).toBe('blocked');
- expect(await useProjectStore.getState().commitStagedDelivery('confirm-structure-replace',key())).toBe(false);
  stage(candidate+'<img src="assets/images/missing.png" alt="缺失图片">');expect(useProjectStore.getState().getStagedDeliveryReport().checks.find(c=>c.id==='assets')?.status).toBe('blocked');
  expect(await useProjectStore.getState().commitStagedDelivery('confirm-structure-keep-both',key())).toBe(false);expect(useProjectStore.getState().screens.page.htmlContent).toBe(original);
+});
+test('静态质量阻断在显式确认后可采纳，未确认时仍禁用',async()=>{
+ await mount();
+ // Drop primary CTA copy → quality blocked; structure may also be blocked. Soft gates only.
+ stage(candidate.replace('登录查看',''));clean();
+ for(let i=0;i<50&&useProjectStore.getState().getStagedDeliveryReport().checks.some(c=>c.id==='asset_files'&&c.status==='pending');i++)await new Promise(r=>setTimeout(r,0));
+ await act(async()=>clean());
+ const report=useProjectStore.getState().getStagedDeliveryReport();
+ expect(report.checks.find(c=>c.id==='quality')?.status).toBe('blocked');
+ expect(report.checks.every(c=>c.id==='quality'||c.id==='structure'||c.status==='passed')).toBe(true);
+ expect(await useProjectStore.getState().adoptStagedChange()).toBe(false);
+ expect(await useProjectStore.getState().commitStagedDelivery('confirm-structure-replace',key())).toBe(true);
+ expect(useProjectStore.getState().screens.page.htmlContent).not.toContain('登录查看');
 });
 test('确认结构替换存档并可撤销，普通阻断尝试返回可见错误',async()=>{
  expect(await useProjectStore.getState().adoptStagedChange()).toBe(false);expect(useProjectStore.getState().stagedAdoptionError).toContain('结构守卫');

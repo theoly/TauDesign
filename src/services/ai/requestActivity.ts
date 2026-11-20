@@ -1,4 +1,6 @@
 import type {AIEngineCore,StreamTextOptions} from './engine/core/types';
+import {t} from '../../i18n';
+import {getUiLocale} from '../../stores/useLocaleStore';
 
 export interface RequestActivity {
   stageId?:string;effectiveOutputTokens?:number;lastTextChars?:number;lastReasoningChars?:number;
@@ -66,5 +68,8 @@ export function observeRequestActivity(core:AIEngineCore,onActivity:(snapshot:Re
 
 export type PipelinePhase='analyzing'|'review-ready'|'page-planning'|'page-plan-ready'|'preparing'|'reference-observation'|'planning'|'assembling'|'generating'|'local-repair'|'validating'|'rendering'|'candidate'|'created'|'answered';
 export interface ExecutionPhaseEvent {phase:PipelinePhase;at:number}
-export const executionPhaseLabels:Record<PipelinePhase,string>={analyzing:'分析已有页面并整理可选建议','review-ready':'修改建议已返回，等待选择','page-planning':'规划页面清单与关联','page-plan-ready':'页面计划已返回，等待确认',preparing:'核对请求与任务范围','reference-observation':'分析参考图片',planning:'梳理功能、信息与交互',assembling:'整理页面资料与设计风格',
-  generating:'AI 正在处理请求','local-repair':'定点修复已确认文案',validating:'检查页面内容',rendering:'检查实际布局与显示效果',candidate:'候选方案已暂存，等待检查与采纳',created:'页面已加入画布',answered:'答复已返回'};
+export function executionPhaseLabel(phase:PipelinePhase):string{
+  return t(`chat.phases.${phase}`,undefined,getUiLocale());
+}
+/** Locale-aware labels; reads current UI locale on each access. */
+export const executionPhaseLabels=new Proxy({} as Record<PipelinePhase,string>,{get:(_target,phase:string)=>executionPhaseLabel(phase as PipelinePhase)});

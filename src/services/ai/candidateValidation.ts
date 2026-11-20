@@ -12,6 +12,21 @@ export interface CandidateDeliveryReport {
   workflow?:WorkflowValidationReport;
 }
 
+const softDeliveryGates = new Set(['structure', 'quality']);
+const softWorkflowGates = new Set(['structure', 'quality']);
+
+/**
+ * After hard gates pass (task/source/assets/render/entities), the user may explicitly accept
+ * remaining structure and/or static-quality blockers and still adopt / keep both.
+ */
+export function canConfirmCandidateOverride(report: CandidateDeliveryReport | null): boolean {
+  if (!report || report.status !== 'blocked') return false;
+  if (!report.checks.some(c => softDeliveryGates.has(c.id) && c.status === 'blocked')) return false;
+  if (!report.checks.every(c => softDeliveryGates.has(c.id) ? c.status !== 'pending' : c.status === 'passed')) return false;
+  if (report.workflow && !report.workflow.checks.every(c => softWorkflowGates.has(c.id) ? c.status !== 'pending' : c.status === 'passed')) return false;
+  return true;
+}
+
 /** A human may accept a structural rewrite only after every other live gate passes. */
 export function canConfirmCandidateStructure(report: CandidateDeliveryReport | null): boolean {
   if (!report || report.status !== 'blocked' || !report.checks.some(c => c.id === 'structure' && c.status === 'blocked')) return false;

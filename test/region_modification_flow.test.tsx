@@ -1,6 +1,6 @@
 import {installReferenceImageDecoder,referenceObservationFixture} from './helpers/referenceImageDecoder';
 import { describe, test, expect, spyOn, beforeEach, afterEach } from 'bun:test';
-import { analyzeScreenModification, getRegionModificationPlan } from '../src/services/ai/modificationReview';
+import { analyzeScreenModification, getLocalModificationPlan, getRegionModificationPlan } from '../src/services/ai/modificationReview';
 import { mergeLocalEditOperations, applyLocalCopyEdits } from '../src/services/ai/localCopyModification';
 import { DefaultAIEngineCore } from '../src/services/ai/engine/core';
 import { defaultTheme } from '../src/utils/themePresets';
@@ -16,7 +16,7 @@ describe('区块分析授权',()=>{
  const core=new DefaultAIEngineCore({} as any);
  const result=await analyzeScreenModification(core,options);
  expect(result.items[0].scope).toBe('region');
- expect(getRegionModificationPlan(result,['suggestion-1'])).toEqual({targetNids:['region']});
+ expect(getRegionModificationPlan(result,['suggestion-1'])).toEqual({targetNids:['region'],includedIds:['suggestion-1']});
  expect(getRegionModificationPlan(result,[])).toBeNull();
  for(const targetNids of [['root'],['region','title'],['missing']]) {
  mock.mockResolvedValue({...regionAnalysis,items:[{...regionAnalysis.items[0],targetNids}]});
@@ -30,7 +30,7 @@ describe('区块分析授权',()=>{
  test('已验证的局部建议可加入不重叠区块计划，纯润色仍禁用区块',async()=>{
  const mock=spyOn(DefaultAIEngineCore.prototype,'generateObject').mockResolvedValue({...regionAnalysis,items:[...regionAnalysis.items,{title:'加粗段落',reason:'段落不突出',change:'加粗段落',scope:'local',operations:[{nid:'p0',type:'add_classes',value:'font-bold'}]}]});
  try {const core=new DefaultAIEngineCore({} as any);const result=await analyzeScreenModification(core,options);
- expect(getRegionModificationPlan(result,['suggestion-1','suggestion-2'])).toEqual({targetNids:['region','p0']});
+ expect(getRegionModificationPlan(result,['suggestion-1','suggestion-2'])).toEqual({targetNids:['region','p0'],includedIds:['suggestion-1','suggestion-2']});
  const polish=await analyzeScreenModification(core,{...options,allowText:false});expect(getRegionModificationPlan(polish,['suggestion-2'])).toBeNull();
  } finally {mock.mockRestore();}
  });
@@ -38,8 +38,29 @@ describe('区块分析授权',()=>{
  const mock=spyOn(DefaultAIEngineCore.prototype,'generateObject').mockResolvedValue({...regionAnalysis,items:[...regionAnalysis.items,{...regionAnalysis.items[0],targetNids:['title']}]});
  try {const result=await analyzeScreenModification(new DefaultAIEngineCore({} as any),options);
  expect(getRegionModificationPlan(result,['suggestion-1','suggestion-2'])).toBeNull();
- expect(getRegionModificationPlan(result,['suggestion-2'])).toEqual({targetNids:['title']});
+ expect(getRegionModificationPlan(result,['suggestion-2'])).toEqual({targetNids:['title'],includedIds:['suggestion-2']});
  } finally {mock.mockRestore();}
+ });
+ test('混选整页建议时仍可用局部/区块子集，并提升带目标的page为region',async()=>{
+  const html=`<main data-nid="root"><section data-nid="cards">${Array.from({length:3},(_,i)=>`<article data-nid="card${i}" class="card col gap-3"><h2 data-nid="h${i}">维${i}</h2><p data-nid="p${i}">说明${i}</p></article>`).join('')}</section><aside data-nid="other">${Array.from({length:20},(_,i)=>`<p data-nid="o${i}">外${i}</p>`).join('')}</aside></main>`;
+  const mock=spyOn(DefaultAIEngineCore.prototype,'generateObject').mockResolvedValue({
+   summary:'收紧布局',
+   items:[
+    {title:'候选卡紧凑',reason:'卡片过高',change:'收紧间距',scope:'local',operations:[{nid:'card0',type:'remove_classes',value:'gap-3'},{nid:'card0',type:'add_classes',value:'gap-2'}]},
+    {title:'维度卡合并',reason:'双评价占高',change:'合并为两行',scope:'page',targetNids:['card1','card2'],operations:[]},
+   ]
+  });
+  try {
+   const result=await analyzeScreenModification(new DefaultAIEngineCore({} as any),{...options,html,request:'更紧凑'});
+   expect(result.items[0].scope).toBe('local');
+   expect(result.items[1].scope).toBe('region');
+   expect(result.items[1].targetNids).toEqual(['card1','card2']);
+   expect(getLocalModificationPlan(result,['suggestion-1','suggestion-2'])).toEqual({
+    operations:result.items[0].operations,allowedNids:['card0'],includedIds:['suggestion-1']
+   });
+   expect(getRegionModificationPlan(result,['suggestion-1','suggestion-2'])?.targetNids).toEqual(['card0','card1','card2']);
+   expect(getRegionModificationPlan(result,['suggestion-1','suggestion-2'])?.includedIds).toEqual(['suggestion-1','suggestion-2']);
+  } finally {mock.mockRestore();}
  });
  test('引用小区块后，模型误标整页/子节点目标时仍收敛为该区块计划',async()=>{
   const html=`<main data-nid="root"><section data-nid="block">${Array.from({length:8},(_,i)=>`<article data-nid="c${i}"><h2 data-nid="t${i}">章${i}</h2><p data-nid="p${i}">正文${i}</p></article>`).join('')}</section><aside data-nid="other">${Array.from({length:20},(_,i)=>`<p data-nid="o${i}">外${i}</p>`).join('')}</aside></main>`;
@@ -54,8 +75,8 @@ describe('区块分析授权',()=>{
    const result=await analyzeScreenModification(new DefaultAIEngineCore({} as any),{...options,html,request:'优化此处UI',elementNid:'block'});
    expect(result.items.map(item=>item.scope)).toEqual(['region','region']);
    expect(result.items.every(item=>item.targetNids?.join()==='block')).toBe(true);
-   expect(getRegionModificationPlan(result,['suggestion-1'])).toEqual({targetNids:['block']});
-   expect(getRegionModificationPlan(result,['suggestion-1','suggestion-2'])).toEqual({targetNids:['block']});
+   expect(getRegionModificationPlan(result,['suggestion-1'])).toEqual({targetNids:['block'],includedIds:['suggestion-1']});
+   expect(getRegionModificationPlan(result,['suggestion-1','suggestion-2'])).toEqual({targetNids:['block'],includedIds:['suggestion-1','suggestion-2']});
   } finally {mock.mockRestore();}
  });
 });

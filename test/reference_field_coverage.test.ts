@@ -1,5 +1,5 @@
 import {expect,test} from 'bun:test';
-import {referenceFieldCoverage,referenceFieldsForRequest,referencePlanningFields,validReferenceEvidence,withReferenceEvidence,type ReferenceEvidence} from '../src/services/ai/referenceEvidence';
+import {isStyleOnlyReferenceRequest,referenceFieldCoverage,referenceFieldsForRequest,referencePlanningFields,validReferenceEvidence,withReferenceEvidence,type ReferenceEvidence} from '../src/services/ai/referenceEvidence';
 import {buildDesignTaskContract,contentFingerprint} from '../src/services/ai/designWorkflow';
 import {preparePageTaskPlan,type PageTaskPlan} from '../src/services/ai/pageTaskPlan';
 import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
@@ -31,6 +31,19 @@ function fixture(labels=['居住地'],request='基础资料使用现居地字段
  const html='<main class="p-4 col gap-3"><h1>基础资料</h1>'+labels.map((label,i)=>`<label for="f-${i}">${label==='居住地'?'现居地':label}</label><input id="f-${i}" class="input"/>`).join('')+'<button class="btn btn-primary">保存</button></main>';
  return {e,contract,plan,transport,requests,core,budget,html,prepare:()=>preparePageTaskPlan(core,{contract,provider,model:'synthetic',budget,isCurrent:()=>true})};
 }
+test('style-only reference prompts do not require observed form fields',()=>{
+ const e=evidence(['综合评分','候选评价']);
+ for(const request of ['修改页面中的评价，样式参考截图','按截图参考样式调整评价区','style reference screenshot for the rating UI']){
+  expect(isStyleOnlyReferenceRequest(request)).toBe(true);
+  expect(referenceFieldsForRequest(e,request)).toEqual([]);
+  expect(referenceFieldCoverage(e,[],request)).toBeUndefined();
+  expect(checkGenerationQuality('<main><h1>评价</h1></main>',{contentTask:{...buildDesignTaskContract({intent:'modify_screen',request,deviceProfile:'mobile',frameWidth:390}),referenceImage:{...e.image,evidence:e},pageTaskPlan:{goal:'x',actor:'u',completion:[],questions:[],features:[]}}}).findings.some(f=>f.code==='reference_field_missing')).toBe(false);
+ }
+ for(const request of ['按截图中的字段还原表单','照着图片把全部字段做出来','recreate all fields from the screenshot']){
+  expect(isStyleOnlyReferenceRequest(request)).toBe(false);
+  expect(referenceFieldsForRequest(e,request)).toContain('综合评分');
+ }
+});
 for(const label of ['现居地','现居住地','常住地','居住地','现 居 地（必填）*'])test(`reference residence equivalence: ${label}`,()=>{
  const e=evidence(),before=JSON.stringify(e);expect(referenceFieldCoverage(e,[label])).toBeUndefined();expect(JSON.stringify(e)).toBe(before);
 });

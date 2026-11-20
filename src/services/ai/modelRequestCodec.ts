@@ -1,6 +1,6 @@
 import {modelImageInput} from './modelImageInput';
 import {resolveModelCapability,requestOutputCap} from './modelCapabilities';
-import {inspectModelCapacity,assertModelCapacity,type CapacityReceipt} from './modelCapacity';
+import {fitOutputToModelCapacity,type CapacityReceipt} from './modelCapacity';
 import { supportsNativeContinuation } from './boundedContinuation';
 import { AIProviderConfig } from '../../types/provider';
 import { EngineMessage, StreamTextOptions } from './engine/core/types';
@@ -15,14 +15,13 @@ export interface PreparedRequest {
 
 export function encodeModelRequest(options: StreamTextOptions): PreparedRequest {
   const { provider, model, temperature = 0.7, jsonSchema } = options;
-  const maxTokens=requestOutputCap(provider,model,options.maxTokens??8192);
+  const requested=requestOutputCap(provider,model,options.maxTokens??8192);
   // Validate every image before building any request or changing transport state.
   const images=new Map(options.messages.map(message=>[message,modelImageInput(provider,model,message)]));
   const messages=structuredMessages(options.messages,jsonSchema);
   const imageOf=(message:EngineMessage)=>images.get(message)??modelImageInput(provider,model,message);
-  const capacity=inspectModelCapacity(messages,maxTokens,resolveModelCapability(provider,model),jsonSchema);
+  const {maxTokens,capacity}=fitOutputToModelCapacity(messages,requested,resolveModelCapability(provider,model),jsonSchema);
   try{options.onCapacity?.(structuredClone(capacity));}catch{/* receipt reporting never grants request authority */}
-  assertModelCapacity(capacity);
   let url = '';
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   let bodyJson: Record<string, unknown> = {};

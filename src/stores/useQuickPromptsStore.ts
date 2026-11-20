@@ -1,8 +1,20 @@
 import { create } from 'zustand';
 import { QuickPromptItem } from '../types/quickPrompt';
+import { t, type Locale } from '../i18n';
+import { getUiLocale } from './useLocaleStore';
 
 const STORAGE_KEY = 'ai_designer_global_quick_prompts_v1';
 
+/** Builtin id → i18n slug under settings.builtinPrompts.* */
+export const BUILTIN_PROMPT_SLUGS: Record<string, 'mobileAdaptive' | 'microTexture' | 'formValidation' | 'emptyState' | 'interactionFeedback'> = {
+  'builtin-mobile-adaptive': 'mobileAdaptive',
+  'builtin-micro-texture': 'microTexture',
+  'builtin-form-validation': 'formValidation',
+  'builtin-empty-state': 'emptyState',
+  'builtin-interaction-feedback': 'interactionFeedback',
+};
+
+/** Canonical builtin shells (zh stored as fallback; UI resolves by locale). */
 export const DEFAULT_BUILTIN_PROMPTS: QuickPromptItem[] = [
   {
     id: 'builtin-mobile-adaptive',
@@ -41,19 +53,39 @@ export const DEFAULT_BUILTIN_PROMPTS: QuickPromptItem[] = [
   }
 ];
 
+/** Overlay localized title/content for untouched built-in prompts. */
+export function resolveQuickPrompt(item: QuickPromptItem, locale: Locale = getUiLocale()): QuickPromptItem {
+  if (!item.isBuiltin) return item;
+  const slug = BUILTIN_PROMPT_SLUGS[item.id];
+  if (!slug) return item;
+  return {
+    ...item,
+    title: t(`settings.builtinPrompts.${slug}.title`, undefined, locale),
+    content: t(`settings.builtinPrompts.${slug}.content`, undefined, locale),
+  };
+}
+
+export function defaultBuiltinPrompts(locale: Locale = getUiLocale()): QuickPromptItem[] {
+  return DEFAULT_BUILTIN_PROMPTS.map((item) => resolveQuickPrompt(item, locale));
+}
+
 function loadGlobalPrompts(): QuickPromptItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        // Older saves may omit isBuiltin; known ids stay localizable until the user edits them.
+        return parsed.map((item: QuickPromptItem) => {
+          if (!BUILTIN_PROMPT_SLUGS[item.id] || item.isBuiltin === false) return item;
+          return { ...item, isBuiltin: true };
+        });
       }
     }
   } catch (e) {
     // ignore
   }
-  return [...DEFAULT_BUILTIN_PROMPTS];
+  return defaultBuiltinPrompts();
 }
 
 function saveGlobalPrompts(prompts: QuickPromptItem[]): void {
@@ -94,6 +126,8 @@ export const useQuickPromptsStore = create<QuickPromptsState>((set, get) => ({
       if (p.id !== id) return p;
       return {
         ...p,
+        // User-edited builtins become custom so locale overlay no longer overrides their copy.
+        ...(p.isBuiltin ? { isBuiltin: false } : {}),
         ...(updates.title !== undefined ? { title: updates.title.trim() } : {}),
         ...(updates.content !== undefined ? { content: updates.content.trim() } : {})
       };
@@ -109,7 +143,7 @@ export const useQuickPromptsStore = create<QuickPromptsState>((set, get) => ({
   },
 
   resetGlobalPrompts: () => {
-    const defaults = [...DEFAULT_BUILTIN_PROMPTS];
+    const defaults = defaultBuiltinPrompts();
     set({ globalPrompts: defaults });
     saveGlobalPrompts(defaults);
   }

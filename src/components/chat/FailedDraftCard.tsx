@@ -12,8 +12,10 @@ import {businessTextReviewChoices,type BusinessTextChoice} from '../../services/
 import {findingSummary} from './QualityFindings';
 import {findingDisposition} from '../../services/ai/findingPolicy';
 
-export function FailedDraftCard({value,saved,busy,notice,onSuggest,onRepair,onRegenerate}: {
+export function FailedDraftCard({value,saved,busy,notice,compactActions=false,onSuggest,onRepair,onRegenerate}: {
   value:SavedQualityDraft;saved?:boolean;busy?:boolean;notice?:string;
+  /** When true, omit the primary Fix-blockers CTA (shown at the latest-message dock instead). */
+  compactActions?:boolean;
   onSuggest:()=>void;onRepair:(labels:DraftLabel[],region?:DraftRegionRequest)=>void;onRegenerate:()=>void;
 }) {
   const t=useT();
@@ -53,13 +55,8 @@ export function FailedDraftCard({value,saved,busy,notice,onSuggest,onRepair,onRe
     {f.code==='redesign_content_missing'&&f.nid&&<button type="button" disabled={locked} onClick={()=>setInstruction(v=>[v,`保留原节点 ${f.nid} 的业务文案与语义，依据原业务片段恢复，不扩大修改范围。`].filter(Boolean).join('\n').slice(0,2000))} className="text-blue-300 disabled:opacity-40">将保留要求加入局部修复</button>}
   </div>;
 
-  return <section aria-label={t('failedDraft.sectionAria')} className="mt-2 p-3 space-y-3 rounded-xl border border-amber-700/50 bg-slate-900 text-xs text-slate-300">
-    <div className="font-semibold text-slate-100">{value.status==='resolved'?t('failedDraft.titleResolved'):t('failedDraft.titleBlocked')}</div>
-    <p className="text-[11px] text-amber-200" data-testid="failed-draft-finding-summary">{findingSummary(findings)}</p>
-    <p className="text-[11px] text-slate-400">{saved?t('failedDraft.savedHint'):t('failedDraft.unsavedHint')} {t('failedDraft.adoptionHint')}</p>
-    {historicalReview&&<details className="rounded border border-slate-700 p-2"><summary>已确认的逐项文案 · {historicalReview.changes.length} 项</summary>{historicalReview.changes.map(c=><p key={c.sourceNid} className="mt-2 whitespace-pre-wrap break-words">[{c.sourceNid} → {c.targetNid}] {c.before} → {c.after}</p>)}<p className="mt-1 text-slate-500">历史确认仍需当前来源和整页验收，不自动执行。</p></details>}
-    {groups.map(group=>group.items.length>1?<details key={group.code} className="rounded border border-slate-700 p-2"><summary className="cursor-pointer text-rose-200">{group.code==='redesign_content_missing'?'原业务文案待核对':userFacingMessage(group.items[0].message)} · {group.items.length} 项</summary><div className="mt-2 space-y-3">{group.items.map(findingRow)}</div></details>:<div key={group.code}>{findingRow(group.items[0],0)}</div>)}
-    {errors.length>0&&regions.length>0&&<div className="space-y-2 rounded-lg border border-rose-800/50 bg-rose-950/20 p-2">
+  const fixBlockersButton=errors.length>0&&regions.length>0?(
+    <div data-testid="failed-draft-fix-blockers" className="space-y-2 rounded-lg border border-rose-800/50 bg-rose-950/20 p-2">
       <p className="text-[11px] text-slate-400">{t('failedDraft.fixBlockersHint')}</p>
       <button type="button" disabled={locked||!blockerPlan} onClick={applyBlockerPlan}
         title={blockerPlan?blockerPlan.nids.map(id=>regions.find(r=>r.nid===id)?.label??id).join('、'):t('failedDraft.fixBlockersUnavailable')}
@@ -67,21 +64,32 @@ export function FailedDraftCard({value,saved,busy,notice,onSuggest,onRepair,onRe
         {t('failedDraft.fixBlockers')}{blockerPlan?` · ${blockerPlan.nids.length}`:''}
       </button>
       {!blockerPlan&&<p className="text-[11px] text-amber-200">{t('failedDraft.fixBlockersUnavailable')}</p>}
-    </div>}
-    {targets.length>0&&<div className="space-y-2">
-      <p className="text-[11px] text-slate-400">{t('failedDraft.labelHint')}</p>
-      {targets.map(target=><label key={target.nid} className="block space-y-1 text-[11px]">
-        <span>{t('failedDraft.actionLabel',{nid:target.nid})}</span>
-        <input aria-label={t('failedDraft.actionLabelAria',{nid:target.nid})} maxLength={160} value={labels[target.nid]??''} disabled={locked}
-          onChange={e=>setLabels(prev=>({...prev,[target.nid]:e.target.value}))} placeholder={t('failedDraft.labelPlaceholder')}
-          className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-slate-200"/>
-      </label>)}
-      <div className="flex flex-wrap gap-2">
+    </div>
+  ):null;
+
+  return <section aria-label={t('failedDraft.sectionAria')} className="mt-2 p-3 space-y-3 rounded-xl border border-amber-700/50 bg-slate-900 text-xs text-slate-300">
+    <div className="font-semibold text-slate-100">{value.status==='resolved'?t('failedDraft.titleResolved'):t('failedDraft.titleBlocked')}</div>
+    <p className="text-[11px] text-amber-200" data-testid="failed-draft-finding-summary">{findingSummary(findings)}</p>
+    <p className="text-[11px] text-slate-400">{saved?t('failedDraft.savedHint'):t('failedDraft.unsavedHint')} {t('failedDraft.adoptionHint')}</p>
+    {historicalReview&&<details className="rounded border border-slate-700 p-2"><summary>已确认的逐项文案 · {historicalReview.changes.length} 项</summary>{historicalReview.changes.map(c=><p key={c.sourceNid} className="mt-2 whitespace-pre-wrap break-words">[{c.sourceNid} → {c.targetNid}] {c.before} → {c.after}</p>)}<p className="mt-1 text-slate-500">历史确认仍需当前来源和整页验收，不自动执行。</p></details>}
+    {groups.map(group=>group.items.length>1?<details key={group.code} className="rounded border border-slate-700 p-2"><summary className="cursor-pointer text-rose-200">{group.code==='redesign_content_missing'?'原业务文案待核对':userFacingMessage(group.items[0].message)} · {group.items.length} 项</summary><div className="mt-2 space-y-3">{group.items.map(findingRow)}</div></details>:<div key={group.code}>{findingRow(group.items[0],0)}</div>)}
+    {targets.length>0&&<details className="rounded border border-slate-700 p-2" data-testid="failed-draft-action-labels">
+      <summary className="cursor-pointer text-slate-300">{t('failedDraft.labelsSummary',{count:targets.length})}</summary>
+      <p className="mt-2 text-[11px] text-slate-400">{t('failedDraft.labelHint')}</p>
+      <div className="mt-2 max-h-48 space-y-2 overflow-y-auto">
+        {targets.map(target=><label key={target.nid} className="block space-y-1 text-[11px]">
+          <span>{t('failedDraft.actionLabel',{nid:target.nid})}</span>
+          <input aria-label={t('failedDraft.actionLabelAria',{nid:target.nid})} maxLength={160} value={labels[target.nid]??''} disabled={locked}
+            onChange={e=>setLabels(prev=>({...prev,[target.nid]:e.target.value}))} placeholder={t('failedDraft.labelPlaceholder')}
+            className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1.5 text-slate-200"/>
+        </label>)}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
         <button type="button" onClick={onSuggest} disabled={locked||value.aiAttempted||!saved} className="px-2 py-1.5 rounded bg-slate-800 disabled:opacity-40">{t('failedDraft.aiSuggestOnce')}</button>
         <button type="button" onClick={()=>onRepair(targets.map(target=>({nid:target.nid,text:labels[target.nid]??''})))}
           disabled={locked||targets.some(target=>!labels[target.nid]?.trim())} className="px-2 py-1.5 rounded bg-blue-600 text-white disabled:opacity-40">{t('failedDraft.confirmLabelsRepair')}</button>
       </div>
-    </div>}
+    </details>}
     {regions.length>0&&<details className="rounded border border-slate-700 p-2" open={Boolean(blockerPlan&&selected.length)}>
       <summary className="cursor-pointer">{t('failedDraft.localRepairSummary')}</summary>
       <p className="mt-2 text-slate-400">{t('failedDraft.localRepairHint')}</p>
@@ -108,6 +116,7 @@ export function FailedDraftCard({value,saved,busy,notice,onSuggest,onRepair,onRe
     </details>}
     {!targets.length&&<p className="text-[11px] text-slate-400">{regions.length?t('failedDraft.noLabelRepairWithRegions'):t('failedDraft.noSafeRegions')}</p>}
     {notice&&<p role="status" className="text-[11px] text-amber-200 break-words">{notice}</p>}
+    {!compactActions&&fixBlockersButton}
     <div className="flex gap-3 text-[11px]">
       <button type="button" onClick={()=>setCode(!code)} className="text-blue-300">{code?t('failedDraft.hideSource'):t('failedDraft.viewSource')}</button>
       <button type="button" onClick={onRegenerate} disabled={busy} className="text-slate-300 disabled:opacity-40">{t('failedDraft.regenerate')}</button>
@@ -117,4 +126,35 @@ export function FailedDraftCard({value,saved,busy,notice,onSuggest,onRepair,onRe
       <pre aria-label={t('failedDraft.draftSourceAria')} className="max-h-64 overflow-auto whitespace-pre-wrap break-all bg-slate-950 rounded p-2 text-[10px] select-text">{value.draft.html}</pre>
     </div>}
   </section>;
+}
+
+/** Compact Fix-blockers CTA for the latest-message dock (outside tall draft history). */
+export function FailedDraftFixBlockersDock({value,busy,onRepair}:{
+  value:SavedQualityDraft;busy?:boolean;onRepair:(labels:DraftLabel[],region?:DraftRegionRequest)=>void;
+}) {
+  const t=useT();
+  const baseline=useProjectStore(state=>value.decision.targetScreenId?state.screens[value.decision.targetScreenId]?.htmlContent:undefined);
+  const findings=value.draft.quality.findings;
+  const errors=findings.filter(f=>findingDisposition(f)==='blocker'||findingDisposition(f)==='layout-risk');
+  const regions=draftRegionChoices(value.draft);
+  const blockerPlan=useMemo(()=>errors.length?blockerRegionRepairPlan(value.draft,baseline):null,[value.draft,baseline,findings]);
+  const locked=busy||value.status==='resolved';
+  // Only surface when there are real blockers that map to repairable regions.
+  if(value.status!=='blocked'||!errors.length||!regions.length||!blockerPlan)return null;
+  return <aside data-testid="failed-draft-fix-blockers-dock" aria-label={t('failedDraft.fixBlockersDockAria')}
+    className="mx-3 mb-2 rounded-xl border border-rose-700/60 bg-rose-950/40 px-3 py-2.5 shadow-lg">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-rose-100">{t('failedDraft.fixBlockersDockTitle')}</p>
+        <p className="text-[11px] text-slate-400">{t('failedDraft.fixBlockersHint')}</p>
+      </div>
+      <button type="button" disabled={locked||!blockerPlan}
+        title={blockerPlan?blockerPlan.nids.map(id=>regions.find(r=>r.nid===id)?.label??id).join('、'):t('failedDraft.fixBlockersUnavailable')}
+        onClick={()=>{if(blockerPlan)onRepair([],blockerPlan);}}
+        className="shrink-0 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40">
+        {t('failedDraft.fixBlockers')}{blockerPlan?` · ${blockerPlan.nids.length}`:''}
+      </button>
+    </div>
+    {!blockerPlan&&<p className="mt-1 text-[11px] text-amber-200">{t('failedDraft.fixBlockersUnavailable')}</p>}
+  </aside>;
 }

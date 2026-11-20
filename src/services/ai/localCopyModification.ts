@@ -143,9 +143,17 @@ export function applyLocalCopyEdits(original: string, raw: unknown, options: Loc
     }
     operations.push({ nid: op.nid, type: op.type, value: op.value });
   }
-  const impacted = new Set<Element>();
-  for (const target of targets) { impacted.add(target); target.querySelectorAll('*').forEach(el => impacted.add(el)); }
-  if (!scope && (targets.size > 3 || impacted.size > Math.max(3, Math.floor(elements.length * 0.2)))) throw new Error('改动范围较大，不符合局部修改条件，请重新分析或选择整页改写。');
+  // Class/text/style ops only rewrite the operated nodes. Counting the whole subtree here falsely
+  // rejects compact spacing edits on cards that happen to contain many descendants.
+  if (!scope) {
+    if (targets.size > 3) throw new Error('改动范围较大，不符合局部修改条件，请重新分析或选择整页改写。');
+    for (const target of targets) {
+      const subtree = 1 + target.querySelectorAll('*').length;
+      if (subtree > Math.floor(elements.length * 0.6)) {
+        throw new Error('改动范围较大，不符合局部修改条件，请重新分析或选择整页改写。');
+      }
+    }
+  }
   let changed = false;
   for (const op of operations) {
     const el = byNid.get(op.nid)![0];
@@ -172,7 +180,7 @@ export function applyLocalCopyEdits(original: string, raw: unknown, options: Loc
   return {
     html, qualityReport,
     operations, targetNids: Array.from(targets).map(el => el.getAttribute('data-nid')!),
-    elementCount: elements.length, impactIndexes: elements.flatMap((el, index) => impacted.has(el) ? [index] : [])
+    elementCount: elements.length, impactIndexes: elements.flatMap((el, index) => targets.has(el) ? [index] : [])
   };
 }
 

@@ -1,7 +1,8 @@
 import {test,expect} from 'bun:test';
 import {AIService} from '../src/services/ai/aiService';
 import {endpointIdentity,resolveModelCapability,requestOutputCap} from '../src/services/ai/modelCapabilities';
-import {inspectModelCapacity,estimateInputTokens} from '../src/services/ai/modelCapacity';
+import {inspectModelCapacity,estimateInputTokens,fitOutputToModelCapacity} from '../src/services/ai/modelCapacity';
+import {encodeModelRequest} from '../src/services/ai/modelRequestCodec';
 import {httpFailure,retryEligibility} from '../src/services/ai/transportFailure';
 import {useAIConfigStore} from '../src/stores/useAIConfigStore';
 import type {AIProviderConfig} from '../src/types/provider';
@@ -12,6 +13,27 @@ test('known capacity includes all messages, metadata schema and output reserve; 
  const r=inspectModelCapacity(messages,4096,profile,{type:'object',description:'必需字段'.repeat(200)});
  expect(r.fits).toBe(false);expect(r.inputTokens).toBeGreaterThan(8000);expect(r.parts.at(-1)?.kind).toBe('native-schema');expect(r.mediaEstimate).toBe(true);
  expect(inspectModelCapacity(messages,4096).knownWindow).toBe(false);expect(estimateInputTokens('中文')).toBe(2);
+});
+test('large input clamps max output to fit the configured window instead of refusing Continue',()=>{
+ // Mirrors: ~56k input + 8192 output + 10% reserve > 65536 window, but input alone still leaves room for a smaller reply.
+ const windowProfile={...profile,contextWindow:65536,maxOutputTokens:8192};
+ const messages=[{role:'user' as const,content:'区'.repeat(56000)}];
+ const oversized=inspectModelCapacity(messages,8192,windowProfile);
+ expect(oversized.inputTokens).toBeGreaterThan(50000);
+ expect(oversized.fits).toBe(false);
+ expect(inspectModelCapacity(messages,256,windowProfile).fits).toBe(true);
+ const fitted=fitOutputToModelCapacity(messages,8192,windowProfile);
+ expect(fitted.capacity.fits).toBe(true);
+ expect(fitted.maxTokens).toBeLessThan(8192);
+ expect(fitted.maxTokens).toBeGreaterThanOrEqual(256);
+ const encoded=encodeModelRequest({provider:{...provider,modelCapabilities:{m:windowProfile}},model:'m',messages,maxTokens:8192});
+ expect(encoded.transportRequest.body.max_tokens).toBe(fitted.maxTokens);
+ expect(encoded.capacity.fits).toBe(true);
+});
+test('input that cannot leave a minimum reply budget still refuses before fetch',()=>{
+ const tiny={...profile,contextWindow:8192,maxOutputTokens:4096};
+ const messages=[{role:'user' as const,content:'超大不可裁剪原文'.repeat(12000)}];
+ expect(()=>fitOutputToModelCapacity(messages,8192,tiny)).toThrow('上下文容量不足');
 });
 test('model/endpoint changes cannot silently reuse an old capacity; role and provider caps intersect',()=>{
  const p={...provider,modelCapabilities:{m:profile},requestOutputCaps:{m:2048}};expect(requestOutputCap(p,'m',8192)).toBe(2048);expect(resolveModelCapability(p,'foreign')).toBeUndefined();

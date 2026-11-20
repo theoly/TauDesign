@@ -12,6 +12,7 @@ import { useProjectStore } from '../src/stores/useProjectStore';
 import { useAIConfigStore, defaultProviders, defaultBindings } from '../src/stores/useAIConfigStore';
 import { defaultTheme } from '../src/utils/themePresets';
 import * as renderedQuality from '../src/utils/renderedQuality';
+import { t } from '../src/i18n';
 
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 const analysis = { summary: '页面结构分析', items: [
@@ -213,7 +214,7 @@ describe('旧页面分析选择与比较聚焦', () => {
       expect(sentMessages.map((message: any) => message.content).join('\n')).toContain('workflow=restyle-page');
       expect(useProjectStore.getState().stagedScreen?.targetScreenId).toBe(targetId);
       expect(useProjectStore.getState().stagedScreen?.workflowContract?.modificationReview?.selectedIds).toEqual(['suggestion-1']);
-      expect(host.textContent).toContain('查看分析检查记录');
+      expect(host.textContent).toContain(t('plan.modEvidenceSummary', undefined, 'zh-CN'));
       expect(useProjectStore.getState().screens[targetId].htmlContent).toBe(html);
     } finally { streamMock.mockRestore(); }
   });

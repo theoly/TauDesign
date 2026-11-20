@@ -89,8 +89,20 @@ test('saved failed whole-page image drafts repair labels without replanning or l
  await saveQualityDraft(saved);const reopened=(await loadQualityDrafts(saved.projectId))[0];expect(JSON.stringify(reopened)).not.toContain(attachment.dataUrl);
  const repaired=await PipelineExecutor.execute({...f.options,pageTaskPlanning:{snapshot:reopened.draft.pageTaskSource!.pageTaskPlan},qualityRepair:{draft:reopened.draft,labels:draftRepairTargets(reopened.draft).map(t=>({nid:t.nid,text:'保存'}))}});
  expect(repaired.status).toBe('staged_side_by_side');expect(f.requests).toHaveLength(2);expect(repaired.workflowContract?.referenceImage?.inputReceipt?.reusedFromTaskId).toBe(draft.sourceTaskId);expect(repaired.executionRecord?.draftRepair?.historicalPageTaskSource?.pageTaskPlan).toEqual(draft.pageTaskSource?.pageTaskPlan);
- const bad=structuredClone(reopened.draft);delete bad.referenceImage!.inputReceipt;
- expect((await PipelineExecutor.execute({...f.options,pageTaskPlanning:{snapshot:bad.pageTaskSource!.pageTaskPlan},qualityRepair:{draft:bad,labels:[]}})).status).toBe('error');expect(f.requests).toHaveLength(2);
+ // Receipt only on pageTaskSource still repairs; evidence-only drafts can rebind a reuse receipt.
+ const fromPlan=structuredClone(reopened.draft);delete fromPlan.referenceImage!.inputReceipt;
+ const planRepair=await PipelineExecutor.execute({...f.options,pageTaskPlanning:{snapshot:fromPlan.pageTaskSource!.pageTaskPlan},qualityRepair:{draft:fromPlan,labels:draftRepairTargets(fromPlan).map(t=>({nid:t.nid,text:'保存'}))}});
+ expect(planRepair.status).toBe('staged_side_by_side');expect(planRepair.workflowContract?.referenceImage?.inputReceipt?.reusedFromTaskId).toBe(draft.sourceTaskId);
+ const legacy=structuredClone(reopened.draft);
+ delete legacy.referenceImage!.inputReceipt;delete legacy.pageTaskSource!.referenceImage!.inputReceipt;
+ const rebound=await PipelineExecutor.execute({...f.options,pageTaskPlanning:{snapshot:legacy.pageTaskSource!.pageTaskPlan},qualityRepair:{draft:legacy,labels:draftRepairTargets(legacy).map(t=>({nid:t.nid,text:'保存'}))}});
+ expect(rebound.status).toBe('staged_side_by_side');expect(rebound.workflowContract?.referenceImage?.inputReceipt?.reusedFromTaskId).toBe(draft.sourceTaskId);
+ // No frozen receipt, no evidence, and no current-turn image → cannot invent a proof.
+ const bad=structuredClone(reopened.draft);
+ delete bad.referenceImage!.inputReceipt;delete bad.pageTaskSource!.referenceImage!.inputReceipt;
+ delete bad.referenceImage!.evidence;delete bad.pageTaskSource!.referenceImage!.evidence;
+ const denied=await PipelineExecutor.execute({...f.options,input:{...f.options.input,attachment:undefined},pageTaskPlanning:{snapshot:bad.pageTaskSource!.pageTaskPlan},qualityRepair:{draft:bad,labels:[]}});
+ expect(denied.status).toBe('error');expect(denied.errorMessage).toContain('缺少草稿原始参考图');
 });
 test('planned page reference receipt rejects a missing or different current-turn image',async()=>{
  const f=fixture();f.transport.queueResponse(JSON.stringify(plan));f.transport.queueResponse(response);const output=await PipelineExecutor.execute(f.options);const contract=structuredClone(output.workflowContract!);

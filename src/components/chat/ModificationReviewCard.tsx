@@ -28,6 +28,12 @@ export const ModificationReviewCard: React.FC<{
   const [busy, setBusy] = useState(false);
   const ready = review.status === 'ready';
   const locked = disabled || busy || !ready;
+  const skippedForMode =
+    mode === 'local' && localPlan
+      ? selected.filter((id) => !localPlan.includedIds.includes(id))
+      : mode === 'region' && regionPlan
+        ? selected.filter((id) => !regionPlan.includedIds.includes(id))
+        : [];
   const scopeLabel = (scope?: ModificationSuggestion['scope']) =>
     scope === 'local' ? t('plan.modScopeLocal') : scope === 'region' ? t('plan.modScopeRegion') : t('plan.modScopePage');
   return (
@@ -36,16 +42,22 @@ export const ModificationReviewCard: React.FC<{
       <p className="text-slate-400">{review.summary}</p>
       {review.evidence && (
         <details className="space-y-1 text-[11px] text-slate-400">
-          <summary className="cursor-pointer">查看分析检查记录</summary>
+          <summary className="cursor-pointer">{t('plan.modEvidenceSummary')}</summary>
           <p className="break-all">
-            任务 {review.evidence.taskId} · {review.evidence.analysisFingerprint}
+            {t('plan.modEvidenceTask', { taskId: review.evidence.taskId, fingerprint: review.evidence.analysisFingerprint })}
           </p>
           <p>
-            已检查输出格式，共请求 {review.evidence.attempts} 次{review.evidence.attempts > 1 ? '（含一次格式纠正）' : ''}。此记录不代表视觉验收通过。
+            {t('plan.modEvidenceAttempts', {
+              attempts: review.evidence.attempts,
+              correction: review.evidence.attempts > 1 ? t('plan.modEvidenceCorrection') : '',
+            })}
           </p>
           {review.evidence.downgrades.map((item) => (
             <p key={item.id} className="text-amber-300">
-              {review.items.find((s) => s.id === item.id)?.title ?? item.id}：{item.reason} 需由用户选择其它执行方式。
+              {t('plan.modEvidenceDowngrade', {
+                title: review.items.find((s) => s.id === item.id)?.title ?? item.id,
+                reason: item.reason,
+              })}
             </p>
           ))}
         </details>
@@ -116,11 +128,13 @@ export const ModificationReviewCard: React.FC<{
             </label>
             <p className="text-[11px] text-slate-400">
               {localPlan
-                ? '推荐局部操作，仅修改已选节点。'
+                ? t('plan.modModeHintLocal')
                 : regionPlan
-                  ? '推荐完整区块修改，仅替换所选区块并保留其他区域。'
-                  : '当前选择缺少明确局部位置或改动范围较大，可明确选择整页改写。'}
-              补充要求超出所选范围时会停下提示，不会自动整页改写。
+                  ? t('plan.modModeHintRegion')
+                  : t('plan.modModeHintPage')}
+              {skippedForMode.length
+                ? t('plan.modModeHintSkip', { count: skippedForMode.length })
+                : t('plan.modModeHintSupplement')}
             </p>
           </fieldset>
           <div className="flex gap-2">
@@ -137,7 +151,13 @@ export const ModificationReviewCard: React.FC<{
                 submitting.current = true;
                 setBusy(true);
                 try {
-                  await onConfirm(selected, extra, mode);
+                  const confirmed =
+                    mode === 'local' && localPlan
+                      ? localPlan.includedIds
+                      : mode === 'region' && regionPlan
+                        ? regionPlan.includedIds
+                        : selected;
+                  await onConfirm(confirmed, extra, mode);
                 } finally {
                   submitting.current = false;
                   setBusy(false);

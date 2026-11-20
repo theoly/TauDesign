@@ -114,6 +114,23 @@ describe('i18n plan cards', () => {
           scope: 'local',
         },
       ],
+      evidence: {
+        version: 1,
+        taskId: 'task-1',
+        targetId: 'screen-1',
+        baselineFingerprint: 'base',
+        analysisFingerprint: 'analysis',
+        attempts: 2,
+        workflow: { status: 'ready', plan: { stages: ['analysis-schema'] }, checks: [] },
+        context: {
+          fingerprint: 'ctx',
+          device: { profile: 'mobile', frameWidth: 390 },
+          mode: 'light',
+          designSystem: { id: 'ds', name: 'DS', tokenFingerprint: 'tok' },
+          knowledgeSources: [],
+        },
+        downgrades: [{ id: 'a', from: 'local', reason: 'unsafe' }],
+      },
     };
     const host = document.createElement('div');
     document.body.append(host);
@@ -125,11 +142,14 @@ describe('i18n plan cards', () => {
       expect(host.textContent).toContain(t('plan.modTitleReady', undefined, 'zh-CN'));
       expect(host.textContent).toContain(t('plan.modConfirm', undefined, 'zh-CN'));
       expect(host.textContent).toContain(t('plan.modScopeLocal', undefined, 'zh-CN'));
+      expect(host.textContent).toContain(t('plan.modEvidenceSummary', undefined, 'zh-CN'));
       expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe(t('plan.modExtraPlaceholder', undefined, 'zh-CN'));
 
       act(() => useLocaleStore.getState().setLocale('en'));
       expect(host.textContent).toContain(t('plan.modTitleReady', undefined, 'en'));
       expect(host.textContent).toContain(t('plan.modConfirm', undefined, 'en'));
+      expect(host.textContent).toContain(t('plan.modEvidenceSummary', undefined, 'en'));
+      expect(host.textContent).not.toContain(t('plan.modEvidenceSummary', undefined, 'zh-CN'));
       expect(host.querySelector('textarea')?.getAttribute('placeholder')).toBe(t('plan.modExtraPlaceholder', undefined, 'en'));
     } finally {
       act(() => root.unmount());

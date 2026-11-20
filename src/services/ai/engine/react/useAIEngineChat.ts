@@ -1300,19 +1300,27 @@ export function useAIEngineChat() {
       setMessages(prev => prev.map(m => m.id === messageId ? { ...m, modificationReview: { ...plan.analysis!, status: 'error', summary: '原页面或工程已变化，请重新分析。' } } : m));
       return;
     }
+    const localPlan = mode === 'local' || mode === 'region' ? getLocalModificationPlan(plan.analysis, selected) : null;
+    const regionPlan = mode === 'local' || mode === 'region' ? getRegionModificationPlan(plan.analysis, selected) : null;
+    if (mode === 'local' && !localPlan) return;
+    if (mode === 'region' && !regionPlan) return;
+    // Local/region authorize only the compatible subset; page-scoped picks stay for whole-page rewrite.
+    const authorizedSelected =
+      mode === 'local' && localPlan
+        ? localPlan.includedIds
+        : mode === 'region' && regionPlan
+          ? regionPlan.includedIds
+          : selected;
     let scope: string;
     let receipt: ModificationReviewReceipt;
     try {
-      receipt = buildModificationReviewReceipt(plan.analysis, selected, extra, useProjectStore.getState().screens[plan.snapshot.screenId]);
-      scope = buildReviewedModificationRequest(plan.analysis, selected, extra);
+      receipt = buildModificationReviewReceipt(plan.analysis, authorizedSelected, extra, useProjectStore.getState().screens[plan.snapshot.screenId]);
+      scope = buildReviewedModificationRequest(plan.analysis, authorizedSelected, extra);
     } catch (error) {
       setMessages(prev => prev.map(m => m.id === messageId ? { ...m, modificationReview: { ...plan.analysis!, status: 'error', summary: error instanceof Error ? error.message : '分析证据无效，请重新分析。' } } : m));
       return;
     }
     if (mode === 'local' || mode === 'region') {
-      const localPlan = getLocalModificationPlan(plan.analysis, selected);
-      const regionPlan = getRegionModificationPlan(plan.analysis, selected);
-      if (mode === 'local' ? !localPlan : !regionPlan) return;
       const modeName = mode === 'region' ? '完整区块' : '局部';
       const executionId=`${messageId}-${crypto.randomUUID()}`;
       const controller = new AbortController(); abortControllerRef.current = controller;activeMessageIdRef.current=messageId;
@@ -1374,7 +1382,7 @@ export function useAIEngineChat() {
         });
         if(!mountedRef.current||controller.signal.aborted||abortControllerRef.current!==controller)return;
         if(candidate.status!=='ready'){
-          if(!controller.signal.aborted)setMessages(prev=>prev.map(m=>m.id===messageId?{...m,workflowContract:candidate.contract,taskBudget:candidate.taskBudget,originalUserPrompt:plan.request,originalReferencedScreenId:screen.id,originalAttachment:plan.attachment,structuredRetry:{reviewId:messageId,selected:[...selected],extra,mode},retryContext:{version:1,projectContext:generationInputFingerprint,options:{textReferences:plan.options?.textReferences}}}:m));
+          if(!controller.signal.aborted)setMessages(prev=>prev.map(m=>m.id===messageId?{...m,workflowContract:candidate.contract,taskBudget:candidate.taskBudget,originalUserPrompt:plan.request,originalReferencedScreenId:screen.id,originalAttachment:plan.attachment,structuredRetry:{reviewId:messageId,selected:[...authorizedSelected],extra,mode},retryContext:{version:1,projectContext:generationInputFingerprint,options:{textReferences:plan.options?.textReferences}}}:m));
           throw new Error(candidate.message);
         }
         if(!structuredCurrent())throw new Error('原页面、工程或模型已变化，未暂存本次区块结果。');
@@ -1388,7 +1396,7 @@ export function useAIEngineChat() {
           { id: `local_usr_${executionId}`, sender: 'user', text: scope },
           { id: `local_ast_${executionId}`, sender: 'assistant', text: resultText,thinkingStage:4,executionEvents:execution?.executionEvents,executionActivity:execution?.executionActivity, screenId: screen.id, screenName: screen.name,
             toolAction: 'modified', qualityReport: candidate.qualityReport, workflowContract:candidate.contract,taskBudget:candidate.taskBudget, htmlOutput: candidate.html, generationInputFingerprint, preActionSnapshot: { screenId: screen.id, screenName: screen.name, htmlContent: screen.htmlContent },
-            structuredRetry:{reviewId:messageId,selected:[...selected],extra,mode},
+            structuredRetry:{reviewId:messageId,selected:[...authorizedSelected],extra,mode},
             originalUserPrompt: `${plan.request}\n${scope}`, originalReferencedScreenId: screen.id, originalAttachment: plan.attachment,
             originalDecision: { action: 'modify_screen', targetScreenId: screen.id, styleReferenceScreenId: null, elementNid: null } }
         ];});

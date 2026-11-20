@@ -37,6 +37,11 @@ interface AIProviderModalProps {
 
 export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initialTab = 'provider' }) => {
   const t = useT();
+  const providerLabel = (id: string, fallback: string) => {
+    const key = `settings.providerNames.${id}`;
+    const label = t(key);
+    return label === key ? fallback : label;
+  };
   const [activeTab, setActiveTab] = useState<'provider' | 'quick_prompts' | 'project'>(initialTab);
   const { providers, bindings, addProvider, updateProvider, deleteProvider, setRoleBinding, setModelCapability, autoReferenceDesignRules, setAutoReferenceDesignRules } =
     useAIConfigStore();
@@ -381,7 +386,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                         className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-200 hover:bg-slate-800 transition flex flex-col gap-0.5"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-medium text-[11px] text-blue-300">{p.name}</span>
+                          <span className="font-medium text-[11px] text-blue-300">{providerLabel(p.id, p.name)}</span>
                           <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0 whitespace-nowrap">
                             {p.protocol === 'anthropic' ? 'Claude' : 'OpenAI'}
                           </span>
@@ -416,7 +421,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                     }`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                      <span className="truncate text-xs">{prov.name}</span>
+                      <span className="truncate text-xs">{providerLabel(prov.id, prov.name)}</span>
                       {prov.isCustom && (
                         <span
                           className={`text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 whitespace-nowrap ${
@@ -646,7 +651,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <h3 className="text-base font-bold text-slate-100">{curProvider.name}</h3>
+                        <h3 className="text-base font-bold text-slate-100">{providerLabel(curProvider.id, curProvider.name)}</h3>
                         <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-medium shrink-0 whitespace-nowrap">
                           {t('settings.builtinProviderBadge')}
                         </span>

@@ -14,6 +14,8 @@ import {withTaskBudget,type TaskBudget} from './taskBudget';
 import {artifactThinkingOptions} from './structuredRequestPolicy';
 import {withTaskProvenance} from './taskProvenance';
 import {supportsVision} from './engine/core/multimodalGuard';
+import {t} from '../../i18n';
+import {getUiLocale} from '../../stores/useLocaleStore';
 
 export interface ReferenceObservation {
  summary:string;texts:string[];
@@ -115,6 +117,17 @@ function coversReferenceField(label:string,value:string):boolean{
  if(aliases.length>1)return value.split(/[、,，/／|｜;；\n]/).some(part=>aliases.some(alias=>normalizeFieldLabel(part)===normalizeFieldLabel(alias)));
  return normalizeFieldLabel(value).includes(normalizeFieldLabel(label));
 }
+/**
+ * Style-reference prompts borrow look & feel from the image; they do not require recreating every observed form field.
+ * Explicit “follow the screenshot fields / recreate the form” wording keeps full field coverage.
+ */
+export function isStyleOnlyReferenceRequest(request:string):boolean{
+ const text=request.trim();
+ if(!text)return false;
+ if(!/(?:样式|风格|视觉|外观|排版|版式)\s*参考|参考\s*(?:样式|风格|视觉|外观|排版|版式|截图|图片)|style\s*reference|(?:for|as)\s+(?:a\s+)?(?:style|visual|look(?:\s*and\s*feel)?)\s+reference|reference\s+(?:the\s+)?(?:screenshot|image)\s+for\s+style/i.test(text))return false;
+ return !/(?:按|照|根据|还原|复刻|对齐)(?:照)?(?:图|截图|图片|参考图)(?:中|里|上)?(?:的)?(?:全部|所有)?(?:字段|表单|信息项)|截图中的字段|字段必须|必须包含(?:图|截图|图片).{0,12}字段|recreate\s+(?:the\s+)?(?:form|fields)|(?:all|every)\s+fields?\s+from\s+(?:the\s+)?(?:screenshot|image)/i.test(text);
+}
+
 /** Program-owned requirements are separate from the unchanged visual evidence and current authorization. */
 export function referencePlanningFields(evidence:ReferenceEvidence,request:string){
  const required=new Set(referenceFieldsForRequest(evidence,request));
@@ -123,11 +136,14 @@ export function referencePlanningFields(evidence:ReferenceEvidence,request:strin
 /** For functional screenshot tasks, preserve observed fields rather than silently summarizing them away. */
 export function referenceFieldCoverage(evidence:ReferenceEvidence,labels:string[],request=''):string|undefined{
  const missing=referenceFieldsForRequest(evidence,request).filter(label=>label.trim()&&!labels.some(value=>coversReferenceField(label,value)));
- return missing.length?'参考图字段尚未完整覆盖：'+[...new Set(missing)].join('、'):undefined;
+ if(!missing.length)return undefined;
+ const fields=[...new Set(missing)].join(getUiLocale()==='en'?', ':'、');
+ return t('chat.referenceFieldCoverageMissing',{fields},getUiLocale());
 }
 
 /** Only explicit user removals/renames override the observed labels; model inference cannot erase them. */
 export function referenceFieldsForRequest(evidence:ReferenceEvidence,request:string):string[]{
+ if(isStyleOnlyReferenceRequest(request))return [];
  return [...new Set(evidence.observation.fields.map(f=>f.label))].filter(label=>!request.split(/[。；;，,\n]/).some(clause=>{
    const aliases=referenceFieldLabelAliases(label);
    const directName=(value:string)=>coversReferenceField(label,value.replace(/[“”「」‘’"']/g,'').replace(/^\s*(?:(?:[-*]|\d+[.)、．])\s*)?(?:请)?(?:将|把)?\s*/,'').replace(/字段|标签|名称|文字|输入框|控件/g,'').trim());

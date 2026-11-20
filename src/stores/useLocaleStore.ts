@@ -63,9 +63,12 @@ export const useLocaleStore = create<LocaleState>((set) => {
 
 /** Hook: translate with the live UI locale (stable identity until locale changes). */
 export function useT() {
+  // Subscribe so locale switches re-render; read getState at call time so SSR/static
+  // markup (happy-dom) cannot stick to the module-init snapshot while tests reset locale.
   const locale = useLocaleStore((s) => s.locale);
   return useCallback(
-    (key: MessageKey | string, params?: Record<string, string | number>) => t(key, params, locale),
+    (key: MessageKey | string, params?: Record<string, string | number>) =>
+      t(key, params, useLocaleStore.getState().locale),
     [locale],
   );
 }

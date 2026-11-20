@@ -229,18 +229,22 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
     if (!isModificationSnapshotCurrent(useProjectStore.getState(), snapshotRef.current)) {
       setAnalysis({ ...analysis, status: 'error', summary: t('theme.restyleErrPageChangedReanalyze') }); return;
     }
+    const local = mode === 'local' ? getLocalModificationPlan(analysis, selected) : null;
+    if (mode === 'local' && !local) {
+      setAnalysis({ ...analysis, status: 'error', summary: t('theme.restyleErrLocalUnsafe') });
+      return;
+    }
+    const authorizedSelected = mode === 'local' && local ? local.includedIds : selected;
     let request: string, receipt: ReturnType<typeof buildModificationReviewReceipt>;
     try {
-      receipt = buildModificationReviewReceipt(analysis, selected, extra, useProjectStore.getState().screens[scope]);
-      request = buildReviewedModificationRequest(analysis, selected, extra);
+      receipt = buildModificationReviewReceipt(analysis, authorizedSelected, extra, useProjectStore.getState().screens[scope]);
+      request = buildReviewedModificationRequest(analysis, authorizedSelected, extra);
     } catch (e) { setAnalysis({...analysis,status:'error',summary:e instanceof Error ? e.message : t('theme.restyleErrInvalidEvidence')}); return; }
     const snapshot=snapshotRef.current,operation=beginOperation(mode!=='local'||Boolean(extra.trim()));setError(null);
     try {
       let outcome: RestyleOutcome;
       if (mode === 'region') throw new Error(t('theme.restyleErrRegionNotSupported'));
       if (mode === 'local') {
-        const local = getLocalModificationPlan(analysis, selected);
-        if (!local) throw new Error(t('theme.restyleErrLocalUnsafe'));
         let binding: ReturnType<typeof getActiveProviderForRole> | undefined = undefined;
         if (extra.trim()) {
           binding = operation.binding;
@@ -252,7 +256,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
           mode:'local',screen:current.screens[scope],styleOverrides:current.overrides,request,contract:taskContract(plan.dryRun,request),settings:current.settings,
           designSystem:current.designSystem,colorMode:current.settings.colorMode,allowText:false,protectedNids:plan.dryRun.protectedNids,
           binding:binding ? {provider:binding.provider,model:binding.modelId} : undefined,
-          local:{...local,supplement:Boolean(extra.trim())},signal:operation.controller.signal,
+          local:{...local!,supplement:Boolean(extra.trim())},signal:operation.controller.signal,
           isCurrent:()=>isLive(operation)&&isModificationSnapshotCurrent(useProjectStore.getState(),snapshot),
           projectKnowledge:[referenceDevicePrompt(current.settings),buildProjectKnowledgeContext(current,request,scope)].join('\n\n')
         });

@@ -16,7 +16,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Status-Developer%20Preview-amber" alt="Developer Preview" />
   <img src="https://img.shields.io/badge/Stack-Tauri%202%20%2B%20React-blue" alt="Tauri 2 and React" />
-  <img src="https://img.shields.io/badge/License-Apache%202.0-green" alt="Apache 2.0" />
+  <img src="https://img.shields.io/badge/License-LGPL%203.0-green" alt="LGPL 3.0" />
 </p>
 
 TauDesign helps product managers, designers, and makers turn product ideas, reference images, and existing web pages into editable, high-fidelity UI designs. Arrange multiple screens on one infinite canvas, fine-tune details visually, compare AI design proposals side by side, and export clean HTML or high-resolution PNGs. Your desktop projects are saved directly on your computer in local `.aidesign` folders.
@@ -176,4 +176,4 @@ pnpm run package:desktop
 
 ## License
 
-[Apache License 2.0](./LICENSE). The software is provided “AS IS”; see the license for its terms and limitations.
+[GNU Lesser General Public License v3.0 only](./LICENSE). The software is provided “AS IS”; see the license for its terms and limitations.

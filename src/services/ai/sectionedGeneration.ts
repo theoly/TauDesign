@@ -12,6 +12,8 @@ import {parseHtmlCopy} from '../../utils/htmlDocument';
 import {NidEngine} from '../../utils/nidEngine';
 import {contentFingerprint} from './designWorkflow';
 import {extractArtifact} from './engine/pipeline/interceptors/streamTransform';
+import {t} from '../../i18n';
+import {getUiLocale} from '../../stores/useLocaleStore';
 
 export interface SectionPlan {version?:2;composition?:PageComposition;title:string;shellHtml:string;sections:Array<{id:string;name:string;requirements:string}>}
 export interface SectionRequestRecord {stage:string;rawResponse:string;responseFingerprint?:string;responseOmitted?:string;finishReason?:string;requestedOutputTokens:number;usage?:TokenUsage}
@@ -81,20 +83,52 @@ export function mergeSectionParts(plan:SectionPlan,parts:Array<{id:string;html:s
 }
 const checkpointFingerprint=(value:Omit<SectionedCheckpoint,'fingerprint'>)=>contentFingerprint(JSON.stringify(value));
 
-export async function generateSectionedPage(core:AIEngineCore,options:StreamTextOptions,contextKey:string,callbacks:{prepareGeneratedHtml?:PrepareGeneratedHtml;preplanned?:SectionPlan;sectionTokenCaps?:Record<string,number>;remainingOutputTokens?:()=>number;reservedOutputTokens?:number;resume?:SectionedCheckpoint;isCurrent?:()=>boolean;onProgress?:(message:string)=>void;onRequest?:(messages:EngineMessage[])=>void;onCheckpoint?:(plan:SectionPlan,completed:Array<{id:string;html:string}>)=>Promise<void>;initialCompleted?:Array<{id:string;html:string}>}={}):Promise<SectionedResult> {
+export async function generateSectionedPage(core:AIEngineCore,options:StreamTextOptions,contextKey:string,callbacks:{prepareGeneratedHtml?:PrepareGeneratedHtml;preplanned?:SectionPlan;sectionTokenCaps?:Record<string,number>;remainingOutputTokens?:()=>number;reservedOutputTokens?:number;resume?:SectionedCheckpoint;isCurrent?:()=>boolean;onProgress?:(message:string)=>void;onRequest?:(messages:EngineMessage[])=>void;onCheckpoint?:(plan:SectionPlan,completed:Array<{id:string;html:string}>)=>Promise<void>;initialCompleted?:Array<{id:string;html:string}>;/** Expand compact in-plan duties into full business copy for the model prompt only. */expandSection?:(section:SectionPlan['sections'][number])=>SectionPlan['sections'][number]}={}):Promise<SectionedResult> {
   const result:SectionedResult={rawResponse:'',warnings:[],continuationCount:0,usage:{inputTokens:0,outputTokens:0},requestedOutputTokens:0};
   const bindingKey=continuationBindingKey(options),resume=callbacks.resume;
   let plan:SectionPlan|undefined,completed:Array<{id:string;html:string}>=[],active:ContinuationCheckpoint|undefined;
   let requests:SectionRequestRecord[]=[],resumeAllowed=true;
   const guard=()=>{if(options.signal?.aborted)throw Error('分区设计已取消，未加入页面。');if(callbacks.isCurrent&&!callbacks.isCurrent())throw Error('工程或模型上下文已变化，分区设计已停止。');};
+  const messageChars=(messages:EngineMessage[])=>messages.reduce((n,m)=>n+m.content.length,0);
   const instruct=(instruction:string,stage:'plan'|'section'):EngineMessage[]=>{
-    const messages=structuredClone(options.messages),last=messages[messages.length-1];
-    if(!last||last.role!=='user')throw Error('分区设计缺少当前用户请求。');
     const format=`\n[本次受控分区阶段输出合同] ${stage==='plan'?'当前只输出JSON title/shellHtml/sections，不输出artifact或整页正文。':'当前只输出本区块HTML片段的artifact，不输出其它区块或完整页面。'}前文要求完整页面的输出格式仅适用于最终交付，由程序合并后复验。其它安全、设备、Token、授权和文案规则继续强制执行。`;
-    const system=messages.find(m=>m.role==='system');if(system)system.content+=format;else messages.unshift({role:'system',content:format});
-    last.content+=`\n\n[同页分区阶段要求]\n${instruction}`;
-    if(messages.reduce((n,m)=>n+m.content.length,0)>120000)throw Error('分区上下文超过安全预算，请缩小需求。');
-    return messages;
+    // Section writes must carry the full business inventory. Soft 120k target prefers lean packs;
+    // hard cap only rejects pathological sizes — never truncate 必需原文.
+    if(stage==='section'&&instruction.length>450000)throw Error('本区块必需业务清单过大，请拆分页面后再生成；未截断内容。');
+    const pack=(base:EngineMessage[],budget:number):EngineMessage[]|null=>{
+      if(!base.length)return null;
+      const messages=structuredClone(base),last=messages[messages.length-1];
+      if(!last||last.role!=='user')return null;
+      const system=messages.find(m=>m.role==='system');if(system)system.content+=format;else messages.unshift({role:'system',content:format});
+      last.content+=`\n\n[同页分区阶段要求]\n${instruction}`;
+      return messageChars(messages)<=budget?messages:null;
+    };
+    if(stage==='plan'){
+      const packed=pack(options.messages,120000);
+      if(!packed)throw Error('分区上下文超过安全预算，请缩小需求。');
+      return packed;
+    }
+    const lastUser=[...options.messages].reverse().find(m=>m.role==='user');
+    const system=options.messages.find(m=>m.role==='system');
+    const attempts:EngineMessage[][]=[
+      options.messages,
+      [
+        ...(system?[{role:'system' as const,content:system.content}]:[]),
+        {role:'user' as const,content:lastUser?.content??'',...(lastUser?.imageUrl?{imageUrl:lastUser.imageUrl}:{})},
+      ],
+      [
+        {role:'system',content:'你是页面分区生成器。遵守设备、Token 白名单、授权范围与业务文案保留规则。'},
+        {role:'user',content:lastUser?.content??''},
+      ],
+    ];
+    // First try to stay near the soft ceiling; then allow headroom for the full duty payload.
+    for(const budget of [120000, Math.max(120000, instruction.length+48000), 500000]){
+      for(const base of attempts){
+        const packed=pack(base,budget);
+        if(packed)return packed;
+      }
+    }
+    throw Error('分区上下文超过安全预算，请缩小需求。');
   };
   const record=(stage:string,r:ContinuationResult)=>{
     const omitted=embeddedMediaIssue(r.rawResponse)?'embedded-media':r.rawResponse.length>120000?'response-size-limit':undefined;
@@ -114,7 +148,7 @@ export async function generateSectionedPage(core:AIEngineCore,options:StreamText
     } else if(callbacks.preplanned){
       plan=parseSectionPlan(callbacks.preplanned);
     } else {
-      callbacks.onProgress?.('正在安排页面的公共布局，并分为2～6个区域…');
+      callbacks.onProgress?.(t('chat.progress.planningLayout',undefined,getUiLocale()));
       if(options.messages.reduce((n,m)=>n+m.content.length,0)>90000)throw Error('分区设计上下文过大，请缩小需求或引用范围。');
       const messages=instruct(`本次明确采用同一页分区生成，最终仍是一个页面。只返回JSON title/shellHtml/sections。先生成公共骨架、全局共享样式和2～6个区块职责；不要填区块正文。骨架使用当前项目基座类、Token，保持专业布局与共同视觉层级；可包含共用页头/侧栏等有明确业务文案的内容。每区块id为section-1至section-6中不同值，骨架用空的<section data-design-slot="对应id"></section>占位，不可嵌套或重复；requirements为该区块全部业务内容和UI要求。只规划原需求功能，不写工程说明、测试说明或假数据处理承诺。Schema:${JSON.stringify(schema)}`,'plan');
       callbacks.onRequest?.(messages);
@@ -133,10 +167,19 @@ export async function generateSectionedPage(core:AIEngineCore,options:StreamText
       const available=remaining-(callbacks.reservedOutputTokens??0),allocation=callbacks.sectionTokenCaps?.[section.id];
       const perSection=Math.min(4096,allocation??(callbacks.remainingOutputTokens?Math.floor(available/(plan.sections.length-index)):available));
       if(perSection<256)throw Error('父任务剩余输出额度不足，已保留完成区块，未扩大预算。');
-      callbacks.onProgress?.(`正在生成区块 ${index+1}/${plan.sections.length}：${section.name}；已完成 ${completed.length} 块…`);
+      callbacks.onProgress?.(t('chat.progress.generatingSection',{current:index+1,total:plan.sections.length,name:section.name,done:completed.length},getUiLocale()));
       const reference=parseHtmlCopy(plan.shellHtml);
       for(const node of Array.from(reference.doc.querySelectorAll('[data-design-slot],[data-nid]'))){node.removeAttribute('data-design-slot');node.removeAttribute('data-nid');}
-      const messages=instruct(`只生成同一页面的本区块内容，以一个完整artifact包裹HTML片段，禁止解释。不要输出其它区块、公共骨架或全局style/link，不要输出data-design-slot或复制公共data-nid。区块id仅用于程序关联，不是需要输出的HTML属性。只使用项目基座和公共样式；保留本区块所有未经明确授权删除的业务文案、表单规则和操作控件，明确授权的文案变更按确认内容执行。用户要求在本页填写的字段应提供关联的可见label与input、select或textarea，不能仅用跳转按钮代替；明确只读的字段用dl/dt/dd逐项展示标签和值，或用关联label和readonly输入框，保留只读语义，不虚构可编辑状态。主操作须有可见名称；图标按钮应有可识别名称。禁止工程/调试说明进入UI。公共骨架参考副本已去内部定位属性，仅作布局/风格参考，不得重新输出：\n${reference.serialize()}\n当前区块：${JSON.stringify(section)}\n其它区块名称（不用生成）：${plan.sections.filter(s=>s.id!==section.id).map(s=>s.name).join('、')}`,'section');
+      const sectionForModel=callbacks.expandSection?.(section)??section;
+      const otherNames=plan.sections.filter(s=>s.id!==section.id).map(s=>s.name).join('、');
+      const sectionPreamble='只生成同一页面的本区块内容，以一个完整artifact包裹HTML片段，禁止解释。不要输出其它区块、公共骨架或全局style/link，不要输出data-design-slot或复制公共data-nid。区块id仅用于程序关联，不是需要输出的HTML属性。只使用项目基座和公共样式；保留本区块所有未经明确授权删除的业务文案、表单规则和操作控件，明确授权的文案变更按确认内容执行。用户要求在本页填写的字段应提供关联的可见label与input、select或textarea，不能仅用跳转按钮代替；明确只读的字段用dl/dt/dd逐项展示标签和值，或用关联label和readonly输入框，保留只读语义，不虚构可编辑状态。主操作须有可见名称；图标按钮应有可识别名称。禁止工程/调试说明进入UI。';
+      const buildInstruction=(includeShell:boolean)=>`${sectionPreamble}${includeShell?`公共骨架参考副本已去内部定位属性，仅作布局/风格参考，不得重新输出：\n${reference.serialize()}\n`:'（为保留完整业务清单，本次省略骨架参考副本；只生成本区块正文。）\n'}当前区块：${JSON.stringify(sectionForModel)}\n其它区块名称（不用生成）：${otherNames}`;
+      let messages:EngineMessage[]|undefined;
+      for(const includeShell of [true,false]){
+        try{messages=instruct(buildInstruction(includeShell),'section');break;}
+        catch(error){if(includeShell&&String(error instanceof Error?error.message:error).includes('分区上下文超过安全预算'))continue;throw error;}
+      }
+      if(!messages)throw Error('分区上下文超过安全预算，请缩小需求。');
       callbacks.onRequest?.(messages);
       const response=await streamWithContinuation(core,{...options,messages,provenance:options.provenance?{...options.provenance,stepId:section.id}:undefined,maxTokens:perSection,jsonSchema:undefined},{prepareGeneratedHtml:callbacks.prepareGeneratedHtml,resume:active,contextKey:`${contextKey}:${section.id}`,externalMediaOnly:plan.version===2,budget:{maxRequestedTokens:Math.min(8192,available,allocation??Infinity),continuationTokens:perSection,autoContinuations:1}});
       const previous=active?.previousContinuations??0;record(section.id,response);result.continuationCount+=Math.max(0,response.continuationCount-previous);active=response.checkpoint;guard();
@@ -167,7 +210,7 @@ export async function generateSectionedPage(core:AIEngineCore,options:StreamText
     guard();const html=mergeSectionParts(plan,completed),title=plan.title.replaceAll('&','&amp;').replaceAll('"','&quot;').replaceAll('<','&lt;');
     result.rawResponse=`<artifact type="screen" title="${title}">${html}</artifact>`;result.finishReason='stop';
     result.sectioned={plan,requests,completed:completed.length,total:plan.sections.length,requestedOutputTokens:requests.reduce((n,r)=>n+r.requestedOutputTokens,0),batchRequestedOutputTokens:result.requestedOutputTokens!};
-    callbacks.onProgress?.('已合并为一个完整页面，正在检查内容和布局…');
+    callbacks.onProgress?.(t('chat.progress.mergedChecking',undefined,getUiLocale()));
     return result;
   } catch(error){
     result.errorMessage=String(error instanceof Error?error.message:error);result.warnings.push(result.errorMessage);

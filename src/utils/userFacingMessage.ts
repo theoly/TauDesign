@@ -1,3 +1,6 @@
+import {t,type Locale} from '../i18n';
+import {getUiLocale} from '../stores/useLocaleStore';
+
 /** Presentation only. Never use this on prompts, generated HTML, user text, or stored evidence. */
 const replacements:Array<[RegExp,string]>=[
  [/^multiple_artifacts$/,'AI 返回了多个页面结果，目前只使用第一个。'],
@@ -31,18 +34,22 @@ export function userFacingMessage(message:string):string{
  return message.split(literal).map((part,index)=>index%2?part:replacements.reduce((text,[pattern,value])=>text.replace(pattern,value),part)).join('');
 }
 
-export function generationProgressLabel(mode:string):string{
- return ({SkeletonMainAtomic:'正在生成页面内容…',SectionPlanThenWrite:'正在安排页面布局，随后生成页面内容…',SectionedPatch:'页面内容较多，正在分区域设计…',DerivedCopyMutableOnly:'正在复制原页面，只修改你指定的部分…'} as Record<string,string>)[mode]??'正在生成页面…';
+export function generationProgressLabel(mode:string,locale:Locale=getUiLocale()):string{
+ const key=`chat.progress.${mode}`;
+ const labeled=t(key,undefined,locale);
+ return labeled===key?t('chat.progress.default',undefined,locale):labeled;
 }
-const stages:Record<string,string>={'functional-plan':'梳理页面功能','functional-plan-correction':'完善功能规划','reference-observation':'分析参考图片','composition-plan':'安排页面布局','business-ownership':'安排原页面内容','section-plan':'划分页面区域',artifact:'生成页面',root:'生成页面共用部分',planning:'梳理页面需求',generation:'生成页面',repair:'修复页面'};
-export function requestStageLabel(stage:string|undefined):string{
- if(!stage)return '当前步骤';if(stages[stage])return stages[stage];
- const section=/^section-(\d+)$/.exec(stage);if(section)return `生成第 ${section[1]} 个区域`;
- const page=/^page-(\d+)$/.exec(stage);if(page)return `生成第 ${page[1]} 个页面`;
- if(/^branch-/.test(stage))return '生成页面共用部分';if(/^repair[-:]/.test(stage))return '修复页面';
- return '当前步骤';
+export function requestStageLabel(stage:string|undefined,locale:Locale=getUiLocale()):string{
+ if(!stage)return t('chat.stages.current',undefined,locale);
+ const known=t(`chat.stages.${stage}`,undefined,locale);
+ if(known!==`chat.stages.${stage}`)return known;
+ const section=/^section-(\d+)$/.exec(stage);if(section)return t('chat.stages.sectionN',{n:section[1]},locale);
+ const page=/^page-(\d+)$/.exec(stage);if(page)return t('chat.stages.pageN',{n:page[1]},locale);
+ if(/^branch-/.test(stage))return t('chat.stages.branch',undefined,locale);if(/^repair[-:]/.test(stage))return t('chat.stages.repair',undefined,locale);
+ return t('chat.stages.current',undefined,locale);
 }
-export function finishReasonLabel(reason:string|undefined):string{
- if(!reason)return '未记录结束原因';
- return ({stop:'回复已结束',end_turn:'回复已结束',stop_sequence:'回复已结束',length:'达到回复长度上限',max_tokens:'达到回复长度上限',content_filter:'回复被安全规则拦截',tool_calls:'AI 请求执行其他操作',tool_use:'AI 请求执行其他操作',error:'请求失败',cancelled:'请求已停止',unknown:'回复是否完整尚未确认'} as Record<string,string>)[reason]??'结束原因未识别';
+export function finishReasonLabel(reason:string|undefined,locale:Locale=getUiLocale()):string{
+ if(!reason)return t('chat.finish.missing',undefined,locale);
+ const known=t(`chat.finish.${reason}`,undefined,locale);
+ return known===`chat.finish.${reason}`?t('chat.finish.unrecognized',undefined,locale):known;
 }

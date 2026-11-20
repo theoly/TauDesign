@@ -20,3 +20,30 @@ export function inspectModelCapacity(messages:ReadonlyArray<EngineMessage>,outpu
  return {version:1,source:'conservative-estimate',inputTokens,outputTokens,reserveTokens,contextWindow:profile?.contextWindow,...(!profile?.contextWindow?{conservativeCeiling:UNKNOWN_CAPACITY_CEILING}:{}),fits:inputTokens+outputTokens+reserveTokens<=(profile?.contextWindow??UNKNOWN_CAPACITY_CEILING),knownWindow:!!profile?.contextWindow,mediaEstimate:messages.some(m=>!!m.imageUrl),parts};
 }
 export function assertModelCapacity(receipt:CapacityReceipt){if(!receipt.fits)throw Error(`${receipt.knownWindow?'模型上下文容量不足':'模型窗口未知，输入超过本地保守容量边界'}：估计输入${receipt.inputTokens} + 输出${receipt.outputTokens} + 预留${receipt.reserveTokens} > ${receipt.knownWindow?'配置窗口'+receipt.contextWindow:'本地边界'+receipt.conservativeCeiling+'（非厂商窗口）'}。未发送请求；请缩小授权区域、分区设计或核对模型容量。`);}
+/**
+ * When input is large but still leaves room for a smaller reply, clamp max output instead of
+ * refusing the whole request (e.g. Continue incomplete design / dense section writes).
+ * Still fails if input + reserve cannot leave at least `minOutput` tokens.
+ */
+export function fitOutputToModelCapacity(
+ messages:ReadonlyArray<EngineMessage>,
+ requestedOutput:number,
+ profile?:ModelCapabilityProfile,
+ schema?:Record<string,unknown>,
+ minOutput=256,
+):{maxTokens:number;capacity:CapacityReceipt}{
+ if(!Number.isSafeInteger(requestedOutput)||requestedOutput<1)throw Error('请求输出上限无效。');
+ if(!Number.isSafeInteger(minOutput)||minOutput<1)throw Error('最小输出上限无效。');
+ let capacity=inspectModelCapacity(messages,requestedOutput,profile,schema);
+ if(capacity.fits)return {maxTokens:requestedOutput,capacity};
+ const window=profile?.contextWindow??UNKNOWN_CAPACITY_CEILING;
+ const inputProbe=inspectModelCapacity(messages,0,profile,schema);
+ const affordable=window-inputProbe.inputTokens-inputProbe.reserveTokens;
+ if(affordable<minOutput){
+  assertModelCapacity(capacity);
+ }
+ const maxTokens=Math.min(requestedOutput,affordable);
+ capacity=inspectModelCapacity(messages,maxTokens,profile,schema);
+ assertModelCapacity(capacity);
+ return {maxTokens,capacity};
+}

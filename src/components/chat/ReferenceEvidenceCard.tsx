@@ -5,6 +5,7 @@ import {useProjectStore} from '../../stores/useProjectStore';
 import {createProjectStorage} from '../../services/storage/projectStorage';
 import {createMediaResourceSession} from '../../services/storage/mediaResourceSession';
 import {referenceBytes,sha256} from '../../utils/referenceImagePreparation';
+import {useT} from '../../stores/useLocaleStore';
 
 /** Read-only, content-verified previews; no data URL is put into the rendered document. */
 export function ReferenceImagePreview({evidence}:{evidence:ReferenceEvidence}){
@@ -28,11 +29,12 @@ export function ReferenceImagePreview({evidence}:{evidence:ReferenceEvidence}){
  </div>{preview.loading&&<p role="status">正在核对图片文件…</p>}{preview.error&&<p role="alert" className="text-amber-300">{preview.error}</p>}{preview.url&&<figure><img src={preview.url} alt={preview.caption} className="max-h-64 max-w-full object-contain"/><figcaption className="mt-1 text-slate-500">{preview.caption}</figcaption></figure>}</div>;
 }
 export function ReferenceEvidenceCard({evidence,reused,busy,onCorrect}:{evidence?:ReferenceEvidence;reused?:boolean;busy?:boolean;onCorrect:(text:string)=>void}){
+ const t=useT();
  const [correction,setCorrection]=useState('');
  if(!validReferenceEvidence(evidence))return null;
  const o=evidence.observation;
  return <details className="rounded-lg border border-slate-700 bg-slate-950/60 px-2 py-1.5 text-[11px] leading-4 text-slate-300">
-  <summary className="cursor-pointer">参考图解析{reused?' · 已复用':''} · {o.fields.length} 个字段{evidence.parts.length>1?` · ${evidence.parts.length} 个观察片段`:''}</summary>
+  <summary className="cursor-pointer">{t('chat.referenceEvidenceSummary',{reused:reused?t('chat.referenceEvidenceReused'):'',fields:t('chat.referenceEvidenceFields',{count:o.fields.length}),parts:evidence.parts.length>1?t('chat.referenceEvidenceParts',{count:evidence.parts.length}):''})}</summary>
   <div className="mt-2 space-y-2"><p>{o.summary}</p>
    <p className="text-slate-500 break-all">原图 {evidence.width}×{evidence.height} · SHA-256 {evidence.sourceSha256.slice(0,12)} · {evidence.parser.model}</p>
    <ReferenceImagePreview evidence={evidence}/>

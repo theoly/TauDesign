@@ -69,10 +69,14 @@ describe('canvas viewport interaction stays off the React path during gestures',
 
     transformSpy.mockClear();
     const canvas=container.firstElementChild as HTMLElement;
-    const world=canvas.querySelector('.will-change-transform') as HTMLElement;
+    const live=container.querySelector('[data-testid="comparison-live-world"]') as HTMLElement;
+    const frozen=container.querySelector('[data-testid="comparison-frozen-world"]') as HTMLElement;
     const backdrop=container.querySelector('[data-testid="comparison-backdrop"]') as HTMLElement;
     expect(backdrop).toBeTruthy();
-    expect(Number.parseFloat(backdrop.style.width)).toBeLessThan(5000);
+    expect(backdrop.className).toContain('inset-0');
+    expect(live).toBeTruthy();
+    expect(frozen).toBeTruthy();
+    const frozenBefore=frozen.style.transform;
     // Background compare screens stay L0 (placeholder/thumbnail), pair keeps iframe.
     expect(container.querySelectorAll('iframe').length).toBeLessThanOrEqual(2);
 
@@ -81,12 +85,14 @@ describe('canvas viewport interaction stays off the React path during gestures',
       canvas.dispatchEvent(new WheelEvent('wheel',{bubbles:true,deltaX:30,deltaY:20}));
     });
     expect(transformSpy).toHaveBeenCalledTimes(0);
-    expect(world.style.transform).toContain('translate3d');
+    expect(live.style.transform).toContain('translate3d');
+    expect(frozen.style.transform).toBe(frozenBefore);
 
     await act(async()=>{await new Promise(r=>setTimeout(r,140));});
     expect(transformSpy).toHaveBeenCalledTimes(1);
     // Same LOD bucket after pan — canvas did not need interactive L2 remount.
     expect(useProjectStore.getState().viewportTransform.scale).toBe(0.4);
+    expect(frozen.style.transform).toBe(frozenBefore);
 
     // Warm cache, then prove repeated delivery reads skip HTML re-parse.
     useProjectStore.getState().getStagedDeliveryReport();

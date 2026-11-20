@@ -11,6 +11,7 @@ import {HistoricalDraftSource} from '../chat/HistoricalDraftSource';
 import {QualityFindings,findingSummary} from '../chat/QualityFindings';
 import {renderFindingsForDisplay} from '../../services/ai/findingPolicy';
 import {RenderCoverageDetails} from '../chat/RenderCoverageDetails';
+import {useT} from '../../stores/useLocaleStore';
 
 const labels = { entities:'设计实体引用', task: '任务快照', source: '源码安全', quality: '静态质量', structure:'结构授权', assets: '资源登记', asset_files: '资源文件', render: '实际渲染' };
 const statuses = { passed: '通过', blocked: '未通过', pending: '待检查' };
@@ -60,14 +61,15 @@ export function EvidenceRecord({ evidence }: { evidence: CandidateValidationEvid
 export function CandidateEvidencePanel({ current, historical, currentIsStale = false }: {
   current: CandidateValidationEvidence | null; historical?: CandidateValidationEvidence; currentIsStale?: boolean;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const receipt = useProjectStore(state => state.stagedScreen?.workflowContract?.modificationReview);
   const contract=useProjectStore(state=>state.stagedScreen?.workflowContract);
   const candidateHtml=useProjectStore(state=>state.stagedScreen?.newHtml);
   const execution=useProjectStore(state=>state.stagedScreen?.executionRecord);
   return <details className="relative text-[11px]" onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary className="cursor-pointer rounded-lg border border-slate-700 px-2.5 py-1.5 text-slate-300 hover:bg-slate-800">查看验收记录</summary>
-    <div className="absolute right-0 top-full z-50 mt-2 max-h-[65vh] w-80 max-w-[80vw] space-y-3 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-4 shadow-xl" aria-label="候选验收记录">
+    <summary className="cursor-pointer rounded-lg border border-slate-700 px-2.5 py-1.5 text-slate-300 hover:bg-slate-800">{t('chat.viewAcceptanceRecords')}</summary>
+    <div className="absolute right-0 top-full z-50 mt-2 max-h-[65vh] w-80 max-w-[80vw] space-y-3 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950 p-4 shadow-xl" aria-label={t('chat.acceptanceRecordsAria')}>
       {current ? <>
         <p className="font-semibold text-slate-200">{currentIsStale ? '最近检查记录（上下文已变化）' : '本次检查记录'}</p>
         <EvidenceRecord evidence={current} />

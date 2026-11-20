@@ -47,6 +47,18 @@ describe('i18n settings chrome', () => {
       expect(host.textContent).toContain(t('settings.setAsCodeModel', undefined, 'zh-CN'));
       expect(host.textContent).toContain(t('settings.privacyNoticeTitle', undefined, 'zh-CN'));
 
+      const projectTabZh = Array.from(host.querySelectorAll('button')).find((el) =>
+        el.textContent?.includes(t('settings.title', undefined, 'zh-CN')),
+      );
+      expect(projectTabZh).toBeTruthy();
+      act(() => {
+        projectTabZh!.click();
+      });
+      expect(host.textContent).toContain(t('settings.iconCacheTitle', undefined, 'zh-CN'));
+      expect(host.textContent).toContain(t('settings.mediaConvertTitle', undefined, 'zh-CN'));
+      expect(host.textContent).toContain(t('settings.iconCacheEmpty', undefined, 'zh-CN'));
+      expect(host.textContent).toContain(t('settings.mediaConvertEmpty', undefined, 'zh-CN'));
+
       const quickTab = Array.from(host.querySelectorAll('button')).find((el) =>
         el.textContent?.includes(t('settings.tabQuickPrompts', undefined, 'zh-CN')),
       );
@@ -67,6 +79,23 @@ describe('i18n settings chrome', () => {
       expect(host.textContent).toContain(t('settings.tabQuickPrompts', undefined, 'en'));
       expect(host.textContent).toContain(t('settings.promptScopeProject', undefined, 'en'));
       expect(host.textContent).toContain(t('settings.promptResetDefaults', undefined, 'en'));
+      expect(host.textContent).toContain(t('settings.builtinPrompts.mobileAdaptive.title', undefined, 'en'));
+      expect(host.textContent).toContain(t('settings.builtinPrompts.mobileAdaptive.content', undefined, 'en'));
+      expect(host.textContent).not.toContain('移动端适配');
+
+      const projectTabEn = Array.from(host.querySelectorAll('button')).find((el) =>
+        el.textContent?.includes(t('settings.title', undefined, 'en')),
+      );
+      expect(projectTabEn).toBeTruthy();
+      act(() => {
+        projectTabEn!.click();
+      });
+      expect(host.textContent).toContain(t('settings.iconCacheTitle', undefined, 'en'));
+      expect(host.textContent).toContain(t('settings.mediaConvertTitle', undefined, 'en'));
+      expect(host.textContent).toContain(t('settings.iconCacheEmpty', undefined, 'en'));
+      expect(host.textContent).toContain(t('settings.mediaConvertEmpty', undefined, 'en'));
+      expect(host.textContent).not.toContain('旧图标缓存整理');
+      expect(host.textContent).not.toContain('旧页面媒体转换');
 
       const providerTab = Array.from(host.querySelectorAll('button')).find((el) =>
         el.textContent?.includes(t('settings.tabProvider', undefined, 'en')),

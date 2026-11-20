@@ -70,6 +70,12 @@ describe('旧页面副本的受限局部操作', () => {
     expect(()=>applyLocalCopyEdits(original,[{nid:'title',type:'add_classes',value:'text-xl'},{nid:'title',type:'remove_classes',value:'text-xl'}],options)).toThrow('冲突');
     expect(()=>applyLocalCopyEdits(original,[{nid:'title',type:'add_classes',value:'text-sm'}],options)).toThrow('无需');
   });
+  test('容器仅改间距类时不因子树节点数误拒', () => {
+    const dense=`<main data-nid="root"><article data-nid="card" class="card col gap-3">${Array.from({length:12},(_,i)=>`<p data-nid="line-${i}">行${i}</p>`).join('')}</article><aside data-nid="side">${Array.from({length:20},(_,i)=>`<p data-nid="side-${i}">侧${i}</p>`).join('')}</aside></main>`;
+    const result=applyLocalCopyEdits(dense,[{nid:'card',type:'remove_classes',value:'gap-3'},{nid:'card',type:'add_classes',value:'gap-2'}],options);
+    expect(result.html).toContain('gap-2');
+    expect(result.impactIndexes).toHaveLength(1);
+  });
 });
 
 describe('局部模式选择与实际接线', () => {
@@ -158,6 +164,24 @@ describe('局部模式选择与实际接线', () => {
     const radios=host.querySelectorAll<HTMLInputElement>('input[type="radio"]');expect(radios[0].checked).toBe(true);
     await act(async()=>{Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('按所选内容生成新版'))!.click();});expect(mode).toBe('local');
     act(()=>radios[2].click());await act(async()=>{Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('按所选内容生成新版'))!.click();});expect(mode).toBe('page');
+  });
+  test('混选整页建议时局部与区块模式仍可选，确认只提交兼容子集',async()=>{
+    objects.mockResolvedValue({summary:'混合',items:[
+      ...rawAnalysis.items.slice(0,1),
+      {title:'整页重排',reason:'信息架构需调整',change:'重排全页分区',scope:'page',operations:[]}
+    ]});
+    const review=await start();
+    let confirmed:{ids:string[];mode:string}|null=null;
+    await render(<ModificationReviewCard review={review.modificationReview!} onConfirm={(ids,_extra,m)=>{confirmed={ids,mode:m};}} onCancel={()=>{}}/>);
+    const boxes=host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+    act(()=>{boxes[0].click();boxes[1].click();});
+    const radios=host.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+    expect(radios[0].disabled).toBe(false);
+    expect(radios[1].disabled).toBe(false);
+    expect(radios[0].checked).toBe(true);
+    expect(host.textContent).toContain('跳过');
+    await act(async()=>{Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('按所选内容生成新版'))!.click();});
+    expect(confirmed).toEqual({ids:['suggestion-1'],mode:'local'});
   });
   test('单页润色局部确认也不再次生成完整HTML',async()=>{
     let closed=false;const stream=spyOn(DefaultAIEngineCore.prototype,'streamText');

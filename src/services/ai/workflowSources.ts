@@ -29,12 +29,17 @@ export function referenceImageIdentity(attachment:ImageAttachment):Pick<Referenc
 /** Use only the outgoing current-turn user message; older conversation images never count. */
 export function recordReferenceInput(contract:DesignTaskContract,messages:EngineMessage[],providerId:string,model:string):string|undefined{
   const plannedPageModification=contract.operation==='modify'&&!contract.elementNid&&Boolean(contract.pageTaskPlan&&contract.referenceImage);
-  if(!creationSourceStages(contract.workflowId).includes('reference-input')&&!plannedPageModification)return;
+  const required=creationSourceStages(contract.workflowId).includes('reference-input')||plannedPageModification;
   const image=contract.referenceImage,last=messages[messages.length-1];
+  // Evidence-backed turns always stamp a receipt when the structured proof is in the current user message,
+  // including style-only / non-planned paths — otherwise failed drafts cannot be repaired later.
   if(image?.evidence){
-    if(!validReferenceImageIdentity(image)||!last||last.role!=='user'||last.imageUrl||!last.content.includes(contract.request)||!last.content.includes(renderReferenceEvidence(image.evidence)))return '当前请求没有携带匹配的图片解析证据，未执行生成。';
+    if(!validReferenceImageIdentity(image)||!last||last.role!=='user'||last.imageUrl||!last.content.includes(contract.request)||!last.content.includes(renderReferenceEvidence(image.evidence))){
+      return required?'当前请求没有携带匹配的图片解析证据，未执行生成。':undefined;
+    }
     image.inputReceipt={version:1,checkedAt:Date.now(),imageFingerprint:image.fingerprint,requestFingerprint:contentFingerprint(contract.request),messageFingerprint:contentFingerprint(last.content),providerId,model,evidenceFingerprint:image.evidence.fingerprint};return;
   }
+  if(!required)return;
   if(!validReferenceImageIdentity(image)||!last||last.role!=='user'||!last.imageUrl||typeof last.content!=='string'||!last.content.includes(contract.request))return '本轮参考图片未进入实际模型消息，未执行生成。';
   try{if(referenceImageIdentity({name:image.name,dataUrl:last.imageUrl}).fingerprint!==image.fingerprint)return '本轮实际图片与任务参考图身份不匹配，未执行生成。';}
   catch(error){return error instanceof Error?error.message:'参考图片消息无效。';}

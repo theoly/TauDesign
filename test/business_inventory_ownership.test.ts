@@ -20,6 +20,35 @@ test('所有原文/控件/媒体/保护项必须唯一归属，存档核对完�
  expect(()=>validateBusinessOwners(source,ids,owners.map(row=>({...row,itemIds:[]})))).toThrow('完整');
  expect(()=>validateBusinessOwners(source,ids,[...owners.slice(0,1),{...owners[1],itemIds:owners[0].itemIds},...owners.slice(2)])).toThrow('重复');
 });
+test('超大业务清单在分区计划中压缩为itemIds，读取与复验仍完整且不截断原文',()=>{
+ const bulky=buildPageRedesignSource(`<main>${Array.from({length:80},(_,i)=>`<p data-nid="t${i}">保留业务文案${i}：${'内容'.repeat(40)}</p>`).join('')}<button data-nid="save">保存</button></main>`,{deviceProfile:'mobile'});
+ const bulkyOwners=ids.map((regionId,i)=>({regionId,itemIds:i?[]:businessItems(bulky).map(item=>item.id)}));
+ const compiled=compileSectionPlan(plan,'mobile','资料',composition,undefined,{source:bulky,owners:bulkyOwners});
+ const inventory=JSON.parse(compiled.sections[0].requirements).businessInventory;
+ expect(compiled.sections[0].requirements.length).toBeLessThanOrEqual(12000);
+ expect(inventory.items).toBeUndefined();
+ expect(inventory.itemIds?.length).toBe(businessItems(bulky).length);
+ expect(readBusinessDuties(bulky,compiled)?.owners).toEqual(bulkyOwners);
+});
+test('超大业务清单展开写入时不因120k软顶直接失败，且提示中仍含完整原文',async()=>{
+ const bulky=buildPageRedesignSource(`<main>${Array.from({length:120},(_,i)=>`<p data-nid="t${i}">保留业务文案${i}：${'内容'.repeat(60)}</p>`).join('')}<button data-nid="save">保存</button></main>`,{deviceProfile:'mobile'});
+ const bulkyPlan={...plan,features:plan.features.slice(0,3)};
+ const bulkyComposition=defaultPageComposition(bulkyPlan);
+ const regionOwners=bulkyComposition.regions.map((region,i)=>({regionId:region.id,itemIds:i?[]:businessItems(bulky).map(item=>item.id)}));
+ const transport=new MockTransport();
+ transport.queueResponse(JSON.stringify({owners:regionOwners}),1);
+ for(let i=0;i<bulkyComposition.regions.length;i++)transport.queueResponse(`<artifact><article>区域${i}</article></artifact>`,1);
+ const ledger=new TaskBudget({maxRequests:8,maxRequestedOutputTokens:34568,maxDurationMs:10000,maxRequestDurationMs:10000});
+ const seen:string[]=[];
+ const core=withTaskBudget(new DefaultAIEngineCore({id:'wire',stream(r,e){seen.push(JSON.stringify(r.body?.messages??r));return transport.stream(r,e);}}),ledger);
+ const fatSystem='S'.repeat(20000),fatUser='U'.repeat(20000)+'保留全部业务';
+ try{
+  const result=await generateTaskPage(core,{provider:{id:'test',name:'test',protocol:'openai_compatible',baseUrl:'https://invalid.test/v1',apiKey:'',isEnabled:true},model:'test',messages:[{role:'system',content:fatSystem},{role:'user',content:fatUser}]},
+   {strategy:choosePageWriteStrategy({plan:bulkyPlan,estimatedHtmlBytes:80000}),plan:bulkyPlan,composition:bulkyComposition,businessSource:bulky,request:'保留全部业务',device:'mobile',title:'页面',contextKey:'bulky',budget:ledger});
+  expect(result.errorMessage??'').not.toContain('分区上下文超过安全预算');
+  expect(seen.some(payload=>payload.includes('保留业务文案0')&&payload.includes('保留业务文案119'))).toBe(true);
+ }finally{ledger.close();}
+});
 test('真实编码归属请求占原父预算，缺失项目时不发送区块生成请求',async()=>{
  const transport=new MockTransport();transport.queueResponse(JSON.stringify({owners:owners.map(row=>({...row,itemIds:[]}))}),1);
  const ledger=new TaskBudget({maxRequests:8,maxRequestedOutputTokens:34568,maxDurationMs:10000,maxRequestDurationMs:10000});let requests=0;

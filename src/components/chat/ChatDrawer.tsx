@@ -13,7 +13,7 @@ import type {ChatMessageItem} from '../../services/ai/engine/react/useAIEngineCh
 import {HistoricalDraftSource} from './HistoricalDraftSource';
 import {PageTaskCoverageCard} from './PageTaskCoverageCard';
 import {MultiPagePlanCard} from './MultiPagePlanCard';
-import { FailedDraftCard } from './FailedDraftCard';
+import { FailedDraftCard, FailedDraftFixBlockersDock } from './FailedDraftCard';
 import { ReferenceRegionDialog } from './ReferenceRegionDialog';
 import type { ImageAttachment } from '../../types/referenceImage';
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
@@ -26,7 +26,7 @@ import { ModificationReviewCard } from './ModificationReviewCard';
 import { useProjectStore } from '../../stores/useProjectStore';
 import { useAIConfigStore } from '../../stores/useAIConfigStore';
 import { supportsVision } from '../../services/ai/engine/core/multimodalGuard';
-import { useQuickPromptsStore } from '../../stores/useQuickPromptsStore';
+import { resolveQuickPrompt, useQuickPromptsStore } from '../../stores/useQuickPromptsStore';
 import {
   useAIEngineChat,
   parseReferencedElement,
@@ -165,8 +165,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
     };
   }, [input]);
   const { globalPrompts } = useQuickPromptsStore();
+  const uiLocale = useLocaleStore((s) => s.locale);
   const projectPrompts = useProjectStore((state) => state.quickPrompts) || [];
-  const allQuickPrompts = [...projectPrompts, ...globalPrompts];
+  const allQuickPrompts = [
+    ...projectPrompts,
+    ...globalPrompts.map((item) => resolveQuickPrompt(item, uiLocale)),
+  ];
 
   const handleInsertQuickPrompt = (content: string) => {
     setInput((prev) => {
@@ -515,6 +519,19 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   };
 
   const activeGeneratingMsg = engine.messages.find((m) => m.isGenerating);
+  /** Only the latest blocked draft may own the Fix-blockers dock; later non-blocker AI results hide it. */
+  const fixBlockersDockMessage = (() => {
+    const latestBlocked = [...engine.messages].reverse().find((row) => row.qualityDraft?.status === 'blocked');
+    if (!latestBlocked?.qualityDraft) return null;
+    const blockedAt = engine.messages.indexOf(latestBlocked);
+    const superseded = engine.messages.slice(blockedAt + 1).some((row) => {
+      if (row.sender !== 'assistant' || row.isGenerating) return false;
+      if (row.qualityDraft?.status === 'blocked') return false;
+      // Any finished assistant turn that is not a blocked draft (success, plain error, Q&A, …).
+      return Boolean(row.htmlOutput || row.isError || row.qualityReport || row.text || row.qualityDraft);
+    });
+    return superseded ? null : latestBlocked;
+  })();
   const activeStreamText = activeGeneratingMsg?.text || '';
   let streamingArtifactStatus: string | null = null;
   if (engine.isGenerating) {
@@ -1176,7 +1193,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               {m.historicalGuidanceNotice&&<p role="status" className="my-2 text-[11px] leading-relaxed text-slate-500">{m.historicalGuidanceNotice}</p>}
               <DesignGuidanceCard contract={m.workflowContract??m.historicalGuidance?.contract} historical={!m.workflowContract&&Boolean(m.historicalGuidance)}/>
               <HistoricalDraftSource execution={m.executionRecord}/>
-              {m.historicalPageTaskNotice&&<p role="status" className="my-2 text-[11px] leading-relaxed text-slate-500">{m.historicalPageTaskNotice}</p>}
+              {m.historicalPageTaskNotice&&<p role="status" className="my-2 text-[11px] leading-relaxed text-slate-500">{m.historicalPageTask?t('chat.historicalPageTaskArchive'):t('chat.historicalPageTaskInvalid')}</p>}
               <PageTaskPlanCard contract={m.workflowContract??m.historicalPageTask?.contract}/>
               <PageTaskCoverageCard contract={m.workflowContract} html={m.htmlOutput}/>
               <TaskBudgetCard value={m.taskBudget}/>
@@ -1188,6 +1205,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               {m.qualityReport && <QualityReportCard report={m.qualityReport} onLocate={m.screenId && m.htmlOutput && screens[m.screenId]?.htmlContent === m.htmlOutput
                 ? nid => handleLocateAuditTarget({type:'element',screenId:m.screenId!,screenName:screens[m.screenId!]!.name,label:'检查发现',nid}) : undefined}/>}
               {m.qualityDraft && <FailedDraftCard value={m.qualityDraft} saved={m.qualityDraftSaved} busy={engine.isGenerating||m.qualityDraftBusy} notice={m.qualityDraftNotice}
+                compactActions={fixBlockersDockMessage?.id===m.id}
                 onSuggest={()=>engine.suggestQualityTurn(m.id)} onRepair={(labels,region)=>engine.repairQualityTurn(m.id,labels,region)} onRegenerate={()=>engine.retryTurn(m.id,{rePlan:true})}/>}
               {m.creationRepairNotice&&<p role="status" className="rounded-lg border border-emerald-900/60 bg-emerald-950/30 p-2 text-[11px] leading-relaxed text-emerald-300">{m.creationRepairNotice}</p>}
 
@@ -1643,22 +1661,22 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               <div className="flex flex-wrap items-center gap-3 pt-1 pl-1 text-[11px] text-slate-400">
                 {m.checkpointId && (
                   <button
-                    onClick={() => alert(`已保留这次生成前的状态，可在历史记录中恢复。`)}
+                    onClick={() => alert(t('chat.checkpointKeptAlert'))}
                     className="flex items-center gap-1 hover:text-blue-400 transition cursor-pointer"
-                    title="回到生成前状态"
+                    title={t('chat.restoreSnapshotTitle')}
                   >
                     <RotateCcw className="w-3 h-3" />
-                    <span>回到这里 (快照)</span>
+                    <span>{t('chat.restoreSnapshot')}</span>
                   </button>
                 )}
                 {m.preActionSnapshot && !isCurrentGenerating && !m.isError && (
                   <button
                     onClick={() => engine.rollbackAndRetryTurn(m.id)}
                     className="flex items-center gap-1 hover:text-amber-400 transition cursor-pointer"
-                    title={`回退「${m.preActionSnapshot.screenName}」至本次生成前的原始版本并重新生成`}
+                    title={t('chat.rollbackAndRetryTitle', {name: m.preActionSnapshot.screenName})}
                   >
                     <Undo2 className="w-3 h-3" />
-                    <span>回退原版并重新调整</span>
+                    <span>{t('chat.rollbackAndRetry')}</span>
                   </button>
                 )}
               </div>
@@ -1669,7 +1687,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               ))}
               {m.streamRecovered && (
                 <div className="pl-1 pt-1 text-[10px] text-amber-300" role="status">
-                  连接中断；已使用完整接收的页面结果，请检查生成内容。
+                  {t('chat.streamRecovered')}
                 </div>
               )}
               {m.usageNote&&<p className="text-[10px] leading-relaxed text-slate-500">{m.usageNote}</p>}
@@ -1710,6 +1728,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         </button>
       )}
     </div>
+
+      {fixBlockersDockMessage?.qualityDraft && (
+        <FailedDraftFixBlockersDock
+          value={fixBlockersDockMessage.qualityDraft}
+          busy={engine.isGenerating || fixBlockersDockMessage.qualityDraftBusy}
+          onRepair={(labels, region) => engine.repairQualityTurn(fixBlockersDockMessage.id, labels, region)}
+        />
+      )}
 
       {/* Mention Auto-complete Menu (PRD D18 / §3.2.7) */}
       {showMentionMenu && (
@@ -1959,29 +1985,29 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           </div>
         )}
 
-        {/* 快捷输入 (Quick Prompts) —— 点击快速插入到输入框（不提交）*/}
+        {/* Quick prompts — click inserts into the input (does not submit) */}
         <div className="mb-2 flex items-center justify-between gap-2 text-[10px] text-slate-400">
-          <label className="flex items-center gap-1.5" title="自动按功能规模和容量选择生成方式。">
+          <label className="flex items-center gap-1.5" title={t('chat.writeStrategyAutoHint')}>
             <span>{t('chat.writeStrategy')}</span><select aria-label={t('chat.writeStrategy')} value={writeStrategy} disabled={engine.isGenerating} onChange={e=>setWriteStrategy(e.target.value as typeof writeStrategy)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5"><option value="auto">{t('chat.writeStrategyAuto')}</option><option value="atomic">{t('chat.writeStrategyAtomic')}</option><option value="patch">{t('chat.writeStrategyPatch')}</option></select>
           </label>
           <details ref={quickMenuRef} className="relative">
-            <summary className="cursor-pointer list-none flex items-center gap-1 rounded border border-slate-700 px-2 py-1 hover:bg-slate-800 text-slate-300"><Sparkles className="w-3 h-3 text-amber-400" />快捷输入</summary>
+            <summary className="cursor-pointer list-none flex items-center gap-1 rounded border border-slate-700 px-2 py-1 hover:bg-slate-800 text-slate-300"><Sparkles className="w-3 h-3 text-amber-400" />{t('chat.quickPrompts')}</summary>
         <div className="absolute bottom-full right-0 mb-2 z-30 w-[300px] max-w-[calc(100vw-2rem)] rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl">
           {/* Header row: title and settings config button */}
           <div className="flex items-center justify-between pb-1 text-[10px] text-slate-400 font-medium">
             <div className="flex items-center gap-1">
               <Sparkles className="w-3 h-3 text-amber-400" />
-              <span>快捷输入</span>
-              <span className="text-[9px] text-slate-500 font-normal">（点击快速插入）</span>
+              <span>{t('chat.quickPrompts')}</span>
+              <span className="text-[9px] text-slate-500 font-normal">{t('chat.quickPromptsInsertHint')}</span>
             </div>
             <button
               type="button"
               onClick={() => { if (quickMenuRef.current) quickMenuRef.current.open = false; onOpenSettings?.('quick_prompts'); }}
               className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-slate-400 hover:text-blue-300 hover:bg-slate-800 rounded border border-dashed border-slate-700 hover:border-blue-500/50 transition"
-              title="自定义与配置快捷输入"
+              title={t('chat.quickPromptsConfigTitle')}
             >
               <Settings className="w-2.5 h-2.5" />
-              <span>配置</span>
+              <span>{t('chat.quickPromptsConfig')}</span>
             </button>
           </div>
 
@@ -1995,12 +2021,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 key={item.id}
                 type="button"
                 onClick={() => handleInsertQuickPrompt(item.content)}
-                title={`${item.content}\n[点击快速插入，不自动提交] · ${item.scope === 'project' ? '当前工程' : '全局通用'}`}
+                title={`${item.content}\n[${t('settings.promptChipInsertHint')}] · ${item.scope === 'project' ? t('settings.promptChipScopeProject') : t('settings.promptChipScopeGlobal')}`}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] border transition bg-slate-800/80 hover:bg-slate-800 border-slate-700/70 hover:border-slate-500 text-slate-300 hover:text-white"
               >
                 <span>{item.title}</span>
                 {item.scope === 'project' && (
-                  <span className="text-[9px] px-1 py-0.2 bg-blue-500/20 text-blue-300 rounded font-mono">项目</span>
+                  <span className="text-[9px] px-1 py-0.2 bg-blue-500/20 text-blue-300 rounded font-mono">{t('settings.promptBadgeProjectChip')}</span>
                 )}
               </button>
             ))}

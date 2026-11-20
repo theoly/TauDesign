@@ -13,6 +13,8 @@ import {assertExternalMedia} from '../src/services/ai/externalMedia';
 import {HistoryRepository} from '../src/services/storage/historyRepository';
 import {MediaMigrationPanel} from '../src/components/settings/MediaMigrationPanel';
 import {resumeHistoryPersistence,suspendHistoryPersistence} from '../src/services/storage/historyPersistence';
+import {useLocaleStore} from '../src/stores/useLocaleStore';
+import {t} from '../src/i18n';
 stubIndependentMediaTransport();
 const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aKioAAAAASUVORK5CYII=';
 const html=`<main data-nid="page"><h1>顾问工作台</h1><button data-nid="entry" aria-label="消息"><svg data-nid="bell" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path data-nid="drawing" d="M12 2L20 20H4Z" /></svg><span>消息</span></button><img data-nid="photo" src="data:image/png;base64,${png}" alt="用户照片"></main>`;
@@ -77,12 +79,14 @@ test('resource write error and rollback archive error never commit partial conve
 });
 
 test('settings UI requires selecting, preparing, comparing and explicitly applying; no AI call',async()=>{
+ useLocaleStore.setState({locale:'zh-CN'});document.documentElement.lang='zh-CN';
  const container=document.createElement('div');document.body.append(container);const root=createRoot(container),previous=(globalThis as any).IS_REACT_ACT_ENVIRONMENT;(globalThis as any).IS_REACT_ACT_ENVIRONMENT=true;
  const waitFor=async(check:()=>void)=>{for(let i=0;;i++){try{check();return;}catch(error){if(i>60)throw error;}await act(async()=>{await new Promise(resolve=>setTimeout(resolve,10));});}};
  const button=(name:string)=>Array.from(container.querySelectorAll('button')).find(el=>el.textContent?.trim()===name)!;
+ const afterTitle=t('settings.mediaConvertIframeAfter',{name:'旧消息页'},'zh-CN');
  try{
-  act(()=>root.render(<MediaMigrationPanel/>));act(()=>container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());act(()=>button('准备转换并预览').click());
-  await waitFor(()=>expect(Boolean(container.querySelector('iframe[title="媒体转换后：旧消息页"]'))).toBe(true));expect(useHistoryStore.getState().past).toHaveLength(0);act(()=>button('应用媒体转换').click());
-  await waitFor(()=>expect(container.textContent).toContain('媒体已转换为独立文件；可通过撤销恢复原页面。'));expect(useHistoryStore.getState().past).toHaveLength(1);expect(screensWithEmbeddedMedia(useProjectStore.getState())).toHaveLength(0);
+  act(()=>root.render(<MediaMigrationPanel/>));act(()=>container.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());act(()=>button(t('settings.mediaConvertPrepare',undefined,'zh-CN')).click());
+  await waitFor(()=>expect(Boolean(container.querySelector(`iframe[title="${afterTitle}"]`))).toBe(true));expect(useHistoryStore.getState().past).toHaveLength(0);act(()=>button(t('settings.mediaConvertApply',undefined,'zh-CN')).click());
+  await waitFor(()=>expect(container.textContent).toContain(t('settings.mediaConvertDone',undefined,'zh-CN')));expect(useHistoryStore.getState().past).toHaveLength(1);expect(screensWithEmbeddedMedia(useProjectStore.getState())).toHaveLength(0);
  }finally{act(()=>root.unmount());container.remove();(globalThis as any).IS_REACT_ACT_ENVIRONMENT=previous;}
 });

@@ -1,9 +1,9 @@
 [package]
 name = "app"
-version = "0.0.23"
+version = "0.0.24"
 description = "A Tauri App"
 authors = ["you"]
-license = "Apache-2.0"
+license = "LGPL-3.0-only"
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"

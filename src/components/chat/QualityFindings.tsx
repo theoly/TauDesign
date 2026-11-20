@@ -2,14 +2,16 @@ import {UserFacingNotice} from '../common/UserFacingNotice';
 import React from 'react';
 import type { QualityFinding } from '../../services/ai/generationQuality';
 import { findingDisposition, findingRequirement } from '../../services/ai/findingPolicy';
+import { t } from '../../i18n';
+import { getUiLocale, useT } from '../../stores/useLocaleStore';
 
-const labels = {
-  blocker: '阻断',
-  warning: '警告',
-  unverified: '未验证',
-  advisory: '设计建议',
-  elevatable: '待提升',
-  'layout-risk': '布局风险',
+const dispositionKeys = {
+  blocker: 'quality.dispositionBlocker',
+  warning: 'quality.dispositionWarning',
+  unverified: 'quality.dispositionUnverified',
+  advisory: 'quality.dispositionAdvisory',
+  elevatable: 'quality.dispositionElevatable',
+  'layout-risk': 'quality.dispositionLayoutRisk',
 } as const;
 const colors = {
   blocker: 'text-rose-300',
@@ -21,19 +23,27 @@ const colors = {
 } as const;
 
 export function findingSummary(findings: QualityFinding[]): string {
-  return (Object.keys(labels) as Array<keyof typeof labels>)
-    .map(type => `${findings.filter(f => findingDisposition(f) === type).length} 项${labels[type]}`).join(' · ');
+  const locale = getUiLocale();
+  return (Object.keys(dispositionKeys) as Array<keyof typeof dispositionKeys>)
+    .map(type => t('quality.dispositionCount', {
+      count: findings.filter(f => findingDisposition(f) === type).length,
+      label: t(dispositionKeys[type], undefined, locale),
+    }, locale)).join(' · ');
 }
 
 export function QualityFindings({findings, onLocate}: {findings: QualityFinding[]; onLocate?: (nid: string) => void}) {
+  const translate = useT();
   return <ul className="mt-2 max-h-48 space-y-2 overflow-y-auto">
-    {findings.map((finding, index) => <li key={index} className="break-words">
-      <div className={colors[findingDisposition(finding)]}>
-        {labels[findingDisposition(finding)]}：{finding.nid ? `[${finding.nid}] ` : ''}<UserFacingNotice message={finding.message}/>
+    {findings.map((finding, index) => {
+      const kind = findingDisposition(finding);
+      return <li key={index} className="break-words">
+      <div className={colors[kind]}>
+        {translate(dispositionKeys[kind])}：{finding.nid ? `[${finding.nid}] ` : ''}<UserFacingNotice message={finding.message}/>
       </div>
-      <details data-technical-details className="text-slate-400"><summary className="cursor-pointer">查看检查详情</summary><div>{findingRequirement(finding) === 'required' ? '必需检查' : '建议类检查'} · 实际：{finding.actual}</div>
-      <div>建议：{finding.expected}</div></details>
-      {finding.nid && onLocate && <button type="button" onClick={() => onLocate(finding.nid!)} className="mt-1 text-blue-300 underline">定位组件 {finding.nid}</button>}
-    </li>)}
+      <details data-technical-details className="text-slate-400"><summary className="cursor-pointer">{translate('quality.viewDetails')}</summary><div>{findingRequirement(finding) === 'required' ? translate('quality.requiredCheck') : translate('quality.advisoryCheck')} · {translate('quality.actualPrefix', {value: finding.actual??''})}</div>
+      <div>{translate('quality.expectedPrefix', {value: finding.expected??''})}</div></details>
+      {finding.nid && onLocate && <button type="button" onClick={() => onLocate(finding.nid!)} className="mt-1 text-blue-300 underline">{translate('quality.locateComponent', {nid: finding.nid})}</button>}
+    </li>;
+    })}
   </ul>;
 }

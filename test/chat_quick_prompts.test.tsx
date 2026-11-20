@@ -5,6 +5,7 @@ import { ChatDrawer } from '../src/components/chat/ChatDrawer';
 import { QuickPromptsConfigPanel } from '../src/components/settings/QuickPromptsConfigPanel';
 import { t } from '../src/i18n';
 import { useProjectStore } from '../src/stores/useProjectStore';
+import { useLocaleStore } from '../src/stores/useLocaleStore';
 import { useQuickPromptsStore, DEFAULT_BUILTIN_PROMPTS } from '../src/stores/useQuickPromptsStore';
 import { useAIConfigStore, defaultProviders, defaultBindings } from '../src/stores/useAIConfigStore';
 import { defaultTheme } from '../src/utils/themePresets';
@@ -17,6 +18,9 @@ describe('Chat Quick Prompts (对话快捷输入与分级配置)', () => {
 
   beforeEach(() => {
     localStorage.clear();
+    useLocaleStore.setState({ locale: 'zh-CN' });
+    document.documentElement.lang = 'zh-CN';
+    useQuickPromptsStore.getState().resetGlobalPrompts();
     // 初始化工程
     const store = useProjectStore.getState();
     store.initNewProject({
@@ -60,7 +64,7 @@ describe('Chat Quick Prompts (对话快捷输入与分级配置)', () => {
     expect(container.textContent).not.toContain('仅本轮生效');
 
     // 快捷输入芯片栏渲染
-    expect(container.textContent).toContain('快捷输入');
+    expect(container.textContent).toContain(t('chat.quickPrompts'));
     // 包含内置默认快捷短语
     expect(container.textContent).toContain('移动端适配');
     expect(container.textContent).toContain('完善表单');
@@ -110,9 +114,28 @@ describe('Chat Quick Prompts (对话快捷输入与分级配置)', () => {
     const globalPrompts = useQuickPromptsStore.getState().globalPrompts;
     expect(globalPrompts.length).toBeGreaterThanOrEqual(DEFAULT_BUILTIN_PROMPTS.length);
     const titles = globalPrompts.map((p) => p.title);
-    expect(titles.some((t) => t.includes('移动端适配'))).toBe(true);
-    expect(titles.some((t) => t.includes('优化微质感'))).toBe(true);
-    expect(titles.some((t) => t.includes('完善表单'))).toBe(true);
+    expect(titles.some((title) => title.includes('移动端适配'))).toBe(true);
+    expect(titles.some((title) => title.includes('优化微质感'))).toBe(true);
+    expect(titles.some((title) => title.includes('完善表单'))).toBe(true);
+  });
+
+  test('builtin prompts resolve to English when locale is en', () => {
+    useLocaleStore.getState().setLocale('en');
+    act(() => {
+      root.render(React.createElement(ChatDrawer, { isOpen: true, onClose: () => {} }));
+    });
+    expect(container.textContent).toContain(t('settings.builtinPrompts.mobileAdaptive.title', undefined, 'en'));
+    expect(container.textContent).toContain(t('settings.builtinPrompts.microTexture.title', undefined, 'en'));
+    expect(container.textContent).not.toContain('移动端适配');
+
+    const mobileChip = Array.from(container.querySelectorAll('button')).find((b) =>
+      b.textContent?.includes(t('settings.builtinPrompts.mobileAdaptive.title', undefined, 'en')),
+    );
+    act(() => {
+      mobileChip?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    const textarea = container.querySelector('textarea') as HTMLTextAreaElement;
+    expect(textarea?.value).toContain(t('settings.builtinPrompts.mobileAdaptive.content', undefined, 'en'));
   });
 
   test('CHK-F-04: 设置面板中可新增当前工程快捷短语（默认 scope = project），保存至当前工程', () => {
@@ -270,7 +293,7 @@ describe('Chat Quick Prompts (对话快捷输入与分级配置)', () => {
     expect(classNames).toContain('max-h-[118px]');
 
     // 快捷输入标题与配置入口在独立标头常显
-    expect(container.textContent).toContain('快捷输入');
+    expect(container.textContent).toContain(t('chat.quickPrompts'));
     expect(container.textContent).toContain('配置');
   });
 });

@@ -22,11 +22,29 @@ export function businessDuty(source:PageRedesignSource,owners:BusinessOwner[],re
  const ids=new Set(owners.find(row=>row.regionId===regionId)?.itemIds??[]);
  return {version:1,sourceFingerprint:source.sourceFingerprint,inventoryFingerprint:contentFingerprint(JSON.stringify(source)),items:businessItems(source).filter(item=>ids.has(item.id))};
 }
+/** Compact durable form for section plans — full item values are rehydrated at generation time. */
+export function businessInventoryRef(source:PageRedesignSource,owners:BusinessOwner[],regionId:string){
+ const duty=businessDuty(source,owners,regionId);
+ return {version:1 as const,sourceFingerprint:duty.sourceFingerprint,inventoryFingerprint:duty.inventoryFingerprint,itemIds:duty.items.map(item=>item.id)};
+}
+function inventoryItemIds(inventory: {items?:BusinessItem[];itemIds?:string[]}|undefined):string[]|undefined{
+ if(!inventory)return;
+ if(Array.isArray(inventory.items))return inventory.items.map(item=>item.id);
+ if(Array.isArray(inventory.itemIds))return inventory.itemIds;
+}
 /** Recheck every saved value against the current immutable inventory, never trust saved assignment contents. */
 export function readBusinessDuties(source:PageRedesignSource,plan:SectionPlan):BusinessDuties|undefined{
  const rows=plan.sections.map(section=>({section,data:JSON.parse(section.requirements)}));
  if(rows.every(row=>row.data.businessInventory===undefined))return;
- const owners=validateBusinessOwners(source,plan.sections.map(section=>section.id),rows.map(row=>({regionId:row.section.id,itemIds:row.data.businessInventory?.items?.map((item:BusinessItem)=>item.id)})));
- for(const row of rows)if(JSON.stringify(row.data.businessInventory)!==JSON.stringify(businessDuty(source,owners,row.section.id)))throw Error('存档业务职责与当前来源不一致，未复用分区。');
+ const owners=validateBusinessOwners(source,plan.sections.map(section=>section.id),rows.map(row=>({regionId:row.section.id,itemIds:inventoryItemIds(row.data.businessInventory)})));
+ for(const row of rows){
+  const inventory=row.data.businessInventory;
+  const expected=businessDuty(source,owners,row.section.id);
+  if(Array.isArray(inventory?.items)){
+   if(JSON.stringify(inventory)!==JSON.stringify(expected))throw Error('存档业务职责与当前来源不一致，未复用分区。');
+  }else if(Array.isArray(inventory?.itemIds)){
+   if(JSON.stringify(inventory)!==JSON.stringify(businessInventoryRef(source,owners,row.section.id)))throw Error('存档业务职责与当前来源不一致，未复用分区。');
+  }else throw Error('存档业务职责与当前来源不一致，未复用分区。');
+ }
  return {source,owners};
 }

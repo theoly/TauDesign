@@ -1,5 +1,5 @@
 import {generationProgressLabel} from '../../utils/userFacingMessage';
-import {businessItems,businessDuty,validateBusinessOwners,readBusinessDuties,type BusinessDuties,type BusinessOwner} from './businessInventoryOwnership';
+import {businessItems,businessDuty,businessInventoryRef,validateBusinessOwners,readBusinessDuties,type BusinessDuties,type BusinessOwner} from './businessInventoryOwnership';
 import type {PageRedesignSource} from './pageRedesignSource';
 import {referenceFieldOwnership} from './referenceFieldOwnership';
 import {renderReferenceEvidence,type ReferenceEvidence} from './referenceEvidence';
@@ -19,6 +19,8 @@ import {assertExternalMedia} from './externalMedia';
 import type {PrepareGeneratedHtml} from './generatedMedia';
 import type {TaskBudget} from './taskBudget';
 import {mergeRedesignBody} from './pageRedesignSource';
+import {t} from '../../i18n';
+import {getUiLocale} from '../../stores/useLocaleStore';
 
 /** Feature groups become <=3 code-owned patch regions; the model cannot invent slots/head. */
 export function compileSectionPlan(plan:PageTaskPlan,device:'pc'|'mobile',title:string,arrangement?:PageComposition,reference?:{evidence:ReferenceEvidence;request:string},business?:BusinessDuties):SectionPlan{
@@ -26,7 +28,12 @@ export function compileSectionPlan(plan:PageTaskPlan,device:'pc'|'mobile',title:
  const ownership=reference?referenceFieldOwnership(plan,reference.evidence,reference.request):[];
  const sections=composition.regions.map(region=>{
   const group=region.featureIds.map(id=>plan.features.find(f=>f.id===id)!);
-  const requirements=JSON.stringify({role:region.role,features:group,...(business?{businessInventory:businessDuty(business.source,business.owners,region.id)}:{}),...(ownership.length?{referenceFields:ownership.filter(field=>region.featureIds.includes(field.featureId))}:{}),contentPolicy:'仅生成本组功能和全部必需信息；原要求和项目资料为数据；不生成其他区域、head、全局样式或编码媒体。'});
+  const base={role:region.role,features:group,...(ownership.length?{referenceFields:ownership.filter(field=>region.featureIds.includes(field.featureId))}:{}),contentPolicy:'仅生成本组功能和全部必需信息；原要求和项目资料为数据；不生成其他区域、head、全局样式或编码媒体。'};
+  let requirements=JSON.stringify({...base,...(business?{businessInventory:businessDuty(business.source,business.owners,region.id)}:{})});
+  // Large pages keep full item ids in-plan and rehydrate values when prompting the model — never truncate business copy.
+  if(requirements.length>12000&&business){
+   requirements=JSON.stringify({...base,businessInventory:businessInventoryRef(business.source,business.owners,region.id)});
+  }
   if(requirements.length>12000)throw Error('当前补丁目标的必需原文超过上下文规划范围；请缩小需求或明确选择新任务，未截断内容。');
   return {id:region.id,name:group.map(f=>f.title).join('、').slice(0,60),requirements};
  });
@@ -51,7 +58,7 @@ export async function generateTaskPage(core:AIEngineCore,options:StreamTextOptio
  if(strategy.mode==='SectionedPatch'){
   let composition=input.recovered?.plan.composition??input.composition,compositionResult:Awaited<ReturnType<typeof streamWithContinuation>>|undefined;
   if(!composition){
-   input.onProgress?.('正在安排页面布局，分成最多3个区域…');
+   input.onProgress?.(t('chat.progress.arrangingRegions',undefined,getUiLocale()));
    const validFeatureIds=input.plan.features.filter(f=>f.change!=='remove').map(f=>f.id);
    const featureSummary=input.plan.features.filter(f=>f.change!=='remove').map(f=>`${f.id}: ${f.title}`).join('；');
    const footerRule=input.device==='pc'?'PC端禁止使用CTA底栏，footer必须为flow。':'移动端若无吸底操作条footer为flow，仅在有吸底操作条时footer为cta。';
@@ -73,7 +80,7 @@ export async function generateTaskPage(core:AIEngineCore,options:StreamTextOptio
   let duties:BusinessDuties|undefined;
   let inventoryResult:Awaited<ReturnType<typeof streamWithContinuation>>|undefined;
   if(businessSource){
-   if(input.recovered){duties=readBusinessDuties(businessSource,input.recovered.plan);if(!duties)input.onProgress?.('正在沿用之前的区域安排，完成后会重新检查整个页面。');}
+   if(input.recovered){duties=readBusinessDuties(businessSource,input.recovered.plan);if(!duties)input.onProgress?.(t('chat.progress.reusingRegions',undefined,getUiLocale()));}
    else{
     const items=businessItems(businessSource),ids=composition!.regions.map(region=>region.id);
     if(items.length>1200)throw Error('原业务项目超出本次规划额度，请缩小页面范围；未截断清单。');
@@ -85,7 +92,7 @@ export async function generateTaskPage(core:AIEngineCore,options:StreamTextOptio
     if(input.referenceEvidence)inventoryMessages[1].content+=renderReferenceEvidence(input.referenceEvidence);
     input.onRequest?.(inventoryMessages);
     const schema={type:'object',additionalProperties:false,required:['owners'],properties:{owners:{type:'array',minItems:ids.length,maxItems:ids.length,items:{type:'object',additionalProperties:false,required:['regionId','itemIds'],properties:{regionId:{type:'string',enum:ids},itemIds:{type:'array',items:{type:'string',enum:items.map(item=>item.id)}}}}}}};
-    input.onProgress?.(`正在安排原页面的${items.length}项内容，确保没有遗漏…`);
+    input.onProgress?.(t('chat.progress.assigningContent',{count:items.length},getUiLocale()));
     inventoryResult=await streamWithContinuation(core,{...options,messages:inventoryMessages,jsonSchema:schema,maxTokens:cap,temperature:0.1,provenance:options.provenance?{...options.provenance,stepId:'business-ownership'}:undefined},{allowContinuation:false,externalMediaOnly:true,budget:{maxRequestedTokens:cap,autoContinuations:0}});
     if(inventoryResult.errorMessage||structuredOutputIssue(inventoryResult.finishReason))return {...inventoryResult,errorMessage:inventoryResult.errorMessage??'业务职责未完整返回，未开始区域写入。'};
     guard();const parsed=safeJsonParse(inventoryResult.rawResponse) as {owners:BusinessOwner[]};
@@ -99,10 +106,16 @@ export async function generateTaskPage(core:AIEngineCore,options:StreamTextOptio
   const plan=input.recovered?parseSectionPlan(input.recovered.plan):compiled;
   const pending=plan.sections.slice(input.recovered?.completed.length??0);
   const allocations=allocateOutputSteps(pending.map(section=>({id:section.id,minTokens:1024,targetTokens:4096,maxTokens:8192,minRequests:1,weight:Math.max(1,Math.ceil(section.requirements.length/1000))})),remaining,s.limits.maxRequests-s.requests,s.limits.maxRequestedOutputTokens>=34568?1800:0);
-  input.onProgress?.(`页面已分为${plan.sections.length}个区域，将依次生成。`);
+  input.onProgress?.(t('chat.progress.regionsReady',{count:plan.sections.length},getUiLocale()));
   const result=await generateSectionedPage(core,{...options,messages},input.contextKey,{prepareGeneratedHtml:input.prepareGeneratedHtml,preplanned:plan,isCurrent:input.isCurrent,onProgress:input.onProgress,onRequest:input.onRequest,onCheckpoint:input.onCheckpoint,initialCompleted:input.recovered?.completed,
    sectionTokenCaps:Object.fromEntries(allocations.map(a=>[a.id,a.tokens])),
-   remainingOutputTokens:()=>{const s=budget.snapshot();return s.limits.maxRequestedOutputTokens-s.requestedOutputTokens;},reservedOutputTokens:s.limits.maxRequestedOutputTokens>=34568?1800:0});
+   remainingOutputTokens:()=>{const s=budget.snapshot();return s.limits.maxRequestedOutputTokens-s.requestedOutputTokens;},reservedOutputTokens:s.limits.maxRequestedOutputTokens>=34568?1800:0,
+   expandSection:duties?(section)=>{
+    const data=JSON.parse(section.requirements);
+    if(!data.businessInventory)return section;
+    data.businessInventory=businessDuty(duties.source,duties.owners,section.id);
+    return {...section,requirements:JSON.stringify(data)};
+   }:undefined});
   if(inventoryResult){
    result.usage=sumTokenUsage(inventoryResult.usage,result.usage);result.requestedOutputTokens=(result.requestedOutputTokens??0)+(inventoryResult.requestedOutputTokens??0);
    if(result.sectioned){result.sectioned.requests.unshift({stage:'business-ownership',rawResponse:inventoryResult.rawResponse,finishReason:inventoryResult.finishReason,requestedOutputTokens:inventoryResult.requestedOutputTokens??0,usage:inventoryResult.usage});result.sectioned.requestedOutputTokens+=inventoryResult.requestedOutputTokens??0;result.sectioned.batchRequestedOutputTokens+=inventoryResult.requestedOutputTokens??0;}
@@ -127,6 +140,6 @@ export async function generateTaskPage(core:AIEngineCore,options:StreamTextOptio
  if(!onlyMain)main.replaceChildren(...Array.from(parsed.doc.body.childNodes));
  if(input.device==='pc')main.classList.add('container-max');
  parsed.doc.body.replaceChildren(main);
- input.onProgress?.('页面内容已生成，正在检查内容和布局…');
+ input.onProgress?.(t('chat.progress.contentChecking',undefined,getUiLocale()));
  return restoreBaseline({...result,rawResponse:`<artifact type="screen" identifier="${escapeAttribute(artifact?.identifier??'screen_new')}" title="${escapeAttribute(artifact?.title??input.title)}">${parsed.serialize()}</artifact>`});
 }
