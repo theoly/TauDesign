@@ -128,6 +128,37 @@ export function FailedDraftCard({value,saved,busy,notice,compactActions=false,on
   </section>;
 }
 
+/** Message fields needed to decide whether the Fix-blockers dock still owns the chat footer. */
+export type FixBlockersDockMessage = {
+  id: string;
+  sender?: string;
+  isGenerating?: boolean;
+  htmlOutput?: string;
+  isError?: boolean;
+  qualityReport?: unknown;
+  text?: string;
+  qualityDraft?: { status?: string } | null;
+};
+
+/**
+ * Only the latest blocked draft may own the dock.
+ * A newer user turn or any newer assistant activity (including in-flight) cancels it —
+ * e.g. starting a new analysis/conversation must not leave "Fix blockers only" sticky.
+ */
+export function resolveFixBlockersDockOwner<T extends FixBlockersDockMessage>(messages: T[]): T | null {
+  const latestBlocked = [...messages].reverse().find((row) => row.qualityDraft?.status === 'blocked');
+  if (!latestBlocked?.qualityDraft) return null;
+  const blockedAt = messages.indexOf(latestBlocked);
+  const superseded = messages.slice(blockedAt + 1).some((row) => {
+    if (row.sender === 'user') return true;
+    if (row.sender !== 'assistant') return false;
+    if (row.isGenerating) return true;
+    if (row.qualityDraft?.status === 'blocked') return false;
+    return Boolean(row.htmlOutput || row.isError || row.qualityReport || row.text || row.qualityDraft);
+  });
+  return superseded ? null : latestBlocked;
+}
+
 /** Compact Fix-blockers CTA for the latest-message dock (outside tall draft history). */
 export function FailedDraftFixBlockersDock({value,busy,onRepair}:{
   value:SavedQualityDraft;busy?:boolean;onRepair:(labels:DraftLabel[],region?:DraftRegionRequest)=>void;

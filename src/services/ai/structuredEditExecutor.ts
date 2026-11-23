@@ -14,6 +14,7 @@ import {resolveWorkflowValidation} from './workflowValidation';
 import { normalizeMobileNavigation } from '../../utils/mobileNavigation';
 import { parseHtmlCopy } from '../../utils/htmlDocument';
 import { applyLocalCopyEdits,generateSupplementedLocalEdits,mergeLocalEditOperations,type LocalEditOperation } from './localCopyModification';
+import { applyConfirmedLayoutDirectives } from './confirmedLayoutDirectives';
 import { generateElementCopyEdits } from './elementCopyModification';
 import { generateRegionCopyEdits } from './regionCopyModification';
 import { checkGenerationSourceSafety,checkGenerationQuality,qualitySummary,type QualityReport } from './generationQuality';
@@ -110,7 +111,7 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
     if(new Set(requested).size!==requested.length || requested.some(nid=>nodes.filter(el=>el.getAttribute('data-nid')===nid).length!==1))throw new Error(`${input.mode==='element'?'引用元素':'授权节点'}不存在或标识不唯一，未请求模型。`);
     if(structural)validateRegionTargets(html,requested as string[],{device:input.settings.deviceProfile,protectedNids,allowedNids:requested as string[],modificationRequest:input.request});
     const needsModel=input.mode!=='local'||input.local?.supplement;
-    const scopedContext=needsModel?buildScopedPageContext({screenId:input.screen.id,html,targetNids:requested as string[],scopedCss:input.screen.scopedCss,overrides:input.styleOverrides}):undefined;
+    const scopedContext=needsModel?buildScopedPageContext({screenId:input.screen.id,html,targetNids:requested as string[],scopedCss:input.screen.scopedCss,overrides:input.styleOverrides,request:input.request}):undefined;
     if(needsModel && (!core||!input.binding))throw new Error('请先配置可用的 AI Provider 以执行结构化修改。');
     if((needsModel||functional||contract.designGuidance)&&contract.request!==input.request)throw new Error('当前指令与冻结任务合同不匹配，请重新发起修改。');
     const protocol=structural?'fragment-json':'finite-json';
@@ -150,8 +151,10 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
           regionNids:requested as string[],projectKnowledge:input.projectKnowledge,textReferences:input.textReferences,attachment:input.attachment,useCustomNavigation:input.settings.useCustomNavigation,signal,isCurrent});
       }
       const issue=pageTaskPlanIssue(contract);if(issue)throw new Error(issue);
-      if(contract.pageTaskPlan.request.providerId!==input.binding!.provider.id||contract.pageTaskPlan.request.model!==input.binding!.model)throw new Error('功能规划使用的模型已变化。');
-      if(contract.pageTaskPlan.plan.questions.length)throw new Error(`区块功能规划有待确认的问题：${contract.pageTaskPlan.plan.questions.join('；')}`);
+      const pageTask=contract.pageTaskPlan;
+      if(!pageTask?.plan||!pageTask.request)throw new Error('区块功能规划缺失，请重新分析或选择整页改写。');
+      if(pageTask.request.providerId!==input.binding!.provider.id||pageTask.request.model!==input.binding!.model)throw new Error('功能规划使用的模型已变化。');
+      if(pageTask.plan.questions.length)throw new Error(`区块功能规划有待确认的问题：${pageTask.plan.questions.join('；')}`);
     }else if(contract.pageTaskPlan)throw new Error('本次有限修改不能复用其它功能规划。');
     if(input.contextualGuidance&&needsModel&&!contract.designGuidance){
       const query={request:input.request,operation:contract.operation,device:contract.device.profile,scope:'element' as const,features:input.contextualGuidance.features??targetRuleFeatures(html,requested as string[]),maxChars:10000};
@@ -183,6 +186,7 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
         allowedNids:input.local!.allowedNids,protectedNids,allowText});
     }
     guard();
+    candidate={...candidate,html:applyConfirmedLayoutDirectives(candidate.html,input.request,protectedNids)};
     const guidanceIssue=guidancePacketIssue(contract);
     if(guidanceIssue)throw new Error(guidanceIssue);
     const safe=checkGenerationSourceSafety(candidate.html,mediaPolicy);

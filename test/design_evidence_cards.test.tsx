@@ -51,6 +51,11 @@ test('functional planning card keeps legacy records quiet and rejects malformed 
   const node=render(<PageTaskPlanCard/>);expect(node.textContent).toBe('');
   act(()=>root!.render(<PageTaskPlanCard contract={{pageTaskPlan:{version:1}} as any}/>));
   expect(node.textContent).toContain('业务规划记录不可用');
+  // Key present with undefined value must not throw (Object.hasOwn alone is unsafe).
+  act(()=>root!.render(<PageTaskPlanCard contract={{pageTaskPlan:undefined} as any}/>));
+  expect(node.textContent).toBe('');
+  act(()=>root!.render(<PageTaskPlanCard contract={{} as any}/>));
+  expect(node.textContent).toBe('');
 });
 
 test('brief identifies exact field labels while legacy obligations remain readable',()=>{

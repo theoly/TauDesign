@@ -71,3 +71,10 @@ test('bounded conversation memory keeps prior requirements without replaying old
  const r=recorder();await PipelineExecutor.execute({input:{rawPrompt:'参考订单管理 Order Detail，创建新页面',activeScreenId:null,decision:{intent:'create_screen',targetScreenId:null,styleReferenceScreenId:'source',reason:'test'}},engineCore:r.core,conversationHistory:history,provider,model:'mock',screens,deviceProfile:'pc',frameWidth:1440,baseSystemPrompt:'System'});
  expect(r.calls[0].messages[1]).toMatchObject({role:'user',content:'新页面也需要显示订单编号'});expect(r.calls[0].messages.at(-1)?.content).toContain('原订单业务完整标题');
 });
+test('modify_screen deduplicates targetScreenId from referencedScreens without false omission warning',()=>{
+ const bigHtml=`<main>${'<div>内容</div>'.repeat(3000)}</main>`;
+ const bigScreens={target:{id:'target',name:'P04 高级偏好评分',htmlContent:bigHtml},other:screens.other};
+ const result=enrichContext({rawPrompt:'@P04 高级偏好评分 压缩间距',intent:'modify_screen',activeScreenId:'target',targetScreenOverride:{id:'target'},referenceScreenId:'target',screens:bigScreens,deviceProfile:'mobile',frameWidth:390,baseSystemPrompt:'System'});
+ expect(result.referencedScreens).toHaveLength(0);
+ expect(result.warnings.some(w=>w.includes('预算不足，以下参考页本轮未注入')&&w.includes('P04 高级偏好评分'))).toBe(false);
+});

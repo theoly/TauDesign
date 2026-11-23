@@ -51,7 +51,7 @@ const MOBILE_RULES = `DEVICE RULES — MOBILE (390px):
 - NO HOVER STATES. 禁 :hover/hover类。
 - WIDTH CONTAINMENT: ≤390px；禁100vw/超视口固定宽；根<main class="col …">；标签.row.wrap.gap-2；列内/吸底长按钮可换行，勿nowrap撑破父列。
 - PAGE GUTTER: body>main已约16px左右margin；正文/卡片/按钮勿贴右缘，左右对称。仅.hero-section/.full-bleed/.tabbar/.cta-fixed/.appbar/.status-bar可贴边。禁根main再写width:100vw或仅左侧padding。
-- .py-4/.px-0或内容区.p-4；.text-md；.input-touch/.tap-target；.safe-bottom；不预留系统顶栏高度。
+- .py-4/.px-0或内容区.p-4；.text-md；.input-touch/.tap-target；.safe-bottom；不预留系统顶栏高度。稀疏主按钮才用.tap-target（最小44px）。星级/心形等重复图标按钮不要套.tap-target，按钮用.p-0.px-0，星组用.row.justify-start加小gap；禁止.grid-5/.justify-between/.flex-1把同一组图标拉开。用户已确认去掉tap-target或收紧间距时必须照做，禁止再把图标按钮撑回44px。
 - FULL-BLEED HERO BANNERS & GRADIENTS: .hero-section full width, no horizontal margins, 0 bottom radius; cards below normal spacing/overlap; .full-bleed media.
 - CTA BUTTON PLACEMENT: card/sheet submits in-flow; .cta-fixed only for sticky full-width bottom bars or when the reference shows them. ALWAYS match the button placement in the reference!
 - RIBBON BADGES & STATUS STRIPS: .relative+.absolute; .notification-control; notice bars .bg-warning-light/.bg-surface-alt.

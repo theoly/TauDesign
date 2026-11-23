@@ -22,7 +22,9 @@ export const ModificationReviewCard: React.FC<{
   const modeGroup = useId();
   const localPlan = getLocalModificationPlan(review, selected);
   const regionPlan = getRegionModificationPlan(review, selected);
-  const recommendedMode: ModificationMode = localPlan ? 'local' : regionPlan ? 'region' : 'page';
+  const allCoveredByLocal = Boolean(localPlan && localPlan.includedIds.length === selected.length);
+  const allCoveredByRegion = Boolean(regionPlan && regionPlan.includedIds.length === selected.length);
+  const recommendedMode: ModificationMode = allCoveredByLocal ? 'local' : allCoveredByRegion ? 'region' : 'page';
   const mode: ModificationMode = requestedMode === 'auto' ? recommendedMode : requestedMode;
   const submitting = useRef(false);
   const [busy, setBusy] = useState(false);
@@ -127,11 +129,13 @@ export const ModificationReviewCard: React.FC<{
               {t('plan.modModePage')}
             </label>
             <p className="text-[11px] text-slate-400">
-              {localPlan
+              {mode === 'local' && localPlan
                 ? t('plan.modModeHintLocal')
-                : regionPlan
+                : mode === 'region' && regionPlan
                   ? t('plan.modModeHintRegion')
-                  : t('plan.modModeHintPage')}
+                  : selected.length > 1 && review.items.some((item) => selected.includes(item.id) && item.scope !== 'page') && !allCoveredByLocal && !allCoveredByRegion
+                    ? t('plan.modModeHintOverlap')
+                    : t('plan.modModeHintPage')}
               {skippedForMode.length
                 ? t('plan.modModeHintSkip', { count: skippedForMode.length })
                 : t('plan.modModeHintSupplement')}

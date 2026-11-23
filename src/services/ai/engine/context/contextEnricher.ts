@@ -10,6 +10,8 @@ import { formatTextReferences, type TextReference } from '../../textFileContext'
 import {contextSource,makeContextManifest,type ContextManifest} from './contextManifest';
 import {buildPageReferenceSnapshot} from './pageReferenceContext';
 import {buildPageRedesignSource,type PageRedesignSource} from '../../pageRedesignSource';
+import { extractStyleReferences } from './scopedPageContext';
+import { parseHtmlCopy } from '../../../../utils/htmlDocument';
 
 export interface ContextEnricherParams {
   rawPrompt: string;
@@ -208,6 +210,11 @@ export function enrichContext(params: ContextEnricherParams): EnrichedContextRes
     targetScreenId = Object.keys(screens)[0];
   }
 
+  // 目标页已作为待修改主体注入时，从参考页列表中去重，避免重复计入预算与误报「未注入」(BR-OPT-01)
+  const effectiveReferencedScreens = (intent === 'modify_screen' && targetScreenId)
+    ? referencedScreens.filter((ref) => ref.id !== targetScreenId)
+    : referencedScreens;
+
   let targetOriginalHtml = '';
   let targetName = '';
   if (targetScreenId && screens[targetScreenId]) {
@@ -215,14 +222,18 @@ export function enrichContext(params: ContextEnricherParams): EnrichedContextRes
     targetName = screens[targetScreenId].name;
   }
   const redesignSource=params.wholePageRedesign&&intent==='modify_screen'&&targetScreenId&&screens[targetScreenId]?buildPageRedesignSource(screens[targetScreenId].htmlContent,{deviceProfile,...params.wholePageRedesign}):undefined;
+  const hasTargetOverrides=Boolean(targetScreenId&&Object.keys(params.overrides??{}).some(key=>key.startsWith(`${targetScreenId}:`)));
+  const targetSnapshotStyles=targetScreenId&&screens[targetScreenId]&&(screens[targetScreenId].scopedCss?.trim()||hasTargetOverrides)
+    ? buildPageReferenceSnapshot(screens[targetScreenId],params.overrides).styles??''
+    : '';
 
   // 3. Enforce budget guard
   const budgetResult = {...enforceBudgetGuard({
-    targetHtml: redesignSource?JSON.stringify(redesignSource)+'\n'+(buildPageReferenceSnapshot(screens[targetScreenId!],params.overrides).styles??''):targetOriginalHtml,
+    targetHtml: redesignSource?(targetSnapshotStyles?JSON.stringify(redesignSource)+'\n'+targetSnapshotStyles:JSON.stringify(redesignSource)):targetOriginalHtml,
     targetId: targetScreenId || undefined,
     targetName,
     targetIsBusinessInventory:Boolean(redesignSource),
-    referencedScreens,
+    referencedScreens: effectiveReferencedScreens,
     skeletonizeFn: htmlSkeletonize
   }),targetScreenHtml:targetOriginalHtml};
 
@@ -347,12 +358,14 @@ User Request: ${userPrompt}`;
       : '';
 
     if(params.wholePageRedesign){
-      userPrompt=`[整页重设计：完整业务清单，不是原DOM]\n${JSON.stringify(redesignSource)}\n[完整来源CSS与L4，只读]\n${buildPageReferenceSnapshot(screens[targetScreenId],params.overrides).styles}\n原head/body属性由程序从基线复制，本阶段只写主体或当前计划区域。保留清单中全部未经明确变更授权的信息、控件规则、媒体及保护属性；不得从布局投影臆造被省略的业务。\n用户修改需求：${userPrompt}`;
+      const styleRefs=extractStyleReferences(parseHtmlCopy(screens[targetScreenId].htmlContent).doc,[],rawPrompt);
+      const refHtmlBlock=styleRefs.length?`\n[同页只读样式参照片段（仅作排版、行式结构与图标形态参照，禁止修改或复用其data-nid）]\n${styleRefs.map(r=>`<!-- 参照区块: ${r.heading} -->\n${r.html}`).join('\n')}`:'';
+      userPrompt=`[整页重设计：完整业务清单，不是原DOM]\n${JSON.stringify(redesignSource)}${targetSnapshotStyles?`\n[完整来源CSS与L4，只读]\n${targetSnapshotStyles}`:''}${refHtmlBlock}\n原head/body属性由程序从基线复制，本阶段只写主体或当前计划区域。保留清单中全部未经明确变更授权的信息、控件规则、视觉图标组(visualIcons)、媒体及保护属性；不得从布局投影臆造被省略的业务。\n用户修改需求：${userPrompt}`;
     }else userPrompt = `[待修改目标画框当前 ${budgetResult.targetIsSkeleton ? '骨架' : 'HTML'}] (名称: "${targetName}"):
 \`\`\`html
 ${budgetResult.targetScreenHtml}
 \`\`\`
-${screens[targetScreenId]?.scopedCss||params.overrides?`[目标来源CSS与L4，完整只读依赖]\n${buildPageReferenceSnapshot(screens[targetScreenId],params.overrides).styles}`:''}
+${targetSnapshotStyles?`[目标来源CSS与L4，完整只读依赖]\n${targetSnapshotStyles}`:''}
 ${elementDirective}${regionDirective}
 [重要修改约束]: 请在严格保留原有业务内容、文本和已有 data-nid 的基础上进行指定调整。必须且仅输出被 <artifact identifier="${targetScreenId}" type="screen" title="${targetName}"> 与 </artifact> 包裹的完整 HTML，严禁输出 identifier="screen_new"。\n\n${ARTIFACT_OUTPUT_REMINDER}\n\n用户修改需求: ${userPrompt}`;
   } else if(intent!=='question') {
@@ -387,9 +400,9 @@ ${elementDirective}${regionDirective}
     ...(isTargetedScreenModification&&targetScreenId&&screens[targetScreenId]?redesignSource?[
       contextSource(targetScreenId,'target',screens[targetScreenId].htmlContent,JSON.stringify(redesignSource),false,'明确全页重设计：保留完整业务数据，原布局投影省略，原DOM留本地'),
       contextSource(targetScreenId+':business','target',JSON.stringify(redesignSource),JSON.stringify(redesignSource),true),
-      contextSource(targetScreenId+':styles','target',buildPageReferenceSnapshot(screens[targetScreenId],params.overrides).styles??'',buildPageReferenceSnapshot(screens[targetScreenId],params.overrides).styles??'',true)
+      ...(targetSnapshotStyles?[contextSource(targetScreenId+':styles','target',targetSnapshotStyles,targetSnapshotStyles,true)]:[])
     ]:[contextSource(targetScreenId,'target',JSON.stringify([screens[targetScreenId].htmlContent,screens[targetScreenId].scopedCss??'',Object.entries(params.overrides??{}).filter(([key])=>key.startsWith(targetScreenId+':'))]),JSON.stringify([budgetResult.targetScreenHtml,screens[targetScreenId].scopedCss??'',Object.entries(params.overrides??{}).filter(([key])=>key.startsWith(targetScreenId+':'))]),true)]:[]),
-    ...referencedScreens.map(ref=>{const used=budgetResult.referencedScreens.find(row=>row.id===ref.id);return contextSource(ref.id,'reference',JSON.stringify(ref),used?JSON.stringify(used):undefined,false,used?.format==='compact'?'参考来源已压缩，未包含的细节不得推断。':!used?'参考来源超出预算，未注入。':undefined);}),
+    ...effectiveReferencedScreens.map(ref=>{const used=budgetResult.referencedScreens.find(row=>row.id===ref.id);return contextSource(ref.id,'reference',JSON.stringify(ref),used?JSON.stringify(used):undefined,false,used?.format==='compact'?'参考来源已压缩，未包含的细节不得推断。':!used?'参考来源超出预算，未注入。':undefined);}),
     ...textReferences.map(ref=>contextSource(ref.path??ref.name,'document',ref.content,ref.content,true)),
     ...(params.projectKnowledge?[contextSource('project:knowledge','knowledge',params.projectKnowledge,params.projectKnowledge,true)]:[]),
     ...(params.conversationHistory??[]).map((entry,index)=>contextSource('history:'+index,'history',entry.content,['user','assistant'].includes(entry.role)?entry.content:undefined,false,['user','assistant'].includes(entry.role)?undefined:'非用户/助手历史消息不注入。'))];

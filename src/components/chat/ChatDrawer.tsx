@@ -13,7 +13,7 @@ import type {ChatMessageItem} from '../../services/ai/engine/react/useAIEngineCh
 import {HistoricalDraftSource} from './HistoricalDraftSource';
 import {PageTaskCoverageCard} from './PageTaskCoverageCard';
 import {MultiPagePlanCard} from './MultiPagePlanCard';
-import { FailedDraftCard, FailedDraftFixBlockersDock } from './FailedDraftCard';
+import { FailedDraftCard, FailedDraftFixBlockersDock, resolveFixBlockersDockOwner } from './FailedDraftCard';
 import { ReferenceRegionDialog } from './ReferenceRegionDialog';
 import type { ImageAttachment } from '../../types/referenceImage';
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
@@ -519,19 +519,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   };
 
   const activeGeneratingMsg = engine.messages.find((m) => m.isGenerating);
-  /** Only the latest blocked draft may own the Fix-blockers dock; later non-blocker AI results hide it. */
-  const fixBlockersDockMessage = (() => {
-    const latestBlocked = [...engine.messages].reverse().find((row) => row.qualityDraft?.status === 'blocked');
-    if (!latestBlocked?.qualityDraft) return null;
-    const blockedAt = engine.messages.indexOf(latestBlocked);
-    const superseded = engine.messages.slice(blockedAt + 1).some((row) => {
-      if (row.sender !== 'assistant' || row.isGenerating) return false;
-      if (row.qualityDraft?.status === 'blocked') return false;
-      // Any finished assistant turn that is not a blocked draft (success, plain error, Q&A, …).
-      return Boolean(row.htmlOutput || row.isError || row.qualityReport || row.text || row.qualityDraft);
-    });
-    return superseded ? null : latestBlocked;
-  })();
+  const fixBlockersDockMessage = resolveFixBlockersDockOwner(engine.messages);
   const activeStreamText = activeGeneratingMsg?.text || '';
   let streamingArtifactStatus: string | null = null;
   if (engine.isGenerating) {

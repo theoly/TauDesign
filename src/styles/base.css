@@ -368,6 +368,11 @@ a { color: var(--color-primary-text); }
   border-radius: var(--radius-lg, 12px);
 }
 
+/* .btn-sm / .btn-lg 与 .p-0 特异性相同且写在后面，单独的 p-0 会被按钮内边距盖掉。 */
+.btn.p-0,
+.btn-sm.p-0,
+.btn-lg.p-0 { padding: var(--space-0, 0px); }
+
 .btn-primary {
   background: var(--background-primary-action, var(--color-primary));
   color: var(--color-on-primary);

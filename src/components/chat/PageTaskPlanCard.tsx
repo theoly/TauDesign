@@ -5,13 +5,16 @@ import type {PageTaskPlan} from '../../services/ai/pageTaskPlan';
 const changes={retain:'保留',add:'新增',update:'调整',remove:'删除'};
 const origins={user:'本次要求',document:'文档资料',page:'已有页面',image:'参考图观察',inference:'AI 推断'};
 export function PageTaskPlanCard({contract}:{contract?:DesignTaskContract}) {
-  if(!contract||!Object.hasOwn(contract,'pageTaskPlan'))return null;
+  // hasOwn alone is insufficient: contracts may carry pageTaskPlan:undefined after restore/partial clone.
+  if(!contract?.pageTaskPlan)return null;
   const issue=pageTaskPlanIssue(contract);
   if(issue)return <p role="status" className="my-2 text-xs text-amber-300">业务规划记录不可用：{issue}</p>;
-  const plan=contract.pageTaskPlan!.plan;
+  const snapshot=contract.pageTaskPlan;
+  if(!snapshot?.plan)return <p role="status" className="my-2 text-xs text-amber-300">业务规划记录不可用：缺少规划正文。</p>;
+  const plan=snapshot.plan;
   return <details aria-label="功能与交互规划" className="my-1 space-y-1.5 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-[11px] leading-4 text-slate-300">
     <summary className="cursor-pointer">功能与交互规划 · {plan.features.length} 项功能</summary>
-    {contract.pageTaskPlan!.request.planSource&&<p className="text-slate-500">规划来自已确认的多页计划；本页生成复用该规划，未增加规划请求。</p>}
+    {snapshot.request?.planSource&&<p className="text-slate-500">规划来自已确认的多页计划；本页生成复用该规划，未增加规划请求。</p>}
     <PageTaskPlanContent plan={plan}/>
   </details>;
 }

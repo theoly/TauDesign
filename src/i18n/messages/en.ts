@@ -2190,6 +2190,7 @@ export const en = {
     modModeHintLocal: 'Recommended: local edit — change only the located nodes.',
     modModeHintRegion: 'Recommended: full region edit — replace selected regions and keep the rest.',
     modModeHintPage: 'Selection lacks a clear local target or the change is large — you can choose whole-page rewrite.',
+    modModeHintOverlap: 'Selected local/region items overlap or exceed 3 target nodes and fell back to whole-page rewrite. Uncheck overlapping items and apply in batches to keep scoped editing.',
     modModeHintSkip: ' This mode skips {count} whole-page suggestion(s); choose whole-page rewrite to include them.',
     modModeHintSupplement: ' If a supplement exceeds the selected scope, the run stops with a prompt and does not auto-fall back to whole-page rewrite.',
     modEvidenceSummary: 'View analysis check log',

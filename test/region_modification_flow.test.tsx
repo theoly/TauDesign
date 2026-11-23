@@ -269,4 +269,18 @@ describe('局部补充合并契约',()=>{
  const conflict=mergeLocalEditOperations(base,[{nid:'title',type:'remove_classes',value:'text-xl'}]);
  expect(()=>applyLocalCopyEdits(regionHtml,conflict,{device:'mobile'})).toThrow('冲突');
  });
+ test('多选重叠区块建议回退整页模式时显示分批执行提示',async()=>{
+  const {ModificationReviewCard}=await import('../src/components/chat/ModificationReviewCard');
+  const host=document.createElement('div');document.body.appendChild(host);const root=createRoot(host);
+  const overlapReview={summary:'重叠建议',elementCount:20,status:'ready' as const,items:[
+   {id:'s1',title:'外层卡片',reason:'外层偏宽',change:'收敛外层',scope:'region' as const,targetNids:['region'],regionImpactIndexes:[1,2]},
+   {id:'s2',title:'内层标题',reason:'标题居中',change:'调整标题',scope:'region' as const,targetNids:['title'],regionImpactIndexes:[2]}
+  ]};
+  try{
+   await act(async()=>{root.render(<ModificationReviewCard review={overlapReview} onConfirm={()=>{}} onCancel={()=>{}}/>);});
+   const boxes=Array.from(host.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
+   await act(async()=>{boxes.forEach(box=>box.click());});
+   expect(host.textContent).toContain('存在区域重叠或超过 3 个目标节点');
+  }finally{await act(async()=>{root.unmount();});host.remove();}
+ });
 });

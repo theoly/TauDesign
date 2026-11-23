@@ -2,8 +2,28 @@ import type {StyleOverride} from '../../../../types/project';
 import {parseHtmlCopy} from '../../../../utils/htmlDocument';
 import {contentFingerprint} from '../../designWorkflow';
 
+export function extractStyleReferences(doc:Document,targets:Element[],request?:string){
+ const query=request?.trim();if(!query)return [];
+ const candidates=Array.from(doc.body.querySelectorAll('section,article,form,aside,header,footer,div[data-nid]'));
+ const picked:Array<{nid?:string;heading:string;html:string}>=[];
+ let totalChars=0;
+ const isIsolated=(el:Element)=>targets.every(t=>el!==t&&!el.contains(t)&&!t.contains(el));
+ for(const el of candidates){
+  if(!isIsolated(el))continue;
+  const html=el.outerHTML;if(html.length>4000||totalChars+html.length>6000)continue;
+  const headingEl=el.querySelector(':scope > h1,:scope > h2,:scope > h3,:scope > h4,:scope > header h1,:scope > header h2,:scope > header h3,:scope > div > h1,:scope > div > h2,:scope > div > h3,legend');
+  const heading=(headingEl?.textContent??el.getAttribute('aria-label')??'').replace(/\s+/g,' ').trim();
+  if(heading.length<2||heading.length>40||!query.includes(heading))continue;
+  if(picked.some(item=>item.heading===heading||item.html.includes(html)))continue;
+  picked.push({nid:el.getAttribute('data-nid')??undefined,heading,html});
+  totalChars+=html.length;
+  if(picked.length>=2)break;
+ }
+ return picked;
+}
+
 /** Read-only dependencies. None of these nodes grants an additional write target. */
-export function buildScopedPageContext(input:{screenId:string;html:string;targetNids:readonly string[];scopedCss?:string;overrides?:Record<string,StyleOverride>}) {
+export function buildScopedPageContext(input:{screenId:string;html:string;targetNids:readonly string[];scopedCss?:string;overrides?:Record<string,StyleOverride>;request?:string}) {
  const {doc}=parseHtmlCopy(input.html),nodes=Array.from(doc.body.querySelectorAll('[data-nid]'));
  if(!input.targetNids.length||new Set(input.targetNids).size!==input.targetNids.length)throw Error('局部上下文缺少唯一授权目标。');
  const targets=input.targetNids.map(nid=>{
@@ -23,8 +43,10 @@ export function buildScopedPageContext(input:{screenId:string;html:string;target
  const externalStyles=Array.from(doc.querySelectorAll('link[rel~="stylesheet"]')).map(el=>el.getAttribute('href')).filter(Boolean);
  const css=[...styleRules,input.scopedCss??''].filter(Boolean).join('\n');
  const overrides=Object.entries(input.overrides??{}).filter(([key])=>key.startsWith(input.screenId+':')).map(([,value])=>structuredClone(value));
+ const styleReferences=extractStyleReferences(doc,targets,input.request);
  return {version:1 as const,screenId:input.screenId,baselineFingerprint:contentFingerprint(input.html),targetNids:[...input.targetNids],
   regions,ancestors:[...ancestors.values()],sourceCss:css,sourceCssFingerprint:contentFingerprint(css),externalStyles,overrides,
   overrideFingerprint:contentFingerprint(JSON.stringify(overrides)),
-  notice:'当前targetNids才是可修改范围。祖先、邻接摘要、来源CSS和L4均只读；摘要已明确截取，不能据此改写整页或推断省略内容。externalStyles只列地址，未声称已读取其内容。'};
+  ...(styleReferences.length?{styleReferences}:{}),
+  notice:'当前targetNids才是可修改范围。祖先、邻接摘要、styleReferences、来源CSS和L4均只读；styleReferences仅作同页样式/排版参照，禁止修改或复用其data-nid；摘要已明确截取，不能据此改写整页或推断省略内容。externalStyles只列地址，未声称已读取其内容。'};
 }

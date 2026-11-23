@@ -1,14 +1,17 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { FailedDraftCard } from '../src/components/chat/FailedDraftCard';
+import {
+  FailedDraftCard,
+  FailedDraftFixBlockersDock,
+  resolveFixBlockersDockOwner,
+} from '../src/components/chat/FailedDraftCard';
 import { findingSummary } from '../src/components/chat/QualityFindings';
 import { draftRepairTargets, makeFailedPageDraft } from '../src/services/ai/qualityDraft';
 import type { SavedQualityDraft } from '../src/services/storage/qualityDraftRepository';
 import { t } from '../src/i18n';
 import { useLocaleStore } from '../src/stores/useLocaleStore';
 import { defaultTheme } from '../src/utils/themePresets';
-import { FailedDraftFixBlockersDock } from '../src/components/chat/FailedDraftCard';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -296,5 +299,29 @@ describe('i18n FailedDraftCard', () => {
       act(() => root.unmount());
       host.remove();
     }
+  });
+
+  test('new user turn or in-flight analysis cancels the Fix-blockers dock owner', () => {
+    const blocked = { id: 'blocked', sender: 'assistant', qualityDraft: { status: 'blocked' } };
+    expect(resolveFixBlockersDockOwner([blocked])?.id).toBe('blocked');
+    expect(
+      resolveFixBlockersDockOwner([
+        blocked,
+        { id: 'ask', sender: 'user', text: '再分析一次' },
+        { id: 'analyzing', sender: 'assistant', isGenerating: true, text: '' },
+      ]),
+    ).toBeNull();
+    expect(
+      resolveFixBlockersDockOwner([
+        blocked,
+        { id: 'ok', sender: 'assistant', text: '已给出普通答复', qualityDraft: undefined },
+      ]),
+    ).toBeNull();
+    expect(
+      resolveFixBlockersDockOwner([
+        blocked,
+        { id: 'busy', sender: 'assistant', qualityDraftBusy: true } as { id: string; sender: string; qualityDraft?: { status: string } },
+      ])?.id,
+    ).toBe('blocked');
   });
 });

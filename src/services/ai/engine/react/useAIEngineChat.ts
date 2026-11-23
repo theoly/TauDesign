@@ -931,6 +931,7 @@ export function useAIEngineChat() {
         contextualGuidance:!resuming&&!repairing&&!recovered?contextualGuidance:undefined,
         pageTaskPlanning:planPageTask?{snapshot:inheritedTaskPlan}:undefined,
         wholePageRedesign,
+        modificationReview:approved?.receipt,
         onTaskPlan:(taskPlan)=>{if(!controller.signal.aborted){setThinkingStage(2);setMessages(prev=>prev.map(m=>m.id===assistantMsgId?{...m,thinkingStage:2,pageTaskPlan:taskPlan,workflowContract:m.workflowContract?{...m.workflowContract,pageTaskPlan:taskPlan}:undefined,generationProgress:repairing?'原功能规划复核通过，正在定点修复已确认文案…':inheritedTaskPlan?'已复用已梳理的功能规划，正在生成页面…':'功能、信息与交互规划已完成，正在生成页面布局…'}:m));}},
         resume: resuming?.checkpoint,
         resumeContract:resuming?.contract,
@@ -1422,7 +1423,7 @@ export function useAIEngineChat() {
     modificationPlansRef.current.delete(messageId);
     setMessages(prev => prev.map(m => m.id === messageId ? { ...m, modificationReview: { ...plan.analysis!, status: 'submitted' } } : m));
     const prompt = `${plan.request}\n\n[本次确认修改范围，以此为准]\n${scope}`;
-    await sendMessage(prompt, plan.attachment, { ...plan.options,wholePageRedesign:true, displayText: `${plan.options?.displayText || extractCleanUserPrompt(plan.request)}\n\n${scope}` }, { ...plan, receipt });
+    await sendMessage(prompt, plan.attachment, { ...plan.options, wholePageRedesign: true, displayText: `${plan.options?.displayText || extractCleanUserPrompt(plan.request)}\n\n${scope}` }, { ...plan, receipt });
   };
 
   const cancelModification = (messageId: string) => {

@@ -105,6 +105,8 @@ export interface ExecutePipelineOptions {
   writeStrategy?:PageWriteStrategy['requested'];
   /** Explicit whole-page request or confirmed page mode, never inferred from a local edit. */
   wholePageRedesign?:boolean;
+  /** Verified modification review receipt authorizing incremental structural changes. */
+  modificationReview?:import('../../modificationReview').ModificationReviewReceipt;
   sectioned?: {resume?:SectionedCheckpoint};
   isCurrent?:()=>boolean;
   onSectionProgress?:(message:string)=>void;
@@ -232,6 +234,7 @@ export class PipelineExecutor {
       try{assertExternalMedia(sourceTarget.htmlContent,[sourceTarget.scopedCss??'',...Object.entries(options.overrides??{}).filter(([key])=>key.startsWith(sourceTarget.id+':')).flatMap(([,entry])=>Object.values(entry.declarations))].join('\n'));}
       catch(error){return attachContract({status:'error',rawResponse:'',errorMessage:(error instanceof Error?error.message:String(error))+' 请先在项目设置转换旧页面媒体。'});}
     }
+    if(options.modificationReview)workflowContract.modificationReview=structuredClone(options.modificationReview);
     if(options.wholePageRedesign)try{
       if(workflowContract.operation!=='modify'||!sourceTarget||workflowContract.elementNid)throw Error('整页重设计需要明确的页面目标，不能用于局部引用。');
       const source=buildPageRedesignSource(sourceTarget.htmlContent,{deviceProfile,useCustomNavigation:options.useCustomNavigation,protectedNids});
@@ -371,7 +374,9 @@ export class PipelineExecutor {
       decisions,
       projectProseMarkdown: designProseMarkdown,
       targetScreenOverride: input.decision ? { id: input.decision.targetScreenId } : undefined,
-      referenceScreenId:input.decision?.styleReferenceScreenId ?? input.decision?.targetScreenId,
+      referenceScreenId: intentResult.intent === 'modify_screen'
+        ? input.decision?.styleReferenceScreenId
+        : (input.decision?.styleReferenceScreenId ?? input.decision?.targetScreenId),
       overrides:options.overrides,
       conversationHistory:options.conversationHistory,
       wholePageRedesign:options.wholePageRedesign?{useCustomNavigation:options.useCustomNavigation,protectedNids}:undefined
@@ -416,7 +421,7 @@ export class PipelineExecutor {
       input,
       intent: intentResult.intent,
       intentReason: intentResult.reason,
-      hasExplicitStructuralChangeIntent: intentResult.hasExplicitStructuralChangeIntent||Boolean(options.wholePageRedesign),
+      hasExplicitStructuralChangeIntent: intentResult.hasExplicitStructuralChangeIntent||Boolean(options.wholePageRedesign)||Boolean(options.modificationReview),
       wholePageRedesign:options.wholePageRedesign,
       targetScreen: enriched.targetScreen,
       referencedScreens: enriched.referencedScreens,

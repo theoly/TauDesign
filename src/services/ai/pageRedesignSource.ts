@@ -17,6 +17,7 @@ export interface PageRedesignSource {
  protectedNodes:Array<{nid:string;tag:string;attributes:Record<string,string>}>;
  sourceStyles:{stylesheets:string[];inline:Array<{nid?:string;tag:string;style:string}>};
  media:Array<{nid?:string;tag:string;attribute:string;url:string}>;
+ visualIcons?:Array<{nid?:string;kind:'svg'|'icon-mask';count:number;contextText?:string}>;
  notice:string;
 }
 type Policy={deviceProfile:'pc'|'mobile';useCustomNavigation?:boolean;protectedNids?:string[]};
@@ -49,9 +50,23 @@ export function buildPageRedesignSource(html:string,policy:Policy):PageRedesignS
  const protectedNodes=(policy.protectedNids??[]).map(nid=>{
   const nodes=allElements(parsed.doc).filter(el=>el.getAttribute('data-nid')===nid);if(nodes.length!==1)throw Error('原页保护节点缺失或重复，不能规划整页重设计。');const el=nodes[0];return {nid,tag:el.localName,attributes:Object.fromEntries(Array.from(el.attributes).map(a=>[a.name,a.value]))};
  });
+ const iconGroups=new Map<Element,{kind:'svg'|'icon-mask';count:number}>();
+ for(const el of allElements(parsed.doc.body)){
+  const kind=el.localName==='svg'?'svg':el.classList.contains('icon-mask')?'icon-mask':null;
+  if(!kind)continue;
+  const host=el.parentElement?.closest('[data-nid]')??el.parentElement;
+  if(!host)continue;
+  const prev=iconGroups.get(host);
+  iconGroups.set(host,{kind:prev?.kind??kind,count:(prev?.count??0)+1});
+ }
+ const visualIcons=Array.from(iconGroups.entries()).slice(0,24).map(([host,info])=>{
+  const contextText=(host.textContent??'').replace(/\s+/g,' ').trim().slice(0,40);
+  return {nid:host.getAttribute('data-nid')??undefined,kind:info.kind,count:info.count,...(contextText?{contextText}:{})};
+ });
  return {version:1,sourceFingerprint:contentFingerprint(html),projection:'complete-business-inventory',texts,controls,protectedNodes,media:inspectExternalMedia(parsed.serialize()).references,
+  ...(visualIcons.length?{visualIcons}:{}),
   sourceStyles:{stylesheets,inline},
-  notice:'这是程序完整提取的业务文本、控件属性、素材和保护属性清单；旧布局已投影省略，不是原DOM，不授予额外修改权限。文字不截断。可重排全页可见布局，保留全部未获明确变更授权的业务内容/表单规则和业务图片；来源CSS/L4仍是独立只读依赖。原惰性template由程序从基线保留，不在新主体重复输出。'};
+  notice:'这是程序完整提取的业务文本、控件属性、素材、视觉图标组(visualIcons)和保护属性清单；旧布局已投影省略，不是原DOM，不授予额外修改权限。文字不截断。可重排全页可见布局，保留全部未获明确变更授权的业务内容/表单规则、视觉评分图标形态和业务图片；来源CSS/L4仍是独立只读依赖。原惰性template由程序从基线保留，不在新主体重复输出。'};
 }
 function permitted(text:string,nid:string|undefined,request:string,removalOnly=false):boolean{
  return request.split(/[。；;\n]/).some(clause=>{

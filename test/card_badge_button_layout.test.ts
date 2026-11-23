@@ -22,6 +22,20 @@ test('CHK-F-02: .btn.px-* 能够覆盖按钮默认的 16px 水平内边距', () 
   expect(css).toContain('.btn.px-4');
 });
 
+test('CHK-F-02b: .btn-sm.p-0 盖过按钮内边距，单独的 .p-0 不再失效', () => {
+  const iframe = document.createElement('iframe');
+  document.body.append(iframe);
+  const doc = iframe.contentDocument!;
+  doc.head.innerHTML = `<style>${getBaseCss('mobile')}</style>`;
+  doc.body.innerHTML = '<button class="btn btn-sm p-0">星</button><button class="btn btn-sm">按钮</button>';
+  const zero = doc.querySelector('.p-0') as HTMLElement;
+  const padded = doc.querySelector('.btn-sm:not(.p-0)') as HTMLElement;
+  expect(doc.defaultView!.getComputedStyle(zero).paddingLeft).toBe('0px');
+  expect(doc.defaultView!.getComputedStyle(zero).paddingTop).toBe('0px');
+  expect(doc.defaultView!.getComputedStyle(padded).paddingLeft).not.toBe('0px');
+  iframe.remove();
+});
+
 function makeFixture(html: string) {
   const iframe = document.createElement('iframe');
   document.body.append(iframe);

@@ -178,6 +178,9 @@ describe('局部模式选择与实际接线', () => {
     const radios=host.querySelectorAll<HTMLInputElement>('input[type="radio"]');
     expect(radios[0].disabled).toBe(false);
     expect(radios[1].disabled).toBe(false);
+    // Mixed with a page-scoped item: do not auto-pick local (would silently drop the main ask).
+    expect(radios[2].checked).toBe(true);
+    act(()=>radios[0].click());
     expect(radios[0].checked).toBe(true);
     expect(host.textContent).toContain('跳过');
     await act(async()=>{Array.from(host.querySelectorAll('button')).find(b=>b.textContent?.includes('按所选内容生成新版'))!.click();});

@@ -199,3 +199,8 @@ test('修复 block 复用原业务规划时，不因新任务知识指纹与合�
  // Contract must stay adoptable even when quality still blocks; identity drift must not poison delivery checks.
  expect(['staged_side_by_side','rejected_by_quality']).toContain(repaired.status);
 });
+test('wholePageRedesign omits empty scoped/L4 style header when target has no scopedCss or overrides',async()=>{
+ const {enrichContext}=await import('../src/services/ai/engine/context/contextEnricher');
+ const res=enrichContext({rawPrompt:'重设计整页',intent:'modify_screen',activeScreenId:'s1',targetScreenOverride:{id:'s1'},screens:{s1:{id:'s1',name:'测试页',htmlContent:'<main><p>内容</p></main>'}},deviceProfile:'mobile',frameWidth:390,baseSystemPrompt:'System',wholePageRedesign:{}});
+ expect(res.messages.at(-1)?.content).not.toContain('[完整来源CSS与L4，只读]');
+});

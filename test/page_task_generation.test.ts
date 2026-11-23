@@ -87,3 +87,16 @@ test('个人图片字段与用户新增择偶同名字段不混归，使用已�
  expect(fields).toHaveLength(1);expect(fields[0].featureId).toBe('f1');
  p.features[1].basis='image';p.features[1].sourceIds=['image:12345678'];expect(()=>compileSectionPlan(p,'mobile','页面',undefined,ref)).toThrow('唯一归属');
 });
+
+test('composition-plan omits bulky rendering system prompt while preserving request and feature allocation rules',async()=>{
+ const p=plan(7),composition=defaultPageComposition(p),transport=new MockTransport();transport.queueResponse(JSON.stringify(composition),1);
+ for(let i=1;i<=3;i++)transport.queueResponse(`<artifact type="screen"><article>完整内容${i}</article></artifact>`,1);
+ const ledger=budget(),calls:any[]=[],real=withTaskBudget(new DefaultAIEngineCore(transport),ledger),core={...real,streamText(o:any){calls.push(o);return real.streamText(o);}};
+ const bulkyBase='__BASE_CSS_WHITELIST_MARKER__\n'+'x'.repeat(20000);
+ const result=await generateTaskPage(core,{provider,model:'test',messages:[{role:'system',content:bulkyBase},{role:'user',content:'原始要求'}]},{request:'原始要求',strategy:choosePageWriteStrategy({plan:p,estimatedHtmlBytes:100}),plan:p,device:'pc',title:'工作台',contextKey:'slim-composition',budget:ledger});
+ expect(result.errorMessage).toBeUndefined();
+ expect(calls[0].messages[0].content).not.toContain('__BASE_CSS_WHITELIST_MARKER__');
+ expect(calls[0].messages[0].content).toContain('PC端禁止使用CTA底栏');
+ expect(calls[0].messages[1].content).toContain('原始要求');
+ ledger.close();
+});

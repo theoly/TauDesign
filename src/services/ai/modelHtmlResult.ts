@@ -6,6 +6,7 @@ import { ensureActionAccessibleNames } from './actionIntegrity';
 import type { ContinuationResult } from './boundedContinuation';
 import { isOutputLimit } from './generationContinuation';
 import { restoreProtectedNodes } from './restoreProtectedNodes';
+import { applyConfirmedLayoutDirectives } from './confirmedLayoutDirectives';
 
 export interface ModelHtmlResult {
   status: 'valid' | 'error' | 'no_html' | 'rejected_by_quality';
@@ -43,8 +44,9 @@ export function finalizeModelHtml(result: ContinuationResult, options: QualityOp
   let html = ensureActionAccessibleNames(normalizeMobileNavigation(raw, options).html);
   // One-shot deterministic correction only — never recursively re-generate or loop on failure.
   const restored = restoreProtectedNodes(html, options.baselineHtml, options.protectedNids);
-  const autoRepaired = restored !== html;
-  html = restored;
+  const directed = applyConfirmedLayoutDirectives(restored, options.modificationRequest ?? '', options.protectedNids);
+  const autoRepaired = directed !== html;
+  html = directed;
   const qualityReport = checkGenerationQuality(html, policy);
   return { status: qualityReport.passed ? 'valid' : 'rejected_by_quality', artifact: artifact ?? undefined, html, qualityReport, autoRepaired,
     ...(!qualityReport.passed ? { message: qualitySummary(qualityReport) } : {}) };

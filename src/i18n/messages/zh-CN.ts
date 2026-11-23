@@ -2187,6 +2187,7 @@ export const zhCN = {
     modModeHintLocal: '推荐局部操作，仅修改已定位的节点。',
     modModeHintRegion: '推荐完整区块修改，仅替换所选区块并保留其他区域。',
     modModeHintPage: '当前选择缺少明确局部位置或改动范围较大，可明确选择整页改写。',
+    modModeHintOverlap: '已选多项局部/区块建议存在区域重叠或超过 3 个目标节点，已自动回退整页改写；可取消部分勾选分批执行以启用局部/区块修改（更省上下文）。',
     modModeHintSkip: ' 当前模式将跳过 {count} 条整页建议；若要一并改写请改用整页改写。',
     modModeHintSupplement: ' 补充要求超出所选范围时会停下提示，不会自动整页改写。',
     modEvidenceSummary: '查看分析检查记录',
