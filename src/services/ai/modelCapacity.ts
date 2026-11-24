@@ -31,6 +31,7 @@ export function fitOutputToModelCapacity(
  profile?:ModelCapabilityProfile,
  schema?:Record<string,unknown>,
  minOutput=256,
+ onCapacity?:(receipt:CapacityReceipt)=>void,
 ):{maxTokens:number;capacity:CapacityReceipt}{
  if(!Number.isSafeInteger(requestedOutput)||requestedOutput<1)throw Error('请求输出上限无效。');
  if(!Number.isSafeInteger(minOutput)||minOutput<1)throw Error('最小输出上限无效。');
@@ -40,10 +41,12 @@ export function fitOutputToModelCapacity(
  const inputProbe=inspectModelCapacity(messages,0,profile,schema);
  const affordable=window-inputProbe.inputTokens-inputProbe.reserveTokens;
  if(affordable<minOutput){
+  onCapacity?.(capacity);
   assertModelCapacity(capacity);
  }
  const maxTokens=Math.min(requestedOutput,affordable);
  capacity=inspectModelCapacity(messages,maxTokens,profile,schema);
+ if(!capacity.fits)onCapacity?.(capacity);
  assertModelCapacity(capacity);
  return {maxTokens,capacity};
 }

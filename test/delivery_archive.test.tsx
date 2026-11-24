@@ -211,7 +211,7 @@ describe('durable delivery archive', () => {
     const newId = useProjectStore.getState().screenOrder.find(id => id !== 'target')!;
     expect(useProjectStore.getState().screens.target.htmlContent).toBe(before);
     expect((await repository().listForScreen(newId)).records[0]).toMatchObject({ mode: 'keep-both', status: 'applied', after: { id: newId } });
-    store.stageScreenChange('target', '<main data-nid="root0001"></main>', '强制候选', '调整布局'); ready();
+    store.stageScreenChange('target', '<main data-nid="root0001" onclick="alert(1)"></main>', '强制候选', '调整布局'); ready();
     const past=useHistoryStore.getState().past.length;
     expect(await store.forceAdoptStagedChange()).toBe(false);
     expect(useProjectStore.getState().screens.target.htmlContent).toBe(before);expect(useHistoryStore.getState().past).toHaveLength(past);

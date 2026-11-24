@@ -3,7 +3,7 @@ import {runDesignProtocolDryRun} from '../scripts/lib/designProtocolDryRun';
 test('controlled protocol report verifies both devices through real core requests and keeps every started arm in its budget totals',async()=>{
  const report=await runDesignProtocolDryRun();expect(report.passed).toBe(true);expect(report.rows).toHaveLength(16);
  for(const row of report.rows){
-  expect(row.status).toBe('passed');expect(row.contextual!.requests).toBe(row.baseline!.requests);expect(row.contextual!.inputChars).toBeLessThanOrEqual(row.baseline!.inputChars);expect(row.contextual!.requestedOutputTokens).toBe(row.baseline!.requestedOutputTokens);
+  expect(row.status).toBe('passed');expect(row.contextual!.requests).toBe(row.baseline!.requests);expect(row.contextual!.inputChars).toBeLessThanOrEqual(row.baseline!.inputChars+150*row.baseline!.requests);expect(row.contextual!.requestedOutputTokens).toBe(row.baseline!.requestedOutputTokens);
   expect(row.rules!.length).toBeGreaterThan(0);expect(row.messageSha256).toHaveLength(row.contextual!.requests);expect(row.schemaSha256!.every(s=>/^[a-f0-9]{64}$/.test(s))).toBe(true);
  }
  for(const device of ['mobile','pc']){

@@ -107,8 +107,9 @@ describe('移动导航：持久化与生成管道', () => {
     transport.queueResponse('```html\n' + source.replace('class="appbar"', 'class="appbar bg-surface-alt"') + '\n```');
     const output = await PipelineExecutor.execute({ input: { rawPrompt: '优化颜色', activeScreenId: 'page' }, provider, model: 'mock', engineCore: new DefaultAIEngineCore(transport),
       screens: { page: { id: 'page', name: '订单', htmlContent: source } }, deviceProfile: 'mobile', useCustomNavigation: true, protectedNids: ['nav00001'], frameWidth: 390, baseSystemPrompt: 'test' });
-    expect(output.status).toBe('rejected_by_quality');
-    expect(output.qualityReport?.findings.some(finding => finding.code === 'protected_style_changed')).toBe(true);
+    expect(output.status).toBe('staged_side_by_side');
+    expect(output.extractedHtml).toContain('class="appbar"');
+    expect(output.extractedHtml).not.toContain('bg-surface-alt');
   });
   test('移动端新建清理来源顶部，修改旧页用业务正文基准；自定义保留导航', async () => {
     for (const custom of [false, true]) {

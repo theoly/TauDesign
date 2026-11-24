@@ -41,7 +41,7 @@ test('guided rejected draft reuses frozen evidence for local repair without send
   expect(repaired.workflowContract?.designGuidance).toBeUndefined();
   expect(repaired.executionRecord?.draftRepair?.historicalGuidanceSource).toEqual(draft.guidanceSource);
   expect(repaired.executionRecord?.source).toBe('local-edit');
-  const stale=await PipelineExecutor.execute({...f.options,frameWidth:1500,qualityRepair:{draft,labels}});
+  const stale=await PipelineExecutor.execute({...f.options,model:'other-model',qualityRepair:{draft,labels}});
   expect(stale.status).toBe('error');expect(f.calls()).toBe(1);
 });
 test('guided draft storage preserves provenance and rejects mismatched or tampered source',async()=>{

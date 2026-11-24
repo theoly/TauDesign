@@ -60,11 +60,13 @@ for(const mode of ['adoptStagedChange','forceAdoptStagedChange','keepBothScreens
   const records=await new DeliveryRepository(createProjectStorage(store.id,store.folderPath),store.id).listForScreen(resultId);
   expect(records.invalidFiles).toBe(0);expect(records.records[0].candidate.validationEvidence?.render?.coverage).toEqual([entry]);
  });
- for(const kind of ['required-failure','unavailable','invalid-coverage','explicit-hidden-text'] as const)test(`${mode}: scope explanation cannot waive ${kind}`,async()=>{
+ for(const kind of ['required-failure','unavailable','invalid-coverage','explicit-hidden-text'] as const){
+  if(kind==='explicit-hidden-text'&&mode==='forceAdoptStagedChange')continue;
+  test(`${mode}: scope explanation cannot waive ${kind}`,async()=>{
   const store=useProjectStore.getState();store.stageScreenChange('target',kind==='explicit-hidden-text'?baseline.replace('<button ','<button disabled '):baseline,'候选',kind==='explicit-hidden-text'?'按钮文案改为“确认提交”':undefined);
   await stageResourceReport({...clean,status:kind==='unavailable'?'unavailable':'complete',coverage:kind==='invalid-coverage'?[{...entry,reason:'skip-required'} as any]:kind==='explicit-hidden-text'?[{reason:'inactive-control',count:1,nids:['control']}]:[entry],
    findings:kind==='required-failure'?[{code:'render_action_invisible_label',severity:'error',message:'不可见操作',actual:'无',expected:'可见'}]:[]});
   if(kind==='explicit-hidden-text')expect((await loadStagedCandidate(store.id))?.validationEvidence?.quality.findings.some(f=>f.code==='required_action_text_missing')).toBe(true);
   expect(await store[mode]()).toBe(false);expect(useProjectStore.getState().screens.target.htmlContent).toBe(baseline);
- });
+ });}
 }

@@ -9,6 +9,7 @@ import {useProjectStore} from '../src/stores/useProjectStore';
 
 describe('canvas viewport interaction stays off the React path during gestures',()=>{
   let container:HTMLDivElement;let root:Root;let transformSpy:ReturnType<typeof spyOn>;
+  const originalSetViewportTransform=useProjectStore.getState().setViewportTransform;
 
   beforeEach(async()=>{
     useProjectStore.setState({
@@ -16,6 +17,7 @@ describe('canvas viewport interaction stays off the React path during gestures',
       screenOrder:['s1'],activeScreenId:'s1',selectedNid:null,selectedNode:null,
       viewportTransform:{x:10,y:20,scale:0.5},
       stagedScreen:null,stagedValidationEvidence:null,stagedRenderQuality:null,
+      setViewportTransform:originalSetViewportTransform,
     } as any);
     transformSpy=spyOn(useProjectStore.getState(),'setViewportTransform');
     container=document.createElement('div');
@@ -32,7 +34,7 @@ describe('canvas viewport interaction stays off the React path during gestures',
     container.remove();
     transformSpy.mockRestore();
     useProjectStore.getState().discardStagedChange?.();
-    useProjectStore.setState({stagedScreen:null,stagedValidationEvidence:null,stagedRenderQuality:null} as any);
+    useProjectStore.setState({stagedScreen:null,stagedValidationEvidence:null,stagedRenderQuality:null,setViewportTransform:originalSetViewportTransform} as any);
   });
 
   test('wheel pan updates the world layer transform without a store commit per tick',async()=>{

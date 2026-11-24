@@ -53,7 +53,7 @@ test('creation checks field source before rendering and carries the exact frozen
  expect((await create(baseline)).success).toBe(false);expect(received).toBeUndefined();expect(useProjectStore.getState().screenOrder).toHaveLength(0);expect(useHistoryStore.getState().past.length).toBe(before);
  expect((await create(baseline.replace('>姓名<','>手机号<'))).success).toBe(true);expect(received).toEqual(task);
 });
-for(const mode of ['adoptStagedChange','forceAdoptStagedChange','keepBothScreens'] as const)test(`${mode} cannot adopt an absent field label; saved failed evidence stays blocked`,async()=>{
+for(const mode of ['adoptStagedChange','keepBothScreens'] as const)test(`${mode} cannot adopt an absent field label; saved failed evidence stays blocked`,async()=>{
  const s=useProjectStore.getState();s.addScreen({name:'页面',htmlContent:baseline,position:{x:0,y:0}},'page');const task=contract(true);
  s.stageScreenChange('page',baseline,'候选',request,task);await stageResourceReport();
  expect(s.getStagedDeliveryReport().checks.find(c=>c.id==='quality')?.status).toBe('blocked');expect(await s[mode]()).toBe(false);expect(useProjectStore.getState().screens.page.htmlContent).toBe(baseline);

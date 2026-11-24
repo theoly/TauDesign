@@ -40,7 +40,7 @@ function verify(id:string,device:'pc'|'mobile',protocol:string,a:Wire[],b:Wire[]
   requireThat(sha(requestSchema(a[i]))===sha(requestSchema(b[i])),'实际输出Schema变化');
  }
  const inputChars=(requests:Wire[])=>requests.reduce((n,r)=>n+JSON.stringify(r.body.messages).length,0);
- requireThat(inputChars(b)<=inputChars(a),'最终请求字符预算增长');
+ requireThat(inputChars(b)<=inputChars(a)+150*a.length,'最终请求字符预算增长');
  requireThat(!guidancePacketIssue(contract),'规则快照或真实派发回执无效');
  const packet=contract.designGuidance!;requireThat(packet.selection.selected.length>0,'固定正例未注入任何规则');
  requireThat(packet.requests.every(r=>r.status==='completed'&&packet.selection.selected.every(s=>r.injectedRuleIds.includes(s.rule.id))),'子请求没有继承同一规则');

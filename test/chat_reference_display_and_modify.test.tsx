@@ -394,7 +394,7 @@ describe('对话历史引用展示与修改路由保护 (Chat Reference Display 
 
       // 查找并点击回退按钮
       const rollbackBtn = Array.from(container.querySelectorAll('button')).find((b) =>
-        b.textContent?.includes('回退原版并重新调整')
+        b.textContent?.includes('回退修改前版本并重新操作')
       );
       expect(rollbackBtn).toBeDefined();
 

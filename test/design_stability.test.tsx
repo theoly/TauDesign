@@ -103,8 +103,8 @@ describe('统一离线质量检查', () => {
     const warning = await pipeline('<main><span class="tag flex-1">长标签</span></main>');
     expect(warning.status).toBe('applied'); expect(warning.qualityReport?.findings[0].code).toBe('compressed_label');
     expect(warning.executionRecord).toMatchObject({ source: 'model', continuationCount: 0, completeHtml: warning.extractedHtml });
-    const rejected = await pipeline(target.html.replace('text-sm', 'text-xl'), true);
-    expect(rejected.status).toBe('rejected_by_quality'); expect(rejected.qualityReport?.findings.some(f => f.code === 'protected_style_changed')).toBe(true);
+    const restored = await pipeline(target.html.replace('text-sm', 'text-xl'), true);
+    expect(restored.status).toBe('staged_side_by_side'); expect(restored.extractedHtml).toContain('text-sm');
   });
   test('润色/批量接受函数与局部副本也拒绝危险内容', () => {
     expect(acceptRestyleResult(target, target.html.replace('<p ', '<p onclick="bad()" ')).status).toBe('failed');

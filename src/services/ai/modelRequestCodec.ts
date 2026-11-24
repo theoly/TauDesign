@@ -20,7 +20,9 @@ export function encodeModelRequest(options: StreamTextOptions): PreparedRequest 
   const images=new Map(options.messages.map(message=>[message,modelImageInput(provider,model,message)]));
   const messages=structuredMessages(options.messages,jsonSchema);
   const imageOf=(message:EngineMessage)=>images.get(message)??modelImageInput(provider,model,message);
-  const {maxTokens,capacity}=fitOutputToModelCapacity(messages,requested,resolveModelCapability(provider,model),jsonSchema);
+  const {maxTokens,capacity}=fitOutputToModelCapacity(messages,requested,resolveModelCapability(provider,model),jsonSchema,256,cap=>{
+    try{options.onCapacity?.(structuredClone(cap));}catch{/* receipt reporting never grants request authority */}
+  });
   try{options.onCapacity?.(structuredClone(capacity));}catch{/* receipt reporting never grants request authority */}
   let url = '';
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };

@@ -617,7 +617,7 @@ function projectAssetAuditFingerprint(state: ProjectState): string {
 /** Viewport pan/zoom must not invalidate these — keys omit viewportTransform. */
 let stagedDeliveryCache:{token:string;report:StagedDeliveryReport;quality:ReturnType<typeof checkStagedCandidateQuality>}|null=null;
 let stagedRenderContextKeyCache:{
-  id:string;revision:number;staged:unknown;target:unknown;settings:unknown;
+  id:string;revision:number;evidenceIdentity:string;staged:unknown;target:unknown;settings:unknown;
   designSystem:unknown;overrides:unknown;assets:unknown;key:string;
 }|null=null;
 
@@ -626,6 +626,7 @@ function stagedDeliveryCacheToken(state:ProjectState,renderKey:string):string{
   const origin=state.designSystemOrigin;
   return contentFingerprint(JSON.stringify([
     renderKey,state.stagedRepairStatus,staged?.candidateId,staged?.baselineFingerprint,staged?.projectFingerprint,
+    staged?.repair?contentFingerprint(JSON.stringify(staged.repair)):null,
     knowledgeFingerprint(state),origin?.kind,origin?.sourceId,origin?.sourceFingerprint,origin?.tokenVersion,origin?.tokenFingerprint,
     rendered?.key,rendered?.report?.status,rendered?.report&&contentFingerprint(JSON.stringify(rendered.report.findings)),
     files?.key,files?.status,files?.issues?.map(i=>[i.code,i.entityId,i.message]),
@@ -2505,9 +2506,11 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
     const state = get(), staged = state.stagedScreen;
     if (!staged){stagedRenderContextKeyCache=null;return '';}
     const target = state.screens[staged.targetScreenId];
+    const evidenceIdentity = renderEvidenceIdentity(state.settings.deviceProfile);
     if(stagedRenderContextKeyCache
       &&stagedRenderContextKeyCache.id===state.id
       &&stagedRenderContextKeyCache.revision===state.stagedRenderRevision
+      &&stagedRenderContextKeyCache.evidenceIdentity===evidenceIdentity
       &&stagedRenderContextKeyCache.staged===staged
       &&stagedRenderContextKeyCache.target===target
       &&stagedRenderContextKeyCache.settings===state.settings
@@ -2515,11 +2518,11 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
       &&stagedRenderContextKeyCache.overrides===state.overrides
       &&stagedRenderContextKeyCache.assets===state.assets)return stagedRenderContextKeyCache.key;
     const renderSubject = [staged.targetScreenId, staged.newHtml, staged.navigationTitle, staged.modificationRequest];
-    const key=JSON.stringify([state.id, state.stagedRenderRevision, renderSubject, state.settings,renderEvidenceIdentity(state.settings.deviceProfile),pageCreationContext(state),
+    const key=JSON.stringify([state.id, state.stagedRenderRevision, renderSubject, state.settings,evidenceIdentity,pageCreationContext(state),
       isTaskContractShape(staged.workflowContract)?taskInputBinding(staged.workflowContract):staged.workflowContract===undefined?'legacy':'invalid-task',
       state.designSystem.tokens, state.overrides, target?.htmlContent, target?.scopedCss, target?.metadata,
       Object.values(state.assets).map(asset => [asset.id, asset.relPath]).sort(([a], [b]) => a.localeCompare(b))]);
-    stagedRenderContextKeyCache={id:state.id,revision:state.stagedRenderRevision,staged,target,settings:state.settings,designSystem:state.designSystem,overrides:state.overrides,assets:state.assets,key};
+    stagedRenderContextKeyCache={id:state.id,revision:state.stagedRenderRevision,evidenceIdentity,staged,target,settings:state.settings,designSystem:state.designSystem,overrides:state.overrides,assets:state.assets,key};
     return key;
   },
 

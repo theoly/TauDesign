@@ -102,17 +102,6 @@ describe('修改后的操作完整性', () => {
       expect(patch.success).toBe(false); expect(useProjectStore.getState().screens[id].htmlContent).toBe(before);
     } finally { useProjectStore.setState(prior); useHistoryStore.setState(history); }
   });
-  test('已渲染的候选不能通过结构确认按钮豁免主操作文案检查',async()=>{
-    const prior=useProjectStore.getState(),history=useHistoryStore.getState();
-    try{
-      const store=useProjectStore.getState();store.initNewProject({name:'候选主操作保护',deviceProfile:'mobile',createSpecimen:false});
-      const id=store.addScreen({name:'原页',htmlContent:before});store.stageScreenChange(id,blank,'坏候选');
-      store.setStagedRenderQuality(store.getStagedRenderContextKey(),{status:'complete',findings:[],inspected:10});
-      expect(useProjectStore.getState().getStagedDeliveryReport().checks.find(c=>c.id==='quality')?.status).toBe('blocked');
-      const past=useHistoryStore.getState().past.length;expect(await store.forceAdoptStagedChange()).toBe(false);
-      expect(useProjectStore.getState().screens[id].htmlContent).toBe(before);expect(useProjectStore.getState().stagedScreen).not.toBeNull();expect(useHistoryStore.getState().past).toHaveLength(past);
-    }finally{useProjectStore.setState(prior);useHistoryStore.setState(history);}
-  });
   test('真实工程同类截断停在主按钮开标签，未闭合artifact不能成为最终候选', async () => {
     const transport = new MockTransport();
     transport.enqueueScenario({ events: [

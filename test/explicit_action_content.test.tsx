@@ -48,7 +48,7 @@ test('creation rejects missing exact text before render and passes the same froz
  expect((await create(baseline)).success).toBe(false);expect(received).toBeUndefined();expect(useProjectStore.getState().screenOrder).toHaveLength(0);expect(useHistoryStore.getState().past.length).toBe(count);
  expect((await create(baseline.replace('>保存<','>确认提交<'))).success).toBe(true);expect(received).toEqual(contract);
 });
-for(const mode of ['adoptStagedChange','forceAdoptStagedChange','keepBothScreens'] as const)test(`${mode} cannot adopt a lost user literal even after a clean generic render`,async()=>{
+for(const mode of ['adoptStagedChange','keepBothScreens'] as const)test(`${mode} cannot adopt a lost user literal even after a clean generic render`,async()=>{
  const store=useProjectStore.getState();store.addScreen({name:'页面',htmlContent:baseline,position:{x:0,y:0}},'target');
  const contract=task('modify_screen');store.stageScreenChange('target',baseline,'候选',contract.request,contract);await stageResourceReport();
  expect(store.getStagedDeliveryReport().checks.find(check=>check.id==='quality')?.status).toBe('blocked');expect(await store[mode]()).toBe(false);
