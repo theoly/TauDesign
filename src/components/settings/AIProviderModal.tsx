@@ -516,7 +516,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       {bindings.code.modelId}
                     </span>
                     <span className="text-host-tertiary font-mono text-[9px] truncate max-w-[80px]">
-                      {activeCodeProv?.name || t('settings.unspecified')}
+                      {activeCodeProv ? providerLabel(activeCodeProv.id, activeCodeProv.name) : t('settings.unspecified')}
                     </span>
                   </div>
                 </div>
@@ -546,7 +546,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       {bindings.chat.modelId}
                     </span>
                     <span className="text-host-tertiary font-mono text-[9px] truncate max-w-[80px]">
-                      {activeChatProv?.name || t('settings.unspecified')}
+                      {activeChatProv ? providerLabel(activeChatProv.id, activeChatProv.name) : t('settings.unspecified')}
                     </span>
                   </div>
                 </div>
@@ -577,7 +577,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                     </span>
                     <div className="flex items-center gap-1">
                       <span className="text-host-tertiary font-mono text-[9px] truncate max-w-[60px]">
-                        {activeVisionProv?.name || t('settings.unspecified')}
+                        {activeVisionProv ? providerLabel(activeVisionProv.id, activeVisionProv.name) : t('settings.unspecified')}
                       </span>
                       {activeVisionProv?.apiKey || activeVisionProv?.protocol === 'ollama_native' ? (
                         <span className="text-[8px] text-host-success font-sans">{t('settings.ready')}</span>
