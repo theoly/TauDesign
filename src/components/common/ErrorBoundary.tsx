@@ -1,5 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, RotateCcw } from 'lucide-react';
+import { t } from '../../i18n';
+import { getUiLocale } from '../../stores/useLocaleStore';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -44,6 +46,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       if (this.props.fallbackRender) {
         return this.props.fallbackRender(this.state.error, this.handleReset);
       }
+      const locale = getUiLocale();
 
       return (
         <div
@@ -57,11 +60,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
             <div className="space-y-1.5">
               <h3 className="text-sm font-semibold text-slate-100">
-                {this.props.fallbackTitle || '界面渲染遇到非预期异常'}
+                {this.props.fallbackTitle || t('app.errorBoundaryDefaultTitle', undefined, locale)}
               </h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                {this.props.fallbackMessage ||
-                  '已自动拦截该渲染异常以保护当前工程数据，应用未中断。您可以重置当前选中元素继续操作。'}
+                {this.props.fallbackMessage || t('app.errorBoundaryDefaultMessage', undefined, locale)}
               </p>
             </div>
 
@@ -78,7 +80,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-medium transition shadow"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                <span>重置状态并重试</span>
+                <span>{t('app.resetAndRetry', undefined, locale)}</span>
               </button>
               <button
                 type="button"
@@ -86,7 +88,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                 className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-medium border border-slate-700 transition"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
-                <span>刷新窗口</span>
+                <span>{t('app.refreshWindow', undefined, locale)}</span>
               </button>
             </div>
           </div>

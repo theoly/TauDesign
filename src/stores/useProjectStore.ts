@@ -26,6 +26,8 @@ import { defaultReferenceDevice, REFERENCE_DEVICES, resolveProjectViewport, vali
 import { collectNodePresentation, findScreenElement, mergeInspectorDeclarations, isEscapedInspectorValue, type InspectorSnapshot } from '../utils/inspectorStyle';
 import { type ProjectDocumentEntry, validateProjectDocument, MAX_PROJECT_DOCUMENTS } from '../types/projectDocument';
 import { create } from 'zustand';
+import { t } from '../i18n';
+import { getUiLocale } from './useLocaleStore';
 import { DesignSystem } from '../types/designSystem';
 import { QuickPromptItem } from '../types/quickPrompt';
 import { ScreenAuditReport } from '../utils/tokenLint';
@@ -119,13 +121,13 @@ import { buildRestyleDelivery, captureRestylePreviews, removeUnarchivedRestylePr
 import {resolveWorkflowValidation,evaluateWorkflowValidation,inspectWorkflowStructure} from '../services/ai/workflowValidation';
 
 /** 新建工程时的空白起始画框 (PRD §3.0.1) */
-const blankScreenHtml = (name: string) => `<div class="p-8" style="min-height: 800px; background: var(--color-bg);">
+const blankScreenHtml = (name: string, locale = getUiLocale()) => `<div class="p-8" style="min-height: 800px; background: var(--color-bg);">
   <div class="card p-6 r-lg shadow-md col gap-4" style="background: var(--color-surface);">
     <h2 class="text-2xl font-bold">${name}</h2>
-    <p class="text-sm text-secondary">空白画框。在左侧对话面板描述你的需求，或直接用检查器排版。</p>
+    <p class="text-sm text-secondary">${t('layout.blankScreenHint', undefined, locale)}</p>
     <div class="row gap-3 mt-2">
-      <button class="btn btn-primary r-md">主要操作</button>
-      <button class="btn btn-ghost r-md">次要操作</button>
+      <button class="btn btn-primary r-md">${t('layout.blankScreenPrimary', undefined, locale)}</button>
+      <button class="btn btn-ghost r-md">${t('layout.blankScreenSecondary', undefined, locale)}</button>
     </div>
   </div>
 </div>`;
@@ -1218,7 +1220,7 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
       return existing;
     }
     return get().addScreen({
-      name: '🎨 风格样张',
+      name: t('layout.specimenScreenName', undefined, getUiLocale()),
       position: { x: 100, y: 120 },
       htmlContent: html,
       metadata: { kind: 'specimen' }
@@ -1226,8 +1228,9 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
   },
 
   addBlankScreen: (name?: string) => {
-    const defaultName = name || `页面 ${get().screenOrder.length + 1}`;
-    const html = NidEngine.injectNids(blankScreenHtml(defaultName));
+    const locale = getUiLocale();
+    const defaultName = name || t('layout.defaultScreenName', { index: get().screenOrder.length + 1 }, locale);
+    const html = NidEngine.injectNids(blankScreenHtml(defaultName, locale));
     const id = get().addScreen({
       name: defaultName,
       htmlContent: html
@@ -2651,8 +2654,8 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
 
   getStagedRepairEligibility: () => {
     const state=get(),candidate=state.stagedScreen;
-    if(state.stagedRepairStatus||state.stagedAdoptionStatus==='saving')return {allowed:false,message:'候选正在处理，请稍候。'};
-    if(!candidate)return {allowed:false,message:'没有待修复的候选。'};
+    if(state.stagedRepairStatus||state.stagedAdoptionStatus==='saving')return {allowed:false,message:t('repair.candidateBusy',undefined,getUiLocale())};
+    if(!candidate)return {allowed:false,message:t('repair.noCandidate',undefined,getUiLocale())};
     return candidateRepairEligibility({state,candidate,delivery:stagedDeliveryReport(state),
       render:state.stagedRenderQuality?.key===state.getStagedRenderContextKey()?state.stagedRenderQuality.report:undefined});
   },
@@ -2978,7 +2981,7 @@ export const useProjectStore = create<ProjectState>((rawSet, get) => {
       screens = {
         [screenId]: {
           id: screenId,
-          name: '🎨 风格样张',
+          name: t('layout.specimenScreenName', undefined, getUiLocale()),
           position: { x: 100, y: 120 },
           htmlContent: NidEngine.injectNids(buildStyleSpecimenHtml(deviceProfile)),
           metadata: { kind: 'specimen' }

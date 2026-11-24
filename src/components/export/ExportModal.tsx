@@ -160,7 +160,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
 
       if (outcome.engine === 'foreign-object') {
         setExportNotice(
-          `已使用兼容渲染导出（${outcome.fallbackReason || '原生渲染不可用'}）。桌面端原生渲染可获得更高保真度。${outcome.warnings?.length ? ' '+outcome.warnings.join(' ') : ''}`
+          t('export.compatRenderNotice', {
+            reason: outcome.fallbackReason || t('export.nativeRenderUnavailable'),
+            warnings: outcome.warnings?.length ? ' ' + outcome.warnings.join(' ') : '',
+          })
         );
       }
       setLastEngine(outcome.engine);
@@ -408,7 +411,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                   {t('export.renderHint')}
                 </p>
                 <p>
-                  输出宽度: {settings.frameWidth * pngScale}px ·
+                  {t('export.outputWidthPrefix', { width: settings.frameWidth * pngScale })}
                   {clipFirstScreen
                     ? t('export.heightFirstClip', { height: referenceViewport.height * pngScale })
                     : t('export.heightMeasured')}

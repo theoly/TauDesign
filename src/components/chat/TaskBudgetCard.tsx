@@ -7,7 +7,7 @@ export function TaskBudgetCard({value,label}:{value:unknown;label?:string}) {
   if(value===undefined)return null;
   if(!isTaskBudgetSnapshot(value))return <p role="status" className="my-2 text-xs text-amber-300">{t('chat.budgetUnavailable')}</p>;
   const state=value.cancelled?t('chat.budgetStateStopped'):value.closed?t('chat.budgetStateClosed'):t('chat.budgetStateRecording');
-  return <details className="my-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-[11px] leading-4 text-slate-400" aria-label={`${resolvedLabel}预算记录`}>
+  return <details className="my-1 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-[11px] leading-4 text-slate-400" aria-label={t('chat.budgetRecordAria',{label:resolvedLabel})}>
     <summary className="cursor-pointer">{t('chat.budgetSummary',{label:resolvedLabel,used:value.requests,max:value.limits.maxRequests,state})}</summary>
     <dl className="mt-2 space-y-1 break-words">
       <div><dt className="inline">{t('chat.budgetAllocated')}</dt><dd className="inline">{value.requestedOutputTokens.toLocaleString()} / {value.limits.maxRequestedOutputTokens.toLocaleString()} {t('chat.budgetUnits')}</dd></div>

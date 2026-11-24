@@ -362,7 +362,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
                 className="absolute left-[-10000px] border-t-2 border-dashed border-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)] flex items-center"
                 style={{ top: `${activeSnapGuides.horizontalY}px`, width: '40000px' }}>
                 <div className="ml-[10080px] -mt-6 bg-sky-600/90 text-sky-100 text-[11px] font-mono px-2 py-0.5 rounded shadow backdrop-blur-sm border border-sky-400/40">
-                  同行顶部对齐 Y: {activeSnapGuides.horizontalY}px
+                  {t('layout.snapTopAlign', { y: activeSnapGuides.horizontalY })}
                 </div>
               </div>
             )}
@@ -371,7 +371,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
                 className="absolute top-[-10000px] border-l-2 border-dashed border-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.9)] flex flex-col"
                 style={{ left: `${activeSnapGuides.verticalX}px`, height: '40000px' }}>
                 <div className="mt-[10080px] ml-2 bg-sky-600/90 text-sky-100 text-[11px] font-mono px-2 py-0.5 rounded shadow backdrop-blur-sm border border-sky-400/40 whitespace-nowrap">
-                  同列对齐 X: {activeSnapGuides.verticalX}px
+                  {t('layout.snapLeftAlign', { x: activeSnapGuides.verticalX })}
                 </div>
               </div>
             )}
@@ -469,9 +469,9 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
             <div className="w-12 h-12 mx-auto rounded-xl bg-host-accent-subtle border border-host-accent/30 flex items-center justify-center text-host-brand mb-3.5 shadow-inner">
               <Sparkles className="w-6 h-6" />
             </div>
-            <h3 className="text-sm font-semibold text-host-primary">{useProjectStore.getState().projectSaveStatus==='readonly'?'工程需要恢复页面文件':'纯净工作区 · 准备就绪'}</h3>
+            <h3 className="text-sm font-semibold text-host-primary">{useProjectStore.getState().projectSaveStatus==='readonly'?t('layout.readonlyRecoveryTitle'):t('layout.emptyWorkspaceTitle')}</h3>
             <p className="text-xs text-host-secondary mt-1.5 leading-relaxed">
-              {useProjectStore.getState().projectSaveStatus==='readonly'?'工程记录仍在，但页面文件未能完整读取。对话历史不代表页面已保存；请查看顶部“只读恢复”的具体原因，恢复文件后重新打开工程。':'在左侧对话框输入界面描述（如：“生成一个现代科技风的控制台仪表盘”），AI 将直接生成设计画框；或手动添加空白画框开始。'}
+              {useProjectStore.getState().projectSaveStatus==='readonly'?t('layout.readonlyRecoveryHint'):t('layout.emptyWorkspaceHint')}
             </p>
             <div className="mt-5 flex items-center justify-center gap-2.5">
               <button
@@ -480,7 +480,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
                 className="px-4 py-2 rounded-lg bg-host-accent hover:bg-host-accent-hover text-host-on-accent text-xs font-medium transition shadow flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>新建空白画框</span>
+                <span>{t('layout.newScreen')}</span>
               </button>
             </div>
           </div>

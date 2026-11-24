@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link2, Link2Off, RotateCcw } from 'lucide-react';
 import { ComputedBoxModel } from '../../stores/useProjectStore';
+import { useT } from '../../stores/useLocaleStore';
 
 interface BoxModelInspectorProps {
   computedBox: ComputedBoxModel;
@@ -210,6 +211,7 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
   declarations,
   onStyleChange
 }) => {
+  const t = useT();
   const [paddingLinked, setPaddingLinked] = useState(false);
   const [marginLinked, setMarginLinked] = useState(false);
 
@@ -272,7 +274,7 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
     <div className="space-y-3 pt-2 border-t border-slate-800" data-testid="box-model-inspector">
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-          盒模型与间距 (Box Model)
+          {t('inspector.boxModelTitle')}
         </span>
         {(isPaddingOverridden || isMarginOverridden) && (
           <button
@@ -280,11 +282,11 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
               resetPadding();
               resetMargin();
             }}
-            title="还原内外边距"
+            title={t('inspector.resetSpacingTitle')}
             className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-1"
           >
             <RotateCcw className="w-2.5 h-2.5" />
-            <span>还原边距</span>
+            <span>{t('inspector.resetSpacingBtn')}</span>
           </button>
         )}
       </div>
@@ -295,7 +297,7 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-medium text-emerald-400 flex items-center gap-1">
-              <span>Padding (内边距)</span>
+              <span>{t('inspector.paddingLabel')}</span>
               {isPaddingOverridden && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />}
             </span>
             <div className="flex items-center gap-1.5">
@@ -307,7 +309,7 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
                     ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
                     : 'text-slate-500 hover:text-slate-300'
                 }`}
-                title={paddingLinked ? '四边等距已锁定（点击解开）' : '四边独立（点击锁定等距）'}
+                title={paddingLinked ? t('inspector.sidesLinkedTitle') : t('inspector.sidesUnlinkedTitle')}
               >
                 {paddingLinked ? <Link2 className="w-3 h-3" /> : <Link2Off className="w-3 h-3" />}
               </button>
@@ -315,7 +317,7 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
                 <button
                   type="button"
                   onClick={resetPadding}
-                  title="清除内边距覆盖"
+                  title={t('inspector.clearPaddingTitle')}
                   className="p-1 text-slate-500 hover:text-slate-300 rounded"
                 >
                   <RotateCcw className="w-2.5 h-2.5" />
@@ -328,7 +330,7 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
             <div className="flex items-center gap-1.5">
               <select
                 value={
-                  SPACING_TOKENS.some((t) => t.value === (declarations['padding'] || ''))
+                  SPACING_TOKENS.some((tok) => tok.value === (declarations['padding'] || ''))
                     ? declarations['padding']
                     : declarations['padding'] ? 'custom' : ''
                 }
@@ -339,24 +341,24 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
                 }}
                 className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs focus:outline-none focus:border-emerald-500"
               >
-                <option value="">默认 ({computedBox?.padding?.top ?? 0}px)</option>
-                {SPACING_TOKENS.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label} ({t.value})
+                <option value="">{t('inspector.spacingDefaultOption', { value: computedBox?.padding?.top ?? 0 })}</option>
+                {SPACING_TOKENS.map((tok) => (
+                  <option key={tok.value} value={tok.value}>
+                    {tok.label} ({tok.value})
                   </option>
                 ))}
-                {!SPACING_TOKENS.some((t) => t.value === declarations['padding']) && declarations['padding'] && (
-                  <option value="custom">自定义 ({declarations['padding']})</option>
+                {!SPACING_TOKENS.some((tok) => tok.value === declarations['padding']) && declarations['padding'] && (
+                  <option value="custom">{t('inspector.spacingCustomOption', { value: declarations['padding'] })}</option>
                 )}
               </select>
               <SpacingNumberInput
-                placeholder="或自定义输入..."
+                placeholder={t('inspector.spacingCustomPlaceholder')}
                 value={declarations['padding'] || ''}
                 allowNegative={false}
                 allowAuto={false}
                 onChange={(val) => handlePaddingChange('top', val)}
                 className="w-28 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 font-mono"
-                title="Padding 自定义输入"
+                title={t('inspector.paddingCustomInputTitle')}
                 data-testid="padding-linked-custom-input"
               />
             </div>
@@ -385,7 +387,7 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-medium text-amber-400 flex items-center gap-1">
-              <span>Margin (外边距)</span>
+              <span>{t('inspector.marginLabel')}</span>
               {isMarginOverridden && <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
             </span>
             <div className="flex items-center gap-1.5">
@@ -397,7 +399,7 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
                     ? 'bg-amber-950 text-amber-300 border border-amber-800'
                     : 'text-slate-500 hover:text-slate-300'
                 }`}
-                title={marginLinked ? '四边等距已锁定（点击解开）' : '四边独立（点击锁定等距）'}
+                title={marginLinked ? t('inspector.sidesLinkedTitle') : t('inspector.sidesUnlinkedTitle')}
               >
                 {marginLinked ? <Link2 className="w-3 h-3" /> : <Link2Off className="w-3 h-3" />}
               </button>
@@ -405,7 +407,7 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
                 <button
                   type="button"
                   onClick={resetMargin}
-                  title="清除外边距覆盖"
+                  title={t('inspector.clearMarginTitle')}
                   className="p-1 text-slate-500 hover:text-slate-300 rounded"
                 >
                   <RotateCcw className="w-2.5 h-2.5" />
@@ -418,7 +420,7 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
             <div className="flex items-center gap-1.5">
               <select
                 value={
-                  SPACING_TOKENS.some((t) => t.value === (declarations['margin'] || ''))
+                  SPACING_TOKENS.some((tok) => tok.value === (declarations['margin'] || ''))
                     ? declarations['margin']
                     : declarations['margin'] ? 'custom' : ''
                 }
@@ -429,25 +431,25 @@ export const BoxModelInspector: React.FC<BoxModelInspectorProps> = ({
                 }}
                 className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs focus:outline-none focus:border-amber-500"
               >
-                <option value="">默认 ({computedBox?.margin?.top ?? 0}px)</option>
-                <option value="auto">auto (自动居中)</option>
-                {SPACING_TOKENS.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label} ({t.value})
+                <option value="">{t('inspector.spacingDefaultOption', { value: computedBox?.margin?.top ?? 0 })}</option>
+                <option value="auto">{t('inspector.marginAutoOption')}</option>
+                {SPACING_TOKENS.map((tok) => (
+                  <option key={tok.value} value={tok.value}>
+                    {tok.label} ({tok.value})
                   </option>
                 ))}
-                {!SPACING_TOKENS.some((t) => t.value === declarations['margin']) && declarations['margin'] && (
-                  <option value="custom">自定义 ({declarations['margin']})</option>
+                {!SPACING_TOKENS.some((tok) => tok.value === declarations['margin']) && declarations['margin'] && (
+                  <option value="custom">{t('inspector.spacingCustomOption', { value: declarations['margin'] })}</option>
                 )}
               </select>
               <SpacingNumberInput
-                placeholder="或自定义输入..."
+                placeholder={t('inspector.spacingCustomPlaceholder')}
                 value={declarations['margin'] || ''}
                 allowNegative={true}
                 allowAuto={true}
                 onChange={(val) => handleMarginChange('top', val)}
                 className="w-28 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-amber-500 font-mono"
-                title="Margin 自定义输入"
+                title={t('inspector.marginCustomInputTitle')}
                 data-testid="margin-linked-custom-input"
               />
             </div>

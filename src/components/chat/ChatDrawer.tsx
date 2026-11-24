@@ -606,7 +606,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           </div>
           <span
             className="text-[10px] px-1.5 py-0.5 rounded bg-host-sunken text-host-secondary font-mono truncate max-w-[100px]"
-            title={`当前主力模型: ${activeCodeProv?.name || 'DeepSeek'} (${bindings.code.modelId})`}
+            title={t('chat.currentCodeModelTitle', { provider: activeCodeProv?.name || 'DeepSeek', model: bindings.code.modelId })}
           >
             {bindings.code.modelId}
           </span>
@@ -932,7 +932,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       <div className="pt-2 border-t border-host-border flex flex-wrap gap-1.5 text-[10px]">
                         {m.checkpointId && (
                           <span className="px-2 py-0.5 rounded bg-host-sunken text-host-secondary border border-host-border font-mono">
-                            快照: #{m.checkpointId.slice(0, 12)}
+                            {t('chat.snapshotPrefix', { id: m.checkpointId.slice(0, 12) })}
                           </span>
                         )}
                       </div>
@@ -1065,7 +1065,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 font-semibold text-host-primary">
                       <Activity className="w-4 h-4 text-host-warning" />
-                      <span>Token 规范评测报告</span>
+                      <span>{t('chat.auditReportTitle')}</span>
                       <span className="text-host-secondary font-normal">(@{m.auditReport.screenName})</span>
                     </div>
                     <span
@@ -1075,7 +1075,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           : 'bg-amber-950/60 text-host-warning border border-amber-800/60'
                       }`}
                     >
-                      合规度 {m.auditReport.complianceRate}%
+                      {t('chat.complianceRateLabel', { rate: m.auditReport.complianceRate })}
                     </span>
                   </div>
 
@@ -1096,13 +1096,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       data-testid="locate-audit-target-btn"
                       onClick={() => handleLocateAuditTarget(m.auditReport!.targetToLocate)}
                       className="w-full flex items-center justify-between px-2.5 py-1.5 bg-host-accent-subtle hover:bg-host-accent/20 border border-host-accent/40 rounded-lg text-host-brand transition text-[11px] group cursor-pointer"
-                      title="点击在画布中定位目标元素/父区块/页面"
+                      title={t('chat.locateTargetTitle')}
                     >
                       <div className="flex items-center gap-1.5 truncate">
                         <Crosshair className="w-3.5 h-3.5 text-host-brand group-hover:scale-110 transition-transform flex-shrink-0" />
                         <span className="font-medium truncate">{m.auditReport.targetToLocate.label}</span>
                       </div>
-                      <span className="text-[10px] text-host-brand font-mono ml-2 flex-shrink-0">点击定位 →</span>
+                      <span className="text-[10px] text-host-brand font-mono ml-2 flex-shrink-0">{t('chat.clickToLocate')}</span>
                     </button>
                   </div>
 
@@ -1110,8 +1110,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   {m.auditReport.issues.length > 0 ? (
                     <div className="space-y-1.5 pt-1 border-t border-host-border">
                       <div className="flex items-center justify-between text-[11px] text-host-secondary">
-                        <span>待优化逃逸清单 ({m.auditReport.issues.length} 处)</span>
-                        <span className="text-[10px] text-host-tertiary">（已禁用自动修复，请核实后微调）</span>
+                        <span>{t('chat.escapeListTitle', { count: m.auditReport.issues.length })}</span>
+                        <span className="text-[10px] text-host-tertiary">{t('chat.autoFixDisabledHint')}</span>
                       </div>
                       <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
                         {m.auditReport.issues.map((issue, idx) => (
@@ -1119,7 +1119,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             key={idx}
                             onClick={() => handleLocateAuditTarget(m.auditReport!.targetToLocate)}
                             className="p-2 bg-host-sunken hover:bg-host-chrome border border-host-border hover:border-host-border-strong rounded-lg text-[11px] space-y-1 cursor-pointer transition"
-                            title="点击定位包含该问题的区域"
+                            title={t('chat.locateProblemAreaTitle')}
                           >
                             <div className="flex items-center justify-between gap-1.5">
                               <div className="flex items-center gap-1.5 min-w-0">
@@ -1134,7 +1134,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             </div>
                             {issue.rawSnippet && (
                               <div className="flex items-center gap-1 text-[10px] text-host-secondary font-mono bg-host-chrome px-1.5 py-0.5 rounded truncate">
-                                <span className="text-host-danger flex-shrink-0">逃逸值:</span>
+                                <span className="text-host-danger flex-shrink-0">{t('chat.escapeValueLabel')}</span>
                                 <span className="truncate">{issue.rawSnippet}</span>
                                 {issue.suggestedFix && (
                                   <>
@@ -1151,7 +1151,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   ) : (
                     <div className="p-2 bg-emerald-950/30 border border-emerald-800/40 rounded-lg text-host-success text-[11px] flex items-center gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5 text-host-success flex-shrink-0" />
-                      <span>当前画框规范度 100%，所有类名与样式完全符合设计系统标准！</span>
+                      <span>{t('chat.auditPerfect')}</span>
                     </div>
                   )}
                 </div>
@@ -1161,12 +1161,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 <div
                   onClick={() => setPreviewImageUrl(m.imageUrl!)}
                   className="mb-2 max-w-[220px] rounded-lg overflow-hidden border border-host-border shadow-md cursor-pointer group relative"
-                  title="点击放大查看"
+                  title={t('chat.clickToZoomTitle')}
                 >
                   <img src={m.imageUrl} alt="Reference Screenshot" className="w-full h-auto object-cover transition duration-200 group-hover:scale-105" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 text-[11px] text-white font-medium backdrop-blur-[1px]">
                     <ZoomIn className="w-3.5 h-3.5" />
-                    <span>点击放大</span>
+                    <span>{t('chat.clickToZoom')}</span>
                   </div>
                 </div>
               )}
@@ -1191,7 +1191,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               {m.failureHistoryState&&<p role="status" className={`text-[10px] ${m.failureHistoryState==='failed'?'text-amber-300':'text-slate-500'}`}>{m.failureHistoryState==='saved'?t('chat.failureHistorySaved'):t('chat.failureHistorySaveFailed')}</p>}
               {m.isGenerating&&m.generationProgress&&<div role="status" className="text-[11px] leading-relaxed text-sky-300/80"><UserFacingNotice message={m.generationProgress}/></div>}
               {m.qualityReport && <QualityReportCard report={m.qualityReport} onLocate={m.screenId && m.htmlOutput && screens[m.screenId]?.htmlContent === m.htmlOutput
-                ? nid => handleLocateAuditTarget({type:'element',screenId:m.screenId!,screenName:screens[m.screenId!]!.name,label:'检查发现',nid}) : undefined}/>}
+                ? nid => handleLocateAuditTarget({type:'element',screenId:m.screenId!,screenName:screens[m.screenId!]!.name,label:t('chat.auditFindingLabel'),nid}) : undefined}/>}
               {m.qualityDraft && <FailedDraftCard value={m.qualityDraft} saved={m.qualityDraftSaved} busy={engine.isGenerating||m.qualityDraftBusy} notice={m.qualityDraftNotice}
                 compactActions={fixBlockersDockMessage?.id===m.id}
                 onSuggest={()=>engine.suggestQualityTurn(m.id)} onRepair={(labels,region)=>engine.repairQualityTurn(m.id,labels,region)} onRegenerate={()=>engine.retryTurn(m.id,{rePlan:true})}/>}
@@ -1216,7 +1216,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-host-sunken border border-host-border rounded-lg text-[11px] text-host-primary font-medium select-none shadow-xs">
                               <Pin className="w-3 h-3 text-host-brand flex-shrink-0" />
                               <span>
-                                引用元素: <code className="font-mono bg-host-chrome px-1 py-0.5 rounded text-host-primary font-medium">{'<'}{refElem.tagName}#{refElem.nid}{'>'}</code>
+                                {t('chat.referencedElement')} <code className="font-mono bg-host-chrome px-1 py-0.5 rounded text-host-primary font-medium">{'<'}{refElem.tagName}#{refElem.nid}{'>'}</code>
                               </span>
                               {refElem.screenName && (
                                 <span className="text-host-brand text-[10px]">(@{refElem.screenName})</span>
@@ -1226,9 +1226,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-host-sunken border border-host-border rounded-lg text-[11px] text-host-primary font-medium select-none shadow-xs">
                               <AtSign className="w-3 h-3 text-host-brand flex-shrink-0" />
                               {m.referencedScreen.viaActiveScreen ? (
-                                <span>作用于当前画框: <span className="font-medium text-host-primary">{m.referencedScreen.name}</span></span>
+                                <span>{t('chat.actingOnScreen')} <span className="font-medium text-host-primary">{m.referencedScreen.name}</span></span>
                               ) : (
-                                <span>引用画框: <span className="font-medium text-host-primary">@{m.referencedScreen.name}</span></span>
+                                <span>{t('chat.referencedScreen')} <span className="font-medium text-host-primary">@{m.referencedScreen.name}</span></span>
                               )}
                             </div>
                           ) : null}
@@ -1238,16 +1238,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             <div
                               onClick={() => setPreviewImageUrl(m.imageUrl!)}
                               className="relative group cursor-pointer overflow-hidden rounded-lg border border-host-accent/40 max-w-[210px] max-h-[140px] bg-host-sunken shadow-xs hover:border-host-accent transition"
-                              title="点击放大查看原图"
+                              title={t('chat.zoomOriginalTitle')}
                             >
                               <img
                                 src={m.imageUrl}
-                                alt="附件参考图"
+                                alt={t('chat.attachmentAlt')}
                                 className="w-full h-auto max-h-[140px] object-cover transition duration-200 group-hover:scale-105"
                               />
                               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 text-[11px] text-white font-medium backdrop-blur-[1px]">
                                 <ZoomIn className="w-3.5 h-3.5" />
-                                <span>点击放大</span>
+                                <span>{t('chat.clickToZoom')}</span>
                               </div>
                             </div>
                           )}
@@ -1280,7 +1280,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                         Object.keys(screens).find((sid) => screens[sid]?.htmlContent === m.htmlOutput);
                       const isMounted = Boolean(mountedScreenId);
                       const isModified = m.toolAction === 'modified' || m.toolAction === 'patched';
-                      const displayTitle = m.screenName || (mountedScreenId ? screens[mountedScreenId]?.name : '画框');
+                      const displayTitle = m.screenName || (mountedScreenId ? screens[mountedScreenId]?.name : t('chat.screenFallback'));
 
                       const isStagedNow = Boolean(
                         stagedScreen &&
@@ -1396,7 +1396,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                 type="button"
                                 onClick={() => engine.forceApply(m.htmlOutput, m.id)}
                                 className="w-full px-2.5 py-1.5 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow transition cursor-pointer"
-                                title={`放行并直接覆盖更新「${m.preActionSnapshot?.screenName || displayTitle}」`}
+                                title={t('chat.forceOverwriteTitle', { name: m.preActionSnapshot?.screenName || displayTitle })}
                               >
                                 <Sparkles className="w-3.5 h-3.5" />
                                 <span>{t('chat.forceOverwrite')}</span>
@@ -1494,16 +1494,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                         <div className="p-3 bg-host-sunken border border-host-danger/40 rounded-xl space-y-2 text-host-primary shadow-sm">
                           <div className="flex items-center gap-1.5 font-semibold text-xs text-host-danger">
                             <ShieldAlert className="w-4 h-4 text-host-danger flex-shrink-0" />
-                            <span>请求被安全护栏拦截</span>
+                            <span>{t('chat.securityBlockedTitle')}</span>
                           </div>
                           <p className="text-[11px] text-host-secondary leading-relaxed">
                             {isRuleF ? (
                               <>
-                                目标端点属于私有局域网或受保护网段。如需连接自建内网模型（如 Ollama / vLLM），请在模型设置中开启<strong>“允许访问局域网/内网端点”</strong>。
+                                {t('chat.privateLanHintPrefix')}<strong>{t('chat.privateLanHintStrong')}</strong>{t('chat.privateLanHintSuffix')}
                               </>
                             ) : (
                               <>
-                                目标端点触发不可豁免的安全防护规则（{reason}）。为保护云凭证与网络环境安全，该请求已被阻断。
+                                {t('chat.nonExemptRuleHint', { reason })}
                               </>
                             )}
                           </p>
@@ -1513,7 +1513,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                 onClick={() => onOpenSettings?.('provider')}
                                 className="px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white font-medium rounded-lg text-[10px] transition shadow"
                               >
-                                打开模型设置开启权限
+                                {t('chat.openProviderSettings')}
                               </button>
                             </div>
                           )}
@@ -1603,7 +1603,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <div className="text-host-primary text-xs whitespace-pre-wrap">{m.text}</div>
+                      <div className="text-host-primary text-xs whitespace-pre-wrap">{m.id === 'welcome' ? t('chat.welcomeMessage') : m.text}</div>
                       {m.structureDiff ? (
                         <div className="flex items-center gap-2 pt-1">
                           <button
@@ -1682,8 +1682,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               {m.usage && m.sender === 'assistant' && (
                 <div className="flex items-center gap-1.5 text-[10px] text-host-tertiary font-mono pl-1 pt-0.5">
                   <Zap className="w-2.5 h-2.5 text-host-warning" />
-                  <span>{m.usage.totalTokens.toLocaleString()} 个用量单位</span>
-                  <span className="text-host-tertiary">({m.usage.promptTokens.toLocaleString()} 输入 / {m.usage.completionTokens.toLocaleString()} 回复)</span>
+                  <span>{t('chat.usageUnits', { count: m.usage.totalTokens.toLocaleString() })}</span>
+                  <span className="text-host-tertiary">{t('chat.usageBreakdown', { prompt: m.usage.promptTokens.toLocaleString(), completion: m.usage.completionTokens.toLocaleString() })}</span>
                   {m.elapsedSeconds && (
                     <>
                       <span className="text-host-tertiary">·</span>
@@ -1882,14 +1882,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               <div key={`${file.name}-${index}`} className="flex items-center gap-2 p-2 rounded-lg border border-host-accent/40 bg-host-accent-subtle text-[11px] text-host-brand">
                 <FileCode className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="truncate flex-1" title={file.name}>{file.name}</span>
-                <span className="text-host-secondary">{file.content.length} 字</span>
+                <span className="text-host-secondary">{t('chat.charCount', { count: file.content.length })}</span>
                 <button type="button" onClick={() => setAttachedTextFiles((prev) => prev.filter((_, i) => i !== index))} title={t('chat.removeFile', { name: file.name })} disabled={engine.isGenerating}>
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             ))}
-            {isReadingFiles && <div className="text-[11px] text-host-brand">正在读取文本文件...</div>}
-            {textFileError && <div role="alert" className="text-[11px] text-host-danger">文件读取失败：{textFileError}</div>}
+            {isReadingFiles && <div className="text-[11px] text-host-brand">{t('chat.readingTextFiles')}</div>}
+            {textFileError && <div role="alert" className="text-[11px] text-host-danger">{t('chat.readFileFailed', { error: textFileError })}</div>}
           </div>
         )}
 
@@ -1911,10 +1911,10 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 </span>
                 <span className="text-[10px] text-host-secondary truncate block">
                   {codeSupportsVision
-                    ? `主力模型 [${activeCodeProv?.name || 'Code'}] 原生识图`
+                    ? t('chat.visionNative', { provider: activeCodeProv?.name || 'Code' })
                     : visionReady
-                    ? `将由 Vision 档 [${activeVisionProv?.name || 'Gemini'}] 识别`
-                    : `⚠️ 主力为纯文本，且 Vision 档未配 Key`}
+                    ? t('chat.visionDelegate', { provider: activeVisionProv?.name || 'Gemini' })
+                    : t('chat.visionMissingKey')}
                 </span>
               </div>
               <button
@@ -1927,14 +1927,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               </button>
             </div>
             <div className="flex items-center gap-2 text-[10px] text-host-secondary">
-              <button type="button" disabled={engine.isGenerating} onClick={()=>{const source=originalReference.current??attachedImage;const ticket=++cropTicket.current;setRegionDialog({source,ticket});}} className="text-host-brand hover:underline disabled:opacity-40">{attachedImage.region?'重新选择参考区域':'选择参考区域'}</button>
-              {attachedImage.region&&<span>仅使用选区 {attachedImage.region.width}×{attachedImage.region.height}</span>}
+              <button type="button" disabled={engine.isGenerating} onClick={()=>{const source=originalReference.current??attachedImage;const ticket=++cropTicket.current;setRegionDialog({source,ticket});}} className="text-host-brand hover:underline disabled:opacity-40">{attachedImage.region?t('chat.reselectRegionBtn'):t('chat.selectRegionBtn')}</button>
+              {attachedImage.region&&<span>{t('chat.usingSelectedRegion',{width:attachedImage.region.width,height:attachedImage.region.height})}</span>}
             </div>
             {!codeSupportsVision && !visionReady && (
               <div className="p-2 bg-amber-950/40 border border-amber-800/40 rounded-xl text-[10px] text-host-warning leading-relaxed flex items-start gap-1.5">
                 <span className="flex-shrink-0">⚠️</span>
                 <span>
-                  当前主力【{activeCodeProv?.name || 'DeepSeek'}】不支持图片。请点击
+                  {t('chat.visionUnsupportedPrefix',{name:activeCodeProv?.name || 'DeepSeek'})}
                   <button
                     type="button"
                     onClick={() => onOpenSettings?.('provider')}
@@ -1942,7 +1942,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   >
                     {t('chat.aiSettings')}
                   </button>
-                  为 Vision 档配置 Key，或移除图片仅发送文字。
+                  {t('chat.visionUnsupportedSuffix')}
                 </span>
               </div>
             )}
@@ -2101,7 +2101,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             data-testid="close-lightbox-btn"
             onClick={() => setPreviewImageUrl(null)}
             className="absolute top-4 right-4 p-2 rounded-full bg-host-dialog/90 hover:bg-host-elevated text-host-primary border border-host-border-strong transition shadow-lg cursor-pointer z-10"
-            title="关闭预览 (Esc)"
+            title={t('chat.closePreviewTitle')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -2113,12 +2113,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           >
             <img
               src={previewImageUrl}
-              alt="附件高清大图预览"
+              alt={t('chat.lightboxAlt')}
               data-testid="lightbox-preview-img"
               className="max-w-full max-h-[82vh] object-contain rounded-xl border border-host-border shadow-2xl bg-host-sunken"
             />
             <div className="mt-2.5 px-3 py-1 bg-host-dialog/90 border border-host-border rounded-full text-xs text-host-secondary flex items-center gap-2 shadow">
-              <span>附件参考图预览</span>
+              <span>{t('chat.lightboxCaption')}</span>
               <span className="text-host-tertiary">·</span>
               <button
                 type="button"
@@ -2128,7 +2128,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 }}
                 className="text-host-brand hover:underline cursor-pointer"
               >
-                在新标签打开
+                {t('chat.openInNewTab')}
               </button>
             </div>
           </div>

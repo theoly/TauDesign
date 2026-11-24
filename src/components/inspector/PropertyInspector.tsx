@@ -94,9 +94,9 @@ export const PropertyInspector: React.FC = () => {
     const previous=pointContext.current;pointContext.current={key:pointContextKey,model:pointBindingKey};
     if(previous.key===pointContextKey&&previous.model===pointBindingKey)return;
     const job=pointJob.current;pointJob.current=null;job?.abort();setIsPointGenerating(false);setPointActivity(undefined);
-    setPointNotice(job?(previous.model!==pointBindingKey?'模型已变化，旧局部修改已取消。':'选中目标或工程已变化，旧局部修改已取消。'):'');
+    setPointNotice(job?(previous.model!==pointBindingKey?t('inspector.pointModelChangedCancelled'):t('inspector.pointTargetChangedCancelled')):'');
   },[pointContextKey,pointBindingKey]);
-  const stopPoint=()=>{const job=pointJob.current;pointJob.current=null;job?.abort();setIsPointGenerating(false);setPointNotice('局部修改已取消，原页未改变。');setPointActivity(value=>value?{...value,active:0,status:'cancelled',lastActivityAt:Date.now()}:value);};
+  const stopPoint=()=>{const job=pointJob.current;pointJob.current=null;job?.abort();setIsPointGenerating(false);setPointNotice(t('inspector.pointCancelled'));setPointActivity(value=>value?{...value,active:0,status:'cancelled',lastActivityAt:Date.now()}:value);};
 
   // Component states
   const [compNameInput, setCompNameInput] = useState('');
@@ -154,7 +154,7 @@ export const PropertyInspector: React.FC = () => {
               />
             </div>
             <div className="space-y-1.5 pt-1">
-              {curScreen.metadata?.importedHtml && <p className="text-[11px] leading-relaxed text-host-secondary">导入页包含自带样式；Token 合规度仅衡量与项目基座的差异，不代表视觉还原度。保留原貌时无需自动统一这些差异。</p>}
+              {curScreen.metadata?.importedHtml && <p className="text-[11px] leading-relaxed text-host-secondary">{t('inspector.importedHtmlHint')}</p>}
               <span className="text-[10px] text-host-secondary block">
                 {lint.issues.length > 0 ? t('inspector.lintIssues', { count: lint.issues.length }) : t('inspector.lintClean')}
               </span>
@@ -217,7 +217,7 @@ export const PropertyInspector: React.FC = () => {
   const handlePointAndEdit = async () => {
     if (!pointPrompt.trim() || pointJob.current) return;
     const binding=getActiveProviderForRole('code');
-    if(!binding?.provider||(!binding.provider.apiKey&&binding.provider.protocol!=='ollama_native')) {setPointNotice('请先配置可用的代码模型。');return;}
+    if(!binding?.provider||(!binding.provider.apiKey&&binding.provider.protocol!=='ollama_native')) {setPointNotice(t('inspector.pointNoCodeModel'));return;}
     const state=useProjectStore.getState(),screen=state.screens[activeScreenId];
     if(!screen)return;
     const snapshot=captureModificationSnapshot(state,activeScreenId),job=new AbortController(),request=pointPrompt.trim();
@@ -232,15 +232,15 @@ export const PropertyInspector: React.FC = () => {
         signal:job.signal,screen,styleOverrides:state.overrides,elementNid:selectedNid,request,settings:state.settings,contract,designSystem:state.designSystem,colorMode:state.settings.colorMode,
         protectedNids:state.getProtectedNids(activeScreenId),isCurrent:current,
         onActivity:activity=>{if(current())setPointActivity(activity);},
-        onPhase:phase=>{if(current())setPointNotice(phase==='planning'?'正在梳理所选元素内的功能与交互…':'正在生成所选元素的副本修改…');}});
+        onPhase:phase=>{if(current())setPointNotice(phase==='planning'?t('inspector.pointPlanningPhase'):t('inspector.pointGeneratingPhase'));}});
       if(!current()){
-        if(pointMounted.current&&pointJob.current===job&&!job.signal.aborted)setPointNotice('原页或工程已变化，本次局部修改未应用。');
+        if(pointMounted.current&&pointJob.current===job&&!job.signal.aborted)setPointNotice(t('inspector.pointContextChanged'));
         return;
       }
       if(candidate.status!=='ready')throw Error(candidate.message);
-      useProjectStore.getState().stageScreenChange(activeScreenId,candidate.html,`${screen.name}（局部微调候选）`,request,candidate.contract,candidate.executionRecord);
-      setPointPrompt('');setPointNotice('已创建局部修改候选，请比较后采纳。');
-    }catch(error){if(current())setPointNotice(error instanceof Error?error.message:'局部修改失败，原页未改变。');else if(pointMounted.current&&pointJob.current===job&&!job.signal.aborted)setPointNotice('原页或工程已变化，本次局部修改未应用。');}
+      useProjectStore.getState().stageScreenChange(activeScreenId,candidate.html,`${screen.name}${t('inspector.pointStagedTitleSuffix')}`,request,candidate.contract,candidate.executionRecord);
+      setPointPrompt('');setPointNotice(t('inspector.pointStagedCreated'));
+    }catch(error){if(current())setPointNotice(error instanceof Error?error.message:t('inspector.pointFailed'));else if(pointMounted.current&&pointJob.current===job&&!job.signal.aborted)setPointNotice(t('inspector.pointContextChanged'));}
     finally{if(pointJob.current===job){pointJob.current=null;if(pointMounted.current){setIsPointGenerating(false);setPointActivity(value=>value?.active?{...value,active:0,status:'cancelled',lastActivityAt:Date.now()}:value);}}}
   };
 
@@ -273,7 +273,7 @@ export const PropertyInspector: React.FC = () => {
     if (compId) {
       setShowExtractInput(false);
       setCompNameInput('');
-      setSyncStatusMsg(`成功提取为组件「${compNameInput.trim()}」`);
+      setSyncStatusMsg(t('inspector.componentExtractedMsg', { name: compNameInput.trim() }));
       setTimeout(() => setSyncStatusMsg(null), 3000);
     }
   };
@@ -282,9 +282,9 @@ export const PropertyInspector: React.FC = () => {
     if (!selectedNode.componentId) return;
     const res = syncComponentInstances(selectedNode.componentId);
     if (res.skippedConflictCount > 0) {
-      setSyncStatusMsg(`已同步 ${res.syncedCount} 处；跳过 ${res.skippedConflictCount} 处实例。${res.details[0]??'无法安全保留用户内容。'}`);
+      setSyncStatusMsg(t('inspector.componentSyncPartialMsg', { synced: res.syncedCount, skipped: res.skippedConflictCount, detail: res.details[0] ?? t('inspector.componentSyncFallbackDetail') }));
     } else {
-      setSyncStatusMsg(`成功同步全部 ${res.syncedCount} 处实例`);
+      setSyncStatusMsg(t('inspector.componentSyncSuccessMsg', { synced: res.syncedCount }));
     }
     setTimeout(() => setSyncStatusMsg(null), 3500);
   };
@@ -424,12 +424,12 @@ export const PropertyInspector: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-host-brand font-semibold text-[11px]">
                 <Boxes className="w-3.5 h-3.5 text-host-brand" />
-                <span>组件实例: {components[selectedNode.componentId]?.name || '已封装组件'}</span>
+                <span>{t('inspector.componentInstanceLabel', { name: components[selectedNode.componentId]?.name || t('inspector.componentDefaultName') })}</span>
               </div>
               <span className="text-[10px] text-host-secondary font-mono">#{selectedNode.componentInstanceId?.slice(0, 8)}</span>
             </div>
             <p className="text-[10px] text-host-secondary leading-tight">
-              {components[selectedNode.componentId]?.templateContract?'固定模板与插槽校验已启用；同步按槽名保留内容，固定区域使用最新模板。':'该组件使用兼容同步，按原有内容顺序匹配。可在资源中心配置模板与插槽约束。'}
+              {components[selectedNode.componentId]?.templateContract ? t('inspector.componentTemplateContractHint') : t('inspector.componentCompatSyncHint')}
             </p>
             {syncStatusMsg && (
               <div className="p-1.5 bg-host-elevated text-host-primary border border-host-border rounded text-[10px] leading-tight">
@@ -441,13 +441,13 @@ export const PropertyInspector: React.FC = () => {
                 onClick={handleSyncComponent}
                 className="py-1 px-2 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded text-[11px] font-medium transition"
               >
-                批量同步全画板
+                {t('inspector.componentBatchSync')}
               </button>
               <button
                 onClick={() => detachComponentInstance(activeScreenId, selectedNid)}
                 className="py-1 px-2 bg-host-elevated hover:bg-host-dialog text-host-secondary border border-host-border rounded text-[11px] transition"
               >
-                从组件分离
+                {t('inspector.componentDetach')}
               </button>
             </div>
           </div>
@@ -456,7 +456,7 @@ export const PropertyInspector: React.FC = () => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-host-primary font-semibold text-[11px]">
                 <Boxes className="w-3.5 h-3.5 text-host-brand" />
-                <span>组件化复用 (Component)</span>
+                <span>{t('inspector.componentReuseTitle')}</span>
               </div>
               <button
                 onClick={() => setShowExtractInput(!showExtractInput)}
@@ -471,7 +471,7 @@ export const PropertyInspector: React.FC = () => {
                   type="text"
                   value={compNameInput}
                   onChange={(e) => setCompNameInput(e.target.value)}
-                  placeholder="组件名称，如：概览指标卡..."
+                  placeholder={t('inspector.componentNamePlaceholder')}
                   className="w-full bg-host-elevated border border-host-border rounded-lg px-2.5 py-1 text-host-primary text-xs focus:outline-none focus:border-host-accent"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleExtractComponent();
@@ -482,14 +482,14 @@ export const PropertyInspector: React.FC = () => {
                     onClick={() => setShowExtractInput(false)}
                     className="px-2 py-0.5 bg-host-elevated text-host-secondary hover:text-host-primary rounded text-[10px]"
                   >
-                    取消
+                    {t('common.cancel')}
                   </button>
                   <button
                     onClick={handleExtractComponent}
                     disabled={!compNameInput.trim()}
                     className="px-2.5 py-0.5 bg-host-accent hover:bg-host-accent-hover disabled:opacity-40 text-host-on-accent rounded text-[10px] font-medium transition"
                   >
-                    确认封装
+                    {t('inspector.componentConfirmExtract')}
                   </button>
                 </div>
               </div>
@@ -504,32 +504,32 @@ export const PropertyInspector: React.FC = () => {
 
         {/* Structural Operations (PRD §3.6.3) */}
         <div className="space-y-2 pt-1 border-t border-host-border">
-          <span className="text-[11px] font-semibold text-host-secondary uppercase tracking-wider block">结构与容器操作</span>
+          <span className="text-[11px] font-semibold text-host-secondary uppercase tracking-wider block">{t('inspector.structuralOpsTitle')}</span>
           <div className="grid grid-cols-2 gap-1.5">
             <button
               onClick={handleDuplicateNode}
               className="flex items-center justify-center gap-1.5 py-1 px-2 bg-host-elevated hover:bg-host-dialog text-host-secondary hover:text-host-primary rounded-lg border border-host-border transition text-[11px]"
             >
               <Copy className="w-3 h-3" />
-              <span>复制此节点</span>
+              <span>{t('inspector.duplicateNode')}</span>
             </button>
             <button
               onClick={handleDeleteNode}
               className="flex items-center justify-center gap-1.5 py-1 px-2 bg-host-elevated hover:bg-red-950/60 text-host-danger rounded-lg border border-host-border hover:border-red-800/60 transition text-[11px]"
             >
               <Trash2 className="w-3 h-3" />
-              <span>删除此节点</span>
+              <span>{t('inspector.deleteNode')}</span>
             </button>
           </div>
           <div className="flex items-center gap-1 pt-1">
-            <span className="text-[10px] text-host-tertiary">包裹为容器:</span>
-            {(['row', 'col', 'card'] as const).map((t) => (
+            <span className="text-[10px] text-host-tertiary">{t('inspector.wrapInContainer')}</span>
+            {(['row', 'col', 'card'] as const).map((cls) => (
               <button
-                key={t}
-                onClick={() => handleWrapInContainer(t)}
+                key={cls}
+                onClick={() => handleWrapInContainer(cls)}
                 className="px-2 py-0.5 bg-host-sunken hover:bg-host-elevated border border-host-border rounded text-[10px] text-host-secondary hover:text-host-primary transition"
               >
-                .{t}
+                .{cls}
               </button>
             ))}
           </div>
@@ -545,7 +545,7 @@ export const PropertyInspector: React.FC = () => {
               className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-host-elevated hover:bg-host-dialog border border-host-border text-host-secondary hover:text-host-primary rounded-lg text-xs transition"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>还原为 AI 基线样式</span>
+              <span>{t('inspector.resetToAiBaseline')}</span>
             </button>
           </div>
         )}

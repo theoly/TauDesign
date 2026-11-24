@@ -143,6 +143,7 @@ const Workspace: React.FC = () => {
  * 全部无意义，直接进工作空间只会得到一屏空壳。
  */
 export const App: React.FC = () => {
+  const t = useT();
   const { view, refresh, activeProjectId } = useWorkspaceStore();
   const [showHtmlImport, setShowHtmlImport] = useState(false);
   useEffect(() => bindHtmlImportMenu(() => setShowHtmlImport(true)), []);
@@ -155,8 +156,8 @@ export const App: React.FC = () => {
 
   return (
     <ErrorBoundary
-      fallbackTitle="TauDesign 遇到非预期异常"
-      fallbackMessage="已拦截错误以保护工程数据安全，应用未崩溃。您可以尝试重置状态或刷新。"
+      fallbackTitle={t('app.errorBoundaryTitle')}
+      fallbackMessage={t('app.errorBoundaryMessage')}
       onReset={() => {
         useProjectStore.getState().selectNode(null);
         refresh();

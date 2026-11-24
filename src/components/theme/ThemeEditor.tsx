@@ -154,7 +154,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
 
           <div className="flex items-center gap-2 py-2">
             <button
-              disabled={libraryReadOnly} title={libraryReadOnly?'固定版本参考只读，请先转为项目副本':undefined}
+              disabled={libraryReadOnly} title={libraryReadOnly?t('theme.libraryReadonlyTitle'):undefined}
               onClick={() => setShowStylePicker(true)}
               className="px-2.5 py-1.5 bg-host-elevated hover:bg-host-dialog text-host-primary rounded-lg text-xs font-medium transition flex items-center gap-1.5 border border-host-border"
             >
@@ -213,7 +213,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-semibold text-host-primary block">{t('theme.presetsTitle')}</span>
                   <button
-                    disabled={libraryReadOnly} title={libraryReadOnly?'固定版本参考只读，请先转为项目副本':undefined}
+                    disabled={libraryReadOnly} title={libraryReadOnly?t('theme.libraryReadonlyTitle'):undefined}
                     onClick={() => setShowStylePicker(true)}
                     className="px-2.5 py-1 bg-host-elevated hover:bg-host-dialog border border-host-border text-host-primary rounded-lg text-[10px] font-medium whitespace-nowrap"
                   >
@@ -266,12 +266,12 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                 </div>
                 <label className="flex items-center gap-2 text-xs text-host-secondary">
                   <input type="checkbox" checked={harmonizeSurfaces} onChange={e => setHarmonizeSurfaces(e.target.checked)} />
-                  自定义主色时联动背景、卡片、中性色与阴影
+                  {t('theme.harmonizeSurfacesLabel')}
                 </label>
                 <div className="flex items-center gap-4">
                   <input
                     type="color"
-                    aria-label="自定义品牌主色"
+                    aria-label={t('theme.customBrandColorAria')}
                     value={designSystem.tokens.colors.primary['500'] || '#2563eb'}
                     onChange={(e) => handlePrimaryColorChange(e.target.value)}
                     className="w-10 h-10 rounded-lg cursor-pointer bg-transparent border-0"
@@ -281,11 +281,11 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                       {designSystem.tokens.colors.primary['500'] || '#2563eb'}
                     </span>
                     <span className="text-[11px] text-host-tertiary">
-                      {harmonizeSurfaces ? '自动生成完整色阶与协调表面；支持撤销。' : '更新完整品牌色阶，保留自定义背景与表面；支持撤销。'}
+                      {harmonizeSurfaces ? t('theme.harmonizeSurfacesHintOn') : t('theme.harmonizeSurfacesHintOff')}
                     </span>
                   </div>
                 </div>
-                <p className="text-[11px] leading-relaxed text-host-secondary">背景保持低饱和，卡片用表面色；品牌色集中用于主操作和选中态，成功、警告、危险色只表达状态。</p>
+                <p className="text-[11px] leading-relaxed text-host-secondary">{t('theme.colorUsageGuide')}</p>
               </div>
 
               <ThemeBackgroundEditor/>
@@ -356,7 +356,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                     className="w-full accent-host-accent"
                   />
                   <span className="text-[10px] text-host-tertiary">
-                    值越低边框越柔和；生效于 .border-subtle 与 .glass
+                    {t('theme.borderAlphaEffectHint')}
                   </span>
                 </div>
 
@@ -371,7 +371,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                       <div className="flex items-center gap-2">
                         <FileText className="w-4 h-4 text-host-brand" />
                         <span className="text-xs font-semibold text-host-primary">
-                          当前激活设计规范 (DESIGN.md)
+                          {t('theme.activeProseTitle')}
                         </span>
                         <span
                           className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
@@ -380,11 +380,11 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                               : 'bg-host-elevated text-host-secondary border border-host-border'
                           }`}
                         >
-                          {activeProse.source === 'project_override' ? '工程覆盖' : '内置预设'}
+                          {activeProse.source === 'project_override' ? t('theme.proseProjectOverride') : t('theme.proseBuiltinPreset')}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 text-host-tertiary text-xs">
-                        <span>{showProseCard ? '收起' : '展开查看'}</span>
+                        <span>{showProseCard ? t('theme.proseCollapse') : t('theme.proseExpand')}</span>
                         <ChevronDown
                           className={`w-3.5 h-3.5 transition-transform ${showProseCard ? 'rotate-180' : ''}`}
                         />
@@ -394,7 +394,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                     {showProseCard && (
                       <div className="p-3 border-t border-host-border bg-host-chrome space-y-2">
                         <div className="flex items-center justify-between text-[11px] text-host-secondary">
-                          <span>规范名称: <strong className="text-host-primary">{activeProse.title}</strong></span>
+                          <span>{t('theme.proseNameLabel')} <strong className="text-host-primary">{activeProse.title}</strong></span>
                           <span className="font-mono text-[10px] text-host-tertiary">{activeProse.presetId}</span>
                         </div>
                         <pre className="p-2.5 bg-host-sunken rounded-lg border border-host-border font-mono text-[11px] text-host-primary leading-relaxed overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap">
@@ -415,7 +415,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               <div className="space-y-1">
                 <span className="font-semibold text-host-primary block text-sm">{t('theme.decisionsTitle')}</span>
                 <p className="text-host-secondary text-[11px] leading-relaxed">
-                  沉淀在工程中的设计偏好（如“不使用渐变”、“按钮一律胶囊圆角”）。每次 AI 生成新页面时均自动作为上下文下发，保证项目越做越契合统一。
+                  {t('theme.decisionsDescription')}
                 </p>
               </div>
 
@@ -445,7 +445,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               <div className="space-y-2">
                 {Object.values(decisions).length === 0 ? (
                   <div className="p-6 text-center text-host-tertiary bg-host-sunken border border-host-border rounded-xl">
-                    暂无工程设计约定。在右侧 AI 对话中提到偏好时会自动提示沉淀。
+                    {t('theme.editorDecisionsEmpty')}
                   </div>
                 ) : (
                   Object.values(decisions).map((dec) => (
@@ -465,7 +465,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                         </span>
                       </div>
                       <span className="text-[10px] text-host-tertiary font-mono">
-                        {dec.source.kind === 'auto_extracted' ? '对话沉淀' : '人工添加'}
+                        {dec.source.kind === 'auto_extracted' ? t('theme.decisionAutoSource') : t('theme.decisionManualSource')}
                       </span>
                     </div>
                   ))
@@ -481,7 +481,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                 <div>
                   <span className="font-semibold text-host-primary block text-sm">{t('theme.baseCssTitle')}</span>
                   <p className="text-host-secondary text-[11px] leading-relaxed">
-                    随工程持久化存储。类名白名单由此实时派生下发给 AI。用户禁止手改以免破坏契约，可经下方对话申请演进（PRD D15 / §3.5.6）。
+                    {t('theme.baseCssDesc')}
                   </p>
                 </div>
               </div>
@@ -510,18 +510,18 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               <div className="p-3 bg-host-sunken border border-host-border rounded-xl space-y-2">
                 <div className="flex items-center gap-1.5 text-host-brand font-semibold text-xs">
                   <Sparkles className="w-3.5 h-3.5" />
-                  <span>AI 辅助基座样式演进 (PRD §3.5.6)</span>
+                  <span>{t('theme.aiEvolveTitle')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
-                    placeholder="以自然语言提出修改，例：新增 .badge-glow 呼吸灯高光徽章..."
+                    placeholder={t('theme.aiEvolvePlaceholder')}
                     value={aiEvolveInput}
                     onChange={(e) => setAiEvolveInput(e.target.value)}
                     className="flex-1 bg-host-elevated border border-host-border rounded-lg px-3 py-1.5 text-host-primary text-xs focus:outline-none focus:border-host-accent"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && aiEvolveInput.trim()) {
-                        setEvolveResult(`已创建基座变更提案：「${aiEvolveInput.trim()}」，并在历史中建立快照保护点。`);
+                        setEvolveResult(t('theme.aiEvolveCreated', { text: aiEvolveInput.trim() }));
                         setAiEvolveInput('');
                       }
                     }}
@@ -529,12 +529,12 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                   <button
                     onClick={() => {
                       if (!aiEvolveInput.trim()) return;
-                      setEvolveResult(`已创建基座变更提案：「${aiEvolveInput.trim()}」，并在历史中建立快照保护点。`);
+                      setEvolveResult(t('theme.aiEvolveCreated', { text: aiEvolveInput.trim() }));
                       setAiEvolveInput('');
                     }}
                     className="px-3 py-1.5 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg text-xs font-medium transition"
                   >
-                    申请演进
+                    {t('theme.aiEvolveBtn')}
                   </button>
                 </div>
                 {evolveResult && (
@@ -561,7 +561,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
         {/* Footer */}
         <div className="p-4 border-t border-host-border bg-host-sunken flex justify-between items-center">
           <div className="text-[11px] text-host-tertiary">
-            预设切换与参数调整将实时同步至画框沙箱与设计令牌
+            {t('theme.footerLiveSyncHint')}
           </div>
           <button
             onClick={onClose}

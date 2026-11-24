@@ -23,6 +23,7 @@ import { Copy, Edit2, Smartphone, Monitor, Image as ImageIcon, Check } from 'luc
 import type {ContentTask} from '../../services/ai/explicitActionContent';
 import {ConfirmDialog} from '../common/ConfirmDialog';
 import {MediaDiagnosticsButton} from '../common/MediaDiagnosticsButton';
+import {useT} from '../../stores/useLocaleStore';
 interface ScreenFrameProps {
   contentTask?:ContentTask;
   screen: Screen;
@@ -39,6 +40,7 @@ interface ScreenFrameProps {
 }
 
 export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isStaged, isComparisonTarget, isComparisonBackground, overrideSourceScreenId, renderQualityKey, onRenderQuality, qualityFocusNid, onPolish, contentTask }) => {
+  const t = useT();
   const contentPolicy = useMemo(()=>contentTask?{request:contentTask.request,elementNid:contentTask.elementNid,multiPage:contentTask.multiPage}:undefined,
     [contentTask?.request,contentTask?.elementNid,Boolean(contentTask?.multiPage)]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -672,7 +674,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
             ? 'text-blue-400 font-semibold'
             : 'text-slate-300 hover:text-white font-medium'
         }`}
-        title="按住拖动可调整画框位置"
+        title={t('layout.dragToMoveScreenTitle')}
       >
         <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-2 flex-wrap">
           {isEditingName ? (
@@ -708,14 +710,14 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
                 setIsEditingName(true);
               }}
               className="cursor-pointer break-words max-w-full leading-snug tracking-wide"
-              title={`${screen.name} (双击重命名)`}
+              title={t('layout.doubleClickRenameTitle', { name: screen.name })}
             >
               {screen.name}
             </span>
           )}
           {isStaged && (
             <span className="bg-purple-900/60 text-purple-300 border border-purple-500/40 px-1.5 py-0.5 rounded text-[10px] flex-shrink-0">
-              AI 新方案比选
+              {t('layout.aiSideBySideCompare')}
             </span>
           )}
         </div>
@@ -731,7 +733,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
                   ? 'text-emerald-400 bg-emerald-950/60'
                   : 'text-slate-400 hover:text-blue-400 hover:bg-slate-800'
               }`}
-              title={coverSetSuccess ? '已设为工程封面！' : '设为工程封面'}
+              title={coverSetSuccess ? t('layout.coverSetSuccessTitle') : t('layout.setAsCoverTitle')}
               data-testid="set-as-cover-btn"
             >
               {coverSetSuccess ? (
@@ -746,7 +748,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
                 duplicateScreen(screen.id);
               }}
               className="p-1 rounded transition text-slate-400 hover:text-blue-400 hover:bg-slate-800"
-              title="复制画框"
+              title={t('layout.duplicateScreen')}
             >
               <Copy className="w-3.5 h-3.5" />
             </button>
@@ -756,7 +758,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
                 setIsEditingName(true);
               }}
               className="p-1 rounded transition text-slate-400 hover:text-blue-400 hover:bg-slate-800"
-              title="重命名画框"
+              title={t('layout.renameScreenFrameTitle')}
             >
               <Edit2 className="w-3.5 h-3.5" />
             </button>
@@ -766,7 +768,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
                 setConfirmDelete(true);
               }}
               className="p-1 rounded transition text-sm leading-none text-slate-400 hover:text-red-400 hover:bg-slate-800"
-              title="删除画框"
+              title={t('layout.deleteScreen')}
               data-testid="screen-frame-delete"
             >
               ×
@@ -776,8 +778,8 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       </div>
       {confirmDelete && (
         <ConfirmDialog
-          title="删除画框"
-          message={<>将删除「<span className="font-medium text-slate-200">{screen.name}</span>」，此操作可通过撤销恢复，但仍请确认是否继续。</>}
+          title={t('layout.deleteScreen')}
+          message={<>{t('layout.deleteScreenConfirmBefore')}<span className="font-medium text-slate-200">{screen.name}</span>{t('layout.deleteScreenConfirmAfter')}</>}
           onCancel={() => setConfirmDelete(false)}
           onConfirm={() => {
             removeScreen(screen.id);
@@ -789,7 +791,7 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
       {/* 原型画框卡片主体 (圆角无内嵌顶栏) */}
       {resourceFailure && <div role="alert" className="mb-2 rounded-lg border border-red-800 bg-red-950 p-2 text-xs text-red-200">
         <p>{resourceFailure}</p>
-        <button type="button" onClick={event=>{event.stopPropagation();retryPageResources();}} className="mt-2 rounded border border-red-700 px-2 py-1 hover:bg-red-900">重试页面资源</button>
+        <button type="button" onClick={event=>{event.stopPropagation();retryPageResources();}} className="mt-2 rounded border border-red-700 px-2 py-1 hover:bg-red-900">{t('layout.retryPageResources')}</button>
         <MediaDiagnosticsButton/>
       </div>}
       <div
@@ -821,12 +823,12 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
             className="w-full h-full flex flex-col items-center justify-center text-sm font-mono select-none"
             style={{ background: frameBg, color: frameFg }}
           >
-            <span>[L0 位图降级缩略视图]</span>
+            <span>{t('layout.lodThumbnailLabel')}</span>
             <span className="text-xs opacity-70">{screen.name}</span>
           </div>
         ) : frameDocument === null ? (
           <div role="status" className="flex h-full items-center justify-center text-xs text-slate-400">
-            {resourceError ? '页面资源不可用' : '正在读取页面资源…'}
+            {resourceError ? t('layout.pageResourcesUnavailable') : t('layout.loadingPageResources')}
           </div>
         ) : (
           // L1 (Frozen) or L2 (Active) Iframe: 保持完整高保真视觉渲染
@@ -852,9 +854,9 @@ export const ScreenFrame: React.FC<ScreenFrameProps> = ({ screen, lodLevel, isSt
           >
             <span
               className="text-[9px] font-normal leading-none text-slate-500/55 bg-slate-950/20 px-1.5 py-1 rounded-sm backdrop-blur-[1px]"
-              title={`首屏参考线 · ${viewport.reference.name} · ${guideHeight}px`}
+              title={t('layout.firstScreenGuideTitle', { name: viewport.reference.name, height: guideHeight })}
             >
-              首屏 · {guideHeight}px
+              {t('layout.firstScreenGuideChip', { height: guideHeight })}
             </span>
           </div>
         )}

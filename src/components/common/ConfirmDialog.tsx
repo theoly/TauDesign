@@ -1,6 +1,7 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { AlertTriangle } from 'lucide-react';
+import { useT } from '../../stores/useLocaleStore';
 
 interface ConfirmDialogProps {
   title: string;
@@ -15,11 +16,15 @@ interface ConfirmDialogProps {
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   title,
   message,
-  confirmLabel = '确认删除',
-  cancelLabel = '取消',
+  confirmLabel,
+  cancelLabel,
   onConfirm,
   onCancel,
-}) => createPortal(
+}) => {
+  const t = useT();
+  const resolvedConfirm = confirmLabel ?? t('common.confirmDelete');
+  const resolvedCancel = cancelLabel ?? t('common.cancel');
+  return createPortal(
   <div
     className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
     role="alertdialog"
@@ -45,7 +50,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           className="rounded-lg border border-host-border bg-host-sunken px-4 py-2 text-host-primary hover:border-host-border-strong transition"
           data-testid="confirm-dialog-cancel"
         >
-          {cancelLabel}
+          {resolvedCancel}
         </button>
         <button
           type="button"
@@ -53,10 +58,11 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           className="rounded-lg border border-host-danger/40 bg-host-sunken px-4 py-2 font-medium text-host-danger hover:bg-host-danger/10 transition"
           data-testid="confirm-dialog-confirm"
         >
-          {confirmLabel}
+          {resolvedConfirm}
         </button>
       </div>
     </div>
   </div>,
   document.body
 );
+};

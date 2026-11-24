@@ -5,8 +5,10 @@ import {libraryMemberLocked} from '../../services/ai/designLibraryReference';
 import {checkGenerationSourceSafety} from '../../services/ai/generationQuality';
 import {htmlIsComplete} from '../../utils/htmlCompleteness';
 import {compileComponentTemplate} from '../../utils/componentTemplate';
+import {useT} from '../../stores/useLocaleStore';
 
 export function ComponentContractEditor({component}:{component:ComponentDefinition}) {
+ const t=useT();
  const projectId=useProjectStore(s=>s.id),binding=useProjectStore(s=>s.designLibraryBinding);
  const [open,setOpen]=useState(false),[enabled,setEnabled]=useState(Boolean(component.templateContract));
  const [html,setHtml]=useState(component.templateHtml),[slots,setSlots]=useState(JSON.stringify(component.slotDefs??[],null,2)),[message,setMessage]=useState('');
@@ -15,30 +17,30 @@ export function ComponentContractEditor({component}:{component:ComponentDefiniti
  const save=()=>{
   try{
    const s=useProjectStore.getState();
-   if(s.id!==baseline.current.projectId||JSON.stringify(s.components[component.id])!==baseline.current.component)throw Error('工程或组件定义已变化，请取消后重新打开配置。');
-   let defs:SlotDef[];try{defs=JSON.parse(slots);}catch{throw Error('插槽 JSON 格式不正确。');}
-   if(!Array.isArray(defs))throw Error('插槽须为 JSON 数组。');
+   if(s.id!==baseline.current.projectId||JSON.stringify(s.components[component.id])!==baseline.current.component)throw Error(t('assets.contractContextChanged'));
+   let defs:SlotDef[];try{defs=JSON.parse(slots);}catch{throw Error(t('assets.contractSlotJsonError'));}
+   if(!Array.isArray(defs))throw Error(t('assets.contractSlotArrayError'));
    const next={...component,templateHtml:html,slotDefs:defs,templateContract:enabled?{version:1 as const}:undefined};
    // Disabling strict mode does not permit saving unsafe HTML through this editor.
-   if(!htmlIsComplete(html)||!checkGenerationSourceSafety(html).passed)throw Error('模板HTML不完整或不安全。');
-   if(defs.length>20||defs.some(d=>!d||typeof d.slotName!=='string'||typeof d.selector!=='string'||!['text','image','node'].includes(d.type)||typeof d.defaultContent!=='string'))throw Error('插槽定义字段或数量无效。');
+   if(!htmlIsComplete(html)||!checkGenerationSourceSafety(html).passed)throw Error(t('assets.contractHtmlUnsafeError'));
+   if(defs.length>20||defs.some(d=>!d||typeof d.slotName!=='string'||typeof d.selector!=='string'||!['text','image','node'].includes(d.type)||typeof d.defaultContent!=='string'))throw Error(t('assets.contractSlotFieldError'));
    if(enabled)compileComponentTemplate(next);
-   s.updateComponent(component.id,{templateHtml:html,slotDefs:defs,templateContract:next.templateContract});setOpen(false);setMessage('复用约束已保存；原页面保持不变，可按需同步实例。');
-  }catch(error){setMessage(error instanceof Error?error.message:'保存失败。');}
+   s.updateComponent(component.id,{templateHtml:html,slotDefs:defs,templateContract:next.templateContract});setOpen(false);setMessage(t('assets.contractSavedNotice'));
+  }catch(error){setMessage(error instanceof Error?error.message:t('assets.contractSaveFailed'));}
  };
- return <section className="space-y-2 text-[11px]" aria-label={`${component.name}复用约束`}>
+ return <section className="space-y-2 text-[11px]" aria-label={t('assets.contractSectionAria',{name:component.name})}>
   <div className="flex flex-wrap items-center gap-2">
-   <span className="text-slate-500">v{component.version??1} · {component.templateContract?'模板与插槽校验':'兼容复用'}</span>
-   {!open&&<button type="button" disabled={locked} onClick={begin} title={locked?'设计库参考只读，请先转为项目副本':undefined} className="rounded bg-slate-800 px-2 py-1 text-slate-300 disabled:opacity-40">配置复用约束</button>}
+   <span className="text-slate-500">v{component.version??1} · {component.templateContract?t('assets.contractTemplateMode'):t('assets.contractCompatMode')}</span>
+   {!open&&<button type="button" disabled={locked} onClick={begin} title={locked?t('assets.contractReadonlyTitle'):undefined} className="rounded bg-slate-800 px-2 py-1 text-slate-300 disabled:opacity-40">{t('assets.contractConfigBtn')}</button>}
   </div>
-  {locked&&<p className="text-slate-500">固定版本参考只读，请先转为项目副本。</p>}
+  {locked&&<p className="text-slate-500">{t('theme.libraryReadonlyTitle')}。</p>}
   {open&&<div className="space-y-2 select-text">
-   <label className="flex gap-2 text-slate-300"><input type="checkbox" checked={enabled} disabled={locked} onChange={e=>setEnabled(e.target.checked)}/>启用固定模板与插槽校验</label>
-   <p className="text-slate-500">固定区域须保持一致。文本槽仅改文字，图片槽仅改图片内容，节点槽仅改容器内部。保存后版本递增，不自动改页面。</p>
-   <label className="block text-slate-400">模板 HTML<textarea aria-label="组件模板 HTML" value={html} onChange={e=>setHtml(e.target.value)} disabled={locked} className="mt-1 h-28 w-full resize-y rounded border border-slate-700 bg-slate-900 p-2 font-mono text-slate-300"/></label>
-   <label className="block text-slate-400">插槽 JSON<textarea aria-label="组件插槽 JSON" value={slots} onChange={e=>setSlots(e.target.value)} disabled={locked} className="mt-1 h-28 w-full resize-y rounded border border-slate-700 bg-slate-900 p-2 font-mono text-slate-300"/></label>
-   <p className="break-words text-slate-500">例：{JSON.stringify([{slotName:'title',selector:'[data-slot="title"]',type:'text',defaultContent:'标题'}])}。在模板目标节点添加 data-slot="title"；根节点可用 :scope。默认内容取自模板。</p>
-   <div className="flex gap-2"><button type="button" disabled={locked} onClick={save} className="rounded bg-blue-600 px-2 py-1 text-white disabled:opacity-40">保存复用约束</button><button type="button" onClick={()=>{setOpen(false);setMessage('');}} className="rounded bg-slate-800 px-2 py-1 text-slate-300">取消配置</button></div>
+   <label className="flex gap-2 text-slate-300"><input type="checkbox" checked={enabled} disabled={locked} onChange={e=>setEnabled(e.target.checked)}/>{t('assets.contractEnableCheckbox')}</label>
+   <p className="text-slate-500">{t('assets.contractConstraintHint')}</p>
+   <label className="block text-slate-400">{t('assets.contractTemplateHtmlLabel')}<textarea aria-label={t('assets.contractTemplateHtmlAria')} value={html} onChange={e=>setHtml(e.target.value)} disabled={locked} className="mt-1 h-28 w-full resize-y rounded border border-slate-700 bg-slate-900 p-2 font-mono text-slate-300"/></label>
+   <label className="block text-slate-400">{t('assets.contractSlotJsonLabel')}<textarea aria-label={t('assets.contractSlotJsonAria')} value={slots} onChange={e=>setSlots(e.target.value)} disabled={locked} className="mt-1 h-28 w-full resize-y rounded border border-slate-700 bg-slate-900 p-2 font-mono text-slate-300"/></label>
+   <p className="break-words text-slate-500">{t('assets.contractExampleHint',{example:JSON.stringify([{slotName:'title',selector:'[data-slot="title"]',type:'text',defaultContent:'Title'}])})}</p>
+   <div className="flex gap-2"><button type="button" disabled={locked} onClick={save} className="rounded bg-blue-600 px-2 py-1 text-white disabled:opacity-40">{t('assets.contractSaveBtn')}</button><button type="button" onClick={()=>{setOpen(false);setMessage('');}} className="rounded bg-slate-800 px-2 py-1 text-slate-300">{t('assets.contractCancelBtn')}</button></div>
   </div>}
   {message&&<p role="status" className="text-amber-300">{message}</p>}
  </section>;

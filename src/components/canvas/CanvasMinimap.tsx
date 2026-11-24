@@ -5,6 +5,7 @@ import { Screen } from '../../types/project';
 import { getBaseCss, DeviceProfile } from '../../styles/baseCss';
 import { compileTokensToCss } from '../../utils/cssCompiler';
 import { createMapProjection, getWorldViewport, mapPointToWorld, MapProjection, projectMapRect } from '../../utils/minimapGeometry';
+import { useT } from '../../stores/useLocaleStore';
 
 const MAP_WIDTH = 208;
 const MAP_HEIGHT = 128;
@@ -13,6 +14,7 @@ const MAP_HEIGHT = 128;
 const PagePreview = React.memo(function PagePreview({ screen, device, tokensCss, overridesCss, width, height }: {
   screen: Screen; device: DeviceProfile; tokensCss: string; overridesCss: string; width: number; height: number;
 }) {
+  const t = useT();
   const ref = useRef<HTMLIFrameElement>(null);
   const srcDoc = useMemo(() => `<!DOCTYPE html><html><head><meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="script-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'">
@@ -29,12 +31,13 @@ const PagePreview = React.memo(function PagePreview({ screen, device, tokensCss,
   };
   useEffect(syncStyles, [tokensCss, overridesCss, srcDoc]);
 
-  return <iframe ref={ref} srcDoc={srcDoc} onLoad={syncStyles} title={`${screen.name}缩略图`}
+  return <iframe ref={ref} srcDoc={srcDoc} onLoad={syncStyles} title={t('layout.minimapThumbnailTitle', { name: screen.name })}
     tabIndex={-1} aria-hidden="true" scrolling="no" className="pointer-events-none border-0 origin-top-left"
     style={{ width, height, display: 'block' }} />;
 });
 
 export const CanvasMinimap: React.FC<{ canvasRef: React.RefObject<HTMLDivElement> }> = ({ canvasRef }) => {
+  const t = useT();
   const screens = useProjectStore(s => s.screens);
   const screenOrder = useProjectStore(s => s.screenOrder);
   const settings = useProjectStore(s => s.settings);
@@ -127,13 +130,13 @@ export const CanvasMinimap: React.FC<{ canvasRef: React.RefObject<HTMLDivElement
     <div data-testid="canvas-minimap" className="absolute bottom-4 left-4 z-40 bg-host-elevated/95 backdrop-blur-md border border-host-border-strong rounded-xl shadow-2xl p-2.5 flex flex-col gap-2 select-none"
       onMouseDown={(event) => event.stopPropagation()} onWheel={(event) => event.stopPropagation()}>
       <div className="flex items-center justify-between gap-4 text-[10px] font-semibold text-host-secondary">
-        <span className="flex items-center gap-1.5"><Map className="w-3 h-3 text-host-brand" />小地图 (Minimap)</span>
+        <span className="flex items-center gap-1.5"><Map className="w-3 h-3 text-host-brand" />{t('layout.minimapTitle')}</span>
         <button type="button" aria-expanded={expanded} aria-controls="minimap-scene" onClick={() => setExpanded(!expanded)} className="text-host-tertiary hover:text-host-primary transition">
-          {expanded ? '收起' : '展开'}
+          {expanded ? t('common.collapse') : t('common.expand')}
         </button>
       </div>
       {expanded && <>
-        <div id="minimap-scene" data-testid="minimap-scene" aria-label="画布概览，点击或拖动定位" className="relative bg-host-sunken border border-host-border/60 rounded-lg overflow-hidden cursor-crosshair touch-none"
+        <div id="minimap-scene" data-testid="minimap-scene" aria-label={t('layout.minimapSceneAria')} className="relative bg-host-sunken border border-host-border/60 rounded-lg overflow-hidden cursor-crosshair touch-none"
           style={{ width: MAP_WIDTH, height: MAP_HEIGHT }}
           onPointerDown={(event) => {
             if (event.button !== 0) return;
@@ -149,7 +152,7 @@ export const CanvasMinimap: React.FC<{ canvasRef: React.RefObject<HTMLDivElement
           {frames.map((frame) => {
             const rect = projectMapRect(frame, projection);
             return <button key={frame.screen.id} type="button" data-testid={`minimap-screen-${frame.screen.id}`}
-              aria-label={`定位画框：${frame.screen.name}`} aria-pressed={activeScreenId === frame.screen.id} title={frame.screen.name}
+              aria-label={t('layout.minimapLocateScreen', { name: frame.screen.name })} aria-pressed={activeScreenId === frame.screen.id} title={frame.screen.name}
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation(); setActiveScreen(frame.screen.id);
@@ -164,9 +167,9 @@ export const CanvasMinimap: React.FC<{ canvasRef: React.RefObject<HTMLDivElement
           })}
           <div data-testid="minimap-viewport" className="absolute pointer-events-none z-20 border border-host-accent bg-host-accent/15 rounded-[1px]"
             style={{ left: viewRect.x, top: viewRect.y, width: viewRect.width, height: viewRect.height }} />
-          {!frames.length && <span className="absolute inset-0 flex items-center justify-center text-[10px] text-host-tertiary pointer-events-none">暂无画框</span>}
+          {!frames.length && <span className="absolute inset-0 flex items-center justify-center text-[10px] text-host-tertiary pointer-events-none">{t('layout.minimapNoScreens')}</span>}
         </div>
-        <div className="flex justify-between text-[9px] text-host-tertiary"><span>{frames.length} 个画框 · 点击或拖动定位{comparing?' · 对比中':''}</span><span>{scalePercent}%</span></div>
+        <div className="flex justify-between text-[9px] text-host-tertiary"><span>{t('layout.minimapFooter', { count: frames.length })}{comparing ? t('layout.minimapComparing') : ''}</span><span>{scalePercent}%</span></div>
       </>}
     </div>
   );

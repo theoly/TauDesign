@@ -40,7 +40,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
   /** 应用到当前选中元素：img 改 src，其他元素设为背景图 */
   const applyImage = (url: string) => {
     if (!activeScreenId || !selectedNode) {
-      alert('请先在画板中点击选中一个图片或容器元素');
+      alert(t('assets.selectElementFirstAlert'));
       return;
     }
     const cur = screens[activeScreenId];
@@ -84,7 +84,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
                 <button
                   key={a.id}
                   onClick={() => applyImage(a.relPath)}
-                  title={`${a.name}\n点击应用到当前选中元素`}
+                  title={t('assets.applyAssetImageTitle', { name: a.name })}
                   className="aspect-square rounded-md overflow-hidden border border-host-border hover:border-host-accent bg-host-sunken transition"
                 >
                   <AssetPreviewImage asset={a} className="w-full h-full object-cover" />
@@ -130,7 +130,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
                     onClick={() => activeScreenId && insertComponent(activeScreenId, c.id)}
                     disabled={!activeScreenId}
                     className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 bg-host-accent hover:bg-host-accent-hover disabled:opacity-30 text-host-on-accent font-medium rounded text-[10px] transition shrink-0"
-                    title="插入当前画板"
+                    title={t('assets.insertToActiveBoard')}
                   >
                     {t('assets.insert')}
                   </button>
@@ -157,27 +157,27 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
                 </div>
               ))}
               {builtinMothers.length > 12 && (
-                <p className="px-3 py-1 text-[10px] text-host-tertiary">另有 {builtinMothers.length - 12} 条，见资源中心「母版」</p>
+                <p className="px-3 py-1 text-[10px] text-host-tertiary">{t('assets.moreMothersNotice', { count: builtinMothers.length - 12 })}</p>
               )}
               <button
                 type="button"
                 onClick={onOpenAssetCenter}
                 className="mx-2 mb-1 mt-1 w-[calc(100%-1rem)] py-1.5 rounded-md border border-host-border bg-host-sunken hover:bg-host-elevated text-[10px] text-host-primary transition"
               >
-                打开资源中心存为母版
+                {t('assets.openCenterSaveMother')}
               </button>
             </div>
           )}
       </Accordion>
 
       <Accordion panelKey="assets.media" title={t('assets.panelMedia')} badge={media.length} defaultOpen={false}>
-        {media.length?media.map(asset=><p key={asset.id} title={asset.relPath} className="break-words px-3 py-2 text-[11px] text-host-secondary">{asset.name}<span className="block text-host-tertiary">{asset.mimeType}</span></p>):empty('导入页面引用的音视频与字幕会作为独立文件保存在工程中。')}
+        {media.length?media.map(asset=><p key={asset.id} title={asset.relPath} className="break-words px-3 py-2 text-[11px] text-host-secondary">{asset.name}<span className="block text-host-tertiary">{asset.mimeType}</span></p>):empty(t('assets.emptyMediaHint'))}
       </Accordion>
       <Accordion panelKey="assets.fonts" title={t('assets.panelFonts')} badge={fonts.length} defaultOpen={false}>
         {fonts.map(asset=><p key={asset.id} title={asset.relPath} className="break-words px-3 py-2 text-[11px] text-host-secondary">{asset.name}</p>)}
         <p className="px-3 py-3 text-[11px] text-host-tertiary leading-relaxed flex items-start gap-1.5">
           <Shapes className="w-3.5 h-3.5 mt-0.5 shrink-0 text-host-tertiary" />
-          <span>字体家族在「设计系统 → 排版」中配置；导入的字体文件独立保存，由来源 CSS 的 @font-face 引用。</span>
+          <span>{t('assets.fontsPanelHint')}</span>
         </p>
       </Accordion>
 

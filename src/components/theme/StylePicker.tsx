@@ -6,6 +6,7 @@ import { getBaseCss } from '../../styles/baseCss';
 import { buildStyleSpecimenHtml } from '../../utils/styleSpecimen';
 import { themePresets } from '../../utils/themePresets';
 import { computeRetraceability } from '../../utils/tokenLint';
+import { useT } from '../../stores/useLocaleStore';
 
 /**
  * 风格候选并排选择 (A2 / T-AE-19)。
@@ -18,6 +19,7 @@ import { computeRetraceability } from '../../utils/tokenLint';
  * 参见 doc/aesthetic/spec.md §6.3 / §6.6.3。
  */
 export const StylePicker: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const t = useT();
   const { designSystem, settings, setDesignSystem, screens, screenOrder, overrides, scanThemeConflicts, clearOverridesForTheme } =
     useProjectStore();
   const libraryReadOnly=useProjectStore(state=>state.designLibraryBinding?.mode==='pinned_reference');
@@ -73,9 +75,9 @@ export const StylePicker: React.FC<{ onClose: () => void }> = ({ onClose }) => {
       <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-5xl max-h-full flex flex-col overflow-hidden">
         <div className="p-4 border-b border-slate-800 flex items-center justify-between">
           <div>
-            <h2 className="text-slate-100 font-semibold text-sm">选择工程风格</h2>
+            <h2 className="text-slate-100 font-semibold text-sm">{t('theme.stylePickerTitle')}</h2>
             <p className="text-slate-400 text-xs mt-0.5">
-              同一份风格样张、四套设计 Token。点选即应用至全工程，可随时撤销。
+              {t('theme.stylePickerSubtitle')}
             </p>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-200 p-1">
@@ -135,42 +137,41 @@ export const StylePicker: React.FC<{ onClose: () => void }> = ({ onClose }) => {
             <div className="flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400 flex-none mt-0.5" />
               <div className="text-xs text-slate-300 space-y-1.5">
-                <p className="font-semibold text-slate-100">这些内容不会跟随新主题</p>
+                <p className="font-semibold text-slate-100">{t('theme.stylePickerWarningTitle')}</p>
                 <p className="text-slate-400 leading-relaxed">
-                  风格可回溯率 <span className="text-amber-400 font-semibold">{retrace.rate}%</span>
-                  （{retrace.totalNodes} 个节点中，{retrace.literalNodes} 个含硬编码样式、
-                  {retrace.overriddenNodes} 个被手动覆盖挡住）。
+                  {t('theme.stylePickerRetraceBefore')}<span className="text-amber-400 font-semibold">{retrace.rate}%</span>
+                  {t('theme.stylePickerRetraceMid', { total: retrace.totalNodes, literal: retrace.literalNodes, overridden: retrace.overriddenNodes })}
                 </p>
                 {clearable.length > 0 && (
                   <p className="text-slate-400 leading-relaxed">
-                    其中 <span className="text-slate-100 font-semibold">{clearable.length}</span> 条手动样式覆盖可以清除以跟随新主题。
+                    {t('theme.stylePickerClearableBefore')}<span className="text-slate-100 font-semibold">{clearable.length}</span>{t('theme.stylePickerClearableAfter')}
                     {conflicts.length - clearable.length > 0 && (
                       <span className="text-slate-500">
-                        （另有 {conflicts.length - clearable.length} 条为显式逃逸覆盖，将保留）
+                        {t('theme.stylePickerEscapedNote', { count: conflicts.length - clearable.length })}
                       </span>
                     )}
                   </p>
                 )}
-                <p className="text-slate-500">整个操作为单条历史记录，可一键撤销。</p>
+                <p className="text-slate-500">{t('theme.stylePickerUndoHint')}</p>
               </div>
             </div>
             <div className="flex justify-end gap-2">
               <button onClick={() => setConfirming(false)} className="px-3 py-1.5 text-xs text-slate-300 hover:text-slate-100">
-                返回
+                {t('theme.stylePickerBack')}
               </button>
               <button
                 disabled={libraryReadOnly}
                 onClick={() => applyTheme(false)}
                 className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg"
               >
-                保留覆盖并换肤
+                {t('theme.stylePickerKeepOverrides')}
               </button>
               {clearable.length > 0 && (
                 <button
                   onClick={() => applyTheme(true)}
                   className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg"
                 >
-                  清除并跟随新主题
+                  {t('theme.stylePickerClearAndApply')}
                 </button>
               )}
             </div>
@@ -178,18 +179,18 @@ export const StylePicker: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         ) : (
           <div className="p-4 border-t border-slate-800 flex items-center justify-between">
             <span className="text-slate-500 text-[11px]">
-              切换风格不改动任何画框结构，仅重算 Design Token —— 零 AI 调用、可一键撤销
+              {t('theme.stylePickerFooterHint')}
             </span>
             <div className="flex gap-2">
               <button onClick={onClose} className="px-3 py-1.5 text-xs text-slate-300 hover:text-slate-100">
-                稍后再说
+                {t('theme.stylePickerLater')}
               </button>
               <button
-                disabled={libraryReadOnly} title={libraryReadOnly?'固定版本参考只读，请先转为项目副本':undefined}
+                disabled={libraryReadOnly} title={libraryReadOnly?t('theme.libraryReadonlyTitle'):undefined}
                 onClick={onApplyClick}
                 className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium rounded-lg"
               >
-                应用到全工程
+                {t('theme.stylePickerApplyProject')}
               </button>
             </div>
           </div>

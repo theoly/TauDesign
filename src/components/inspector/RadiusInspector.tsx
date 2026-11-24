@@ -3,6 +3,7 @@ import { Squircle } from 'lucide-react';
 import { ComputedLayoutInfo } from '../../stores/useProjectStore';
 import { SpacingNumberInput } from './BoxModelInspector';
 import { toPlaceholder } from './PositionSizeInspector';
+import { useT } from '../../stores/useLocaleStore';
 
 /**
  * 圆角检查器 (doc/feature/inspector-geometry-tabs/spec.md BR-INS-05)
@@ -46,7 +47,19 @@ export const RadiusInspector: React.FC<RadiusInspectorProps> = ({
   declarations,
   onStyleChange
 }) => {
+  const t = useT();
   const [perCorner, setPerCorner] = useState(() => hasPerCornerRadius(declarations));
+  const presetLabels: Record<string, string> = {
+    '': t('inspector.radiusPresetDefault'),
+    'var(--radius-none)': t('inspector.radiusPresetNone'),
+    'var(--radius-full)': t('inspector.radiusPresetFull'),
+  };
+  const cornerLabels: Record<string, string> = {
+    'border-top-left-radius': t('inspector.radiusCornerTL'),
+    'border-top-right-radius': t('inspector.radiusCornerTR'),
+    'border-bottom-right-radius': t('inspector.radiusCornerBR'),
+    'border-bottom-left-radius': t('inspector.radiusCornerBL'),
+  };
 
   const unified = declarations['border-radius'] || '';
   const isTokenValue = unified.startsWith('var(');
@@ -70,7 +83,7 @@ export const RadiusInspector: React.FC<RadiusInspectorProps> = ({
       <div className="flex items-center justify-between">
         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
           <Squircle className="w-3.5 h-3.5 text-slate-400" />
-          <span>圆角 (RADIUS)</span>
+          <span>{t('inspector.radiusTitle')}</span>
         </span>
         <button
           type="button"
@@ -78,7 +91,7 @@ export const RadiusInspector: React.FC<RadiusInspectorProps> = ({
           onClick={() => (perCorner ? switchToUnified() : switchToPerCorner())}
           className="text-[10px] px-1.5 py-0.5 rounded border border-slate-700 bg-slate-950 hover:bg-slate-800 text-slate-300 transition"
         >
-          {perCorner ? '统一设置' : '分别设置'}
+          {perCorner ? t('inspector.radiusUnifiedBtn') : t('inspector.radiusPerCornerBtn')}
         </button>
       </div>
 
@@ -87,7 +100,7 @@ export const RadiusInspector: React.FC<RadiusInspectorProps> = ({
           <div className="grid grid-cols-4 gap-1 text-center mb-1">
             {CORNER_FIELDS.map((c) => (
               <span key={c.prop} className="text-[10px] text-slate-500">
-                {c.label}
+                {cornerLabels[c.prop] ?? c.label}
               </span>
             ))}
           </div>
@@ -99,7 +112,7 @@ export const RadiusInspector: React.FC<RadiusInspectorProps> = ({
                 placeholder={toPlaceholder(computedLayout?.[c.computedKey] as string | undefined)}
                 onChange={(v) => onStyleChange(c.prop, v)}
                 className={INPUT_CLS}
-                title={c.label}
+                title={cornerLabels[c.prop] ?? c.label}
                 data-testid={`radius-${c.prop}`}
               />
             ))}
@@ -108,29 +121,29 @@ export const RadiusInspector: React.FC<RadiusInspectorProps> = ({
       ) : (
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <span className="text-[10px] text-slate-500 block mb-1">规范档位</span>
+            <span className="text-[10px] text-slate-500 block mb-1">{t('inspector.radiusTokenLabel')}</span>
             <select
               value={isTokenValue ? unified : ''}
               onChange={(e) => onStyleChange('border-radius', e.target.value)}
-              aria-label="圆角规范档位"
+              aria-label={t('inspector.radiusTokenAria')}
               data-testid="radius-token"
               className="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-slate-200 text-xs"
             >
-              {RADIUS_TOKENS.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
+              {RADIUS_TOKENS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {presetLabels[item.value] ?? item.label}
                 </option>
               ))}
             </select>
           </div>
           <div>
-            <span className="text-[10px] text-slate-500 block mb-1">自定义数值</span>
+            <span className="text-[10px] text-slate-500 block mb-1">{t('inspector.radiusCustomLabel')}</span>
             <SpacingNumberInput
               value={isTokenValue ? '' : unified}
               placeholder={toPlaceholder(computedLayout?.borderRadius)}
               onChange={(v) => onStyleChange('border-radius', v, true)}
               className={INPUT_CLS}
-              title="自定义圆角"
+              title={t('inspector.radiusCustomTitle')}
               data-testid="radius-custom"
             />
           </div>

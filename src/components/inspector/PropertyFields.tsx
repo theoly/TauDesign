@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useT } from '../../stores/useLocaleStore';
 
 export type PropertyPatch = Record<string, string>;
 export interface DesignSectionProps {
@@ -18,6 +19,7 @@ export function Section({ title, children, onReset }: {
   children: ReactNode;
   onReset?: () => void;
 }) {
+  const t = useT();
   const [closed, setClosed] = useState(() => collapsed.get(title) ?? false);
   function toggle() {
     setClosed(previous => {
@@ -31,7 +33,7 @@ export function Section({ title, children, onReset }: {
         <button type="button" aria-expanded={!closed} onClick={toggle} className="text-xs font-semibold text-slate-200">
           {closed ? '▸' : '▾'} {title}
         </button>
-        {onReset && <button type="button" onClick={onReset} className="text-[10px] text-slate-500 hover:text-blue-400">还原分区</button>}
+        {onReset && <button type="button" onClick={onReset} className="text-[10px] text-slate-500 hover:text-blue-400">{t('inspector.resetSection')}</button>}
       </div>
       {!closed && <div className="space-y-2">{children}</div>}
     </section>
@@ -66,6 +68,7 @@ export function PropertyField({
   label, property, value, computed, onChange, onPreview, options,
   type = 'text', min, max, step = 1, unit = '', disabled,
 }: FieldProps) {
+  const t = useT();
   const shown = value || computed || '';
   const [draft, setDraft] = useState(shown);
   const [error, setError] = useState('');
@@ -111,7 +114,7 @@ export function PropertyField({
     if (!dirty.current) return;
     const next = normalize(draftRef.current);
     if (next === null) {
-      setError('请输入有效的 CSS 值');
+      setError(t('inspector.invalidCssValue'));
       return;
     }
     dirty.current = false;
@@ -199,8 +202,8 @@ export function PropertyField({
       <div className="property-field-row flex items-center gap-2">
         <label data-drag-label={type === 'number' ? 'true' : undefined} onPointerDown={startDrag}
           className={`property-field-label text-[11px] text-slate-400 w-16 shrink-0 ${type === 'number' ? 'cursor-ew-resize' : ''}`}>{label}</label>
-        {type === 'color' && <input type="color" aria-label={`${label} 调色盘`} disabled={disabled}
-          title="连续调色预览，关闭并失焦后提交；Escape 取消"
+        {type === 'color' && <input type="color" aria-label={t('inspector.colorPaletteAria', { label })} disabled={disabled}
+          title={t('inspector.colorPickerTitle')}
           className="w-6 h-6 shrink-0 cursor-pointer bg-transparent border-0 p-0"
           value={nativeColor(draft.startsWith('var(') ? computed : draft)}
           onChange={event => {
@@ -218,7 +221,7 @@ export function PropertyField({
                 onChange({ [property]: next });
               }
             }}>
-            {!options.some(option => option.value === draft) && <option value={draft}>{draft || '继承'}</option>}
+            {!options.some(option => option.value === draft) && <option value={draft}>{draft || t('inspector.inheritedLabel')}</option>}
             {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         ) : (
@@ -226,11 +229,11 @@ export function PropertyField({
             inputMode={type === 'number' ? 'decimal' : undefined} onChange={event => update(event.target.value)}
             onBlur={commit} onKeyDown={handleKey} />
         )}
-        <button type="button" title={value ? '清除手动覆盖' : '继承 / 基线'} disabled={!value || disabled}
+        <button type="button" title={value ? t('inspector.clearManualOverride') : t('inspector.inheritedBaselineTitle')} disabled={!value || disabled}
           onClick={() => { cancel(); onChange({ [property]: '' }); }}
-          className="text-[9px] text-slate-500 shrink-0 disabled:cursor-default">{value ? '覆写 ↶' : '继承'}</button>
+          className="text-[9px] text-slate-500 shrink-0 disabled:cursor-default">{value ? t('inspector.overriddenResetBtn') : t('inspector.inheritedLabel')}</button>
       </div>
-      {type === 'number' && dirty.current && /^(var|calc)\(/.test(shown) && <p className="text-[10px] text-amber-400 pl-16">从实际值调整，将写入自定义值</p>}
+      {type === 'number' && dirty.current && /^(var|calc)\(/.test(shown) && <p className="text-[10px] text-amber-400 pl-16">{t('inspector.computedAdjustHint')}</p>}
       {error && <p role="alert" className="text-[10px] text-red-400 pl-16">{error}</p>}
     </div>
   );
