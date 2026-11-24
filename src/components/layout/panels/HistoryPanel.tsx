@@ -19,11 +19,11 @@ export const HistoryPanel: React.FC = () => {
 
   return (
     <>
-      <div className="px-2 py-1.5 border-b border-slate-850/80 flex gap-1.5">
+      <div className="px-2 py-1.5 border-b border-host-border flex gap-1.5">
         <button
           onClick={() => undo()}
           disabled={!canUndo()}
-          className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-slate-800 hover:bg-slate-750 disabled:opacity-30 text-slate-200 rounded-md text-[11px] transition"
+          className="flex-1 flex items-center justify-center gap-1 py-1.5 border border-host-border bg-host-sunken hover:bg-host-elevated disabled:opacity-30 text-host-primary rounded-md text-[11px] transition"
         >
           <Undo2 className="w-3.5 h-3.5" />
           <span>{t('common.undo')}</span>
@@ -31,7 +31,7 @@ export const HistoryPanel: React.FC = () => {
         <button
           onClick={() => redo()}
           disabled={!canRedo()}
-          className="flex-1 flex items-center justify-center gap-1 py-1.5 bg-slate-800 hover:bg-slate-750 disabled:opacity-30 text-slate-200 rounded-md text-[11px] transition"
+          className="flex-1 flex items-center justify-center gap-1 py-1.5 border border-host-border bg-host-sunken hover:bg-host-elevated disabled:opacity-30 text-host-primary rounded-md text-[11px] transition"
         >
           <Redo2 className="w-3.5 h-3.5" />
           <span>{t('common.redo')}</span>
@@ -40,7 +40,7 @@ export const HistoryPanel: React.FC = () => {
 
       <Accordion panelKey="history.undo" title={t('layout.historyUndoStack')} badge={past.length}>
         {past.length === 0 ? (
-          <p className="px-3 py-3 text-[11px] text-slate-600">{t('layout.historyEmpty')}</p>
+          <p className="px-3 py-3 text-[11px] text-host-tertiary">{t('layout.historyEmpty')}</p>
         ) : (
           <div className="space-y-0.5 px-1.5">
             {past
@@ -50,7 +50,7 @@ export const HistoryPanel: React.FC = () => {
                 <div
                   key={h.id}
                   className={`px-2 py-1 rounded-md text-[11px] truncate ${
-                    i === 0 ? 'bg-slate-800 text-slate-200' : 'text-slate-500 hover:bg-slate-850'
+                    i === 0 ? 'bg-host-elevated text-host-primary font-medium' : 'text-host-secondary hover:bg-host-elevated/60'
                   }`}
                   title={h.label}
                 >
@@ -65,7 +65,7 @@ export const HistoryPanel: React.FC = () => {
         <Accordion panelKey="history.redo" title={t('layout.historyRedoStack')} badge={future.length} defaultOpen={false}>
           <div className="space-y-0.5 px-1.5">
             {future.map((h) => (
-              <div key={h.id} className="px-2 py-1 rounded-md text-[11px] text-slate-600 truncate" title={h.label}>
+              <div key={h.id} className="px-2 py-1 rounded-md text-[11px] text-host-tertiary truncate" title={h.label}>
                 {h.label}
               </div>
             ))}
@@ -76,7 +76,7 @@ export const HistoryPanel: React.FC = () => {
       {/* D17：每轮 AI 操作前自动建还原点，比依赖用户手动打快照可靠 */}
       <Accordion panelKey="history.checkpoints" title={t('layout.historyCheckpoints')} badge={checkpoints.length}>
         {checkpoints.length === 0 ? (
-          <p className="px-3 py-3 text-[11px] text-slate-600 leading-relaxed">
+          <p className="px-3 py-3 text-[11px] text-host-tertiary leading-relaxed">
             {t('layout.historyCheckpointHint')}
           </p>
         ) : (
@@ -91,12 +91,12 @@ export const HistoryPanel: React.FC = () => {
                     t('layout.historyRestoreTo', { label: cp.label })
                   )
                 }
-                className="w-full text-left px-2 py-1.5 rounded-md text-[11px] text-slate-300 hover:bg-slate-800 transition flex items-center gap-1.5"
+                className="w-full text-left px-2 py-1.5 rounded-md text-[11px] text-host-secondary hover:bg-host-elevated hover:text-host-primary transition flex items-center gap-1.5"
                 title={t('layout.historyRestoreHere')}
               >
-                <Camera className="w-3 h-3 text-blue-400 shrink-0" />
+                <Camera className="w-3 h-3 text-host-brand shrink-0" />
                 <span className="truncate flex-1">{cp.label}</span>
-                <span className="text-[10px] text-slate-600 shrink-0">{fmt(cp.timestamp)}</span>
+                <span className="text-[10px] text-host-tertiary shrink-0">{fmt(cp.timestamp)}</span>
               </button>
             ))}
           </div>

@@ -596,23 +596,23 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
   ]);
 
   return (
-    <div data-testid="ai-chat-panel" className="w-[390px] shrink-0 h-full bg-slate-900 border-r border-slate-800 flex flex-col z-20 select-text">
+    <div data-testid="ai-chat-panel" className="w-[390px] shrink-0 h-full bg-host-chrome border-r border-host-border flex flex-col z-20 select-text">
       {/* Header */}
-      <div className="p-3 border-b border-slate-800 flex items-center justify-between text-xs">
+      <div className="p-3 border-b border-host-border flex items-center justify-between text-xs">
         <div className="flex items-center gap-1.5 min-w-0">
-          <div className="flex items-center gap-1.5 font-semibold text-slate-200 flex-shrink-0">
-            <Bot className="w-4 h-4 text-blue-400" />
+          <div className="flex items-center gap-1.5 font-semibold text-host-primary flex-shrink-0">
+            <Bot className="w-4 h-4 text-host-brand" />
             <span>{t('chat.assistantTitle')}</span>
           </div>
           <span
-            className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono truncate max-w-[100px]"
+            className="text-[10px] px-1.5 py-0.5 rounded bg-host-sunken text-host-secondary font-mono truncate max-w-[100px]"
             title={`当前主力模型: ${activeCodeProv?.name || 'DeepSeek'} (${bindings.code.modelId})`}
           >
             {bindings.code.modelId}
           </span>
         </div>
-        <button type="button" onClick={()=>setShowTaskRecords(true)} aria-label={t('chat.tasksAria')} className="text-slate-400 hover:text-slate-200 text-[11px]">{t('chat.tasks')}</button>
-        <button onClick={() => onOpenSettings?.('provider')} className="text-blue-400 hover:underline text-[11px] flex-shrink-0">
+        <button type="button" onClick={()=>setShowTaskRecords(true)} aria-label={t('chat.tasksAria')} className="text-host-secondary hover:text-host-primary text-[11px]">{t('chat.tasks')}</button>
+        <button onClick={() => onOpenSettings?.('provider')} className="text-host-brand hover:underline text-[11px] flex-shrink-0">
           {t('chat.aiSettings')}
         </button>
       </div>
@@ -621,24 +621,24 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       <UnfinishedDesignNotice refreshKey={taskRecordsRevision*2+(engine.isGenerating?1:0)} onOpen={()=>setShowTaskRecords(true)}/>
 
       {/* Token Usage Stats Bar */}
-      <div className="px-3 py-1.5 bg-slate-950/70 border-b border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
+      <div className="px-3 py-1.5 bg-host-sunken border-b border-host-border flex items-center justify-between text-[10px] text-host-secondary">
         <button
           type="button"
           onClick={() => setShowUsageDetails(!showUsageDetails)}
-          className="flex items-center gap-1 hover:text-slate-200 transition cursor-pointer"
+          className="flex items-center gap-1 hover:text-host-primary transition cursor-pointer"
           title={t('chat.usageTitle')}
         >
-          <Zap className="w-3 h-3 text-amber-400 shrink-0" />
-          <span>{t('chat.sessionTokens')}: <strong className="text-slate-200 font-mono font-medium">{formatTokenCount(sessionInputTokens + sessionOutputTokens)}</strong></span>
-          <span className="text-slate-700">·</span>
-          <span>{t('chat.historyTokens')}: <strong className="text-slate-300 font-mono font-medium">{formatTokenCount(totalInputTokens + totalOutputTokens)}</strong></span>
-          <ChevronDown className={`w-3 h-3 transition-transform ${showUsageDetails ? 'rotate-180 text-blue-400' : 'text-slate-500'}`} />
+          <Zap className="w-3 h-3 text-host-warning shrink-0" />
+          <span>{t('chat.sessionTokens')}: <strong className="text-host-primary font-mono font-medium">{formatTokenCount(sessionInputTokens + sessionOutputTokens)}</strong></span>
+          <span className="text-host-tertiary">·</span>
+          <span>{t('chat.historyTokens')}: <strong className="text-host-primary font-mono font-medium">{formatTokenCount(totalInputTokens + totalOutputTokens)}</strong></span>
+          <ChevronDown className={`w-3 h-3 transition-transform ${showUsageDetails ? 'rotate-180 text-host-brand' : 'text-host-tertiary'}`} />
         </button>
         {sessionCalls > 0 && (
           <button
             type="button"
             onClick={resetSessionUsage}
-            className="text-slate-500 hover:text-slate-300 transition text-[9px] cursor-pointer"
+            className="text-host-tertiary hover:text-host-primary transition text-[9px] cursor-pointer"
             title={t('chat.resetSessionUsage')}
           >
             {t('chat.resetSessionShort')}
@@ -648,26 +648,26 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
       {/* Token Usage Details Dropdown */}
       {currentUsage && (
-        <div className="px-3 py-1 bg-slate-950/70 border-b border-slate-800/80 flex items-center gap-1.5 text-[10px] text-slate-400" aria-live="polite">
-          <Zap className="w-3 h-3 text-amber-400 shrink-0" />
+        <div className="px-3 py-1 bg-host-sunken border-b border-host-border flex items-center gap-1.5 text-[10px] text-host-secondary" aria-live="polite">
+          <Zap className="w-3 h-3 text-host-warning shrink-0" />
           <span>{currentUsage.status === 'running' ? t('chat.currentRequest') : t('chat.recentRequest')}:</span>
-          <strong className="font-mono text-slate-200">{formatTokenCount(currentUsage.inputTokens + currentUsage.outputTokens)}</strong>
-          <span className="text-slate-500">{t('chat.usageInOutInline', { input: formatTokenCount(currentUsage.inputTokens), output: formatTokenCount(currentUsage.outputTokens) })}</span>
-          <span className="ml-auto shrink-0 text-amber-300/80">
+          <strong className="font-mono text-host-primary">{formatTokenCount(currentUsage.inputTokens + currentUsage.outputTokens)}</strong>
+          <span className="text-host-tertiary">{t('chat.usageInOutInline', { input: formatTokenCount(currentUsage.inputTokens), output: formatTokenCount(currentUsage.outputTokens) })}</span>
+          <span className="ml-auto shrink-0 text-host-warning">
             {currentUsage.source === 'provider' ? t('chat.usageActual') : currentUsage.source === 'unknown' ? t('chat.usageUnknown') : t('chat.usageEstimated')}
           </span>
         </div>
       )}
       {showUsageDetails && (
-        <div className="p-3 bg-slate-950 border-b border-slate-800 space-y-2 text-[11px] select-text">
-          <div className="flex items-center justify-between font-medium text-slate-300">
+        <div className="p-3 bg-host-sunken border-b border-host-border space-y-2 text-[11px] select-text">
+          <div className="flex items-center justify-between font-medium text-host-primary">
             <div className="flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <Zap className="w-3.5 h-3.5 text-host-warning" />
               <span>{t('chat.usageDetailsTitle')}</span>
             </div>
             <button
               onClick={() => setShowUsageDetails(false)}
-              className="text-slate-500 hover:text-slate-300 cursor-pointer"
+              className="text-host-tertiary hover:text-host-primary cursor-pointer"
               aria-label={t('common.close')}
             >
               <X className="w-3.5 h-3.5" />
@@ -676,29 +676,29 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
           <div className="grid grid-cols-2 gap-2 text-[10px]">
             {/* 本轮会话 */}
-            <div className="p-2 bg-slate-900/90 rounded-lg border border-slate-800 space-y-1">
-              <div className="text-slate-400 font-medium">{t('chat.sessionUsageCard')}</div>
-              <div className="text-sm font-semibold font-mono text-amber-300">
+            <div className="p-2 bg-host-elevated rounded-lg border border-host-border space-y-1">
+              <div className="text-host-secondary font-medium">{t('chat.sessionUsageCard')}</div>
+              <div className="text-sm font-semibold font-mono text-host-warning">
                 {formatTokenCount(sessionInputTokens + sessionOutputTokens)}
               </div>
-              <div className="text-slate-500 flex justify-between pt-0.5">
+              <div className="text-host-tertiary flex justify-between pt-0.5">
                 <span>{t('chat.usageIn', { count: formatTokenCount(sessionInputTokens) })}</span>
                 <span>{t('chat.usageOut', { count: formatTokenCount(sessionOutputTokens) })}</span>
               </div>
-              <div className="text-slate-500 text-[9px]">{t('chat.usageCalls', { count: sessionCalls })}</div>
+              <div className="text-host-tertiary text-[9px]">{t('chat.usageCalls', { count: sessionCalls })}</div>
             </div>
 
             {/* 历史累计 */}
-            <div className="p-2 bg-slate-900/90 rounded-lg border border-slate-800 space-y-1">
-              <div className="text-slate-400 font-medium">{t('chat.historyUsageCard')}</div>
-              <div className="text-sm font-semibold font-mono text-blue-300">
+            <div className="p-2 bg-host-elevated rounded-lg border border-host-border space-y-1">
+              <div className="text-host-secondary font-medium">{t('chat.historyUsageCard')}</div>
+              <div className="text-sm font-semibold font-mono text-host-brand">
                 {formatTokenCount(totalInputTokens + totalOutputTokens)}
               </div>
-              <div className="text-slate-500 flex justify-between pt-0.5">
+              <div className="text-host-tertiary flex justify-between pt-0.5">
                 <span>{t('chat.usageIn', { count: formatTokenCount(totalInputTokens) })}</span>
                 <span>{t('chat.usageOut', { count: formatTokenCount(totalOutputTokens) })}</span>
               </div>
-              <div className="text-slate-500 text-[9px]">{t('chat.usageCalls', { count: totalCalls })}</div>
+              <div className="text-host-tertiary text-[9px]">{t('chat.usageCalls', { count: totalCalls })}</div>
             </div>
           </div>
         </div>
@@ -706,8 +706,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
       {/* Streaming Artifact Status Badge (REQ-OD-01 / T-OD-17 / CHK-OD-21) */}
       {streamingArtifactStatus && (
-        <div className="px-3 py-1.5 bg-blue-950/80 border-b border-blue-800/60 flex items-center gap-2 text-[11px] text-blue-300 font-medium animate-pulse">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400 flex-shrink-0" />
+        <div className="px-3 py-1.5 bg-host-accent-subtle border-b border-host-border flex items-center gap-2 text-[11px] text-host-brand font-medium animate-pulse">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-host-brand flex-shrink-0" />
           <span className="truncate">{streamingArtifactStatus}</span>
         </div>
       )}
@@ -729,30 +729,30 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         >
         {/* Side-by-Side Floating / Inline Bar (D17) */}
         {stagedScreen && (
-          <div className="p-3 bg-purple-950/50 border border-purple-800/60 rounded-xl space-y-2 text-purple-200 shadow-md">
-            <div className="flex items-center justify-between gap-1 border-b border-purple-900/40 pb-2">
-              <div className="flex items-center gap-1.5 font-semibold text-[11px] text-purple-200 min-w-0">
-                <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping shrink-0" />
-                <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+          <div className="p-3 bg-host-elevated border border-host-border rounded-xl space-y-2 text-host-primary shadow-md">
+            <div className="flex items-center justify-between gap-1 border-b border-host-border pb-2">
+              <div className="flex items-center gap-1.5 font-semibold text-[11px] text-host-primary min-w-0">
+                <span className="w-2 h-2 rounded-full bg-host-accent animate-ping shrink-0" />
+                <Sparkles className="w-3.5 h-3.5 text-host-brand shrink-0" />
                 <span className="truncate">{t('chat.candidateReady')}</span>
               </div>
-              <span className="shrink-0 text-[10px] font-medium text-purple-300 bg-purple-900/70 border border-purple-700/60 px-2 py-0.5 rounded-full whitespace-nowrap">
+              <span className="shrink-0 text-[10px] font-medium text-host-brand bg-host-accent-subtle border border-host-accent/40 px-2 py-0.5 rounded-full whitespace-nowrap">
                 {t('chat.comparingBadge')}
               </span>
             </div>
-            <p className="text-[11px] text-purple-300/90 leading-relaxed">
+            <p className="text-[11px] text-host-secondary leading-relaxed">
               {t('chat.candidateHint', { name: screens[stagedScreen.targetScreenId]?.name || t('chat.targetScreenFallback') })}
             </p>
-            {candidateDelivery && <p role="status" className="text-[10px] text-purple-300/80">{t('chat.deliveryChecks', { passed: candidateDelivery.checks.filter(check => check.status === 'passed').length, total: candidateDelivery.checks.length })}{candidateDelivery.status !== 'ready' ? ` · ${candidateDelivery.checks.find(check => check.status === 'blocked' || check.status === 'pending')?.message ?? t('chat.checkIncomplete')}` : ''}</p>}
-            {stagedAdoptionStatus === 'saving' && <p role="status" className="text-[11px] text-slate-300">{t('chat.savingDelivery')}</p>}
-            {stagedAdoptionError && <p role="alert" className="text-[11px] text-amber-300">{stagedAdoptionError}</p>}
+            {candidateDelivery && <p role="status" className="text-[10px] text-host-secondary">{t('chat.deliveryChecks', { passed: candidateDelivery.checks.filter(check => check.status === 'passed').length, total: candidateDelivery.checks.length })}{candidateDelivery.status !== 'ready' ? ` · ${candidateDelivery.checks.find(check => check.status === 'blocked' || check.status === 'pending')?.message ?? t('chat.checkIncomplete')}` : ''}</p>}
+            {stagedAdoptionStatus === 'saving' && <p role="status" className="text-[11px] text-host-secondary">{t('chat.savingDelivery')}</p>}
+            {stagedAdoptionError && <p role="alert" className="text-[11px] text-host-warning">{stagedAdoptionError}</p>}
             <CandidateRecheckControl />
             <div className="space-y-1.5 pt-0.5">
               <button
                 type="button"
                 disabled={!candidateReady}
                 onClick={engine.adoptCandidate}
-                className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-900/30 transition cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full px-3 py-2 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
                 <span>{t('chat.adoptReplace')}</span>
@@ -762,17 +762,17 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   type="button"
                   disabled={!candidateReady}
                   onClick={engine.keepBothCandidates}
-                  className="w-full px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-slate-700/70 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full px-2.5 py-1.5 bg-host-sunken hover:bg-host-chrome text-host-primary border border-host-border rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Copy className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <Copy className="w-3.5 h-3.5 text-host-secondary shrink-0" />
                   <span>{t('chat.keepBoth')}</span>
                 </button>
                 <button
                   type="button"
                   onClick={engine.discardCandidate}
-                  className="w-full px-2.5 py-1.5 bg-slate-900/60 hover:bg-red-950/40 text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-900/50 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
+                  className="w-full px-2.5 py-1.5 bg-host-sunken hover:bg-red-950/40 text-host-primary hover:text-host-danger border border-host-border hover:border-red-900/50 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap"
                 >
-                  <X className="w-3.5 h-3.5 text-slate-400 hover:text-red-400 shrink-0" />
+                  <X className="w-3.5 h-3.5 text-host-secondary hover:text-host-danger shrink-0" />
                   <span>{t('chat.keepOriginal')}</span>
                 </button>
               </div>
@@ -782,18 +782,18 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
         {/* Structure Guard Interception Alert (ISSUE-011) */}
         {engine.lastGuardOutput && (
-          <div className="p-3 bg-amber-950/50 border border-amber-800/60 rounded-xl space-y-2 text-amber-200 shadow-md">
-            <div className="flex items-center gap-1.5 font-semibold text-[11px]">
-              <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+          <div className="p-3 bg-host-elevated border border-host-border rounded-xl space-y-2 text-host-primary shadow-md">
+            <div className="flex items-center gap-1.5 font-semibold text-[11px] text-host-warning">
+              <AlertTriangle className="w-3.5 h-3.5 text-host-warning" />
               <span>{t('chat.guardBlockedTitle')}</span>
             </div>
-            <p className="text-[11px] text-amber-300/90 leading-relaxed">
+            <p className="text-[11px] text-host-secondary leading-relaxed">
               {t('chat.guardBlockedHint')}
             </p>
             <div className="flex items-center gap-2 pt-1">
               <button
                 onClick={() => engine.forceApply()}
-                className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg text-[10px] transition"
+                className="px-2.5 py-1 bg-host-accent hover:bg-host-accent-hover text-host-on-accent font-medium rounded-lg text-[10px] transition"
               >
                 {t('chat.forceApplySideBySide')}
               </button>
@@ -810,15 +810,15 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
           return (
             <div key={m.id} className="space-y-2">
-              <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
+              <div className="flex items-center gap-1.5 text-host-secondary text-[11px]">
                 {m.sender === 'user' ? (
                   <>
-                    <User className="w-3.5 h-3.5 text-slate-400" />
+                    <User className="w-3.5 h-3.5 text-host-secondary" />
                     <span>{t('chat.you')}</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                    <Sparkles className="w-3.5 h-3.5 text-host-brand" />
                     <span>TauDesign</span>
                   </>
                 )}
@@ -826,27 +826,27 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
               {/* Collapsible Thinking & Feedback Accordion (PRD §3.2) */}
               {m.sender === 'assistant' && (m.thinkingStage !== undefined && m.thinkingStage > 0) && (
-                <div className="rounded-lg border border-slate-800 bg-slate-950/80 overflow-hidden text-[11px] leading-4 transition-all shadow-sm">
+                <div className="rounded-xl border border-host-border bg-host-elevated overflow-hidden text-[11px] leading-4 transition-all shadow-sm">
                   {/* Summary Header */}
                   <button
                     type="button"
                     onClick={() => toggleThinkingExpand(m.id)}
                     aria-expanded={isExpanded}
-                    className="w-full px-2 py-1.5 flex items-center justify-between hover:bg-slate-900/80 transition text-left cursor-pointer group select-none"
+                    className="w-full px-2 py-1.5 flex items-center justify-between hover:bg-host-sunken transition text-left cursor-pointer group select-none"
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
-                      <div className="w-4 h-4 rounded bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+                      <div className="w-4 h-4 rounded bg-host-accent-subtle border border-host-accent/30 flex items-center justify-center flex-shrink-0">
                         {isCurrentGenerating ? (
-                          <Loader2 className="w-3 h-3 text-blue-400 animate-spin" />
+                          <Loader2 className="w-3 h-3 text-host-brand animate-spin" />
                         ) : m.isStopped ? (
-                          <Square className="w-2.5 h-2.5 text-amber-400 fill-current" />
+                          <Square className="w-2.5 h-2.5 text-host-warning fill-current" />
                         ) : (
-                          <Brain className="w-3 h-3 text-blue-400" />
+                          <Brain className="w-3 h-3 text-host-brand" />
                         )}
                       </div>
 
                       <div className="flex items-center gap-2 truncate">
-                        <span className="font-semibold text-slate-200 text-[11px]">
+                        <span className="font-semibold text-host-primary text-[11px]">
                           {isCurrentGenerating
                             ? t('chat.thinkingRunning')
                             : m.isStopped
@@ -854,14 +854,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             : t('chat.thinkingDone')}
                         </span>
                         {m.elapsedSeconds !== undefined && (
-                          <span className="text-[10px] text-slate-500 font-mono">
+                          <span className="text-[10px] text-host-tertiary font-mono">
                             {m.elapsedSeconds}s
                           </span>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1 text-slate-500 group-hover:text-slate-300 transition flex-shrink-0">
+                    <div className="flex items-center gap-1 text-host-tertiary group-hover:text-host-primary transition flex-shrink-0">
                       <span className="text-[10px]">
                         {isExpanded ? t('chat.collapse') : t('chat.expand')}
                       </span>
@@ -875,8 +875,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
                   {/* Collapsed Brief Preview */}
                   {!isExpanded && (
-                    <div className="px-2 pb-1.5 flex items-center gap-1.5 text-[10px] leading-3 text-slate-400 overflow-hidden">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 flex-shrink-0" />
+                    <div className="px-2 pb-1.5 flex items-center gap-1.5 text-[10px] leading-3 text-host-secondary overflow-hidden">
+                      <span className="w-1.5 h-1.5 rounded-full bg-host-accent flex-shrink-0" />
                       <span className="truncate">
                         {m.isGenerating?userFacingMessage(m.generationProgress??executionPhaseLabels[m.executionEvents?.at(-1)?.phase??'preparing']):m.isStopped?t('chat.requestStopped'):m.isError||m.isGuardRejected?t('chat.resultNotApplied'):t('chat.requestEnded')}
                       </span>
@@ -885,21 +885,21 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
                   {/* Expanded Detailed Steps & Feedback */}
                   {isExpanded && (
-                    <div className="p-2 pt-1.5 border-t border-slate-800/80 space-y-2 bg-slate-900/40">
+                    <div className="p-2 pt-1.5 border-t border-host-border space-y-2 bg-host-sunken/50">
                       <div className="space-y-2">
                         {thinkingSteps.map((step, idx) => (
                           <div key={idx} className="flex items-start gap-2 text-[11px]">
                             <div className="mt-0.5 flex-shrink-0">
                               {step.status === 'completed' ? (
-                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                <CheckCircle2 className="w-3.5 h-3.5 text-host-success" />
                               ) : step.status === 'active' ? (
-                                <Loader2 className="w-3.5 h-3.5 text-blue-400 animate-spin" />
+                                <Loader2 className="w-3.5 h-3.5 text-host-brand animate-spin" />
                               ) : step.status === 'stopped' ? (
-                                <Square className="w-3.5 h-3.5 text-amber-400 fill-current" />
+                                <Square className="w-3.5 h-3.5 text-host-warning fill-current" />
                               ) : step.status === 'error' ? (
-                                <XCircle className="w-3.5 h-3.5 text-red-400" />
+                                <XCircle className="w-3.5 h-3.5 text-host-danger" />
                               ) : (
-                                <div className="w-3.5 h-3.5 rounded-full border border-slate-700 flex items-center justify-center text-[9px] text-slate-600">
+                                <div className="w-3.5 h-3.5 rounded-full border border-host-border flex items-center justify-center text-[9px] text-host-tertiary">
                                   {idx + 1}
                                 </div>
                               )}
@@ -908,19 +908,19 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                               <span
                                 className={`font-medium block ${
                                   step.status === 'completed'
-                                    ? 'text-slate-300'
+                                    ? 'text-host-primary'
                                     : step.status === 'active'
-                                    ? 'text-blue-300'
+                                    ? 'text-host-brand'
                                     : step.status === 'stopped'
-                                    ? 'text-amber-300'
+                                    ? 'text-host-warning'
                                     : step.status === 'error'
-                                    ? 'text-red-300'
-                                    : 'text-slate-500'
+                                    ? 'text-host-danger'
+                                    : 'text-host-tertiary'
                                 }`}
                               >
                                 {step.title}
                               </span>
-                              <p className="text-[10px] text-slate-500 leading-normal mt-0.5">
+                              <p className="text-[10px] text-host-tertiary leading-normal mt-0.5">
                                 {step.description}
                               </p>
                             </div>
@@ -929,9 +929,9 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       </div>
 
                       {/* Feedback Badges */}
-                      <div className="pt-2 border-t border-slate-800/60 flex flex-wrap gap-1.5 text-[10px]">
+                      <div className="pt-2 border-t border-host-border flex flex-wrap gap-1.5 text-[10px]">
                         {m.checkpointId && (
-                          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 font-mono">
+                          <span className="px-2 py-0.5 rounded bg-host-sunken text-host-secondary border border-host-border font-mono">
                             快照: #{m.checkpointId.slice(0, 12)}
                           </span>
                         )}
@@ -943,14 +943,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
               {/* Token 变更提案卡片 (T-AE-25 / T-AE-34) */}
               {m.pendingProposal && (
-                <div className="p-3 bg-sky-950/40 border border-sky-800/50 rounded-xl space-y-2 text-sky-200">
+                <div className="p-3 bg-host-elevated border border-host-border rounded-xl space-y-2 text-host-primary">
                   <div className="flex items-center gap-1.5 font-semibold text-[11px]">
-                    <Palette className="w-3.5 h-3.5 text-sky-400" />
+                    <Palette className="w-3.5 h-3.5 text-host-brand" />
                     <span>{t('chat.tokenProposalTitle')}</span>
                   </div>
-                  <p className="text-[11px] text-sky-300/90 leading-relaxed">{m.pendingProposal.label || t('chat.tokenProposalDefaultLabel')}</p>
+                  <p className="text-[11px] text-host-secondary leading-relaxed">{m.pendingProposal.label || t('chat.tokenProposalDefaultLabel')}</p>
                   {m.pendingProposal.resolved ? (
-                    <div className="flex items-center gap-1 text-[10px] text-emerald-400 pt-1">
+                    <div className="flex items-center gap-1 text-[10px] text-host-success pt-1">
                       <Check className="w-3 h-3" />
                       <span>
                         {m.pendingProposal.resolved === 'applied'
@@ -964,19 +964,19 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <button
                         onClick={() => engine.resolveProposal(m.id, 'applied')}
-                        className="px-2.5 py-1 bg-sky-600 hover:bg-sky-500 text-white font-medium rounded-lg text-[10px] transition"
+                        className="px-2.5 py-1 bg-host-accent hover:bg-host-accent-hover text-host-on-accent font-medium rounded-lg text-[10px] transition"
                       >
                         {t('chat.tokenProposalApplyProject')}
                       </button>
                       <button
                         onClick={() => engine.resolveProposal(m.id, 'once')}
-                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] transition"
+                        className="px-2.5 py-1 bg-host-sunken hover:bg-host-chrome border border-host-border text-host-primary rounded-lg text-[10px] transition"
                       >
                         {t('chat.tokenProposalApplyOnce')}
                       </button>
                       <button
                         onClick={() => engine.resolveProposal(m.id, 'ignored')}
-                        className="px-2 py-1 text-slate-400 hover:text-slate-200 text-[10px] transition"
+                        className="px-2 py-1 text-host-secondary hover:text-host-primary text-[10px] transition"
                       >
                         {t('chat.tokenProposalIgnore')}
                       </button>
@@ -987,16 +987,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
               {/* Candidate Decision Confirmation Card (PRD D20 / §3.2.8) */}
               {m.candidateDecision && (
-                <div className="p-3 bg-amber-950/40 border border-amber-800/50 rounded-xl space-y-2 text-amber-200">
+                <div className="p-3 bg-host-elevated border border-host-border rounded-xl space-y-2 text-host-primary">
                   <div className="flex items-center gap-1.5 font-semibold text-[11px]">
-                    <BookmarkPlus className="w-3.5 h-3.5 text-amber-400" />
+                    <BookmarkPlus className="w-3.5 h-3.5 text-host-warning" />
                     <span>{t('chat.designDecisionExtractTitle')}</span>
                   </div>
-                  <p className="text-[11px] text-amber-300/90 leading-relaxed">
+                  <p className="text-[11px] text-host-secondary leading-relaxed">
                     “{m.candidateDecision}”
                   </p>
                   {m.decisionConfirmed ? (
-                    <div className="flex items-center gap-1 text-[10px] text-emerald-400 pt-1">
+                    <div className="flex items-center gap-1 text-[10px] text-host-success pt-1">
                       <Check className="w-3 h-3" />
                       <span>{t('chat.designDecisionConfirmed')}</span>
                     </div>
@@ -1004,13 +1004,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                     <div className="flex items-center gap-2 pt-1">
                       <button
                         onClick={() => engine.confirmDecision(m.id, m.candidateDecision!)}
-                        className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg text-[10px] transition"
+                        className="px-2.5 py-1 bg-host-accent hover:bg-host-accent-hover text-host-on-accent font-medium rounded-lg text-[10px] transition"
                       >
                         {t('chat.designDecisionCommit')}
                       </button>
                       <button
                         onClick={() => engine.dismissDecision(m.id)}
-                        className="text-slate-400 hover:text-slate-200 text-[10px]"
+                        className="text-host-secondary hover:text-host-primary text-[10px]"
                       >
                         {t('chat.tokenProposalIgnore')}
                       </button>
@@ -1021,15 +1021,15 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
               {/* 设计取舍披露卡片 (doc/feature/deviation-note/spec.md) */}
               {m.deviationNote && (
-                <div className="p-3 bg-violet-950/40 border border-violet-800/50 rounded-xl space-y-2 text-violet-200">
+                <div className="p-3 bg-host-elevated border border-host-border rounded-xl space-y-2 text-host-primary">
                   <div className="flex items-center gap-1.5 font-semibold text-[11px]">
-                    <GitBranch className="w-3.5 h-3.5 text-violet-400" />
+                    <GitBranch className="w-3.5 h-3.5 text-host-brand" />
                     <span>{t('chat.deviationTitle')}</span>
                   </div>
-                  <p className="text-[11px] text-violet-300/90 leading-relaxed">{m.deviationNote.conflict}</p>
-                  <p className="text-[11px] text-violet-300/70 leading-relaxed">{t('chat.deviationChosenLabel', { chosen: m.deviationNote.chosen })}</p>
+                  <p className="text-[11px] text-host-secondary leading-relaxed">{m.deviationNote.conflict}</p>
+                  <p className="text-[11px] text-host-tertiary leading-relaxed">{t('chat.deviationChosenLabel', { chosen: m.deviationNote.chosen })}</p>
                   {m.deviationChoice ? (
-                    <div className="flex items-center gap-1 text-[10px] text-emerald-400 pt-1">
+                    <div className="flex items-center gap-1 text-[10px] text-host-success pt-1">
                       <Check className="w-3 h-3" />
                       <span>{m.deviationChoice === 'switch' ? t('chat.deviationResolvedSwitch') : t('chat.deviationResolvedKeep')}</span>
                     </div>
@@ -1037,7 +1037,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                     <div className="flex flex-wrap items-center gap-2 pt-1">
                       <button
                         onClick={() => engine.resolveDeviationChoice(m.id, 'keep')}
-                        className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] transition"
+                        className="px-2.5 py-1 bg-host-sunken hover:bg-host-chrome border border-host-border text-host-primary rounded-lg text-[10px] transition"
                       >
                         {t('chat.deviationKeepButton')}
                       </button>
@@ -1046,7 +1046,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           engine.resolveDeviationChoice(m.id, 'switch');
                           handleInsertQuickPrompt(m.deviationNote!.alternativeInstruction);
                         }}
-                        className="px-2.5 py-1 bg-violet-600 hover:bg-violet-500 text-white font-medium rounded-lg text-[10px] transition"
+                        className="px-2.5 py-1 bg-host-accent hover:bg-host-accent-hover text-host-on-accent font-medium rounded-lg text-[10px] transition"
                       >
                         {t('chat.deviationSwitchButton', { alternative: m.deviationNote.alternative })}
                       </button>
@@ -1059,20 +1059,20 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               {m.auditReport && (
                 <div
                   data-testid="audit-report-card"
-                  className="p-3 bg-slate-900 border border-slate-700/80 rounded-xl space-y-2.5 text-xs shadow-md"
+                  className="p-3 bg-host-elevated border border-host-border rounded-xl space-y-2.5 text-xs shadow-md"
                 >
                   {/* Header */}
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-semibold text-slate-200">
-                      <Activity className="w-4 h-4 text-amber-400" />
+                    <div className="flex items-center gap-1.5 font-semibold text-host-primary">
+                      <Activity className="w-4 h-4 text-host-warning" />
                       <span>Token 规范评测报告</span>
-                      <span className="text-slate-400 font-normal">(@{m.auditReport.screenName})</span>
+                      <span className="text-host-secondary font-normal">(@{m.auditReport.screenName})</span>
                     </div>
                     <span
                       className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
                         m.auditReport.complianceRate >= 95
-                          ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
-                          : 'bg-amber-950 text-amber-300 border border-amber-800/60'
+                          ? 'bg-emerald-950/60 text-host-success border border-emerald-800/60'
+                          : 'bg-amber-950/60 text-host-warning border border-amber-800/60'
                       }`}
                     >
                       合规度 {m.auditReport.complianceRate}%
@@ -1080,7 +1080,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   </div>
 
                   {/* 进度条 */}
-                  <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                  <div className="w-full bg-host-sunken h-1.5 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-300 ${
                         m.auditReport.complianceRate >= 95 ? 'bg-emerald-500' : 'bg-amber-500'
@@ -1095,51 +1095,51 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       type="button"
                       data-testid="locate-audit-target-btn"
                       onClick={() => handleLocateAuditTarget(m.auditReport!.targetToLocate)}
-                      className="w-full flex items-center justify-between px-2.5 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 hover:border-blue-400/60 rounded-lg text-blue-300 transition text-[11px] group cursor-pointer"
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 bg-host-accent-subtle hover:bg-host-accent/20 border border-host-accent/40 rounded-lg text-host-brand transition text-[11px] group cursor-pointer"
                       title="点击在画布中定位目标元素/父区块/页面"
                     >
                       <div className="flex items-center gap-1.5 truncate">
-                        <Crosshair className="w-3.5 h-3.5 text-blue-400 group-hover:scale-110 transition-transform flex-shrink-0" />
+                        <Crosshair className="w-3.5 h-3.5 text-host-brand group-hover:scale-110 transition-transform flex-shrink-0" />
                         <span className="font-medium truncate">{m.auditReport.targetToLocate.label}</span>
                       </div>
-                      <span className="text-[10px] text-blue-400/90 font-mono ml-2 flex-shrink-0">点击定位 →</span>
+                      <span className="text-[10px] text-host-brand font-mono ml-2 flex-shrink-0">点击定位 →</span>
                     </button>
                   </div>
 
                   {/* 待优化逃逸点列表 (展示但不要主动修复) */}
                   {m.auditReport.issues.length > 0 ? (
-                    <div className="space-y-1.5 pt-1 border-t border-slate-800">
-                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <div className="space-y-1.5 pt-1 border-t border-host-border">
+                      <div className="flex items-center justify-between text-[11px] text-host-secondary">
                         <span>待优化逃逸清单 ({m.auditReport.issues.length} 处)</span>
-                        <span className="text-[10px] text-slate-500">（已禁用自动修复，请核实后微调）</span>
+                        <span className="text-[10px] text-host-tertiary">（已禁用自动修复，请核实后微调）</span>
                       </div>
                       <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
                         {m.auditReport.issues.map((issue, idx) => (
                           <div
                             key={idx}
                             onClick={() => handleLocateAuditTarget(m.auditReport!.targetToLocate)}
-                            className="p-2 bg-slate-950/70 hover:bg-slate-950 border border-slate-800/80 hover:border-slate-700 rounded-lg text-[11px] space-y-1 cursor-pointer transition"
+                            className="p-2 bg-host-sunken hover:bg-host-chrome border border-host-border hover:border-host-border-strong rounded-lg text-[11px] space-y-1 cursor-pointer transition"
                             title="点击定位包含该问题的区域"
                           >
                             <div className="flex items-center justify-between gap-1.5">
                               <div className="flex items-center gap-1.5 min-w-0">
-                                <span className="w-4 h-4 rounded-full bg-amber-500/10 text-amber-400 font-mono text-[10px] flex items-center justify-center flex-shrink-0">
+                                <span className="w-4 h-4 rounded-full bg-amber-500/10 text-host-warning font-mono text-[10px] flex items-center justify-center flex-shrink-0">
                                   {idx + 1}
                                 </span>
-                                <span className="text-slate-300 font-medium truncate">{issue.description}</span>
+                                <span className="text-host-primary font-medium truncate">{issue.description}</span>
                               </div>
-                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 font-mono flex-shrink-0">
+                              <span className="text-[9px] px-1.5 py-0.5 rounded bg-host-elevated text-host-secondary font-mono flex-shrink-0">
                                 &lt;{issue.tagName}&gt; #{issue.nid.slice(0, 6)}
                               </span>
                             </div>
                             {issue.rawSnippet && (
-                              <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono bg-slate-900/80 px-1.5 py-0.5 rounded truncate">
-                                <span className="text-red-400 flex-shrink-0">逃逸值:</span>
+                              <div className="flex items-center gap-1 text-[10px] text-host-secondary font-mono bg-host-chrome px-1.5 py-0.5 rounded truncate">
+                                <span className="text-host-danger flex-shrink-0">逃逸值:</span>
                                 <span className="truncate">{issue.rawSnippet}</span>
                                 {issue.suggestedFix && (
                                   <>
-                                    <span className="text-slate-600 flex-shrink-0">→</span>
-                                    <span className="text-emerald-400 truncate">{issue.suggestedFix}</span>
+                                    <span className="text-host-tertiary flex-shrink-0">→</span>
+                                    <span className="text-host-success truncate">{issue.suggestedFix}</span>
                                   </>
                                 )}
                               </div>
@@ -1149,8 +1149,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       </div>
                     </div>
                   ) : (
-                    <div className="p-2 bg-emerald-950/30 border border-emerald-800/40 rounded-lg text-emerald-300 text-[11px] flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                    <div className="p-2 bg-emerald-950/30 border border-emerald-800/40 rounded-lg text-host-success text-[11px] flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-host-success flex-shrink-0" />
                       <span>当前画框规范度 100%，所有类名与样式完全符合设计系统标准！</span>
                     </div>
                   )}
@@ -1160,7 +1160,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               {m.sender === 'assistant' && m.imageUrl && (
                 <div
                   onClick={() => setPreviewImageUrl(m.imageUrl!)}
-                  className="mb-2 max-w-[220px] rounded-lg overflow-hidden border border-slate-700 shadow-md cursor-pointer group relative"
+                  className="mb-2 max-w-[220px] rounded-lg overflow-hidden border border-host-border shadow-md cursor-pointer group relative"
                   title="点击放大查看"
                 >
                   <img src={m.imageUrl} alt="Reference Screenshot" className="w-full h-auto object-cover transition duration-200 group-hover:scale-105" />
@@ -1202,8 +1202,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 <div
                   className={`p-3 rounded-xl leading-relaxed whitespace-pre-wrap break-words max-h-72 overflow-y-auto ${
                     m.sender === 'user'
-                      ? 'bg-slate-800/90 text-slate-200 border border-slate-600/50 ml-4 shadow-sm'
-                      : 'bg-slate-800 text-slate-200 mr-2 border border-slate-700/60'
+                      ? 'bg-host-accent-subtle text-host-primary border border-host-accent/30 ml-4 shadow-sm'
+                      : 'bg-host-elevated text-host-primary mr-2 border border-host-border'
                   }`}
                 >
                   {m.sender === 'user' ? (
@@ -1213,22 +1213,22 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       return (
                         <div className="space-y-2">
                           {refElem ? (
-                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-slate-700/60 border border-slate-500/40 rounded-lg text-[11px] text-slate-300 font-medium select-none shadow-xs">
-                              <Pin className="w-3 h-3 text-blue-200 flex-shrink-0" />
+                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-host-sunken border border-host-border rounded-lg text-[11px] text-host-primary font-medium select-none shadow-xs">
+                              <Pin className="w-3 h-3 text-host-brand flex-shrink-0" />
                               <span>
-                                引用元素: <code className="font-mono bg-slate-800/70 px-1 py-0.5 rounded text-slate-200 font-medium">{'<'}{refElem.tagName}#{refElem.nid}{'>'}</code>
+                                引用元素: <code className="font-mono bg-host-chrome px-1 py-0.5 rounded text-host-primary font-medium">{'<'}{refElem.tagName}#{refElem.nid}{'>'}</code>
                               </span>
                               {refElem.screenName && (
-                                <span className="text-blue-200/80 text-[10px]">(@{refElem.screenName})</span>
+                                <span className="text-host-brand text-[10px]">(@{refElem.screenName})</span>
                               )}
                             </div>
                           ) : m.referencedScreen ? (
-                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-slate-700/60 border border-slate-500/40 rounded-lg text-[11px] text-slate-300 font-medium select-none shadow-xs">
-                              <AtSign className="w-3 h-3 text-blue-200 flex-shrink-0" />
+                            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-host-sunken border border-host-border rounded-lg text-[11px] text-host-primary font-medium select-none shadow-xs">
+                              <AtSign className="w-3 h-3 text-host-brand flex-shrink-0" />
                               {m.referencedScreen.viaActiveScreen ? (
-                                <span>作用于当前画框: <span className="font-medium text-slate-200">{m.referencedScreen.name}</span></span>
+                                <span>作用于当前画框: <span className="font-medium text-host-primary">{m.referencedScreen.name}</span></span>
                               ) : (
-                                <span>引用画框: <span className="font-medium text-slate-200">@{m.referencedScreen.name}</span></span>
+                                <span>引用画框: <span className="font-medium text-host-primary">@{m.referencedScreen.name}</span></span>
                               )}
                             </div>
                           ) : null}
@@ -1237,7 +1237,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           {m.imageUrl && (
                             <div
                               onClick={() => setPreviewImageUrl(m.imageUrl!)}
-                              className="relative group cursor-pointer overflow-hidden rounded-lg border border-blue-400/40 max-w-[210px] max-h-[140px] bg-blue-950/50 shadow-xs hover:border-blue-300 transition"
+                              className="relative group cursor-pointer overflow-hidden rounded-lg border border-host-accent/40 max-w-[210px] max-h-[140px] bg-host-sunken shadow-xs hover:border-host-accent transition"
                               title="点击放大查看原图"
                             >
                               <img
@@ -1253,24 +1253,24 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           )}
 
                           {m.textFileNames?.map((name, index) => (
-                            <div key={`${name}-${index}`} className="inline-flex items-center gap-1.5 px-2 py-1 mr-1 rounded-lg border border-slate-500/40 bg-slate-700/60 text-[11px] text-slate-300 max-w-full">
+                            <div key={`${name}-${index}`} className="inline-flex items-center gap-1.5 px-2 py-1 mr-1 rounded-lg border border-host-border bg-host-sunken text-[11px] text-host-primary max-w-full">
                               <FileCode className="w-3 h-3 flex-shrink-0" />
                               <span className="truncate" title={name}>{name}</span>
                             </div>
                           ))}
 
-                          <div className="text-[13px] font-normal leading-relaxed text-slate-200 select-text">{displayPrompt}</div>
+                          <div className="text-[13px] font-normal leading-relaxed text-host-primary select-text">{displayPrompt}</div>
                         </div>
                       );
                     })()
                   ) : m.isStopped ? (
-                    <div className="flex items-center gap-1.5 text-amber-300 text-xs">
+                    <div className="flex items-center gap-1.5 text-host-warning text-xs">
                       <Square className="w-3.5 h-3.5 flex-shrink-0 fill-current" />
                       <span>{m.text || t('chat.generationStoppedDefault')}</span>
                     </div>
                   ) : isCurrentGenerating && !m.text ? (
-                    <div className="flex items-center gap-2 text-slate-400 text-xs">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                    <div className="flex items-center gap-2 text-host-secondary text-xs">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-host-brand" />
                       <span>{m.executionEvents?.length?`${executionPhaseLabels[m.executionEvents.at(-1)!.phase]}…`:userFacingMessage(m.generationProgress??t('chat.waitingForAiResponse'))}</span>
                     </div>
                   ) : m.qualityDraft ? null : m.htmlOutput ? (
@@ -1292,31 +1292,31 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       return (
                         <div className="space-y-2">
                           {isStagedNow ? (
-                            <div className="space-y-2 p-2.5 bg-purple-950/40 border border-purple-800/60 rounded-xl text-purple-200 shadow-sm">
-                              <div className="flex items-center justify-between gap-1 border-b border-purple-900/40 pb-2">
-                                <div className="flex items-center gap-1.5 font-semibold text-[11px] text-purple-200 min-w-0">
-                                  <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping shrink-0" />
-                                  <Sparkles className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                            <div className="space-y-2 p-2.5 bg-host-sunken border border-host-border rounded-xl text-host-primary shadow-sm">
+                              <div className="flex items-center justify-between gap-1 border-b border-host-border pb-2">
+                                <div className="flex items-center gap-1.5 font-semibold text-[11px] text-host-primary min-w-0">
+                                  <span className="w-2 h-2 rounded-full bg-host-accent animate-ping shrink-0" />
+                                  <Sparkles className="w-3.5 h-3.5 text-host-brand shrink-0" />
                                   <span className="truncate">
                                     {m.isGuardRejected
                                       ? t('chat.guardRejectedTitle')
                                       : t('chat.candidateReady')}
                                   </span>
                                 </div>
-                                <span className="shrink-0 text-[10px] font-medium text-purple-300 bg-purple-900/70 border border-purple-700/60 px-2 py-0.5 rounded-full whitespace-nowrap">
+                                <span className="shrink-0 text-[10px] font-medium text-host-brand bg-host-accent-subtle border border-host-accent/40 px-2 py-0.5 rounded-full whitespace-nowrap">
                                   {t('chat.comparingBadge')}
                                 </span>
                               </div>
                               {m.isGuardRejected && (
-                                <div className="text-[11px] text-amber-300/90 leading-relaxed bg-amber-950/40 border border-amber-800/50 p-2 rounded-lg flex items-start gap-1.5">
-                                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                <div className="text-[11px] text-host-warning leading-relaxed bg-amber-950/40 border border-amber-800/50 p-2 rounded-lg flex items-start gap-1.5">
+                                  <AlertTriangle className="w-3.5 h-3.5 text-host-warning shrink-0 mt-0.5" />
                                   <span>{t('chat.guardRejectedHint')}</span>
                                 </div>
                               )}
-                              <p className="text-[11px] text-purple-300/90 leading-relaxed">
+                              <p className="text-[11px] text-host-secondary leading-relaxed">
                                 {t('chat.candidateHint', { name: displayTitle })}
                               </p>
-                              {candidateDelivery && <p role="status" className="text-[10px] leading-relaxed text-slate-300">
+                              {candidateDelivery && <p role="status" className="text-[10px] leading-relaxed text-host-secondary">
                                 {t('chat.deliveryChecks', { passed: candidateDelivery.checks.filter(check => check.status === 'passed').length, total: candidateDelivery.checks.length })}
                                 {candidateDelivery.checks.find(check => check.status !== 'passed') && ` · ${candidateDelivery.checks.find(check => check.status !== 'passed')?.message}`}
                               </p>}
@@ -1325,7 +1325,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                   type="button"
                                   disabled={m.isGuardRejected ? !candidateForceReady : !candidateReady}
                                   onClick={m.isGuardRejected ? () => engine.forceApply(m.htmlOutput, m.id) : engine.adoptCandidate}
-                                  className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-900/30 transition cursor-pointer whitespace-nowrap active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                                  className="w-full px-3 py-2 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md transition cursor-pointer whitespace-nowrap active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                   <Check className="w-3.5 h-3.5 stroke-[2.5] shrink-0" />
                                   <span>
@@ -1339,19 +1339,19 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                     type="button"
                                     disabled={!candidateReady}
                                     onClick={engine.keepBothCandidates}
-                                    className="w-full px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/90 text-slate-200 border border-slate-700/70 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer whitespace-nowrap active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full px-2.5 py-1.5 bg-host-sunken hover:bg-host-chrome text-host-primary border border-host-border rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow-sm transition cursor-pointer whitespace-nowrap active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                                     title={t('chat.keepBothTitle')}
                                   >
-                                    <Copy className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                    <Copy className="w-3.5 h-3.5 text-host-secondary shrink-0" />
                                     <span>{t('chat.keepBoth')}</span>
                                   </button>
                                   <button
                                     type="button"
                                     onClick={engine.discardCandidate}
-                                    className="w-full px-2.5 py-1.5 bg-slate-900/60 hover:bg-red-950/40 text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-900/50 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap active:scale-[0.98]"
+                                    className="w-full px-2.5 py-1.5 bg-host-sunken hover:bg-red-950/40 text-host-primary hover:text-host-danger border border-host-border hover:border-red-900/50 rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer whitespace-nowrap active:scale-[0.98]"
                                     title={t('chat.discardTitle')}
                                   >
-                                    <X className="w-3.5 h-3.5 text-slate-400 hover:text-red-400 shrink-0" />
+                                    <X className="w-3.5 h-3.5 text-host-secondary hover:text-host-danger shrink-0" />
                                     <span>{t('chat.keepOriginal')}</span>
                                   </button>
                                 </div>
@@ -1360,12 +1360,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                           ) : isMounted ? (
                             <div className="flex items-center justify-between">
                               {isModified ? (
-                                <div className="flex items-center gap-1.5 text-blue-400 font-medium text-[11px]">
+                                <div className="flex items-center gap-1.5 text-host-brand font-medium text-[11px]">
                                   <Sparkles className="w-3.5 h-3.5" />
                                   <span>{t('chat.screenUpdated', { name: displayTitle })}</span>
                                 </div>
                               ) : (
-                                <div className="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
+                                <div className="flex items-center gap-1.5 text-host-success font-medium text-[11px]">
                                   <CheckCircle2 className="w-3.5 h-3.5" />
                                   <span>{t('chat.screenMounted')}</span>
                                 </div>
@@ -1375,8 +1375,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                 onClick={() => panToScreen(mountedScreenId!)}
                                 className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded transition cursor-pointer ${
                                   isModified
-                                    ? 'bg-blue-950/60 hover:bg-blue-900/60 text-blue-300 border border-blue-700/50'
-                                    : 'bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/50'
+                                    ? 'bg-host-accent-subtle hover:bg-host-accent/20 text-host-brand border border-host-accent/40'
+                                    : 'bg-emerald-950/60 hover:bg-emerald-900/60 text-host-success border border-emerald-700/50'
                                 }`}
                               >
                                 <span>{t('chat.locateScreen')}</span>
@@ -1385,17 +1385,17 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             </div>
                           ) : m.isGuardRejected ? (
                             <div className="space-y-2">
-                              <div className="flex items-center gap-1.5 text-amber-400 font-medium text-[11px]">
+                              <div className="flex items-center gap-1.5 text-host-warning font-medium text-[11px]">
                                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                                 <span>{t('chat.guardNotWritten')}</span>
                               </div>
-                              <div className="text-[11px] text-amber-300/80 leading-relaxed">
+                              <div className="text-[11px] text-host-secondary leading-relaxed">
                                 {m.text || t('chat.guardDefaultReason')}
                               </div>
                               <button
                                 type="button"
                                 onClick={() => engine.forceApply(m.htmlOutput, m.id)}
-                                className="w-full px-2.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow transition cursor-pointer"
+                                className="w-full px-2.5 py-1.5 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow transition cursor-pointer"
                                 title={`放行并直接覆盖更新「${m.preActionSnapshot?.screenName || displayTitle}」`}
                               >
                                 <Sparkles className="w-3.5 h-3.5" />
@@ -1404,28 +1404,28 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             </div>
                           ) : (
                             <div className="space-y-2">
-                              <div className="flex items-center gap-1.5 text-amber-400 font-medium text-[11px]">
+                              <div className="flex items-center gap-1.5 text-host-warning font-medium text-[11px]">
                                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                                 <span>{m.isError?t('chat.pageCheckFailed'):t('chat.pageReadyUnmounted')}</span>
                               </div>
-                              {m.isError&&<p role="alert" className="text-[11px] leading-relaxed text-red-300">{m.text}</p>}
+                              {m.isError&&<p role="alert" className="text-[11px] leading-relaxed text-host-danger">{m.text}</p>}
                               <button
                                 type="button"
                                 disabled={engine.isGenerating}
                                 onClick={() => engine.mountMessageHtml(m.id)}
-                                className="w-full px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow transition cursor-pointer"
+                                className="w-full px-2.5 py-1.5 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg text-xs font-medium flex items-center justify-center gap-1.5 shadow transition cursor-pointer"
                               >
                                 <Sparkles className="w-3.5 h-3.5" />
                                 <span>{m.isError?t('chat.remountAndCheck'):t('chat.mountToBoard')}</span>
                               </button>
                             </div>
                           )}
-                          <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono bg-slate-950/60 p-2 rounded-lg border border-slate-800">
+                          <div className="flex items-center justify-between text-[10px] text-host-secondary font-mono bg-host-sunken p-2 rounded-lg border border-host-border">
                             <span>{t('chat.specLine', { width: settings.frameWidth, chars: m.htmlOutput.length })}</span>
                             {isStagedNow ? (
-                              <span className="text-purple-400/90 font-sans">{t('chat.comparingBadge')}</span>
+                              <span className="text-host-brand font-sans">{t('chat.comparingBadge')}</span>
                             ) : mountedScreenId && (
-                              <span className={isModified ? 'text-blue-400/90 font-sans' : 'text-emerald-400/80 font-sans'}>
+                              <span className={isModified ? 'text-host-brand font-sans' : 'text-host-success font-sans'}>
                                 {isModified ? t('chat.readyUpdated') : t('chat.readyOnBoard')}
                               </span>
                             )}
@@ -1447,12 +1447,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
                       return (
                         <div className="space-y-2">
-                          {preText && <div className="text-slate-300 text-xs">{preText}</div>}
-                          <div className="p-2.5 bg-slate-950/90 border border-slate-700/80 rounded-xl space-y-2">
+                          {preText && <div className="text-host-primary text-xs">{preText}</div>}
+                          <div className="p-2.5 bg-host-sunken border border-host-border rounded-xl space-y-2">
                             <div className="flex items-center justify-between gap-1.5">
                               <div className="flex items-center gap-1.5 min-w-0">
-                                <FileCode className="w-4 h-4 text-blue-400 flex-shrink-0" />
-                                <span className="font-medium text-slate-200 text-xs truncate" title={title}>
+                                <FileCode className="w-4 h-4 text-host-brand flex-shrink-0" />
+                                <span className="font-medium text-host-primary text-xs truncate" title={title}>
                                   {title}
                                 </span>
                               </div>
@@ -1460,25 +1460,25 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                 <button
                                   type="button"
                                   onClick={() => panToScreen(targetScreen.id)}
-                                  className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/40 rounded transition"
+                                  className="flex items-center gap-1 text-[10px] px-2 py-0.5 bg-host-accent-subtle hover:bg-host-accent/20 text-host-brand border border-host-accent/40 rounded transition"
                                 >
                                   <span>{t('chat.locateScreen')}</span>
                                   <ExternalLink className="w-2.5 h-2.5" />
                                 </button>
                               )}
                             </div>
-                            <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800">
+                            <div className="flex items-center justify-between text-[10px] text-host-secondary pt-1 border-t border-host-border">
                               <span>{t('chat.specLine', { width: settings.frameWidth, chars: codeSnippet.length })}</span>
                               <button
                                 type="button"
                                 onClick={() => toggleCodeExpand(m.id)}
-                                className="text-blue-400 hover:text-blue-300 transition cursor-pointer"
+                                className="text-host-brand hover:underline transition cursor-pointer"
                               >
                                 {isCodeExpanded ? t('chat.collapseCode') : t('chat.viewCode')}
                               </button>
                             </div>
                             {isCodeExpanded && (
-                              <pre className="max-h-48 overflow-y-auto p-2 bg-slate-900 rounded-lg text-[10px] font-mono text-slate-300 whitespace-pre overflow-x-auto select-text border border-slate-800">
+                              <pre className="max-h-48 overflow-y-auto p-2 bg-host-chrome rounded-lg text-[10px] font-mono text-host-primary whitespace-pre overflow-x-auto select-text border border-host-border">
                                 {codeSnippet}
                               </pre>
                             )}
@@ -1491,12 +1491,12 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       const isRuleF = m.text.includes('[SSRF_BLOCKED] F:');
                       const reason = m.text.replace(/\[SSRF_BLOCKED\]\s*[A-Z]:\s*/, '').trim();
                       return (
-                        <div className="p-3 bg-red-950/40 border border-red-800/60 rounded-xl space-y-2 text-red-200 shadow-sm">
-                          <div className="flex items-center gap-1.5 font-semibold text-xs text-red-400">
-                            <ShieldAlert className="w-4 h-4 text-red-400 flex-shrink-0" />
+                        <div className="p-3 bg-host-sunken border border-host-danger/40 rounded-xl space-y-2 text-host-primary shadow-sm">
+                          <div className="flex items-center gap-1.5 font-semibold text-xs text-host-danger">
+                            <ShieldAlert className="w-4 h-4 text-host-danger flex-shrink-0" />
                             <span>请求被安全护栏拦截</span>
                           </div>
-                          <p className="text-[11px] text-red-300/90 leading-relaxed">
+                          <p className="text-[11px] text-host-secondary leading-relaxed">
                             {isRuleF ? (
                               <>
                                 目标端点属于私有局域网或受保护网段。如需连接自建内网模型（如 Ollama / vLLM），请在模型设置中开启<strong>“允许访问局域网/内网端点”</strong>。
@@ -1521,38 +1521,38 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                       );
                     })()
                   ) : m.isError || m.text?.startsWith('生成失败:') || m.text?.startsWith('请求异常:') ? (
-                    <div className="space-y-2.5 p-2 bg-red-950/40 border border-red-800/60 rounded-xl text-red-200">
-                      <div className="flex items-center gap-1.5 font-semibold text-xs text-red-400">
+                    <div className="space-y-2.5 p-2 bg-host-sunken border border-host-danger/40 rounded-xl text-host-primary">
+                      <div className="flex items-center gap-1.5 font-semibold text-xs text-host-danger">
                         <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                         <span>{t('chat.errorActionIncomplete')}</span>
                       </div>
-                      <div className="text-[11px] text-red-300/90 whitespace-pre-wrap leading-relaxed">
+                      <div className="text-[11px] text-host-secondary whitespace-pre-wrap leading-relaxed">
                         <UserFacingNotice message={m.text}/>
                       </div>
                       {m.text.includes('读取流数据异常') && (
-                        <div className="text-[10px] text-red-400/80 bg-red-950/60 p-1.5 rounded border border-red-900/60">
+                        <div className="text-[10px] text-host-danger bg-red-950/40 p-1.5 rounded border border-red-900/60">
                           {t('chat.hintStreamInterrupted')}
                         </div>
                       )}
                       {(m.text?.includes('数据流传输超时') || m.text?.includes('[timeout]')) && (
-                        <div className="text-[10px] text-amber-400/90 bg-amber-950/40 p-1.5 rounded border border-amber-900/60 leading-relaxed">
+                        <div className="text-[10px] text-host-warning bg-amber-950/40 p-1.5 rounded border border-amber-900/60 leading-relaxed">
                           {t('chat.hintStreamTimeout')}
                         </div>
                       )}
                       {m.text?.includes('结构化输出达到输出上限') && (
-                        <div className="text-[10px] text-amber-400/90 bg-amber-950/40 p-1.5 rounded border border-amber-900/60 leading-relaxed">
+                        <div className="text-[10px] text-host-warning bg-amber-950/40 p-1.5 rounded border border-amber-900/60 leading-relaxed">
                           {t('chat.hintStructuredOutputLimit')}
                         </div>
                       )}
                       {!isCurrentGenerating && (
-                        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-red-900/40">
-                          {m.continuationAvailable&&<button type="button" onClick={()=>engine.continueTurn(m.id)} className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px]" title={t('chat.continueTurnTitle')}>{m.sectionedAvailable?t('chat.continueSectionDesign'):t('chat.continueIncompleteDesign')}</button>}
-                          {m.outputLimitReached&&!m.sectionedMode&&m.originalDecision?.action==='create_screen'&&<button type="button" onClick={()=>engine.sectionLargeTurn(m.id)} className="px-2.5 py-1 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 text-[11px]">{t('chat.rebuildSamePageBySection')}</button>}
-                          {m.outputLimitReached&&m.originalDecision?.action==='create_screen'&&<button type="button" onClick={()=>engine.splitLargeTurn(m.id)} className="px-2.5 py-1 rounded-lg border border-slate-600 bg-slate-800 text-slate-200 text-[11px]">{t('chat.splitIntoMultiPage')}</button>}
+                        <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-host-border">
+                          {m.continuationAvailable&&<button type="button" onClick={()=>engine.continueTurn(m.id)} className="px-2.5 py-1 rounded-lg bg-host-accent hover:bg-host-accent-hover text-host-on-accent text-[11px]" title={t('chat.continueTurnTitle')}>{m.sectionedAvailable?t('chat.continueSectionDesign'):t('chat.continueIncompleteDesign')}</button>}
+                          {m.outputLimitReached&&!m.sectionedMode&&m.originalDecision?.action==='create_screen'&&<button type="button" onClick={()=>engine.sectionLargeTurn(m.id)} className="px-2.5 py-1 rounded-lg border border-host-border bg-host-elevated text-host-primary text-[11px]">{t('chat.rebuildSamePageBySection')}</button>}
+                          {m.outputLimitReached&&m.originalDecision?.action==='create_screen'&&<button type="button" onClick={()=>engine.splitLargeTurn(m.id)} className="px-2.5 py-1 rounded-lg border border-host-border bg-host-elevated text-host-primary text-[11px]">{t('chat.splitIntoMultiPage')}</button>}
                           <button
                             type="button"
                             onClick={() => engine.retryTurn(m.id)}
-                            className="flex items-center gap-1 px-2.5 py-1 bg-red-600 hover:bg-red-500 text-white rounded-lg text-[11px] font-medium transition cursor-pointer shadow-sm"
+                            className="flex items-center gap-1 px-2.5 py-1 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg text-[11px] font-medium transition cursor-pointer shadow-sm"
                             title={Boolean(m.pageTaskPlan || m.workflowContract?.pageTaskPlan) ? t('chat.retryTitleReusePlan') : t('chat.retryTitleFresh')}
                           >
                             <RefreshCw className="w-3 h-3" />
@@ -1570,7 +1570,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             <button
                               type="button"
                               onClick={() => engine.retryTurn(m.id, { rePlan: true })}
-                              className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] transition cursor-pointer"
+                              className="flex items-center gap-1 px-2.5 py-1 bg-host-sunken hover:bg-host-chrome text-host-primary border border-host-border rounded-lg text-[11px] transition cursor-pointer"
                               title={t('chat.replanFromScratchTitle')}
                             >
                               <span>{t('chat.replanFromScratch')}</span>
@@ -1580,21 +1580,21 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                             <button
                               type="button"
                               onClick={() => engine.retryTurn(m.id, { withoutAttachment: true })}
-                              className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] transition cursor-pointer"
+                              className="flex items-center gap-1 px-2.5 py-1 bg-host-sunken hover:bg-host-chrome text-host-primary border border-host-border rounded-lg text-[11px] transition cursor-pointer"
                               title={m.referenceEvidence||m.workflowContract?.referenceImage?.evidence?t('chat.retryTitleKeepImage'):t('chat.retryTitleDropImage')}
                             >
                               <span>{m.referenceEvidence||m.workflowContract?.referenceImage?.evidence?t('chat.continueWithImageEvidence'):t('chat.retryTextOnlyNoImage')}</span>
                             </button>
                           )}
-                          {m.originalAttachment&&Boolean(m.referenceEvidence||m.workflowContract?.referenceImage?.evidence)&&<button type="button" onClick={()=>engine.retryTurn(m.id,{reparseReference:true})} className="px-2.5 py-1 rounded-lg border border-slate-700 text-slate-200 text-[11px]" title={t('chat.reparseReferenceTitle')}>{t('chat.reparseReferenceImage')}</button>}
+                          {m.originalAttachment&&Boolean(m.referenceEvidence||m.workflowContract?.referenceImage?.evidence)&&<button type="button" onClick={()=>engine.retryTurn(m.id,{reparseReference:true})} className="px-2.5 py-1 rounded-lg border border-host-border bg-host-sunken text-host-primary text-[11px]" title={t('chat.reparseReferenceTitle')}>{t('chat.reparseReferenceImage')}</button>}
                           {m.preActionSnapshot && (
                             <button
                               type="button"
                               onClick={() => engine.rollbackAndRetryTurn(m.id)}
-                              className="flex items-center gap-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-[11px] transition cursor-pointer"
+                              className="flex items-center gap-1 px-2.5 py-1 bg-host-sunken hover:bg-host-chrome text-host-primary border border-host-border rounded-lg text-[11px] transition cursor-pointer"
                               title={t('chat.rollbackAndRetryTitle', { name: m.preActionSnapshot.screenName })}
                             >
-                              <Undo2 className="w-3 h-3 text-amber-400" />
+                              <Undo2 className="w-3 h-3 text-host-warning" />
                               <span>{t('chat.rollbackAndRetry')}</span>
                             </button>
                           )}
@@ -1603,13 +1603,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      <div className="text-slate-300 text-xs whitespace-pre-wrap">{m.text}</div>
+                      <div className="text-host-primary text-xs whitespace-pre-wrap">{m.text}</div>
                       {m.structureDiff ? (
                         <div className="flex items-center gap-2 pt-1">
                           <button
                             type="button"
                             onClick={() => engine.forceApply(m.htmlOutput, m.id)}
-                            className="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg text-[11px] flex items-center gap-1 transition cursor-pointer shadow"
+                            className="px-2.5 py-1 bg-host-accent hover:bg-host-accent-hover text-host-on-accent font-medium rounded-lg text-[11px] flex items-center gap-1 transition cursor-pointer shadow"
                             title={t('chat.forceApplyModificationTitle')}
                           >
                             <Sparkles className="w-3 h-3" />
@@ -1635,7 +1635,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                                 : '请直接输出被 <artifact identifier="screen_new" type="screen" title="新页面设计"> 与 </artifact> 包裹的完整页面代码块'
                             );
                           }}
-                          className="mt-1 px-2.5 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 rounded-lg text-[11px] flex items-center gap-1 transition cursor-pointer"
+                          className="mt-1 px-2.5 py-1 bg-host-accent-subtle hover:bg-host-accent/20 text-host-brand border border-host-accent/30 rounded-lg text-[11px] flex items-center gap-1 transition cursor-pointer"
                         >
                           <Sparkles className="w-3 h-3" />
                           <span>{t('chat.generateFullPage')}</span>
@@ -1646,11 +1646,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 </div>
               )}
 
-              <div className="flex flex-wrap items-center gap-3 pt-1 pl-1 text-[11px] text-slate-400">
+              <div className="flex flex-wrap items-center gap-3 pt-1 pl-1 text-[11px] text-host-secondary">
                 {m.checkpointId && (
                   <button
                     onClick={() => alert(t('chat.checkpointKeptAlert'))}
-                    className="flex items-center gap-1 hover:text-blue-400 transition cursor-pointer"
+                    className="flex items-center gap-1 hover:text-host-brand transition cursor-pointer"
                     title={t('chat.restoreSnapshotTitle')}
                   >
                     <RotateCcw className="w-3 h-3" />
@@ -1660,7 +1660,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 {m.preActionSnapshot && !isCurrentGenerating && !m.isError && (
                   <button
                     onClick={() => engine.rollbackAndRetryTurn(m.id)}
-                    className="flex items-center gap-1 hover:text-amber-400 transition cursor-pointer"
+                    className="flex items-center gap-1 hover:text-host-warning transition cursor-pointer"
                     title={t('chat.rollbackAndRetryTitle', {name: m.preActionSnapshot.screenName})}
                   >
                     <Undo2 className="w-3 h-3" />
@@ -1671,22 +1671,22 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
               {/* Single Message Token Usage */}
               {m.generationWarnings?.map((warning, index) => (
-                <div key={index} className="pl-1 pt-1 text-[10px] text-amber-300" role="status"><UserFacingNotice message={warning}/></div>
+                <div key={index} className="pl-1 pt-1 text-[10px] text-host-warning" role="status"><UserFacingNotice message={warning}/></div>
               ))}
               {m.streamRecovered && (
-                <div className="pl-1 pt-1 text-[10px] text-amber-300" role="status">
+                <div className="pl-1 pt-1 text-[10px] text-host-warning" role="status">
                   {t('chat.streamRecovered')}
                 </div>
               )}
-              {m.usageNote&&<p className="text-[10px] leading-relaxed text-slate-500">{m.usageNote}</p>}
+              {m.usageNote&&<p className="text-[10px] leading-relaxed text-host-tertiary">{m.usageNote}</p>}
               {m.usage && m.sender === 'assistant' && (
-                <div className="flex items-center gap-1.5 text-[10px] text-slate-500 font-mono pl-1 pt-0.5">
-                  <Zap className="w-2.5 h-2.5 text-amber-400/80" />
+                <div className="flex items-center gap-1.5 text-[10px] text-host-tertiary font-mono pl-1 pt-0.5">
+                  <Zap className="w-2.5 h-2.5 text-host-warning" />
                   <span>{m.usage.totalTokens.toLocaleString()} 个用量单位</span>
-                  <span className="text-slate-600">({m.usage.promptTokens.toLocaleString()} 输入 / {m.usage.completionTokens.toLocaleString()} 回复)</span>
+                  <span className="text-host-tertiary">({m.usage.promptTokens.toLocaleString()} 输入 / {m.usage.completionTokens.toLocaleString()} 回复)</span>
                   {m.elapsedSeconds && (
                     <>
-                      <span className="text-slate-700">·</span>
+                      <span className="text-host-tertiary">·</span>
                       <span>{m.elapsedSeconds}s</span>
                     </>
                   )}
@@ -1705,13 +1705,13 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
           type="button"
           data-testid="scroll-to-bottom-btn"
           onClick={() => scrollToBottom('smooth')}
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-3 py-1.5 bg-slate-850/95 hover:bg-slate-750 text-slate-200 hover:text-white border border-slate-700/80 rounded-full shadow-lg backdrop-blur-sm text-xs font-medium transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer group select-none"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-3 py-1.5 bg-host-dialog/95 hover:bg-host-elevated text-host-primary border border-host-border-strong rounded-full shadow-lg backdrop-blur-sm text-xs font-medium transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer group select-none"
           title={t('chat.scrollToLatest')}
         >
           {engine.isGenerating && (
-            <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping flex-shrink-0" />
+            <span className="w-2 h-2 rounded-full bg-host-accent animate-ping flex-shrink-0" />
           )}
-          <ArrowDown className="w-3.5 h-3.5 text-blue-400 group-hover:translate-y-0.5 transition-transform" />
+          <ArrowDown className="w-3.5 h-3.5 text-host-brand group-hover:translate-y-0.5 transition-transform" />
           <span>{t('chat.scrollToLatestLabel')}</span>
         </button>
       )}
@@ -1727,19 +1727,19 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
       {/* Mention Auto-complete Menu (PRD D18 / §3.2.7) */}
       {showMentionMenu && (
-        <div className="p-2 bg-slate-950 border-t border-slate-800 max-h-32 overflow-y-auto space-y-1">
-          <div className="text-[10px] text-slate-500 px-2 py-0.5 flex items-center gap-1 font-semibold uppercase tracking-wider">
-            <AtSign className="w-3 h-3 text-blue-400" />
+        <div className="p-2 bg-host-dialog border-t border-host-border max-h-32 overflow-y-auto space-y-1">
+          <div className="text-[10px] text-host-tertiary px-2 py-0.5 flex items-center gap-1 font-semibold uppercase tracking-wider">
+            <AtSign className="w-3 h-3 text-host-brand" />
             <span>{t('chat.mentionMenuTitle')}</span>
           </div>
           {Object.values(screens).map((s) => (
             <div
               key={s.id}
               onClick={() => handleInsertMention(s.name)}
-              className="px-2.5 py-1.5 hover:bg-slate-800 rounded-lg cursor-pointer text-slate-300 text-[11px] flex items-center justify-between"
+              className="px-2.5 py-1.5 hover:bg-host-elevated rounded-lg cursor-pointer text-host-primary text-[11px] flex items-center justify-between"
             >
               <span>@{s.name}</span>
-              <span className="text-[10px] text-slate-500 font-mono">{settings.frameWidth}px</span>
+              <span className="text-[10px] text-host-tertiary font-mono">{settings.frameWidth}px</span>
             </div>
           ))}
         </div>
@@ -1748,14 +1748,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       {/* 上下文引用控制栏（卡片/按钮双态：启用 / 非启用）*/}
       {/* TODO(E4c): optional mother enabled/disabled chip beside page/element refs — skip for now (invasive; wait for E5 mother inject wiring). */}
       {(activeScreen || selectedNode) && (
-        <div className="px-3 py-2 border-t border-slate-800 bg-slate-900/60 flex items-center flex-wrap gap-2">
-          <span className="text-[10px] text-slate-500 mr-0.5 flex-shrink-0">{t('chat.contextRefLabel')}</span>
+        <div className="px-3 py-2 border-t border-host-border bg-host-chrome flex items-center flex-wrap gap-2">
+          <span className="text-[10px] text-host-tertiary mr-0.5 flex-shrink-0">{t('chat.contextRefLabel')}</span>
           {activeScreen && (
             <div
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] border transition select-none ${
                 isPageReferenced
-                  ? 'bg-blue-600/20 border-blue-500/80 text-blue-300 shadow-sm shadow-blue-500/10'
-                  : 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/70 hover:border-slate-600 text-slate-400 hover:text-slate-200'
+                  ? 'bg-host-accent-subtle border-host-accent/40 text-host-brand'
+                  : 'bg-host-sunken border-host-border text-host-tertiary hover:text-host-secondary hover:border-host-border-strong'
               }`}
             >
               <button
@@ -1770,16 +1770,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 }
               >
                 {isPageReferenced ? (
-                  <Check className="w-3 h-3 text-blue-400" />
+                  <Check className="w-3 h-3 text-host-brand" />
                 ) : (
-                  <AtSign className="w-3 h-3 text-slate-500" />
+                  <AtSign className="w-3 h-3 text-host-tertiary" />
                 )}
                 <span className="truncate max-w-[100px] font-medium">{activeScreen.name}</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.5 rounded transition ${
                     isPageReferenced
-                      ? 'bg-blue-500/30 text-blue-200 font-semibold border border-blue-400/40'
-                      : 'bg-slate-800 text-slate-500 border border-slate-700/60'
+                      ? 'bg-host-accent/20 text-host-brand font-semibold border border-host-accent/30'
+                      : 'bg-host-chrome text-host-tertiary border border-host-border'
                   }`}
                 >
                   {isPageReferenced ? t('chat.refEnabled') : t('chat.refDisabled')}
@@ -1790,7 +1790,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   type="button"
                   onClick={() => setIsPageReferenced(false)}
                   disabled={engine.isGenerating}
-                  className="p-0.5 text-blue-400/60 hover:text-blue-100 hover:bg-blue-500/20 rounded transition"
+                  className="p-0.5 text-host-brand/70 hover:text-host-brand hover:bg-host-accent/20 rounded transition"
                   title={t('chat.pageRefDisableTitle')}
                 >
                   <X className="w-3 h-3" />
@@ -1803,8 +1803,8 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             <div
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] border transition select-none ${
                 isElementReferenced
-                  ? 'bg-indigo-600/20 border-indigo-500/80 text-indigo-300 shadow-sm shadow-indigo-500/10'
-                  : 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/70 hover:border-slate-600 text-slate-400 hover:text-slate-200'
+                  ? 'bg-host-accent-subtle border-host-accent/40 text-host-brand'
+                  : 'bg-host-sunken border-host-border text-host-tertiary hover:text-host-secondary hover:border-host-border-strong'
               }`}
             >
               <button
@@ -1819,16 +1819,16 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 }
               >
                 {isElementReferenced ? (
-                  <Check className="w-3 h-3 text-indigo-400" />
+                  <Check className="w-3 h-3 text-host-brand" />
                 ) : (
-                  <Pin className="w-3 h-3 text-slate-500" />
+                  <Pin className="w-3 h-3 text-host-tertiary" />
                 )}
                 <span className="font-mono">{'<'}{selectedNode.tagName}{'>'}</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.5 rounded transition ${
                     isElementReferenced
-                      ? 'bg-indigo-500/30 text-indigo-200 font-semibold border border-indigo-400/40'
-                      : 'bg-slate-800 text-slate-500 border border-slate-700/60'
+                      ? 'bg-host-accent/20 text-host-brand font-semibold border border-host-accent/30'
+                      : 'bg-host-chrome text-host-tertiary border border-host-border'
                   }`}
                 >
                   {isElementReferenced ? t('chat.refEnabled') : t('chat.refDisabled')}
@@ -1839,7 +1839,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                   type="button"
                   onClick={handleDisableElementRef}
                   disabled={engine.isGenerating}
-                  className="p-0.5 text-indigo-400/60 hover:text-indigo-100 hover:bg-indigo-500/20 rounded transition"
+                  className="p-0.5 text-host-brand/70 hover:text-host-brand hover:bg-host-accent/20 rounded transition"
                   title={t('chat.elementRefDisableTitle')}
                 >
                   <X className="w-3 h-3" />
@@ -1851,7 +1851,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
       )}
 
       {/* Input Form */}
-      <div className="p-3 border-t border-slate-800 bg-slate-900" onPaste={handlePaste}>
+      <div className="p-3 border-t border-host-border bg-host-chrome" onPaste={handlePaste}>
         <input
           type="file"
           ref={fileInputRef}
@@ -1879,37 +1879,37 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         {(attachedTextFiles.length > 0 || textFileError || isReadingFiles) && (
           <div className="mb-2 space-y-1" aria-live="polite">
             {attachedTextFiles.map((file, index) => (
-              <div key={`${file.name}-${index}`} className="flex items-center gap-2 p-2 rounded-lg border border-blue-800/60 bg-blue-950/30 text-[11px] text-blue-200">
+              <div key={`${file.name}-${index}`} className="flex items-center gap-2 p-2 rounded-lg border border-host-accent/40 bg-host-accent-subtle text-[11px] text-host-brand">
                 <FileCode className="w-3.5 h-3.5 flex-shrink-0" />
                 <span className="truncate flex-1" title={file.name}>{file.name}</span>
-                <span className="text-blue-300/60">{file.content.length} 字</span>
+                <span className="text-host-secondary">{file.content.length} 字</span>
                 <button type="button" onClick={() => setAttachedTextFiles((prev) => prev.filter((_, i) => i !== index))} title={t('chat.removeFile', { name: file.name })} disabled={engine.isGenerating}>
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             ))}
-            {isReadingFiles && <div className="text-[11px] text-blue-300">正在读取文本文件...</div>}
-            {textFileError && <div role="alert" className="text-[11px] text-red-300">文件读取失败：{textFileError}</div>}
+            {isReadingFiles && <div className="text-[11px] text-host-brand">正在读取文本文件...</div>}
+            {textFileError && <div role="alert" className="text-[11px] text-host-danger">文件读取失败：{textFileError}</div>}
           </div>
         )}
 
         {attachedImage && (
           <div className="space-y-1 mb-2">
             <div
-              className={`flex items-center gap-2 p-1.5 px-2.5 bg-slate-950 border rounded-xl text-[11px] text-slate-300 ${
-                codeSupportsVision || visionReady ? 'border-blue-900/60' : 'border-amber-700/60 bg-amber-950/20'
+              className={`flex items-center gap-2 p-1.5 px-2.5 bg-host-sunken border rounded-xl text-[11px] text-host-primary ${
+                codeSupportsVision || visionReady ? 'border-host-border' : 'border-amber-700/60 bg-amber-950/20'
               }`}
             >
               <img
                 src={attachedImage.dataUrl}
                 alt="Ref"
-                className="w-7 h-7 object-cover rounded-md border border-slate-700 flex-shrink-0"
+                className="w-7 h-7 object-cover rounded-md border border-host-border flex-shrink-0"
               />
               <div className="min-w-0 flex-1">
-                <span className="truncate block font-medium text-blue-300">
+                <span className="truncate block font-medium text-host-brand">
                   {attachedImage.name}
                 </span>
-                <span className="text-[10px] text-slate-400 truncate block">
+                <span className="text-[10px] text-host-secondary truncate block">
                   {codeSupportsVision
                     ? `主力模型 [${activeCodeProv?.name || 'Code'}] 原生识图`
                     : visionReady
@@ -1920,25 +1920,25 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               <button
                 onClick={() => attachReference(null)}
                 disabled={engine.isGenerating}
-                className="text-slate-400 hover:text-slate-200 p-0.5 disabled:opacity-40 flex-shrink-0"
+                className="text-host-tertiary hover:text-host-primary p-0.5 disabled:opacity-40 flex-shrink-0"
                 title={t('chat.removeImage')}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="flex items-center gap-2 text-[10px] text-slate-400">
-              <button type="button" disabled={engine.isGenerating} onClick={()=>{const source=originalReference.current??attachedImage;const ticket=++cropTicket.current;setRegionDialog({source,ticket});}} className="text-blue-300 hover:underline disabled:opacity-40">{attachedImage.region?'重新选择参考区域':'选择参考区域'}</button>
+            <div className="flex items-center gap-2 text-[10px] text-host-secondary">
+              <button type="button" disabled={engine.isGenerating} onClick={()=>{const source=originalReference.current??attachedImage;const ticket=++cropTicket.current;setRegionDialog({source,ticket});}} className="text-host-brand hover:underline disabled:opacity-40">{attachedImage.region?'重新选择参考区域':'选择参考区域'}</button>
               {attachedImage.region&&<span>仅使用选区 {attachedImage.region.width}×{attachedImage.region.height}</span>}
             </div>
             {!codeSupportsVision && !visionReady && (
-              <div className="p-2 bg-amber-950/40 border border-amber-800/40 rounded-xl text-[10px] text-amber-300/90 leading-relaxed flex items-start gap-1.5">
+              <div className="p-2 bg-amber-950/40 border border-amber-800/40 rounded-xl text-[10px] text-host-warning leading-relaxed flex items-start gap-1.5">
                 <span className="flex-shrink-0">⚠️</span>
                 <span>
                   当前主力【{activeCodeProv?.name || 'DeepSeek'}】不支持图片。请点击
                   <button
                     type="button"
                     onClick={() => onOpenSettings?.('provider')}
-                    className="underline text-amber-200 mx-1 font-medium hover:text-white"
+                    className="underline text-host-primary mx-1 font-medium hover:text-white"
                   >
                     {t('chat.aiSettings')}
                   </button>
@@ -1951,21 +1951,21 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
 
         {/* 元素引用 Chip（Add to Chat 功能 - spec: element-add-to-chat） */}
         {pendingNodeRef && (
-          <div className="flex items-center gap-1.5 mb-2 p-2 bg-blue-950/40 border border-blue-500/40 border-dashed rounded-xl">
-            <Pin className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+          <div className="flex items-center gap-1.5 mb-2 p-2 bg-host-accent-subtle border border-host-accent/40 border-dashed rounded-xl">
+            <Pin className="w-3.5 h-3.5 text-host-brand flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <span className="text-[11px] text-blue-300 font-medium">
+              <span className="text-[11px] text-host-brand font-medium">
                 {'<'}{pendingNodeRef.tagName}{'>'}&nbsp;
-                <span className="text-blue-400/70">@&nbsp;{pendingNodeRef.screenName}</span>
+                <span className="text-host-secondary">@&nbsp;{pendingNodeRef.screenName}</span>
               </span>
-              <span className="block text-[10px] text-blue-400/50 font-mono truncate">
+              <span className="block text-[10px] text-host-tertiary font-mono truncate">
                 nid: {pendingNodeRef.nid}
               </span>
             </div>
             <button
               type="button"
               onClick={() => clearPendingNodeRef()}
-              className="p-0.5 text-blue-400/60 hover:text-blue-200 transition flex-shrink-0"
+              className="p-0.5 text-host-secondary hover:text-host-primary transition flex-shrink-0"
               title={t('chat.cancelRef')}
             >
               <X className="w-3.5 h-3.5" />
@@ -1974,24 +1974,24 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
         )}
 
         {/* Quick prompts — click inserts into the input (does not submit) */}
-        <div className="mb-2 flex items-center justify-between gap-2 text-[10px] text-slate-400">
+        <div className="mb-2 flex items-center justify-between gap-2 text-[10px] text-host-secondary">
           <label className="flex items-center gap-1.5" title={t('chat.writeStrategyAutoHint')}>
-            <span>{t('chat.writeStrategy')}</span><select aria-label={t('chat.writeStrategy')} value={writeStrategy} disabled={engine.isGenerating} onChange={e=>setWriteStrategy(e.target.value as typeof writeStrategy)} className="bg-slate-900 border border-slate-700 rounded px-1 py-0.5"><option value="auto">{t('chat.writeStrategyAuto')}</option><option value="atomic">{t('chat.writeStrategyAtomic')}</option><option value="patch">{t('chat.writeStrategyPatch')}</option></select>
+            <span>{t('chat.writeStrategy')}</span><select aria-label={t('chat.writeStrategy')} value={writeStrategy} disabled={engine.isGenerating} onChange={e=>setWriteStrategy(e.target.value as typeof writeStrategy)} className="bg-host-sunken border border-host-border text-host-primary rounded px-1 py-0.5"><option value="auto">{t('chat.writeStrategyAuto')}</option><option value="atomic">{t('chat.writeStrategyAtomic')}</option><option value="patch">{t('chat.writeStrategyPatch')}</option></select>
           </label>
           <details ref={quickMenuRef} className="relative">
-            <summary className="cursor-pointer list-none flex items-center gap-1 rounded border border-slate-700 px-2 py-1 hover:bg-slate-800 text-slate-300"><Sparkles className="w-3 h-3 text-amber-400" />{t('chat.quickPrompts')}</summary>
-        <div className="absolute bottom-full right-0 mb-2 z-30 w-[300px] max-w-[calc(100vw-2rem)] rounded-lg border border-slate-700 bg-slate-900 p-2 shadow-xl">
+            <summary className="cursor-pointer list-none flex items-center gap-1 rounded border border-host-border bg-host-sunken px-2 py-1 hover:bg-host-elevated text-host-primary"><Sparkles className="w-3 h-3 text-host-warning" />{t('chat.quickPrompts')}</summary>
+        <div className="absolute bottom-full right-0 mb-2 z-30 w-[300px] max-w-[calc(100vw-2rem)] rounded-xl border border-host-border-strong bg-host-dialog p-2 shadow-xl">
           {/* Header row: title and settings config button */}
-          <div className="flex items-center justify-between pb-1 text-[10px] text-slate-400 font-medium">
+          <div className="flex items-center justify-between pb-1 text-[10px] text-host-secondary font-medium">
             <div className="flex items-center gap-1">
-              <Sparkles className="w-3 h-3 text-amber-400" />
+              <Sparkles className="w-3 h-3 text-host-warning" />
               <span>{t('chat.quickPrompts')}</span>
-              <span className="text-[9px] text-slate-500 font-normal">{t('chat.quickPromptsInsertHint')}</span>
+              <span className="text-[9px] text-host-tertiary font-normal">{t('chat.quickPromptsInsertHint')}</span>
             </div>
             <button
               type="button"
               onClick={() => { if (quickMenuRef.current) quickMenuRef.current.open = false; onOpenSettings?.('quick_prompts'); }}
-              className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-slate-400 hover:text-blue-300 hover:bg-slate-800 rounded border border-dashed border-slate-700 hover:border-blue-500/50 transition"
+              className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-host-secondary hover:text-host-brand hover:bg-host-elevated rounded border border-dashed border-host-border hover:border-host-accent/50 transition"
               title={t('chat.quickPromptsConfigTitle')}
             >
               <Settings className="w-2.5 h-2.5" />
@@ -2010,11 +2010,11 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 type="button"
                 onClick={() => handleInsertQuickPrompt(item.content)}
                 title={`${item.content}\n[${t('settings.promptChipInsertHint')}] · ${item.scope === 'project' ? t('settings.promptChipScopeProject') : t('settings.promptChipScopeGlobal')}`}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] border transition bg-slate-800/80 hover:bg-slate-800 border-slate-700/70 hover:border-slate-500 text-slate-300 hover:text-white"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] border transition bg-host-sunken hover:bg-host-elevated border-host-border hover:border-host-border-strong text-host-primary"
               >
                 <span>{item.title}</span>
                 {item.scope === 'project' && (
-                  <span className="text-[9px] px-1 py-0.2 bg-blue-500/20 text-blue-300 rounded font-mono">{t('settings.promptBadgeProjectChip')}</span>
+                  <span className="text-[9px] px-1 py-0.2 bg-host-accent-subtle text-host-brand rounded font-mono">{t('settings.promptBadgeProjectChip')}</span>
                 )}
               </button>
             ))}
@@ -2027,7 +2027,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={engine.isGenerating || isReadingFiles}
-            className="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-800 disabled:opacity-40 rounded-xl transition"
+            className="p-2 text-host-secondary hover:text-host-brand hover:bg-host-elevated disabled:opacity-40 rounded-lg transition"
             title={t('chat.attachTitle')}
           >
             <ImageIcon className="w-4 h-4" />
@@ -2054,7 +2054,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
                 : t('chat.placeholder')
             }
             rows={4}
-            className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 pr-20 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
+            className="w-full bg-host-sunken border border-host-border rounded-lg px-3 py-2 pr-20 text-xs text-host-primary placeholder-host-tertiary focus:outline-none focus:border-host-accent resize-none"
           />
 
           {/* Submit / Stop Action Button */}
@@ -2062,14 +2062,14 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             <button
               type="button"
               onClick={handleStopGenerating}
-              className="absolute right-2.5 top-2.5 px-2.5 py-1.5 bg-blue-600/20 hover:bg-red-600/30 text-blue-400 hover:text-red-300 border border-blue-500/40 hover:border-red-500/50 rounded-xl transition-all flex items-center gap-1.5 group cursor-pointer shadow-sm select-none"
+              className="absolute right-2.5 top-2.5 px-2.5 py-1.5 bg-host-accent-subtle hover:bg-red-600/30 text-host-brand hover:text-red-300 border border-host-accent/40 hover:border-red-500/50 rounded-lg transition-all flex items-center gap-1.5 group cursor-pointer shadow-sm select-none"
               title={t('chat.stopTitle')}
             >
-              <Loader2 className="w-3.5 h-3.5 animate-spin group-hover:hidden text-blue-400" />
-              <Square className="w-3.5 h-3.5 hidden group-hover:block fill-current text-red-400" />
+              <Loader2 className="w-3.5 h-3.5 animate-spin group-hover:hidden text-host-brand" />
+              <Square className="w-3.5 h-3.5 hidden group-hover:block fill-current text-host-danger" />
               <span className="text-[11px] font-medium transition">
                 <span className="group-hover:hidden animate-pulse">{t('chat.thinking')}</span>
-                <span className="hidden group-hover:inline text-red-300 font-semibold">{t('chat.stop')}</span>
+                <span className="hidden group-hover:inline text-host-danger font-semibold">{t('chat.stop')}</span>
               </span>
             </button>
           ) : (
@@ -2077,7 +2077,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               type="button"
               onClick={() => handleSendMessage()}
               disabled={(!input.trim() && !attachedImage && attachedTextFiles.length === 0) || isReadingFiles}
-              className="absolute right-2.5 top-2.5 p-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-xl transition shadow"
+              className="absolute right-2.5 top-2.5 p-2 bg-host-accent hover:bg-host-accent-hover disabled:opacity-40 text-host-on-accent rounded-lg transition shadow"
               title={t('chat.sendTitle')}
             >
               <Send className="w-3.5 h-3.5" />
@@ -2100,7 +2100,7 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
             type="button"
             data-testid="close-lightbox-btn"
             onClick={() => setPreviewImageUrl(null)}
-            className="absolute top-4 right-4 p-2 rounded-full bg-slate-800/90 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition shadow-lg cursor-pointer z-10"
+            className="absolute top-4 right-4 p-2 rounded-full bg-host-dialog/90 hover:bg-host-elevated text-host-primary border border-host-border-strong transition shadow-lg cursor-pointer z-10"
             title="关闭预览 (Esc)"
           >
             <X className="w-5 h-5" />
@@ -2115,18 +2115,18 @@ export const ChatDrawer: React.FC<ChatDrawerProps> = ({ onOpenSettings }) => {
               src={previewImageUrl}
               alt="附件高清大图预览"
               data-testid="lightbox-preview-img"
-              className="max-w-full max-h-[82vh] object-contain rounded-xl border border-slate-700 shadow-2xl bg-slate-950"
+              className="max-w-full max-h-[82vh] object-contain rounded-xl border border-host-border shadow-2xl bg-host-sunken"
             />
-            <div className="mt-2.5 px-3 py-1 bg-slate-900/90 border border-slate-800 rounded-full text-xs text-slate-400 flex items-center gap-2 shadow">
+            <div className="mt-2.5 px-3 py-1 bg-host-dialog/90 border border-host-border rounded-full text-xs text-host-secondary flex items-center gap-2 shadow">
               <span>附件参考图预览</span>
-              <span className="text-slate-600">·</span>
+              <span className="text-host-tertiary">·</span>
               <button
                 type="button"
                 onClick={() => {
                   const w = window.open('');
-                  w?.document.write(`<body style="margin:0;background:#0f172a;display:flex;align-items:center;justify-content:center;height:100vh;"><img src="${previewImageUrl}" style="max-width:100%;max-height:100%;" /></body>`);
+                  w?.document.write(`<body style="margin:0;background:#1C1B17;display:flex;align-items:center;justify-content:center;height:100vh;"><img src="${previewImageUrl}" style="max-width:100%;max-height:100%;" /></body>`);
                 }}
-                className="text-blue-400 hover:underline cursor-pointer"
+                className="text-host-brand hover:underline cursor-pointer"
               >
                 在新标签打开
               </button>

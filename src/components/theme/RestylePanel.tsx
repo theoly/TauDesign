@@ -326,36 +326,36 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
   const summary = outcomes.length > 0 ? summarizeOutcomes(outcomes) : null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 flex items-center justify-center p-6">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-full flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-6">
+      <div className="bg-host-chrome text-host-primary border border-host-border-strong rounded-xl shadow-2xl w-full max-w-2xl max-h-full flex flex-col overflow-hidden">
+        <div className="p-4 border-b border-host-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-blue-400" />
+            <Sparkles className="w-4 h-4 text-host-brand" />
             <div>
-              <h2 className="text-slate-100 font-semibold text-sm">
+              <h2 className="text-host-primary font-semibold text-sm">
                 {isSingle ? t('theme.restylePolishTitle') : t('theme.restyleBatchTitle')}
               </h2>
-              <p className="text-slate-400 text-xs mt-0.5">
+              <p className="text-host-secondary text-xs mt-0.5">
                 {isSingle ? t('theme.restylePolishHint') : t('theme.restyleBatchHint')}
               </p>
             </div>
           </div>
-          <button onClick={close} aria-label={busy ? t('theme.restyleStopClose') : t('theme.restyleClose')} className="text-slate-400 hover:text-slate-200 p-1">
+          <button onClick={close} aria-label={busy ? t('theme.restyleStopClose') : t('theme.restyleClose')} className="text-host-secondary hover:text-host-primary p-1">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="p-4 space-y-3 overflow-y-auto text-xs">
           {/* 预估消耗：执行前必须让用户知道要花多少 */}
-          <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
-            <div className="flex items-center justify-between text-slate-300">
+          <div className="p-3 bg-host-sunken border border-host-border rounded-xl space-y-2">
+            <div className="flex items-center justify-between text-host-primary">
               <span className="font-semibold">{t('theme.restylePlan')}</span>
-              <span className="text-slate-400">
+              <span className="text-host-secondary">
                 {t('theme.restyleEstimateCalls', { count: requestEstimate + (isSingle ? 1 : 0) })}
                 {isSingle && t('theme.restyleEstimateSingleExtra')}
               </span>
             </div>
-            <div className="text-slate-500 leading-relaxed">
+            <div className="text-host-tertiary leading-relaxed">
               {t('theme.restyleQueue', {
                 components: plan.queue.filter((item) => item.kind === 'component').length,
                 screens: plan.queue.filter((item) => item.kind === 'screen').length,
@@ -366,7 +366,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
             </div>
           </div>
 
-          {!isSingle && <div className="space-y-2 text-slate-400">
+          {!isSingle && <div className="space-y-2 text-host-secondary">
             <p>
               {t('theme.restylePreflight', {
                 recommended: assessments.filter((a) => a.assessment.recommended).length,
@@ -379,7 +379,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
               <span>{target.name}：{userFacingMessage(assessment.reason)}</span>
             </label>)}
           </div>}
-          {progress && <div role="status" className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-slate-300 space-y-1">
+          {progress && <div role="status" className="p-3 bg-host-sunken border border-host-border rounded-xl text-host-primary space-y-1">
             <p>{progress.targetName} · {progressPhaseLabel(progress.phase)}</p>
             <p>{progress.provider} / {progress.model}</p>
             <p>
@@ -396,7 +396,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
               })}
             </p>
             {progress.patchGroups && (
-              <p className="text-blue-300">
+              <p className="text-host-brand">
                 {t('theme.restyleProgressPatch', {
                   current: progress.patchGroup ?? 0,
                   total: progress.patchGroups,
@@ -407,7 +407,7 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
           </div>}
           {phase === 'plan' && (
             <div className="p-3 bg-amber-950/30 border border-amber-800/40 rounded-xl text-amber-200 flex items-start gap-2">
-              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-amber-400" />
+              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-host-warning" />
               <span className="leading-relaxed">
                 {t(isSingle ? 'theme.restylePlanWarnSingle' : 'theme.restylePlanWarnBatch', {
                   name: plan.dryRun?.name ?? '—',
@@ -421,41 +421,41 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
             onConfirm={confirmSingle} onCancel={onClose} onRetry={analyzeSingle} />}
 
           {phase === 'review' && dryOutcome && (
-            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
-              <div className="font-semibold text-slate-200">
+            <div className="p-3 bg-host-sunken border border-host-border rounded-xl space-y-2">
+              <div className="font-semibold text-host-primary">
                 {t('theme.restyleDryRunResult', { name: dryOutcome.target.name })}
               </div>
               <DesignGuidanceCard contract={dryOutcome.workflowContract} />
               {dryOutcome.status === 'applied' ? (
                 <>
-                  <div className="flex items-center gap-1.5 text-emerald-400">
+                  <div className="flex items-center gap-1.5 text-host-success">
                     <Check className="w-3 h-3" />
                     <span>{t('theme.restyleStructurePassed')}</span>
                   </div>
-                  {dryOutcome.message && <div className="text-amber-300"><UserFacingNotice message={dryOutcome.message??''}/></div>}
-                  <pre className="max-h-40 overflow-auto bg-slate-900 p-2 rounded-lg text-[10px] text-slate-400 whitespace-pre-wrap">
+                  {dryOutcome.message && <div className="text-host-warning"><UserFacingNotice message={dryOutcome.message??''}/></div>}
+                  <pre className="max-h-40 overflow-auto bg-host-elevated p-2 rounded-lg text-[10px] text-host-secondary whitespace-pre-wrap">
                     {dryOutcome.html?.slice(0, 800)}
                   </pre>
                 </>
-              ) : dryOutcome.status==='skipped_unchanged' ? <div className="text-slate-300"><UserFacingNotice message={dryOutcome.message??''}/></div> : (
-                <div className="text-rose-400 leading-relaxed">
+              ) : dryOutcome.status==='skipped_unchanged' ? <div className="text-host-primary"><UserFacingNotice message={dryOutcome.message??''}/></div> : (
+                <div className="text-host-danger leading-relaxed">
                   <UserFacingNotice message={dryOutcome.message ?? t('theme.restyleDryRunFailedShort')} />
-                  <div className="text-slate-500 mt-1">{t('theme.restyleResultRejected')}</div>
+                  <div className="text-host-tertiary mt-1">{t('theme.restyleResultRejected')}</div>
                 </div>
               )}
             </div>
           )}
 
           {(phase === 'batch' || phase === 'done') && (
-            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5">
-              <div className="font-semibold text-slate-200">
+            <div className="p-3 bg-host-sunken border border-host-border rounded-xl space-y-1.5">
+              <div className="font-semibold text-host-primary">
                 {t('theme.restyleBatchProgress', {
                   done: outcomes.length,
                   total: batchSnapshotRef.current?.plan.queue.length ?? plan.queue.length,
                 })}
               </div>
               {summary && (
-                <div className="text-slate-400 leading-relaxed">
+                <div className="text-host-secondary leading-relaxed">
                   {t('theme.restyleBatchSummary', {
                     applied: summary.applied,
                     unchanged: summary.unchanged,
@@ -467,19 +467,19 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
                 </div>
               )}
               {summary?.details.map((d, i) => (
-                <div key={i} className="text-amber-300/90">• {d}</div>
+                <div key={i} className="text-host-warning">• {d}</div>
               ))}
               {outcomes.filter(outcome => outcome.validation).map(outcome => (
-                <details key={`${outcome.target.kind}:${outcome.target.id}`} className="border-t border-slate-800 pt-2 text-slate-400">
+                <details key={`${outcome.target.kind}:${outcome.target.id}`} className="border-t border-host-border pt-2 text-host-secondary">
                   <summary className="cursor-pointer">
                     {outcome.target.name} · {t('theme.restyleAcceptance')}
                     {outcome.validation!.status === 'passed'
                       ? t('theme.restyleValidationPass')
                       : t('theme.restyleValidationFail')}
                   </summary>
-                  {outcome.validation!.message && <div className="mt-1 text-amber-300"><UserFacingNotice message={outcome.validation!.message}/></div>}
+                  {outcome.validation!.message && <div className="mt-1 text-host-warning"><UserFacingNotice message={outcome.validation!.message}/></div>}
                   {outcome.delivery && (
-                    <p className="mt-1 text-slate-500">
+                    <p className="mt-1 text-host-tertiary">
                       {outcome.delivery.message ?? t('theme.restyleDeliverySaved')}
                     </p>
                   )}
@@ -490,27 +490,27 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
                         ? t('theme.restyleRenderChecked', { count: page.render.inspected })
                         : page.render?.reason ?? t('theme.restyleRenderIncomplete')}
                     </p>
-                    {page.render?.findings.map((finding,index) => <div key={index} className="text-amber-300"><UserFacingNotice message={finding.message}/></div>)}
+                    {page.render?.findings.map((finding,index) => <div key={index} className="text-host-warning"><UserFacingNotice message={finding.message}/></div>)}
                   </div>)}
                 </details>
               ))}
             </div>
           )}
 
-          {error && <div className="text-rose-400"><UserFacingNotice message={error}/></div>}
+          {error && <div className="text-host-danger"><UserFacingNotice message={error}/></div>}
           {!isSingle && <RestyleDeliveryHistoryPanel projectId={projectId} folderPath={folderPath} revision={deliveryArchiveRevision} notice={deliveryArchiveNotice}/>}
         </div>
 
-        <div className="p-4 border-t border-slate-800 flex items-center justify-end gap-2">
-          {busy && <button onClick={stop} className="px-3 py-1.5 text-amber-300 text-xs">{t('theme.restyleStop')}</button>}
-          <button onClick={close} className="px-3 py-1.5 text-slate-300 hover:text-slate-100 text-xs">
+        <div className="p-4 border-t border-host-border flex items-center justify-end gap-2">
+          {busy && <button onClick={stop} className="px-3 py-1.5 text-host-warning text-xs">{t('theme.restyleStop')}</button>}
+          <button onClick={close} className="px-3 py-1.5 text-host-secondary hover:text-host-primary text-xs">
             {phase === 'done' ? t('common.done') : busy ? t('theme.restyleStopClose') : t('theme.restyleClose')}
           </button>
           {phase === 'plan' && (
             <button
               onClick={isSingle ? analyzeSingle : doDryRun}
               disabled={busy || !plan.dryRun}
-              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-medium rounded-lg flex items-center gap-1.5"
+              className="px-4 py-1.5 bg-host-accent hover:bg-host-accent-hover disabled:opacity-40 text-host-on-accent text-xs font-medium rounded-lg flex items-center gap-1.5"
             >
               {busy && <Loader2 className="w-3 h-3 animate-spin" />}
               {isSingle ? t('theme.restyleAnalyze') : t('theme.restyleDryRun')}
@@ -518,14 +518,14 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
           )}
           {phase === 'review' && (
             <>
-              <button onClick={() => { batchSnapshotRef.current = null; setPhase('plan'); }} disabled={busy} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg disabled:opacity-40">
+              <button onClick={() => { batchSnapshotRef.current = null; setPhase('plan'); }} disabled={busy} className="px-3 py-1.5 bg-host-elevated hover:bg-host-dialog border border-host-border text-host-primary text-xs rounded-lg disabled:opacity-40">
                 {t('theme.restyleRetryDry')}
               </button>
               <button
                 onClick={doBatch}
                 disabled={busy || dryOutcome?.status !== 'applied'}
                 title={dryOutcome?.status !== 'applied' ? t('theme.restyleDryRunFailed') : undefined}
-                className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white text-xs font-medium rounded-lg"
+                className="px-4 py-1.5 bg-host-accent hover:bg-host-accent-hover disabled:opacity-40 text-host-on-accent text-xs font-medium rounded-lg"
               >
                 {t('theme.restyleConfirmBatch', {
                   count: (batchSnapshotRef.current?.plan.queue.length ?? plan.queue.length) - 1,

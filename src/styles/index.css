@@ -4,15 +4,33 @@
 
 :root {
   color-scheme: dark;
+  --host-canvas: #12110F;
+  --host-chrome: #1C1B18;
+  --host-elevated: #26241F;
+  --host-dialog: #2B2823;
+  --host-sunken: #161512;
+  --host-accent: #8FCBB0;
+  --host-accent-hover: #9FD6BD;
+  --host-accent-subtle: #1A2E26;
+  --host-text-primary: #F3EFE6;
+  --host-text-secondary: #C4BDB0;
+  --host-text-tertiary: #8E887C;
+  --host-text-on-accent: #10241C;
+  --host-text-brand: #8FCBB0;
+  --host-text-success: #8FCBB0;
+  --host-text-warning: #E2B15A;
+  --host-text-danger: #F0A8A2;
+  --host-border: #3A3630;
+  --host-border-strong: #524D45;
 }
 
 body {
   margin: 0;
   padding: 0;
   user-select: none;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background-color: #090d16;
-  color: #f1f5f9;
+  font-family: "SF Pro Text", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--host-canvas);
+  color: var(--host-text-primary);
 }
 
 /* Custom scrollbars */
@@ -24,11 +42,11 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: #3A3630;
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #524D45;
 }
 
 /* Paired inspector fields keep an editable value visible in narrow sidebars. */

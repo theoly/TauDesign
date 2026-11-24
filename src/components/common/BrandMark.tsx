@@ -22,8 +22,8 @@ export interface BrandMarkProps {
 
 export const BrandMark: React.FC<BrandMarkProps> = ({
   size = 28,
-  tile = '#2563EB',
-  glyph = '#F8FAFC',
+  tile = '#8FCBB0',
+  glyph = '#10241C',
   className
 }) => (
   <svg

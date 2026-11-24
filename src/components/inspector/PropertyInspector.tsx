@@ -121,10 +121,10 @@ export const PropertyInspector: React.FC = () => {
     const lint = curScreen ? TokenLintEngine.scan(curScreen.htmlContent, designSystem, settings.deviceProfile, getTokenLintContext(curScreen)) : null;
 
     return (
-      <div className="w-full min-w-0 h-full bg-slate-900 p-5 flex flex-col gap-3 overflow-y-auto text-xs select-none">
-        <div className="min-h-28 flex-1 flex flex-col items-center justify-center text-center text-slate-500">
-          <Sliders className="w-8 h-8 text-slate-600 mb-3" />
-          <span className="font-medium text-slate-400">{t('inspector.emptyTitle')}</span>
+      <div className="w-full min-w-0 h-full bg-host-chrome text-host-primary p-5 flex flex-col gap-3 overflow-y-auto text-xs select-none">
+        <div className="min-h-28 flex-1 flex flex-col items-center justify-center text-center text-host-tertiary">
+          <Sliders className="w-8 h-8 text-host-tertiary mb-3" />
+          <span className="font-medium text-host-secondary">{t('inspector.emptyTitle')}</span>
           <p className="mt-1 text-[11px] leading-relaxed">
             {t('inspector.emptyHint')}
           </p>
@@ -138,24 +138,24 @@ export const PropertyInspector: React.FC = () => {
 
         {/* Screen Health & Token Lint Widget (PRD §3.5.4) */}
         {lint && curScreen && (
-          <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+          <div className="p-3 bg-host-sunken border border-host-border rounded-xl space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-300">{t('inspector.tokenCompliance')}</span>
-              <span className={`font-mono font-bold ${lint.complianceRate >= 95 ? 'text-emerald-400' : 'text-amber-400'}`}>
+              <span className="font-semibold text-host-primary">{t('inspector.tokenCompliance')}</span>
+              <span className={`font-mono font-bold ${lint.complianceRate >= 95 ? 'text-host-success' : 'text-host-warning'}`}>
                 {lint.complianceRate}%
               </span>
             </div>
-            <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+            <div className="w-full bg-host-elevated h-1.5 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-300 ${
-                  lint.complianceRate >= 95 ? 'bg-emerald-500' : 'bg-amber-500'
+                  lint.complianceRate >= 95 ? 'bg-host-accent' : 'bg-amber-500'
                 }`}
                 style={{ width: `${lint.complianceRate}%` }}
               />
             </div>
             <div className="space-y-1.5 pt-1">
-              {curScreen.metadata?.importedHtml && <p className="text-[11px] leading-relaxed text-slate-400">导入页包含自带样式；Token 合规度仅衡量与项目基座的差异，不代表视觉还原度。保留原貌时无需自动统一这些差异。</p>}
-              <span className="text-[10px] text-slate-400 block">
+              {curScreen.metadata?.importedHtml && <p className="text-[11px] leading-relaxed text-host-secondary">导入页包含自带样式；Token 合规度仅衡量与项目基座的差异，不代表视觉还原度。保留原貌时无需自动统一这些差异。</p>}
+              <span className="text-[10px] text-host-secondary block">
                 {lint.issues.length > 0 ? t('inspector.lintIssues', { count: lint.issues.length }) : t('inspector.lintClean')}
               </span>
               <button
@@ -164,10 +164,10 @@ export const PropertyInspector: React.FC = () => {
                   const report = computeScreenAuditReport(curScreen, designSystem, settings.deviceProfile);
                   postAuditReport(report);
                 }}
-                className="w-full py-1.5 px-2 bg-blue-600/80 hover:bg-blue-600 text-white rounded-lg text-[11px] font-medium transition flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99]"
+                className="w-full py-1.5 px-2 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg text-[11px] font-medium transition flex items-center justify-center gap-1.5 shadow-sm active:scale-[0.99]"
                 title={t('inspector.auditTitle')}
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <Sparkles className="w-3.5 h-3.5 text-host-on-accent" />
                 <span>{t('inspector.auditOnce')}</span>
               </button>
             </div>
@@ -290,32 +290,32 @@ export const PropertyInspector: React.FC = () => {
   };
 
   return (
-    <div className="w-full min-w-0 h-full bg-slate-900 flex flex-col z-20 text-xs select-none">
+    <div className="w-full min-w-0 h-full bg-host-chrome text-host-primary flex flex-col z-20 text-xs select-none">
       {/* Header & Breadcrumb (PRD §3.6.1) */}
-      <div className="p-3 border-b border-slate-800 bg-slate-900/60">
-        <div className="flex items-center gap-1 text-slate-400 text-[11px] mb-2 font-mono overflow-x-auto whitespace-nowrap pb-1">
-          <Layers className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-          <span className="truncate max-w-[70px] text-slate-500" title={currentScreen?.name}>{currentScreen?.name}</span>
+      <div className="p-3 border-b border-host-border bg-host-chrome">
+        <div className="flex items-center gap-1 text-host-secondary text-[11px] mb-2 font-mono overflow-x-auto whitespace-nowrap pb-1">
+          <Layers className="w-3.5 h-3.5 text-host-brand shrink-0" />
+          <span className="truncate max-w-[70px] text-host-tertiary" title={currentScreen?.name}>{currentScreen?.name}</span>
           {selectedNode.parentChain && selectedNode.parentChain.map((p) => (
             <React.Fragment key={p.nid}>
-              <ChevronRight className="w-3 h-3 text-slate-600 shrink-0" />
+              <ChevronRight className="w-3 h-3 text-host-tertiary shrink-0" />
               <button
                 onClick={() => selectNodeByNid(activeScreenId, p.nid)}
-                className="hover:text-blue-400 hover:underline transition truncate max-w-[60px]"
+                className="hover:text-host-brand hover:underline transition truncate max-w-[60px]"
                 title={`${p.tagName}${formatBreadcrumbClass(p.className)}`}
               >
                 {p.tagName}
               </button>
             </React.Fragment>
           ))}
-          <ChevronRight className="w-3 h-3 text-slate-600 shrink-0" />
-          <span className="text-blue-400 font-semibold">{selectedNode.tagName}</span>
-          <span className="text-slate-500 font-mono text-[10px]">#{selectedNid}</span>
+          <ChevronRight className="w-3 h-3 text-host-tertiary shrink-0" />
+          <span className="text-host-brand font-semibold">{selectedNode.tagName}</span>
+          <span className="text-host-tertiary font-mono text-[10px]">#{selectedNid}</span>
         </div>
-        <div className="flex items-center justify-between text-[11px] text-slate-400">
+        <div className="flex items-center justify-between text-[11px] text-host-secondary">
           <span>{t('inspector.sizeLabel', { width: selectedNode.computedBox?.width ?? 0, height: selectedNode.computedBox?.height ?? 0 })}</span>
           {currentOverride.escaped && (
-            <span className="flex items-center gap-1 text-amber-400 bg-amber-950/60 border border-amber-800/40 px-1.5 py-0.5 rounded text-[10px]">
+            <span className="flex items-center gap-1 text-host-warning bg-amber-950/50 border border-amber-800/40 px-1.5 py-0.5 rounded text-[10px]">
               <AlertTriangle className="w-3 h-3" />
               <span>{t('inspector.tokenEscape')}</span>
             </span>
@@ -326,9 +326,9 @@ export const PropertyInspector: React.FC = () => {
       {/* 常驻：局部定向 AI 微调。它是跨场景高频入口，不该藏进任一 Tab (BR-INS-01) */}
       <div className="px-3 pt-3">
         {/* Point-and-Edit: 局部定向 AI 微调 (PRD §3.6.2) */}
-        <div className="p-3 bg-purple-950/40 border border-purple-800/50 rounded-xl space-y-2">
-          <div className="flex items-center gap-1.5 text-purple-300 font-semibold text-[11px]">
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+        <div className="p-3 bg-host-elevated border border-host-accent/30 rounded-xl space-y-2">
+          <div className="flex items-center gap-1.5 text-host-brand font-semibold text-[11px]">
+            <Sparkles className="w-3.5 h-3.5 text-host-brand" />
             <span>{t('inspector.pointEditTitle')}</span>
           </div>
           <div className="relative">
@@ -340,19 +340,19 @@ export const PropertyInspector: React.FC = () => {
                 if (e.key === 'Enter') handlePointAndEdit();
               }}
               placeholder={t('inspector.pointEditPlaceholder')}
-              className="w-full bg-slate-950 border border-purple-800/60 rounded-lg px-2.5 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-purple-500 pr-8"
+              className="w-full bg-host-sunken border border-host-border rounded-lg px-2.5 py-1.5 text-host-primary placeholder:text-host-tertiary text-xs focus:outline-none focus:border-host-accent pr-8"
             />
             <button
               onClick={handlePointAndEdit}
               aria-label={t('inspector.pointEditAria')}
               disabled={isPointGenerating || !pointPrompt.trim()}
-              className="absolute right-1.5 top-1.5 p-1 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white rounded transition"
+              className="absolute right-1.5 top-1.5 p-1 bg-host-accent hover:bg-host-accent-hover disabled:opacity-40 text-host-on-accent rounded transition"
             >
               <Wand2 className="w-3 h-3" />
             </button>
           </div>
-          {pointNotice&&<p role="status" className="text-[11px] leading-relaxed text-purple-200">{pointNotice}</p>}
-          {isPointGenerating&&<button type="button" aria-label={t('inspector.pointEditStop')} onClick={stopPoint} className="text-[11px] text-amber-300">{t('inspector.pointEditStop')}</button>}
+          {pointNotice&&<p role="status" className="text-[11px] leading-relaxed text-host-secondary">{pointNotice}</p>}
+          {isPointGenerating&&<button type="button" aria-label={t('inspector.pointEditStop')} onClick={stopPoint} className="text-[11px] text-host-warning">{t('inspector.pointEditStop')}</button>}
           <RequestActivityCard activity={pointActivity} running={isPointGenerating}/>
         </div>
       </div>
@@ -365,9 +365,9 @@ export const PropertyInspector: React.FC = () => {
           const editable = selectedNode.textEditable !== false;
           const hint = selectedNode.textReason ? uneditableHint(selectedNode.textReason) : null;
           return (
-            <div className="space-y-1.5 pt-2 border-t border-slate-800">
-              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                <Type className="w-3.5 h-3.5 text-slate-400" />
+            <div className="space-y-1.5 pt-2 border-t border-host-border">
+              <label className="text-[11px] font-semibold text-host-secondary uppercase tracking-wider flex items-center gap-1">
+                <Type className="w-3.5 h-3.5 text-host-secondary" />
                 <span>{t('inspector.textContent')}</span>
               </label>
               <input
@@ -380,13 +380,13 @@ export const PropertyInspector: React.FC = () => {
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                 }}
-                className={`w-full bg-slate-950 border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none ${
+                className={`w-full bg-host-sunken border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none ${
                   editable
-                    ? 'border-slate-700 text-slate-200 focus:border-blue-500'
-                    : 'border-slate-800 text-slate-500 cursor-not-allowed'
+                    ? 'border-host-border text-host-primary focus:border-host-accent'
+                    : 'border-host-border/60 text-host-tertiary cursor-not-allowed'
                 }`}
               />
-              {hint && <p className="text-[10px] text-slate-500 leading-tight">{hint}</p>}
+              {hint && <p className="text-[10px] text-host-tertiary leading-tight">{hint}</p>}
             </div>
           );
         })()}
@@ -402,13 +402,13 @@ export const PropertyInspector: React.FC = () => {
           <AppearanceSections {...sectionProps} />
         </div>
         <Section title={t('inspector.sectionNav')}>
-          <label className="block text-[10px] text-slate-400" htmlFor="screen-link-target">{t('inspector.sectionNavHint')}</label>
+          <label className="block text-[10px] text-host-secondary" htmlFor="screen-link-target">{t('inspector.sectionNavHint')}</label>
           <select
             id="screen-link-target"
             aria-label={t('inspector.sectionNav')}
             value={selectedLinkTarget}
             onChange={event => setScreenLinkTarget(activeScreenId, selectedNid, event.target.value || undefined)}
-            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+            className="w-full bg-host-sunken border border-host-border rounded-lg px-2 py-1.5 text-xs text-host-primary focus:outline-none focus:border-host-accent"
           >
             <option value="">{t('inspector.sectionNavNone')}</option>
             {selectedLinkTarget && !availableTargets.some(screen => screen.id === selectedLinkTarget) && (
@@ -420,47 +420,47 @@ export const PropertyInspector: React.FC = () => {
         <Section title={t('inspector.sectionStructure')}>
         {/* Component Instance or Extract Banner (PRD §3.7 / D6) */}
         {selectedNode.componentId ? (
-          <div className="p-3 bg-indigo-950/40 border border-indigo-800/50 rounded-xl space-y-2">
+          <div className="p-3 bg-host-accent-subtle border border-host-accent/40 rounded-xl space-y-2">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-indigo-300 font-semibold text-[11px]">
-                <Boxes className="w-3.5 h-3.5 text-indigo-400" />
+              <div className="flex items-center gap-1.5 text-host-brand font-semibold text-[11px]">
+                <Boxes className="w-3.5 h-3.5 text-host-brand" />
                 <span>组件实例: {components[selectedNode.componentId]?.name || '已封装组件'}</span>
               </div>
-              <span className="text-[10px] text-indigo-400/70 font-mono">#{selectedNode.componentInstanceId?.slice(0, 8)}</span>
+              <span className="text-[10px] text-host-secondary font-mono">#{selectedNode.componentInstanceId?.slice(0, 8)}</span>
             </div>
-            <p className="text-[10px] text-indigo-300/70 leading-tight">
+            <p className="text-[10px] text-host-secondary leading-tight">
               {components[selectedNode.componentId]?.templateContract?'固定模板与插槽校验已启用；同步按槽名保留内容，固定区域使用最新模板。':'该组件使用兼容同步，按原有内容顺序匹配。可在资源中心配置模板与插槽约束。'}
             </p>
             {syncStatusMsg && (
-              <div className="p-1.5 bg-indigo-900/60 text-indigo-200 rounded text-[10px] leading-tight">
+              <div className="p-1.5 bg-host-elevated text-host-primary border border-host-border rounded text-[10px] leading-tight">
                 {syncStatusMsg}
               </div>
             )}
             <div className="grid grid-cols-2 gap-1.5 pt-1">
               <button
                 onClick={handleSyncComponent}
-                className="py-1 px-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[11px] font-medium transition"
+                className="py-1 px-2 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded text-[11px] font-medium transition"
               >
                 批量同步全画板
               </button>
               <button
                 onClick={() => detachComponentInstance(activeScreenId, selectedNid)}
-                className="py-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[11px] transition"
+                className="py-1 px-2 bg-host-elevated hover:bg-host-dialog text-host-secondary border border-host-border rounded text-[11px] transition"
               >
                 从组件分离
               </button>
             </div>
           </div>
         ) : (
-          <div className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+          <div className="p-2.5 bg-host-sunken border border-host-border rounded-xl space-y-2">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-slate-300 font-semibold text-[11px]">
-                <Boxes className="w-3.5 h-3.5 text-blue-400" />
+              <div className="flex items-center gap-1.5 text-host-primary font-semibold text-[11px]">
+                <Boxes className="w-3.5 h-3.5 text-host-brand" />
                 <span>组件化复用 (Component)</span>
               </div>
               <button
                 onClick={() => setShowExtractInput(!showExtractInput)}
-                className="text-[10px] text-blue-400 hover:text-blue-300 transition"
+                className="text-[10px] text-host-brand hover:text-host-accent-hover transition"
               >
                 {showExtractInput ? t('inspector.extractCollapse') : t('inspector.extractComponent')}
               </button>
@@ -472,7 +472,7 @@ export const PropertyInspector: React.FC = () => {
                   value={compNameInput}
                   onChange={(e) => setCompNameInput(e.target.value)}
                   placeholder="组件名称，如：概览指标卡..."
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-blue-500"
+                  className="w-full bg-host-elevated border border-host-border rounded-lg px-2.5 py-1 text-host-primary text-xs focus:outline-none focus:border-host-accent"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleExtractComponent();
                   }}
@@ -480,14 +480,14 @@ export const PropertyInspector: React.FC = () => {
                 <div className="flex justify-end gap-1.5">
                   <button
                     onClick={() => setShowExtractInput(false)}
-                    className="px-2 py-0.5 bg-slate-800 text-slate-400 rounded text-[10px]"
+                    className="px-2 py-0.5 bg-host-elevated text-host-secondary hover:text-host-primary rounded text-[10px]"
                   >
                     取消
                   </button>
                   <button
                     onClick={handleExtractComponent}
                     disabled={!compNameInput.trim()}
-                    className="px-2.5 py-0.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded text-[10px] font-medium transition"
+                    className="px-2.5 py-0.5 bg-host-accent hover:bg-host-accent-hover disabled:opacity-40 text-host-on-accent rounded text-[10px] font-medium transition"
                   >
                     确认封装
                   </button>
@@ -495,7 +495,7 @@ export const PropertyInspector: React.FC = () => {
               </div>
             )}
             {syncStatusMsg && (
-              <div className="p-1.5 bg-blue-950 text-blue-300 rounded text-[10px]">
+              <div className="p-1.5 bg-host-accent-subtle text-host-brand rounded text-[10px]">
                 {syncStatusMsg}
               </div>
             )}
@@ -503,31 +503,31 @@ export const PropertyInspector: React.FC = () => {
         )}
 
         {/* Structural Operations (PRD §3.6.3) */}
-        <div className="space-y-2 pt-1 border-t border-slate-800">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">结构与容器操作</span>
+        <div className="space-y-2 pt-1 border-t border-host-border">
+          <span className="text-[11px] font-semibold text-host-secondary uppercase tracking-wider block">结构与容器操作</span>
           <div className="grid grid-cols-2 gap-1.5">
             <button
               onClick={handleDuplicateNode}
-              className="flex items-center justify-center gap-1.5 py-1 px-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-700 transition text-[11px]"
+              className="flex items-center justify-center gap-1.5 py-1 px-2 bg-host-elevated hover:bg-host-dialog text-host-secondary hover:text-host-primary rounded-lg border border-host-border transition text-[11px]"
             >
               <Copy className="w-3 h-3" />
               <span>复制此节点</span>
             </button>
             <button
               onClick={handleDeleteNode}
-              className="flex items-center justify-center gap-1.5 py-1 px-2 bg-slate-800 hover:bg-red-950 text-red-400 rounded-lg border border-slate-700 hover:border-red-800 transition text-[11px]"
+              className="flex items-center justify-center gap-1.5 py-1 px-2 bg-host-elevated hover:bg-red-950/60 text-host-danger rounded-lg border border-host-border hover:border-red-800/60 transition text-[11px]"
             >
               <Trash2 className="w-3 h-3" />
               <span>删除此节点</span>
             </button>
           </div>
           <div className="flex items-center gap-1 pt-1">
-            <span className="text-[10px] text-slate-500">包裹为容器:</span>
+            <span className="text-[10px] text-host-tertiary">包裹为容器:</span>
             {(['row', 'col', 'card'] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => handleWrapInContainer(t)}
-                className="px-2 py-0.5 bg-slate-950 hover:bg-slate-800 border border-slate-700 rounded text-[10px] text-slate-300 transition"
+                className="px-2 py-0.5 bg-host-sunken hover:bg-host-elevated border border-host-border rounded text-[10px] text-host-secondary hover:text-host-primary transition"
               >
                 .{t}
               </button>
@@ -537,12 +537,12 @@ export const PropertyInspector: React.FC = () => {
 
         {/* Reset L4 */}
         {Object.keys(decs).length > 0 && (
-          <div className="pt-2 border-t border-slate-800">
+          <div className="pt-2 border-t border-host-border">
             <button
               onClick={() => {
                 clearNodeOverrides(activeScreenId, selectedNid);
               }}
-              className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 rounded-lg text-xs transition"
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-host-elevated hover:bg-host-dialog border border-host-border text-host-secondary hover:text-host-primary rounded-lg text-xs transition"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>还原为 AI 基线样式</span>

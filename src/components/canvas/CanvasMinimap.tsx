@@ -124,16 +124,16 @@ export const CanvasMinimap: React.FC<{ canvasRef: React.RefObject<HTMLDivElement
   };
 
   return (
-    <div data-testid="canvas-minimap" className="absolute bottom-4 left-4 z-40 bg-slate-900/90 backdrop-blur-md border border-slate-800 rounded-xl shadow-2xl p-2.5 flex flex-col gap-2 select-none"
+    <div data-testid="canvas-minimap" className="absolute bottom-4 left-4 z-40 bg-host-elevated/95 backdrop-blur-md border border-host-border-strong rounded-xl shadow-2xl p-2.5 flex flex-col gap-2 select-none"
       onMouseDown={(event) => event.stopPropagation()} onWheel={(event) => event.stopPropagation()}>
-      <div className="flex items-center justify-between gap-4 text-[10px] font-semibold text-slate-400">
-        <span className="flex items-center gap-1.5"><Map className="w-3 h-3 text-blue-400" />小地图 (Minimap)</span>
-        <button type="button" aria-expanded={expanded} aria-controls="minimap-scene" onClick={() => setExpanded(!expanded)} className="text-slate-500 hover:text-slate-300 transition">
+      <div className="flex items-center justify-between gap-4 text-[10px] font-semibold text-host-secondary">
+        <span className="flex items-center gap-1.5"><Map className="w-3 h-3 text-host-brand" />小地图 (Minimap)</span>
+        <button type="button" aria-expanded={expanded} aria-controls="minimap-scene" onClick={() => setExpanded(!expanded)} className="text-host-tertiary hover:text-host-primary transition">
           {expanded ? '收起' : '展开'}
         </button>
       </div>
       {expanded && <>
-        <div id="minimap-scene" data-testid="minimap-scene" aria-label="画布概览，点击或拖动定位" className="relative bg-slate-950 rounded-lg overflow-hidden cursor-crosshair touch-none"
+        <div id="minimap-scene" data-testid="minimap-scene" aria-label="画布概览，点击或拖动定位" className="relative bg-host-sunken border border-host-border/60 rounded-lg overflow-hidden cursor-crosshair touch-none"
           style={{ width: MAP_WIDTH, height: MAP_HEIGHT }}
           onPointerDown={(event) => {
             if (event.button !== 0) return;
@@ -155,18 +155,18 @@ export const CanvasMinimap: React.FC<{ canvasRef: React.RefObject<HTMLDivElement
                 event.stopPropagation(); setActiveScreen(frame.screen.id);
                 centerOn(frame.x + frame.width / 2, frame.y + frame.height / 2);
               }}
-              className={`absolute overflow-hidden rounded-[1px] bg-slate-700 outline-none focus-visible:ring-2 focus-visible:ring-white ${activeScreenId === frame.screen.id ? 'ring-1 ring-blue-400 z-10' : 'ring-1 ring-slate-600 hover:ring-slate-300'}`}
+              className={`absolute overflow-hidden rounded-[1px] bg-host-elevated outline-none focus-visible:ring-2 focus-visible:ring-host-primary ${activeScreenId === frame.screen.id ? 'ring-1 ring-host-accent z-10' : 'ring-1 ring-host-border-strong hover:ring-host-secondary'}`}
               style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height }}>
               {!comparing && <div className="absolute top-0 left-0 origin-top-left pointer-events-none" style={{ transform: `scale(${projection.scale})` }}>
                 <PagePreview screen={frame.screen} device={settings.deviceProfile} tokensCss={tokensCss} overridesCss={overridesByScreen[frame.screen.id] || ''} width={frameWidth} height={frame.height} />
               </div>}
             </button>;
           })}
-          <div data-testid="minimap-viewport" className="absolute pointer-events-none z-20 border border-blue-300 bg-blue-400/10 rounded-[1px]"
+          <div data-testid="minimap-viewport" className="absolute pointer-events-none z-20 border border-host-accent bg-host-accent/15 rounded-[1px]"
             style={{ left: viewRect.x, top: viewRect.y, width: viewRect.width, height: viewRect.height }} />
-          {!frames.length && <span className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-500 pointer-events-none">暂无画框</span>}
+          {!frames.length && <span className="absolute inset-0 flex items-center justify-center text-[10px] text-host-tertiary pointer-events-none">暂无画框</span>}
         </div>
-        <div className="flex justify-between text-[9px] text-slate-500"><span>{frames.length} 个画框 · 点击或拖动定位{comparing?' · 对比中':''}</span><span>{scalePercent}%</span></div>
+        <div className="flex justify-between text-[9px] text-host-tertiary"><span>{frames.length} 个画框 · 点击或拖动定位{comparing?' · 对比中':''}</span><span>{scalePercent}%</span></div>
       </>}
     </div>
   );

@@ -49,14 +49,14 @@ export const RecoveryBanner: React.FC<RecoveryBannerProps> = ({ uncleanShutdownA
   return (
     <div
       data-testid="recovery-banner"
-      className="px-4 py-2 bg-amber-950/60 border-b border-amber-800/50 text-[11px] text-amber-200 flex items-center justify-between gap-3"
+      className="px-4 py-2 bg-host-elevated border-b border-host-warning/40 text-[11px] text-host-warning flex items-center justify-between gap-3"
     >
       <span>
         {t('app.recoveryDetected', { time: new Date(uncleanShutdownAt).toLocaleString(locale) })}
       </span>
       <button
         onClick={onDismiss}
-        className="text-amber-400 hover:text-amber-200 shrink-0 font-medium px-2 py-0.5 rounded hover:bg-amber-900/40 transition cursor-pointer"
+        className="text-host-primary hover:text-host-brand shrink-0 font-medium px-2.5 py-1 rounded-lg border border-host-border bg-host-sunken hover:border-host-border-strong transition cursor-pointer"
         title={t('app.recoveryDismissTitle')}
       >
         {t('app.recoveryDismiss', { seconds: countdown })}
@@ -92,7 +92,7 @@ const Workspace: React.FC = () => {
   };
 
   return (
-    <div className="w-screen h-screen flex flex-col bg-slate-950 overflow-hidden font-sans">
+    <div className="w-screen h-screen flex flex-col bg-host-canvas overflow-hidden font-sans text-host-primary">
       <Header
         onOpenExport={() => setShowExportModal(true)}
         onOpenSettings={() => handleOpenSettings('provider')}

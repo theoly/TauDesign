@@ -47,10 +47,10 @@ export const ScreensPanel: React.FC = () => {
       badge={screenOrder.length}
       actions={
         <>
-        <button onClick={() => setShowImport(true)} className="p-0.5 text-slate-400 hover:text-blue-400 rounded" title={t('layout.importHtml')} aria-label={t('layout.importHtml')}><FileCode className="w-3.5 h-3.5" /></button>
+        <button onClick={() => setShowImport(true)} className="p-0.5 text-host-secondary hover:text-host-brand rounded" title={t('layout.importHtml')} aria-label={t('layout.importHtml')}><FileCode className="w-3.5 h-3.5" /></button>
         <button
           onClick={handleAddNewScreen}
-          className="p-0.5 text-slate-400 hover:text-blue-400 rounded"
+          className="p-0.5 text-host-secondary hover:text-host-brand rounded"
           title={t('layout.newScreen')}
         >
           <Plus className="w-3.5 h-3.5" />
@@ -60,20 +60,20 @@ export const ScreensPanel: React.FC = () => {
     >
       <div className="px-2 pb-1.5">
         <div className="relative flex items-center">
-          <Search className="w-3 h-3 text-slate-500 absolute left-2" />
+          <Search className="w-3 h-3 text-host-tertiary absolute left-2" />
           <input
             type="text"
             placeholder={t('layout.searchScreens')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-md pl-6 pr-2 py-1 text-slate-300 text-[11px] focus:outline-none focus:border-blue-500"
+            className="w-full bg-host-sunken border border-host-border rounded-md pl-6 pr-2 py-1 text-host-primary placeholder:text-host-tertiary text-[11px] focus:outline-none focus:border-host-accent"
           />
         </div>
       </div>
 
       <div className="space-y-0.5 px-1.5">
         {filteredIds.length === 0 && (
-          <p className="px-2 py-3 text-[11px] text-slate-600">{t('layout.noMatchingScreens')}</p>
+          <p className="px-2 py-3 text-[11px] text-host-tertiary">{t('layout.noMatchingScreens')}</p>
         )}
         {filteredIds.map((id) => {
           const s = screens[id];
@@ -90,11 +90,11 @@ export const ScreensPanel: React.FC = () => {
                 if (next && next.trim()) renameScreen(id, next.trim());
               }}
               className={`group px-2 py-1.5 rounded-md cursor-pointer transition flex items-center justify-between text-[11px] ${
-                isActive ? 'bg-blue-600 text-white font-medium' : 'text-slate-300 hover:bg-slate-800'
+                isActive ? 'bg-host-accent-subtle text-host-brand border border-host-accent/30 font-medium' : 'text-host-secondary border border-transparent hover:bg-host-elevated hover:text-host-primary'
               }`}
             >
               <div className="flex items-center gap-1.5 truncate">
-                <span className={`font-mono text-[10px] ${isActive ? 'text-white/70' : 'text-slate-500'}`}>
+                <span className={`font-mono text-[10px] ${isActive ? 'text-host-brand/70' : 'text-host-tertiary'}`}>
                   {index + 1}
                 </span>
                 <span className="truncate">{s.name}</span>
@@ -106,7 +106,7 @@ export const ScreensPanel: React.FC = () => {
                     e.stopPropagation();
                     duplicateScreen(id);
                   }}
-                  className={`p-0.5 rounded hover:text-blue-200 ${isActive ? 'text-white/80' : 'text-slate-400'}`}
+                  className={`p-0.5 rounded hover:text-host-brand ${isActive ? 'text-host-brand/80' : 'text-host-secondary'}`}
                   title={t('layout.duplicateScreen')}
                 >
                   <Copy className="w-3 h-3" />
@@ -116,7 +116,7 @@ export const ScreensPanel: React.FC = () => {
                     e.stopPropagation();
                     setConfirmDeleteId(id);
                   }}
-                  className={`p-0.5 rounded hover:text-red-300 ${isActive ? 'text-white/80' : 'text-slate-400'}`}
+                  className={`p-0.5 rounded hover:text-host-danger ${isActive ? 'text-host-brand/80' : 'text-host-secondary'}`}
                   title={t('layout.deleteScreen')}
                   data-testid="screens-panel-delete"
                 >

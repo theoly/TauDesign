@@ -173,27 +173,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl bg-host-dialog border border-host-border-strong rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="p-4 border-b border-host-border flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FileCode className="w-5 h-5 text-blue-400" />
-            <span className="font-semibold text-slate-100 text-sm">{t('export.modalTitle')}</span>
+            <FileCode className="w-5 h-5 text-host-brand" />
+            <span className="font-semibold text-host-primary text-sm">{t('export.modalTitle')}</span>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 text-lg leading-none" aria-label={t('common.close')}>
+          <button onClick={onClose} className="text-host-secondary hover:text-host-primary text-lg leading-none" aria-label={t('common.close')}>
             ×
           </button>
         </div>
 
         {/* Export Type Tabs */}
-        <div className="flex items-center border-b border-slate-800 bg-slate-950 px-4 text-xs font-medium">
+        <div className="flex items-center gap-2 border-b border-host-border bg-host-sunken px-4 py-2 text-xs font-medium">
           <button
             onClick={() => setExportType('html')}
-            className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
+            className={`py-2 px-3.5 border rounded-lg flex items-center gap-1.5 transition ${
               exportType === 'html'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'bg-host-accent-subtle border-host-accent/50 text-host-brand'
+                : 'bg-host-sunken border-host-border text-host-secondary hover:text-host-primary'
             }`}
           >
             <FileCode className="w-4 h-4" />
@@ -201,10 +201,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
           </button>
           <button
             onClick={() => setExportType('png')}
-            className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
+            className={`py-2 px-3.5 border rounded-lg flex items-center gap-1.5 transition ${
               exportType === 'png'
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'bg-host-accent-subtle border-host-accent/50 text-host-brand'
+                : 'bg-host-sunken border-host-border text-host-secondary hover:text-host-primary'
             }`}
           >
             <ImageIcon className="w-4 h-4" />
@@ -212,9 +212,9 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
           </button>
         </div>
 
-        <div className="p-6 space-y-4 overflow-y-auto text-xs">
-          {loadingResources && <p className="text-xs text-blue-300">{t('export.loadingResources')}</p>}
-          {resourceError && <div role="alert" className="rounded-lg bg-red-950/40 p-3 text-xs text-red-200">
+        <div className="p-6 space-y-4 overflow-y-auto text-xs text-host-primary">
+          {loadingResources && <p className="text-xs text-host-brand">{t('export.loadingResources')}</p>}
+          {resourceError && <div role="alert" className="rounded-lg bg-red-950/40 p-3 text-xs text-host-danger border border-red-800/60">
             <p>{resourceError}</p>
             <button type="button" onClick={()=>{pageResources.retry();styleResources.retry();}} className="mt-2 rounded border border-red-700 px-2 py-1 hover:bg-red-900">{t('export.retryResources')}</button>
             <MediaDiagnosticsButton/>
@@ -223,13 +223,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
             saveResult.status === 'canceled' ? (
               <div
                 data-testid="export-canceled-banner"
-                className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-400 flex items-center justify-between gap-2"
+                className="p-3 bg-host-sunken border border-host-border rounded-xl text-xs text-host-secondary flex items-center justify-between gap-2"
               >
                 <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-slate-500 shrink-0" />
+                  <AlertCircle className="w-4 h-4 text-host-tertiary shrink-0" />
                   <span>{t('export.saveCanceled')}</span>
                 </div>
-                <button onClick={() => setSaveResult(null)} className="text-slate-500 hover:text-slate-300 text-sm leading-none px-1" aria-label={t('common.close')}>
+                <button onClick={() => setSaveResult(null)} className="text-host-tertiary hover:text-host-primary text-sm leading-none px-1" aria-label={t('common.close')}>
                   ×
                 </button>
               </div>
@@ -298,11 +298,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
 
           {/* Target Screen Selector */}
           <div className="flex items-center justify-between">
-            <span className="text-slate-300 font-semibold">{t('export.selectScreen')}</span>
+            <span className="text-host-primary font-semibold">{t('export.selectScreen')}</span>
             <select
               value={selectedScreenId}
               onChange={(e) => setSelectedScreenId(e.target.value)}
-              className="bg-slate-950 border border-slate-700 rounded-xl px-3 py-1.5 text-slate-200 text-xs"
+              className="bg-host-sunken border border-host-border rounded-xl px-3 py-1.5 text-host-primary text-xs focus:outline-none focus:border-host-accent"
             >
               {Object.values(screens).map((s) => (
                 <option key={s.id} value={s.id}>
@@ -315,8 +315,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
           {/* HTML Tab */}
           {exportType === 'html' && (
             <>
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1.5 text-[11px] text-slate-400">
-                <div className="flex items-center gap-2 text-emerald-400 font-semibold">
+              <div className="p-3 bg-host-sunken border border-host-border rounded-xl space-y-1.5 text-[11px] text-host-secondary">
+                <div className="flex items-center gap-2 text-host-success font-semibold">
                   <span>{t('export.htmlBenefitInline')}</span>
                   <span>{t('export.htmlBenefitStripNid')}</span>
                   <span>{t('export.htmlBenefitTokens')}</span>
@@ -328,26 +328,26 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
 
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-slate-400 font-mono">{t('export.previewLabel')}</span>
-                  <span className="text-[11px] text-slate-500 font-mono">{(standaloneHtml.length / 1024).toFixed(1)} KB</span>
+                  <span className="text-[11px] text-host-secondary font-mono">{t('export.previewLabel')}</span>
+                  <span className="text-[11px] text-host-tertiary font-mono">{(standaloneHtml.length / 1024).toFixed(1)} KB</span>
                 </div>
-                <pre className="p-3 bg-slate-950 border border-slate-800 rounded-xl max-h-48 overflow-auto text-[11px] font-mono text-slate-300 leading-relaxed">
+                <pre className="p-3 bg-host-sunken border border-host-border rounded-xl max-h-48 overflow-auto text-[11px] font-mono text-host-primary leading-relaxed">
                   {standaloneHtml.slice(0, 1200)}
                   {standaloneHtml.length > 1200 && `\n${t('export.previewTruncated')}`}
                 </pre>
               </div>
 
               <div className="pt-2">
-                <label className="flex items-center gap-2 cursor-pointer text-slate-300 select-none">
+                <label className="flex items-center gap-2 cursor-pointer text-host-primary select-none">
                   <input
                     type="checkbox"
                     checked={includeManifest}
                     onChange={(e) => setIncludeManifest(e.target.checked)}
-                    className="rounded border-slate-700 bg-slate-950 text-blue-600 focus:ring-0 cursor-pointer"
+                    className="rounded border-host-border bg-host-sunken text-host-brand focus:ring-0 cursor-pointer"
                   />
                   <span>{t('export.includeManifest', { name: screen?.name || 'design' })}</span>
                 </label>
-                <p className="text-[11px] text-slate-500 pl-5 pt-0.5">
+                <p className="text-[11px] text-host-tertiary pl-5 pt-0.5">
                   {t('export.includeManifestHint')}
                 </p>
               </div>
@@ -358,8 +358,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
           {exportType === 'png' && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
-                  <span className="font-semibold text-slate-300 block">{t('export.scaleLabel')}</span>
+                <div className="p-3 bg-host-sunken border border-host-border rounded-xl space-y-2">
+                  <span className="font-semibold text-host-primary block">{t('export.scaleLabel')}</span>
                   <div className="grid grid-cols-3 gap-1.5">
                     {([1, 2, 3] as const).map((sc) => (
                       <button
@@ -367,8 +367,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                         onClick={() => setPngScale(sc)}
                         className={`py-1.5 rounded-lg border text-xs font-mono transition ${
                           pngScale === sc
-                            ? 'border-blue-500 bg-blue-950 text-blue-300'
-                            : 'border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-700'
+                            ? 'border-host-accent/50 bg-host-accent-subtle text-host-brand'
+                            : 'border-host-border bg-host-elevated text-host-secondary hover:border-host-border-strong'
                         }`}
                       >
                         {sc}x
@@ -377,10 +377,10 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                   </div>
                 </div>
 
-                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
-                  <span className="font-semibold text-slate-300 block">{t('export.clipLabel')}</span>
+                <div className="p-3 bg-host-sunken border border-host-border rounded-xl space-y-2">
+                  <span className="font-semibold text-host-primary block">{t('export.clipLabel')}</span>
                   <div className="space-y-1.5">
-                    <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                    <label className="flex items-center gap-2 cursor-pointer text-host-primary">
                       <input
                         type="radio"
                         name="clipMode"
@@ -389,7 +389,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                       />
                       <span>{t('export.clipFull', { height: screen?.measuredHeight || 800 })}</span>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer text-slate-300">
+                    <label className="flex items-center gap-2 cursor-pointer text-host-primary">
                       <input
                         type="radio"
                         name="clipMode"
@@ -402,8 +402,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                 </div>
               </div>
 
-              <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-[11px] text-slate-400 space-y-1">
-                <span className="font-semibold text-slate-300 block">{t('export.renderLabel')}</span>
+              <div className="p-3 bg-host-sunken border border-host-border rounded-xl text-[11px] text-host-secondary space-y-1">
+                <span className="font-semibold text-host-primary block">{t('export.renderLabel')}</span>
                 <p>
                   {t('export.renderHint')}
                 </p>
@@ -413,7 +413,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
                     ? t('export.heightFirstClip', { height: referenceViewport.height * pngScale })
                     : t('export.heightMeasured')}
                   {lastEngine && (
-                    <span className="text-slate-500">
+                    <span className="text-host-tertiary">
                       {' '}· {t('export.lastEngine', {
                         engine: lastEngine === 'foreign-object' ? t('export.engineCompat') : t('export.engineNative'),
                       })}
@@ -426,27 +426,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950 flex items-center justify-between">
+        <div className="p-4 border-t border-host-border bg-host-chrome flex items-center justify-between">
           {exportType === 'html' ? (
             <button
               onClick={handleCopy}
               disabled={loadingResources || !!resourceError}
-              className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl text-xs transition border border-slate-700"
+              className="flex items-center gap-1.5 px-4 py-2 bg-host-elevated hover:bg-host-dialog text-host-primary font-medium rounded-xl text-xs transition border border-host-border"
             >
-              {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+              {copied ? <Check className="w-3.5 h-3.5 text-host-success" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? t('export.copied') : t('export.copyCode')}</span>
             </button>
           ) : <div />}
 
           <div className="flex items-center gap-2">
-            <button onClick={onClose} className="px-4 py-2 text-slate-400 hover:text-slate-200 text-xs transition">
+            <button onClick={onClose} className="px-4 py-2 text-host-secondary hover:text-host-primary text-xs transition">
               {t('common.cancel')}
             </button>
             {exportType === 'html' ? (
               <button
                 onClick={handleDownloadHtml}
                 disabled={isSavingHtml || loadingResources || !!resourceError}
-                className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-xl text-xs transition shadow"
+                className="flex items-center gap-1.5 px-5 py-2 bg-host-accent hover:bg-host-accent-hover disabled:opacity-50 text-host-on-accent font-medium rounded-xl text-xs transition shadow"
               >
                 {isSavingHtml ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                 <span>{isSavingHtml ? t('export.savingHtml') : t('export.saveHtml')}</span>
@@ -455,7 +455,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({ onClose }) => {
               <button
                 onClick={handleExportPng}
                 disabled={isExportingPng || loadingResources || !!resourceError}
-                className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-medium rounded-xl text-xs transition shadow"
+                className="flex items-center gap-1.5 px-5 py-2 bg-host-accent hover:bg-host-accent-hover disabled:opacity-50 text-host-on-accent font-medium rounded-xl text-xs transition shadow"
               >
                 {isExportingPng ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
                 <span>{isExportingPng ? t('export.exportingPng') : t('export.downloadPng')}</span>

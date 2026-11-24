@@ -93,7 +93,7 @@ export const SideBar: React.FC<SideBarProps> = ({ onOpenAssetCenter, onOpenTheme
   return (
     <div ref={sidebarRef} className="flex flex-row-reverse h-full shrink-0" data-testid="resource-sidebar">
       {/* 活动栏 */}
-      <div className="w-12 h-full bg-slate-950 border-l border-slate-800 flex flex-col items-center py-2 gap-1 z-20">
+      <div className="w-12 h-full bg-host-sunken border-l border-host-border flex flex-col items-center py-2 gap-1 z-20">
         {views.map((v) => {
           const active = v.key === view && !collapsed;
           return (
@@ -104,10 +104,10 @@ export const SideBar: React.FC<SideBarProps> = ({ onOpenAssetCenter, onOpenTheme
               aria-label={v.label}
               aria-pressed={active}
               className={`relative w-10 h-10 flex items-center justify-center rounded-lg transition ${
-                active ? 'text-blue-400 bg-slate-900' : 'text-slate-500 hover:text-slate-300'
+                active ? 'text-host-brand bg-host-accent-subtle' : 'text-host-tertiary hover:text-host-primary'
               }`}
             >
-              {active && <span className="absolute right-0 top-2 bottom-2 w-0.5 bg-blue-500 rounded-l" />}
+              {active && <span className="absolute right-0 top-2 bottom-2 w-0.5 bg-host-accent rounded-l" />}
               <v.icon className="w-5 h-5" />
             </button>
           );
@@ -115,9 +115,9 @@ export const SideBar: React.FC<SideBarProps> = ({ onOpenAssetCenter, onOpenTheme
       </div>
 
       {/* 侧边栏内容 */}
-      <div className="relative h-full bg-slate-900 border-l border-slate-800 flex flex-col z-20" style={{ width, display: collapsed ? 'none' : undefined }}>
-        <div className="h-8 px-3 flex items-center border-b border-slate-800 shrink-0">
-          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+      <div className="relative h-full bg-host-chrome border-l border-host-border flex flex-col z-20" style={{ width, display: collapsed ? 'none' : undefined }}>
+        <div className="h-8 px-3 flex items-center border-b border-host-border shrink-0">
+          <span className="text-[11px] font-semibold text-host-secondary uppercase tracking-wider">
             {views.find((v) => v.key === view)?.label}
           </span>
         </div>
@@ -148,7 +148,7 @@ export const SideBar: React.FC<SideBarProps> = ({ onOpenAssetCenter, onOpenTheme
             document.body.style.cursor = 'col-resize';
             document.body.style.userSelect = 'none';
           }}
-          className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-blue-500/60 transition"
+          className="absolute top-0 left-0 w-1 h-full cursor-col-resize hover:bg-host-accent/60 transition"
         />
       </div>
     </div>

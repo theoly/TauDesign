@@ -35,21 +35,21 @@ export const Accordion: React.FC<AccordionProps> = ({
   const open = stored ?? defaultOpen;
 
   return (
-    <div className="border-b border-slate-850/80">
-      <div className="flex items-center gap-1 px-2 py-1.5 hover:bg-slate-850/60 group">
+    <div className="border-b border-host-border">
+      <div className="flex items-center gap-1 px-2 py-1.5 hover:bg-host-elevated/60 group">
         <button
           onClick={() => setPanelOpen(panelKey, !open)}
-          className="flex items-center gap-1 flex-1 min-w-0 text-left text-[11px] font-semibold text-slate-300 uppercase tracking-wide"
+          className="flex items-center gap-1 flex-1 min-w-0 text-left text-[11px] font-semibold text-host-secondary uppercase tracking-wide"
           aria-expanded={open}
         >
           {open ? (
-            <ChevronDown className="w-3 h-3 text-slate-500 shrink-0" />
+            <ChevronDown className="w-3 h-3 text-host-tertiary shrink-0" />
           ) : (
-            <ChevronRight className="w-3 h-3 text-slate-500 shrink-0" />
+            <ChevronRight className="w-3 h-3 text-host-tertiary shrink-0" />
           )}
           <span className="truncate">{title}</span>
           {badge !== undefined && (
-            <span className="ml-1 px-1.5 rounded bg-slate-800 text-slate-400 text-[10px] font-mono shrink-0">
+            <span className="ml-1 px-1.5 rounded bg-host-sunken border border-host-border/60 text-host-secondary text-[10px] font-mono shrink-0">
               {badge}
             </span>
           )}

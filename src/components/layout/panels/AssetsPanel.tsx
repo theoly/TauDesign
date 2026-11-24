@@ -60,17 +60,17 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
   };
 
   const empty = (text: string) => (
-    <p className="px-3 py-3 text-[11px] text-slate-600 leading-relaxed">{text}</p>
+    <p className="px-3 py-3 text-[11px] text-host-tertiary leading-relaxed">{text}</p>
   );
 
   return (
     <>
-      <div className="px-2 py-1.5 border-b border-slate-850/80">
+      <div className="px-2 py-1.5 border-b border-host-border">
         <button
           onClick={onOpenAssetCenter}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-md text-[11px] transition"
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-host-border bg-host-sunken hover:bg-host-elevated text-host-primary rounded-md text-[11px] transition"
         >
-          <Settings2 className="w-3.5 h-3.5 text-purple-400" />
+          <Settings2 className="w-3.5 h-3.5 text-host-brand" />
           <span>{t('assets.openCenter')}</span>
         </button>
       </div>
@@ -85,7 +85,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
                   key={a.id}
                   onClick={() => applyImage(a.relPath)}
                   title={`${a.name}\n点击应用到当前选中元素`}
-                  className="aspect-square rounded-md overflow-hidden border border-slate-800 hover:border-blue-500 bg-slate-950 transition"
+                  className="aspect-square rounded-md overflow-hidden border border-host-border hover:border-host-accent bg-host-sunken transition"
                 >
                   <AssetPreviewImage asset={a} className="w-full h-full object-cover" />
                 </button>
@@ -103,7 +103,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
                 <div
                   key={a.id}
                   title={a.name}
-                  className="aspect-square rounded-md border border-slate-800 bg-slate-950 flex items-center justify-center p-1.5 text-slate-300"
+                  className="aspect-square rounded-md border border-host-border bg-host-sunken flex items-center justify-center p-1.5 text-host-secondary"
                 ><AssetPreviewImage asset={a} mask className="h-full w-full"/></div>
               ))}
             </div>
@@ -118,10 +118,10 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
               {componentList.map((c) => (
                 <div
                   key={c.id}
-                  className="group flex items-center justify-between px-2 py-1.5 rounded-md text-[11px] text-slate-300 hover:bg-slate-800"
+                  className="group flex items-center justify-between px-2 py-1.5 rounded-md text-[11px] text-host-secondary hover:bg-host-elevated hover:text-host-primary"
                 >
                   <div className="flex items-center gap-1.5 truncate">
-                    <Boxes className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                    <Boxes className="w-3.5 h-3.5 text-host-brand shrink-0" />
                     <span className="truncate" title={c.description || c.name}>
                       {c.name}
                     </span>
@@ -129,7 +129,7 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
                   <button
                     onClick={() => activeScreenId && insertComponent(activeScreenId, c.id)}
                     disabled={!activeScreenId}
-                    className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-30 text-white rounded text-[10px] transition shrink-0"
+                    className="opacity-0 group-hover:opacity-100 px-1.5 py-0.5 bg-host-accent hover:bg-host-accent-hover disabled:opacity-30 text-host-on-accent font-medium rounded text-[10px] transition shrink-0"
                     title="插入当前画板"
                   >
                     {t('assets.insert')}
@@ -148,21 +148,21 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
               {builtinMothers.slice(0, 12).map((meta) => (
                 <div
                   key={meta.id}
-                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-slate-400"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-md text-[11px] text-host-secondary"
                   title={`${meta.device} · ${meta.pageKind}`}
                 >
-                  <Library className="w-3.5 h-3.5 text-emerald-500/80 shrink-0" />
+                  <Library className="w-3.5 h-3.5 text-host-brand/80 shrink-0" />
                   <span className="truncate">{meta.id}</span>
-                  <span className="ml-auto shrink-0 text-[10px] text-slate-600">{t('assets.readonly')}</span>
+                  <span className="ml-auto shrink-0 text-[10px] text-host-tertiary">{t('assets.readonly')}</span>
                 </div>
               ))}
               {builtinMothers.length > 12 && (
-                <p className="px-3 py-1 text-[10px] text-slate-600">另有 {builtinMothers.length - 12} 条，见资源中心「母版」</p>
+                <p className="px-3 py-1 text-[10px] text-host-tertiary">另有 {builtinMothers.length - 12} 条，见资源中心「母版」</p>
               )}
               <button
                 type="button"
                 onClick={onOpenAssetCenter}
-                className="mx-2 mb-1 mt-1 w-[calc(100%-1rem)] py-1.5 rounded-md bg-slate-800 hover:bg-slate-750 text-[10px] text-slate-300 transition"
+                className="mx-2 mb-1 mt-1 w-[calc(100%-1rem)] py-1.5 rounded-md border border-host-border bg-host-sunken hover:bg-host-elevated text-[10px] text-host-primary transition"
               >
                 打开资源中心存为母版
               </button>
@@ -171,20 +171,20 @@ export const AssetsPanel: React.FC<AssetsPanelProps> = ({ onOpenAssetCenter }) =
       </Accordion>
 
       <Accordion panelKey="assets.media" title={t('assets.panelMedia')} badge={media.length} defaultOpen={false}>
-        {media.length?media.map(asset=><p key={asset.id} title={asset.relPath} className="break-words px-3 py-2 text-[11px] text-slate-400">{asset.name}<span className="block text-slate-500">{asset.mimeType}</span></p>):empty('导入页面引用的音视频与字幕会作为独立文件保存在工程中。')}
+        {media.length?media.map(asset=><p key={asset.id} title={asset.relPath} className="break-words px-3 py-2 text-[11px] text-host-secondary">{asset.name}<span className="block text-host-tertiary">{asset.mimeType}</span></p>):empty('导入页面引用的音视频与字幕会作为独立文件保存在工程中。')}
       </Accordion>
       <Accordion panelKey="assets.fonts" title={t('assets.panelFonts')} badge={fonts.length} defaultOpen={false}>
-        {fonts.map(asset=><p key={asset.id} title={asset.relPath} className="break-words px-3 py-2 text-[11px] text-slate-400">{asset.name}</p>)}
-        <p className="px-3 py-3 text-[11px] text-slate-600 leading-relaxed flex items-start gap-1.5">
-          <Shapes className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-700" />
+        {fonts.map(asset=><p key={asset.id} title={asset.relPath} className="break-words px-3 py-2 text-[11px] text-host-secondary">{asset.name}</p>)}
+        <p className="px-3 py-3 text-[11px] text-host-tertiary leading-relaxed flex items-start gap-1.5">
+          <Shapes className="w-3.5 h-3.5 mt-0.5 shrink-0 text-host-tertiary" />
           <span>字体家族在「设计系统 → 排版」中配置；导入的字体文件独立保存，由来源 CSS 的 @font-face 引用。</span>
         </p>
       </Accordion>
 
       {assetList.length === 0 && componentList.length === 0 && (
         <div className="px-3 py-6 text-center">
-          <ImageIcon className="w-6 h-6 text-slate-700 mx-auto mb-2" />
-          <p className="text-[11px] text-slate-600">{t('assets.emptyLibrary')}</p>
+          <ImageIcon className="w-6 h-6 text-host-tertiary mx-auto mb-2" />
+          <p className="text-[11px] text-host-tertiary">{t('assets.emptyLibrary')}</p>
         </div>
       )}
     </>

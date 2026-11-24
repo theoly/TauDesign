@@ -299,28 +299,28 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
         }));
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-5xl bg-host-dialog border border-host-border-strong rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-host-border flex items-center justify-between">
           <div className="flex flex-wrap items-center gap-3 min-w-0">
-            <span className="font-semibold text-slate-100 text-sm hidden sm:inline">
+            <span className="font-semibold text-host-primary text-sm hidden sm:inline">
               {t('header.settings')}
             </span>
-            <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+            <div className="flex flex-wrap items-center gap-1.5 bg-host-sunken p-1 rounded-xl border border-host-border">
               <button type="button" onClick={() => setActiveTab('project')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${activeTab === 'project'
-                  ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'}`}>
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition border ${activeTab === 'project'
+                  ? 'bg-host-accent-subtle text-host-brand border-host-accent/40 shadow-sm' : 'border-transparent text-host-secondary hover:text-host-primary hover:bg-host-elevated'}`}>
                 <FolderOpen className="w-3.5 h-3.5" />
                 <span>{t('settings.title')}</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveTab('provider')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition border ${
                   activeTab === 'provider'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    ? 'bg-host-accent-subtle text-host-brand border-host-accent/40 shadow-sm'
+                    : 'border-transparent text-host-secondary hover:text-host-primary hover:bg-host-elevated'
                 }`}
               >
                 <Server className="w-3.5 h-3.5" />
@@ -329,26 +329,26 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
               <button
                 type="button"
                 onClick={() => setActiveTab('quick_prompts')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition border ${
                   activeTab === 'quick_prompts'
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
+                    ? 'bg-host-accent-subtle text-host-brand border-host-accent/40 shadow-sm'
+                    : 'border-transparent text-host-secondary hover:text-host-primary hover:bg-host-elevated'
                 }`}
               >
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <Sparkles className="w-3.5 h-3.5 text-host-warning" />
                 <span>{t('settings.tabQuickPrompts')}</span>
               </button>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 text-lg leading-none p-1" aria-label={t('common.close')}>
+          <button onClick={onClose} className="text-host-secondary hover:text-host-primary text-lg leading-none p-1" aria-label={t('common.close')}>
             ×
           </button>
         </div>
 
-        {activeTab==='provider'&&<label className="mx-4 my-3 flex items-start gap-3 rounded-xl border border-slate-700 bg-slate-950 p-3 text-xs text-slate-200">
-          <input type="checkbox" aria-label={t('settings.autoDesignRulesAria')} className="mt-0.5 shrink-0 accent-blue-500" checked={autoReferenceDesignRules} onChange={event=>setAutoReferenceDesignRules(event.target.checked)} />
+        {activeTab==='provider'&&<label className="mx-4 my-3 flex items-start gap-3 rounded-xl border border-host-border bg-host-sunken p-3 text-xs text-host-primary">
+          <input type="checkbox" aria-label={t('settings.autoDesignRulesAria')} className="mt-0.5 shrink-0 accent-host-accent" checked={autoReferenceDesignRules} onChange={event=>setAutoReferenceDesignRules(event.target.checked)} />
           <span className="min-w-0"><span className="font-medium">{t('settings.autoDesignRules')}</span>
-            <span className="mt-1 block leading-relaxed text-slate-400">{t('settings.autoDesignRulesHint')}</span></span>
+            <span className="mt-1 block leading-relaxed text-host-secondary">{t('settings.autoDesignRulesHint')}</span></span>
         </label>}
         {activeTab === 'project' ? (
           <ProjectSettingsPanel />
@@ -358,15 +358,15 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
           /* Content Layout */
           <div className="flex-1 flex overflow-hidden text-xs">
           {/* Provider Sidebar List */}
-          <div className="w-72 border-r border-slate-800 bg-slate-950 p-3 flex flex-col overflow-hidden flex-shrink-0">
+          <div className="w-72 border-r border-host-border bg-host-sunken p-3 flex flex-col overflow-hidden flex-shrink-0">
             <div className="flex items-center justify-between px-1 mb-2">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+              <span className="text-[11px] font-semibold text-host-secondary uppercase tracking-wider block">
                 {t('settings.providerList')}
               </span>
               <div className="relative">
                 <button
                   onClick={() => setShowAddMenu(!showAddMenu)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 font-medium text-[11px] border border-blue-500/30 transition shrink-0"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-host-accent-subtle hover:bg-host-accent/20 text-host-brand font-medium text-[11px] border border-host-accent/40 transition shrink-0"
                   title={t('settings.addThirdPartyTitle')}
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -375,23 +375,23 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
 
                 {/* Add Preset Dropdown Menu */}
                 {showAddMenu && (
-                  <div className="absolute right-0 top-7 z-20 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-1.5 space-y-1">
-                    <span className="text-[10px] font-semibold text-slate-400 px-2 py-1 block">
+                  <div className="absolute right-0 top-7 z-20 w-64 bg-host-dialog border border-host-border-strong rounded-xl shadow-2xl p-1.5 space-y-1">
+                    <span className="text-[10px] font-semibold text-host-secondary px-2 py-1 block">
                       {t('settings.pickPreset')}
                     </span>
                     {THIRD_PARTY_PRESETS.map((p) => (
                       <button
                         key={p.id}
                         onClick={() => handleAddPreset(p)}
-                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-slate-200 hover:bg-slate-800 transition flex flex-col gap-0.5"
+                        className="w-full text-left px-2.5 py-1.5 rounded-lg text-host-primary hover:bg-host-elevated transition flex flex-col gap-0.5"
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-medium text-[11px] text-blue-300">{providerLabel(p.id, p.name)}</span>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0 whitespace-nowrap">
+                          <span className="font-medium text-[11px] text-host-brand">{providerLabel(p.id, p.name)}</span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-host-elevated text-host-secondary shrink-0 whitespace-nowrap">
                             {p.protocol === 'anthropic' ? 'Claude' : 'OpenAI'}
                           </span>
                         </div>
-                        <span className="text-[9px] text-slate-400 line-clamp-1">{p.description}</span>
+                        <span className="text-[9px] text-host-secondary line-clamp-1">{p.description}</span>
                       </button>
                     ))}
                   </div>
@@ -414,10 +414,10 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       setSelectedProviderId(prov.id);
                       setTestStatus({ testing: false });
                     }}
-                    className={`w-full text-left px-3 py-2.5 rounded-xl transition flex items-center justify-between gap-2 group ${
+                    className={`w-full text-left px-3 py-2.5 rounded-xl transition flex items-center justify-between gap-2 group border ${
                       isSelected
-                        ? 'bg-blue-600 text-white font-medium shadow'
-                        : 'text-slate-300 hover:bg-slate-850 hover:text-slate-100'
+                        ? 'bg-host-accent-subtle text-host-brand border-host-accent/40 font-medium shadow'
+                        : 'border-transparent text-host-secondary hover:bg-host-elevated hover:text-host-primary'
                     }`}
                   >
                     <div className="flex items-center gap-1.5 min-w-0 flex-1">
@@ -426,8 +426,8 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                         <span
                           className={`text-[9px] px-1.5 py-0.5 rounded font-mono shrink-0 whitespace-nowrap ${
                             isSelected
-                              ? 'bg-blue-700 text-blue-100 border border-blue-400/30'
-                              : 'bg-slate-800 text-slate-400 border border-slate-700/60'
+                              ? 'bg-host-elevated text-host-brand border border-host-accent/30'
+                              : 'bg-host-elevated text-host-secondary border border-host-border'
                           }`}
                         >
                           {t('settings.thirdPartyBadge')}
@@ -438,7 +438,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       {isCode && isChat ? (
                         <span
                           className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 whitespace-nowrap ${
-                            isSelected ? 'bg-blue-700 text-white' : 'bg-blue-500/20 text-blue-300'
+                            isSelected ? 'bg-host-accent text-host-on-accent' : 'bg-host-accent-subtle text-host-brand'
                           }`}
                           title={t('settings.primaryBothRolesTitle')}
                         >
@@ -449,7 +449,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                           {isCode && (
                             <span
                               className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0 whitespace-nowrap ${
-                                isSelected ? 'bg-blue-700 text-white' : 'bg-blue-500/20 text-blue-300'
+                                isSelected ? 'bg-host-accent text-host-on-accent' : 'bg-host-accent-subtle text-host-brand'
                               }`}
                               title={t('settings.roleCode')}
                             >
@@ -486,25 +486,25 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
             </div>
 
             {/* Model Role Bindings Summary & Quick Assignment */}
-            <div className="pt-3 mt-3 border-t border-slate-800 space-y-1.5 flex-shrink-0">
-              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-1 block">
+            <div className="pt-3 mt-3 border-t border-host-border space-y-1.5 flex-shrink-0">
+              <span className="text-[10px] font-semibold text-host-secondary uppercase tracking-wider px-1 block">
                 {t('settings.capacityAssign')}
               </span>
-              <div className="p-2 bg-slate-900 border border-slate-800 rounded-xl space-y-2">
+              <div className="p-2 bg-host-elevated border border-host-border rounded-xl space-y-2">
                 {/* Code generation slot */}
                 <div className="space-y-1">
                   <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-slate-400 flex items-center gap-1">
-                      <Code2 className="w-3 h-3 text-blue-400" />
+                    <span className="text-host-secondary flex items-center gap-1">
+                      <Code2 className="w-3 h-3 text-host-brand" />
                       <span>{t('settings.roleCode')}</span>
                     </span>
                     {isCurCode ? (
-                      <span className="text-[9px] text-blue-400 font-medium bg-blue-500/10 px-1 py-0.2 rounded">{t('settings.currentlySelected')}</span>
+                      <span className="text-[9px] text-host-brand font-medium bg-host-accent-subtle px-1 py-0.2 rounded">{t('settings.currentlySelected')}</span>
                     ) : (
                       <button
                         type="button"
                         onClick={() => handleSetAsCode()}
-                        className="text-[9px] text-blue-400 hover:text-blue-300 underline font-medium"
+                        className="text-[9px] text-host-brand hover:text-host-accent-hover underline font-medium"
                         title={t('settings.assignCurrentCodeTitle')}
                       >
                         {t('settings.assignCurrent')}
@@ -512,29 +512,29 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                     )}
                   </div>
                   <div className="flex items-center justify-between text-[10px]">
-                    <span className="font-semibold text-blue-400 truncate block font-mono text-xs max-w-[130px]">
+                    <span className="font-semibold text-host-brand truncate block font-mono text-xs max-w-[130px]">
                       {bindings.code.modelId}
                     </span>
-                    <span className="text-slate-500 font-mono text-[9px] truncate max-w-[80px]">
+                    <span className="text-host-tertiary font-mono text-[9px] truncate max-w-[80px]">
                       {activeCodeProv?.name || t('settings.unspecified')}
                     </span>
                   </div>
                 </div>
 
                 {/* Chat & reasoning slot */}
-                <div className="border-t border-slate-800/60 pt-1.5 space-y-1">
+                <div className="border-t border-host-border pt-1.5 space-y-1">
                   <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-slate-400 flex items-center gap-1">
-                      <MessageSquare className="w-3 h-3 text-emerald-400" />
+                    <span className="text-host-secondary flex items-center gap-1">
+                      <MessageSquare className="w-3 h-3 text-host-success" />
                       <span>{t('settings.roleChat')}</span>
                     </span>
                     {isCurChat ? (
-                      <span className="text-[9px] text-emerald-400 font-medium bg-emerald-500/10 px-1 py-0.2 rounded">{t('settings.currentlySelected')}</span>
+                      <span className="text-[9px] text-host-success font-medium bg-host-accent-subtle px-1 py-0.2 rounded">{t('settings.currentlySelected')}</span>
                     ) : (
                       <button
                         type="button"
                         onClick={() => handleSetAsChat()}
-                        className="text-[9px] text-emerald-400 hover:text-emerald-300 underline font-medium"
+                        className="text-[9px] text-host-success hover:text-host-accent-hover underline font-medium"
                         title={t('settings.assignCurrentChatTitle')}
                       >
                         {t('settings.assignCurrent')}
@@ -542,19 +542,19 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                     )}
                   </div>
                   <div className="flex items-center justify-between text-[10px]">
-                    <span className="font-semibold text-emerald-300 truncate block font-mono text-xs max-w-[130px]">
+                    <span className="font-semibold text-host-success truncate block font-mono text-xs max-w-[130px]">
                       {bindings.chat.modelId}
                     </span>
-                    <span className="text-slate-500 font-mono text-[9px] truncate max-w-[80px]">
+                    <span className="text-host-tertiary font-mono text-[9px] truncate max-w-[80px]">
                       {activeChatProv?.name || t('settings.unspecified')}
                     </span>
                   </div>
                 </div>
 
                 {/* Vision slot */}
-                <div className="border-t border-slate-800/60 pt-1.5 space-y-1">
+                <div className="border-t border-host-border pt-1.5 space-y-1">
                   <div className="flex items-center justify-between text-[10px]">
-                    <span className="text-slate-400 flex items-center gap-1">
+                    <span className="text-host-secondary flex items-center gap-1">
                       <Eye className="w-3 h-3 text-purple-400" />
                       <span>{t('settings.roleVision')}</span>
                     </span>
@@ -576,13 +576,13 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       {bindings.vision.modelId}
                     </span>
                     <div className="flex items-center gap-1">
-                      <span className="text-slate-500 font-mono text-[9px] truncate max-w-[60px]">
+                      <span className="text-host-tertiary font-mono text-[9px] truncate max-w-[60px]">
                         {activeVisionProv?.name || t('settings.unspecified')}
                       </span>
                       {activeVisionProv?.apiKey || activeVisionProv?.protocol === 'ollama_native' ? (
-                        <span className="text-[8px] text-emerald-400 font-sans">{t('settings.ready')}</span>
+                        <span className="text-[8px] text-host-success font-sans">{t('settings.ready')}</span>
                       ) : (
-                        <span className="text-[8px] text-amber-400 font-sans">{t('settings.missingKey')}</span>
+                        <span className="text-[8px] text-host-warning font-sans">{t('settings.missingKey')}</span>
                       )}
                     </div>
                   </div>
@@ -591,43 +591,43 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
             </div>
 
             {/* Token & Cost Usage Dashboard (PRD §3.1.4) */}
-            <div className="pt-3 mt-3 border-t border-slate-800 space-y-1.5 flex-shrink-0">
+            <div className="pt-3 mt-3 border-t border-host-border space-y-1.5 flex-shrink-0">
               <div className="flex items-center justify-between px-1">
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                  <BarChart3 className="w-3 h-3 text-emerald-400" />
+                <span className="text-[10px] font-semibold text-host-secondary uppercase tracking-wider flex items-center gap-1">
+                  <BarChart3 className="w-3 h-3 text-host-success" />
                   <span>{t('settings.usageTitle')}</span>
                 </span>
                 {totalCalls > 0 && (
-                  <button onClick={clearUsage} className="text-[10px] text-slate-500 hover:text-slate-300">
+                  <button onClick={clearUsage} className="text-[10px] text-host-tertiary hover:text-host-primary">
                     {t('settings.resetUsage')}
                   </button>
                 )}
               </div>
-              <div className="p-2 bg-slate-900 border border-slate-800 rounded-xl space-y-1">
+              <div className="p-2 bg-host-elevated border border-host-border rounded-xl space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400">{t('settings.callFrequency')}</span>
-                  <span className="font-mono font-semibold text-slate-200">{t('settings.callTimes', { count: totalCalls })}</span>
+                  <span className="text-[10px] text-host-secondary">{t('settings.callFrequency')}</span>
+                  <span className="font-mono font-semibold text-host-primary">{t('settings.callTimes', { count: totalCalls })}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-slate-400">{t('settings.totalTokens')}</span>
-                  <span className="font-mono font-semibold text-blue-400">
+                  <span className="text-[10px] text-host-secondary">{t('settings.totalTokens')}</span>
+                  <span className="font-mono font-semibold text-host-brand">
                     {Math.round((totalInputTokens + totalOutputTokens) / 1000)}k
                   </span>
                 </div>
-                <div className="flex items-center justify-between border-t border-slate-800 pt-1">
-                  <span className="text-[10px] text-slate-400">{t('settings.estimatedCost')}</span>
-                  <span className="font-mono font-bold text-emerald-400">${totalEstimatedCostUsd}</span>
+                <div className="flex items-center justify-between border-t border-host-border pt-1">
+                  <span className="text-[10px] text-host-secondary">{t('settings.estimatedCost')}</span>
+                  <span className="font-mono font-bold text-host-success">${totalEstimatedCostUsd}</span>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Configuration Form */}
-          <div className="flex-1 p-6 space-y-4 overflow-y-auto bg-slate-900">
+          <div className="flex-1 p-6 space-y-4 overflow-y-auto bg-host-dialog">
             {curProvider ? (
               <>
                 {/* Header with Title, Role Assignment, and Delete Action */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-800 gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-host-border gap-3">
                   <div className="space-y-1 min-w-0 flex-1">
                     {curProvider.isCustom ? (
                       <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
@@ -635,15 +635,15 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                           type="text"
                           value={curProvider.name}
                           onChange={(e) => updateProvider(curProvider.id, { name: e.target.value })}
-                          className="text-base font-bold text-slate-100 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 focus:outline-none focus:border-blue-500 font-sans w-full sm:w-auto sm:min-w-[200px] sm:max-w-xs shadow-sm"
+                          className="text-base font-bold text-host-primary bg-host-sunken border border-host-border rounded-lg px-2.5 py-1 focus:outline-none focus:border-host-accent font-sans w-full sm:w-auto sm:min-w-[200px] sm:max-w-xs shadow-sm"
                           placeholder={t('settings.providerNamePlaceholder')}
                         />
-                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 font-medium shrink-0 whitespace-nowrap">
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-host-accent-subtle text-host-brand border border-host-accent/40 font-medium shrink-0 whitespace-nowrap">
                           {t('settings.customThirdPartyBadge')}
                         </span>
                         <button
                           onClick={() => handleDeleteProvider(curProvider.id)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-700 hover:border-red-500/30 transition shrink-0 ml-1"
+                          className="p-1.5 rounded-lg text-host-secondary hover:text-host-danger hover:bg-red-500/10 border border-host-border hover:border-red-500/30 transition shrink-0 ml-1"
                           title={t('settings.deleteCustomProviderTitle')}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -651,33 +651,33 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
-                        <h3 className="text-base font-bold text-slate-100">{providerLabel(curProvider.id, curProvider.name)}</h3>
-                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-medium shrink-0 whitespace-nowrap">
+                        <h3 className="text-base font-bold text-host-primary">{providerLabel(curProvider.id, curProvider.name)}</h3>
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-host-elevated text-host-secondary border border-host-border font-medium shrink-0 whitespace-nowrap">
                           {t('settings.builtinProviderBadge')}
                         </span>
                       </div>
                     )}
-                    <p className="text-slate-400 text-[11px]">{t('settings.providerDetailIntro')}</p>
+                    <p className="text-host-secondary text-[11px]">{t('settings.providerDetailIntro')}</p>
                   </div>
 
                   <div data-testid="header-role-actions" className="flex items-center gap-1.5 flex-wrap shrink-0 justify-start sm:justify-end">
                     {/* Code Model Assignment */}
                     {isCurCode ? (
                       <span
-                        className="px-2.5 py-1.5 rounded-xl bg-blue-500/20 text-blue-300 text-xs font-medium border border-blue-500/30 flex items-center gap-1 shadow-sm shrink-0 whitespace-nowrap"
+                        className="px-2.5 py-1.5 rounded-xl bg-host-accent-subtle text-host-brand text-xs font-medium border border-host-accent/40 flex items-center gap-1 shadow-sm shrink-0 whitespace-nowrap"
                         title={t('settings.headerCodeSlotActiveTitle')}
                       >
-                        <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <Check className="w-3.5 h-3.5 text-host-brand shrink-0" />
                         <span>{t('settings.headerCodeSlotActive')}</span>
                       </span>
                     ) : (
                       <button
                         type="button"
                         onClick={() => handleSetAsCode()}
-                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-blue-900/40 text-blue-300 hover:text-blue-200 text-xs font-medium border border-slate-700 hover:border-blue-500/40 transition flex items-center gap-1 shrink-0 whitespace-nowrap"
+                        className="px-2.5 py-1.5 rounded-xl bg-host-elevated hover:bg-host-accent-subtle text-host-brand text-xs font-medium border border-host-border hover:border-host-accent/40 transition flex items-center gap-1 shrink-0 whitespace-nowrap"
                         title={t('settings.setAsCodeModelTitle')}
                       >
-                        <Code2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                        <Code2 className="w-3.5 h-3.5 text-host-brand shrink-0" />
                         <span>{t('settings.setAsCodeModel')}</span>
                       </button>
                     )}
@@ -685,20 +685,20 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                     {/* Chat Model Assignment */}
                     {isCurChat ? (
                       <span
-                        className="px-2.5 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-medium border border-emerald-500/30 flex items-center gap-1 shadow-sm shrink-0 whitespace-nowrap"
+                        className="px-2.5 py-1.5 rounded-xl bg-host-accent-subtle text-host-success text-xs font-medium border border-host-accent/40 flex items-center gap-1 shadow-sm shrink-0 whitespace-nowrap"
                         title={t('settings.headerChatSlotActiveTitle')}
                       >
-                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <Check className="w-3.5 h-3.5 text-host-success shrink-0" />
                         <span>{t('settings.headerChatSlotActive')}</span>
                       </span>
                     ) : (
                       <button
                         type="button"
                         onClick={() => handleSetAsChat()}
-                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-emerald-900/40 text-emerald-300 hover:text-emerald-200 text-xs font-medium border border-slate-700 hover:border-emerald-500/40 transition flex items-center gap-1 shrink-0 whitespace-nowrap"
+                        className="px-2.5 py-1.5 rounded-xl bg-host-elevated hover:bg-host-accent-subtle text-host-success text-xs font-medium border border-host-border hover:border-host-accent/40 transition flex items-center gap-1 shrink-0 whitespace-nowrap"
                         title={t('settings.setAsChatModelTitle')}
                       >
-                        <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <MessageSquare className="w-3.5 h-3.5 text-host-success shrink-0" />
                         <span>{t('settings.setAsChatModel')}</span>
                       </button>
                     )}
@@ -716,7 +716,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       <button
                         type="button"
                         onClick={() => handleSetAsVision()}
-                        className="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-purple-900/40 text-purple-300 hover:text-purple-200 text-xs font-medium border border-slate-700 hover:border-purple-500/40 transition flex items-center gap-1 shrink-0 whitespace-nowrap"
+                        className="px-2.5 py-1.5 rounded-xl bg-host-elevated hover:bg-purple-900/40 text-purple-300 hover:text-purple-200 text-xs font-medium border border-host-border hover:border-purple-500/40 transition flex items-center gap-1 shrink-0 whitespace-nowrap"
                         title={t('settings.setAsVisionModelTitle')}
                       >
                         <Eye className="w-3.5 h-3.5 text-purple-400 shrink-0" />
@@ -729,7 +729,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       <button
                         type="button"
                         onClick={() => handleSetAsBoth()}
-                        className="px-2.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition shadow flex items-center gap-1 shrink-0 whitespace-nowrap"
+                        className="px-2.5 py-1.5 rounded-xl bg-host-accent hover:bg-host-accent-hover text-host-on-accent text-xs font-medium transition shadow flex items-center gap-1 shrink-0 whitespace-nowrap"
                         title={t('settings.setDualPrimaryTitle')}
                       >
                         <Sparkles className="w-3.5 h-3.5 shrink-0" />
@@ -743,7 +743,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
 
                 {/* Protocol Selector */}
                 <div className="space-y-1.5">
-                  <label className="text-slate-300 font-semibold block">{t('settings.protocolSectionLabel')}</label>
+                  <label className="text-host-primary font-semibold block">{t('settings.protocolSectionLabel')}</label>
                   <div className="grid grid-cols-2 gap-2">
                     {(['openai_compatible', 'anthropic', 'gemini', 'ollama_native'] as ProviderProtocol[]).map(
                       (proto) => {
@@ -763,15 +763,15 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                             }}
                             className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-0.5 ${
                               isSelected
-                                ? 'border-blue-500 bg-blue-950/40 text-blue-200 shadow-sm'
-                                : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                                ? 'border-host-accent/40 bg-host-accent-subtle text-host-brand shadow-sm'
+                                : 'border-host-border bg-host-sunken text-host-secondary hover:border-host-border-strong hover:text-host-primary'
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="font-semibold text-xs text-slate-200">{protocolTitle(proto)}</span>
-                              {isSelected && <span className="w-2 h-2 rounded-full bg-blue-400" />}
+                              <span className="font-semibold text-xs text-host-primary">{protocolTitle(proto)}</span>
+                              {isSelected && <span className="w-2 h-2 rounded-full bg-host-accent" />}
                             </div>
-                            <span className="text-[10px] text-slate-500">{protocolBlurb(proto)}</span>
+                            <span className="text-[10px] text-host-tertiary">{protocolBlurb(proto)}</span>
                           </button>
                         );
                       }
@@ -782,8 +782,8 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                 {/* API Base URL */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-slate-300 font-semibold block">{t('settings.apiBaseUrlLabel')}</label>
-                    <span className="text-[10px] text-slate-500">
+                    <label className="text-host-primary font-semibold block">{t('settings.apiBaseUrlLabel')}</label>
+                    <span className="text-[10px] text-host-tertiary">
                       {curProvider.protocol === 'openai_compatible' && t('settings.apiBaseUrlOpenaiSuffix')}
                       {curProvider.protocol === 'anthropic' && t('settings.apiBaseUrlAnthropicSuffix')}
                     </span>
@@ -797,15 +797,15 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                         ? t('settings.apiBaseUrlPlaceholderAnthropic')
                         : t('settings.apiBaseUrlPlaceholderDefault')
                     }
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-mono text-xs"
+                    className="w-full bg-host-sunken border border-host-border rounded-xl px-3 py-2 text-host-primary focus:outline-none focus:border-host-accent font-mono text-xs"
                   />
                 </div>
 
                 {/* API Key */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-slate-300 font-semibold block">{t('settings.apiKeyLabel')}</label>
-                    <span className="text-[10px] text-slate-500">{t('settings.apiKeyPrivacyHint')}</span>
+                    <label className="text-host-primary font-semibold block">{t('settings.apiKeyLabel')}</label>
+                    <span className="text-[10px] text-host-tertiary">{t('settings.apiKeyPrivacyHint')}</span>
                   </div>
                   <div className="relative">
                     <input
@@ -813,12 +813,12 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       placeholder="sk-••••••••••••••••"
                       value={curProvider.apiKey}
                       onChange={(e) => updateProvider(curProvider.id, { apiKey: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 pr-10 text-slate-200 focus:outline-none focus:border-blue-500 font-mono text-xs"
+                      className="w-full bg-host-sunken border border-host-border rounded-xl px-3 py-2 pr-10 text-host-primary focus:outline-none focus:border-host-accent font-mono text-xs"
                     />
                     <button
                       type="button"
                       onClick={() => setShowApiKey(!showApiKey)}
-                      className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300 transition"
+                      className="absolute right-3 top-2.5 text-host-tertiary hover:text-host-primary transition"
                       tabIndex={-1}
                     >
                       {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -829,12 +829,12 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                 {/* Model ID Binding */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
-                    <label className="text-slate-300 font-semibold block">{t('settings.modelIdLabel')}</label>
+                    <label className="text-host-primary font-semibold block">{t('settings.modelIdLabel')}</label>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={() => handleSetAsCode()}
-                        className="text-[10px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-500/10 hover:bg-blue-500/20 transition shrink-0 whitespace-nowrap"
+                        className="text-[10px] text-host-brand hover:text-host-accent-hover flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-host-accent-subtle hover:bg-host-accent/20 transition shrink-0 whitespace-nowrap"
                         title={t('settings.modelAssignCodeTitle')}
                       >
                         <Code2 className="w-3 h-3" />
@@ -843,7 +843,7 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                       <button
                         type="button"
                         onClick={() => handleSetAsChat()}
-                        className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 transition shrink-0 whitespace-nowrap"
+                        className="text-[10px] text-host-success hover:text-host-accent-hover flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-host-accent-subtle hover:bg-host-accent/20 transition shrink-0 whitespace-nowrap"
                         title={t('settings.modelAssignChatTitle')}
                       >
                         <MessageSquare className="w-3 h-3" />
@@ -865,25 +865,25 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                     value={curModelId}
                     onChange={(e) => handleModelChange(e.target.value)}
                     placeholder={t('settings.modelIdPlaceholder')}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 font-mono text-xs"
+                    className="w-full bg-host-sunken border border-host-border rounded-xl px-3 py-2 text-host-primary focus:outline-none focus:border-host-accent font-mono text-xs"
                   />
 
                   {/* Discovered & Suggested Model Chips with Capability Badges (BR-MD-01 ~ BR-MD-03) */}
                   <div className="space-y-1.5 pt-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400 font-medium flex items-center gap-1.5">
+                      <span className="text-[10px] text-host-secondary font-medium flex items-center gap-1.5">
                         <span>
                           {currentDiscovered
                             ? t('settings.discoveredModelsHeader', { count: currentDiscovered.length })
                             : t('settings.suggestedModelsHeader')}
                         </span>
-                        <span className="text-slate-500 font-normal">{t('settings.modelChipsHint')}</span>
+                        <span className="text-host-tertiary font-normal">{t('settings.modelChipsHint')}</span>
                       </span>
                       <button
                         type="button"
                         onClick={handleDiscoverModels}
                         disabled={isDiscovering || (!curProvider?.apiKey && curProvider?.protocol !== 'ollama_native')}
-                        className="text-[10px] text-blue-400 hover:text-blue-300 disabled:opacity-40 flex items-center gap-1 shrink-0 whitespace-nowrap"
+                        className="text-[10px] text-host-brand hover:text-host-accent-hover disabled:opacity-40 flex items-center gap-1 shrink-0 whitespace-nowrap"
                         title={t('settings.discoverRemoteModelsTitle')}
                       >
                         <RefreshCw className={`w-3 h-3 ${isDiscovering ? 'animate-spin' : ''}`} />
@@ -906,8 +906,8 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                             key={mod.id}
                             className={`group inline-flex items-center rounded-lg border transition text-[10px] font-mono ${
                               isSelected
-                                ? 'bg-blue-950/80 border-blue-500 text-blue-200 font-semibold shadow-sm'
-                                : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                                ? 'bg-host-accent-subtle border-host-accent/40 text-host-brand font-semibold shadow-sm'
+                                : 'bg-host-sunken border-host-border text-host-secondary hover:text-host-primary hover:border-host-border-strong'
                             }`}
                           >
                             <button
@@ -1012,13 +1012,13 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                 </div>
 
                 {/* Private Network / SSRF Settings (REQ-OD-04 / REQ-OD-07) */}
-                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+                <div className="p-3 bg-host-sunken border border-host-border rounded-xl space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
-                      <label className="text-slate-300 font-semibold block text-xs">
+                      <label className="text-host-primary font-semibold block text-xs">
                         {t('settings.allowPrivateNetworkLabel')}
                       </label>
-                      <span className="text-[10px] text-slate-500 block">{t('settings.allowPrivateNetworkHint')}</span>
+                      <span className="text-[10px] text-host-tertiary block">{t('settings.allowPrivateNetworkHint')}</span>
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
@@ -1027,17 +1027,17 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                         onChange={(e) => updateProvider(curProvider.id, { allowPrivateNetwork: e.target.checked })}
                         className="sr-only peer"
                       />
-                      <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                      <div className="w-9 h-5 bg-host-elevated peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-host-accent"></div>
                     </label>
                   </div>
                 </div>
 
                 {/* Connectivity Test */}
-                <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-4">
+                <div className="pt-3 border-t border-host-border flex items-center justify-between gap-4">
                   <button
                     onClick={handleTestConnection}
                     disabled={testStatus.testing || (!curProvider.apiKey && curProvider.protocol !== 'ollama_native')}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 font-medium rounded-xl border border-slate-700 transition flex-shrink-0"
+                    className="px-4 py-2 bg-host-elevated hover:bg-host-chrome disabled:opacity-40 text-host-primary font-medium rounded-xl border border-host-border transition flex-shrink-0"
                   >
                     {testStatus.testing ? t('settings.testingConnection') : t('settings.testConnection')}
                   </button>
@@ -1045,13 +1045,13 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                   {testStatus.message && (
                     <div className="flex items-center gap-1.5 flex-1 min-w-0">
                       {testStatus.success ? (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                        <CheckCircle2 className="w-4 h-4 text-host-success flex-shrink-0" />
                       ) : (
-                        <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                        <XCircle className="w-4 h-4 text-host-danger flex-shrink-0" />
                       )}
                       <span
                         className={`truncate text-xs ${
-                          testStatus.success ? 'text-emerald-400' : 'text-red-400 font-mono'
+                          testStatus.success ? 'text-host-success' : 'text-host-danger font-mono'
                         }`}
                         title={testStatus.message}
                       >
@@ -1062,16 +1062,16 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
                 </div>
 
                 {/* Security Notice (D4 / §3.1.3) */}
-                <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-start gap-2.5 text-[11px] text-slate-400">
-                  <ShieldAlert className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+                <div className="p-3 bg-host-sunken border border-host-border rounded-xl flex items-start gap-2.5 text-[11px] text-host-secondary">
+                  <ShieldAlert className="w-4 h-4 text-host-brand flex-shrink-0 mt-0.5" />
                   <div className="leading-relaxed">
-                    <span className="font-semibold text-slate-300 block mb-0.5">{t('settings.privacyNoticeTitle')}</span>
+                    <span className="font-semibold text-host-primary block mb-0.5">{t('settings.privacyNoticeTitle')}</span>
                     {t('settings.privacyNoticeBody')}
                   </div>
                 </div>
               </>
             ) : (
-              <div className="flex items-center justify-center h-full text-slate-500">
+              <div className="flex items-center justify-center h-full text-host-tertiary">
                 {t('settings.selectOrAddProvider')}
               </div>
             )}
@@ -1080,10 +1080,10 @@ export const AIProviderModal: React.FC<AIProviderModalProps> = ({ onClose, initi
         )}
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end">
+        <div className="p-4 border-t border-host-border bg-host-chrome flex justify-end">
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl text-xs transition shadow"
+            className="px-5 py-2 bg-host-accent hover:bg-host-accent-hover text-host-on-accent font-medium rounded-xl text-xs transition shadow"
           >
             {t('settings.saveAndClose')}
           </button>

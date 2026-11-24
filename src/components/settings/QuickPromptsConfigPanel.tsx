@@ -97,32 +97,32 @@ export const QuickPromptsConfigPanel: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-slate-900 text-xs">
+    <div className="flex-1 flex flex-col overflow-hidden bg-host-dialog text-host-primary text-xs">
       {/* Scrollable Container */}
       <div className="flex-1 p-6 space-y-5 overflow-y-auto">
         {/* Intro Banner */}
-        <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl flex items-start gap-3">
-          <Sparkles className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" />
-          <div className="space-y-1 text-slate-300">
-            <h4 className="text-slate-100 font-semibold text-sm">{t('settings.quickPromptsPanelTitle')}</h4>
-            <p className="text-[11px] text-slate-400 leading-relaxed">
+        <div className="p-4 bg-host-sunken border border-host-border rounded-xl flex items-start gap-3">
+          <Sparkles className="w-5 h-5 text-host-warning flex-shrink-0 mt-0.5" />
+          <div className="space-y-1 text-host-secondary">
+            <h4 className="text-host-primary font-semibold text-sm">{t('settings.quickPromptsPanelTitle')}</h4>
+            <p className="text-[11px] text-host-secondary leading-relaxed">
               {t('settings.quickPromptsIntro')}
             </p>
           </div>
         </div>
 
         {/* Add / Edit Form */}
-        <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
+        <div className="p-4 bg-host-sunken border border-host-border rounded-xl space-y-3">
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-slate-200 flex items-center gap-1.5">
-              {editingItem ? <Edit2 className="w-3.5 h-3.5 text-blue-400" /> : <Plus className="w-3.5 h-3.5 text-blue-400" />}
+            <span className="font-semibold text-host-primary flex items-center gap-1.5">
+              {editingItem ? <Edit2 className="w-3.5 h-3.5 text-host-brand" /> : <Plus className="w-3.5 h-3.5 text-host-brand" />}
               <span>{editingItem ? t('settings.editQuickPrompt') : t('settings.addQuickPrompt')}</span>
             </span>
             {editingItem && (
               <button
                 type="button"
                 onClick={handleCancelEdit}
-                className="text-slate-400 hover:text-slate-200 text-[11px] flex items-center gap-1"
+                className="text-host-secondary hover:text-host-primary text-[11px] flex items-center gap-1"
               >
                 <X className="w-3 h-3" />
                 <span>{t('settings.cancelEdit')}</span>
@@ -133,7 +133,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {/* Title Input */}
             <div className="space-y-1">
-              <label className="text-[11px] text-slate-400 font-medium">{t('settings.promptTitleLabel')}</label>
+              <label className="text-[11px] text-host-secondary font-medium">{t('settings.promptTitleLabel')}</label>
               <input
                 type="text"
                 value={title}
@@ -142,27 +142,27 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                   if (errorMsg) setErrorMsg(null);
                 }}
                 placeholder={t('settings.promptTitlePlaceholder')}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-blue-500 text-xs"
+                className="w-full bg-host-elevated border border-host-border rounded-lg px-2.5 py-1.5 text-host-primary focus:outline-none focus:border-host-accent text-xs"
               />
             </div>
 
             {/* Scope Selector */}
             <div className="space-y-1 md:col-span-2">
-              <label className="text-[11px] text-slate-400 font-medium">{t('settings.promptScopeLabel')}</label>
+              <label className="text-[11px] text-host-secondary font-medium">{t('settings.promptScopeLabel')}</label>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setScope('project')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-left transition ${
                     scope === 'project'
-                      ? 'bg-blue-600/20 border-blue-500 text-blue-300 font-medium'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      ? 'bg-host-accent-subtle border-host-accent/40 text-host-brand font-medium'
+                      : 'bg-host-elevated border-host-border text-host-secondary hover:text-host-primary hover:border-host-border-strong'
                   }`}
                 >
                   <FolderGit2 className="w-3.5 h-3.5 flex-shrink-0" />
                   <div className="min-w-0">
                     <div className="text-[11px] font-medium leading-tight truncate">{t('settings.promptScopeProject')}</div>
-                    <div className="text-[9px] text-slate-500 truncate">{t('settings.promptScopeProjectHint', { name: projectName || t('settings.currentProjectFallback') })}</div>
+                    <div className="text-[9px] text-host-tertiary truncate">{t('settings.promptScopeProjectHint', { name: projectName || t('settings.currentProjectFallback') })}</div>
                   </div>
                 </button>
 
@@ -172,13 +172,13 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-left transition ${
                     scope === 'global'
                       ? 'bg-amber-600/20 border-amber-500 text-amber-300 font-medium'
-                      : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      : 'bg-host-elevated border-host-border text-host-secondary hover:text-host-primary hover:border-host-border-strong'
                   }`}
                 >
                   <Globe className="w-3.5 h-3.5 flex-shrink-0" />
                   <div className="min-w-0">
                     <div className="text-[11px] font-medium leading-tight truncate">{t('settings.promptScopeGlobal')}</div>
-                    <div className="text-[9px] text-slate-500 truncate">{t('settings.promptScopeGlobalHint')}</div>
+                    <div className="text-[9px] text-host-tertiary truncate">{t('settings.promptScopeGlobalHint')}</div>
                   </div>
                 </button>
               </div>
@@ -187,7 +187,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
 
           {/* Content Input */}
           <div className="space-y-1">
-            <label className="text-[11px] text-slate-400 font-medium">{t('settings.promptContentLabel')}</label>
+            <label className="text-[11px] text-host-secondary font-medium">{t('settings.promptContentLabel')}</label>
             <textarea
               rows={2}
               value={content}
@@ -196,18 +196,18 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                 if (errorMsg) setErrorMsg(null);
               }}
               placeholder={t('settings.promptContentPlaceholder')}
-              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-blue-500 text-xs"
+              className="w-full bg-host-elevated border border-host-border rounded-lg px-2.5 py-1.5 text-host-primary focus:outline-none focus:border-host-accent text-xs"
             />
           </div>
 
-          {errorMsg && <p className="text-rose-400 text-[11px]">{errorMsg}</p>}
+          {errorMsg && <p className="text-host-danger text-[11px]">{errorMsg}</p>}
 
           <div className="flex justify-end gap-2 pt-1">
             {editingItem && (
               <button
                 type="button"
                 onClick={handleCancelEdit}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition"
+                className="px-3 py-1.5 bg-host-elevated hover:bg-host-chrome border border-host-border text-host-secondary hover:text-host-primary rounded-lg transition"
               >
                 {t('common.cancel')}
               </button>
@@ -215,7 +215,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
             <button
               type="button"
               onClick={handleSave}
-              className="flex items-center gap-1 px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium transition shadow-sm"
+              className="flex items-center gap-1 px-4 py-1.5 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg font-medium transition shadow-sm"
             >
               <Check className="w-3.5 h-3.5" />
               <span>{editingItem ? t('common.save') : t('settings.addQuickPrompt')}</span>
@@ -227,17 +227,17 @@ export const QuickPromptsConfigPanel: React.FC = () => {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <FolderGit2 className="w-4 h-4 text-blue-400" />
-              <span className="font-semibold text-slate-200">{t('settings.projectPrompts')}</span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-300 font-mono">
+              <FolderGit2 className="w-4 h-4 text-host-brand" />
+              <span className="font-semibold text-host-primary">{t('settings.projectPrompts')}</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-host-accent-subtle text-host-brand font-mono">
                 {t('settings.promptCount', { count: projectPrompts.length })}
               </span>
             </div>
-            <span className="text-[10px] text-slate-500">{t('settings.promptProjectStoredIn', { name: projectName || 'Untitled' })}</span>
+            <span className="text-[10px] text-host-tertiary">{t('settings.promptProjectStoredIn', { name: projectName || 'Untitled' })}</span>
           </div>
 
           {projectPrompts.length === 0 ? (
-            <div className="p-4 bg-slate-950/40 border border-slate-800/80 rounded-xl text-center text-slate-500 text-[11px]">
+            <div className="p-4 bg-host-sunken border border-host-border rounded-xl text-center text-host-tertiary text-[11px]">
               {t('settings.promptProjectEmpty')}
             </div>
           ) : (
@@ -245,22 +245,22 @@ export const QuickPromptsConfigPanel: React.FC = () => {
               {projectPrompts.map((item) => (
                 <div
                   key={item.id}
-                  className="p-3 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl flex flex-col justify-between gap-2 group transition"
+                  className="p-3 bg-host-sunken border border-host-border hover:border-host-border-strong rounded-xl flex flex-col justify-between gap-2 group transition"
                 >
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="font-medium text-slate-100">{item.title}</span>
-                      <span className="text-[9px] px-1.5 py-0.2 bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded">
+                      <span className="font-medium text-host-primary">{item.title}</span>
+                      <span className="text-[9px] px-1.5 py-0.2 bg-host-accent-subtle text-host-brand border border-host-accent/40 rounded">
                         {t('settings.promptBadgeProject')}
                       </span>
                     </div>
-                    <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">{item.content}</p>
+                    <p className="text-[11px] text-host-secondary line-clamp-2 leading-relaxed">{item.content}</p>
                   </div>
-                  <div className="flex items-center justify-end gap-1 pt-1 border-t border-slate-900">
+                  <div className="flex items-center justify-end gap-1 pt-1 border-t border-host-border">
                     <button
                       type="button"
                       onClick={() => handleStartEdit(item)}
-                      className="p-1 text-slate-400 hover:text-blue-300 hover:bg-slate-850 rounded transition"
+                      className="p-1 text-host-secondary hover:text-host-brand hover:bg-host-elevated rounded transition"
                       title={t('settings.promptEditTitle')}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
@@ -268,7 +268,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleDelete(item)}
-                      className="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-850 rounded transition"
+                      className="p-1 text-host-secondary hover:text-host-danger hover:bg-host-elevated rounded transition"
                       title={t('settings.promptDeleteTitle')}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -281,11 +281,11 @@ export const QuickPromptsConfigPanel: React.FC = () => {
         </div>
 
         {/* Global Prompts Section */}
-        <div className="space-y-2 pt-2 border-t border-slate-800">
+        <div className="space-y-2 pt-2 border-t border-host-border">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-amber-400" />
-              <span className="font-semibold text-slate-200">{t('settings.globalPrompts')}</span>
+              <Globe className="w-4 h-4 text-host-warning" />
+              <span className="font-semibold text-host-primary">{t('settings.globalPrompts')}</span>
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-mono">
                 {t('settings.promptCount', { count: localizedGlobal.length })}
               </span>
@@ -293,7 +293,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
             <button
               type="button"
               onClick={resetGlobalPrompts}
-              className="text-[10px] text-slate-500 hover:text-slate-300 flex items-center gap-1 transition"
+              className="text-[10px] text-host-tertiary hover:text-host-primary flex items-center gap-1 transition"
               title={t('settings.promptResetDefaultsTitle')}
             >
               <RotateCcw className="w-3 h-3" />
@@ -305,22 +305,22 @@ export const QuickPromptsConfigPanel: React.FC = () => {
             {localizedGlobal.map((item) => (
               <div
                 key={item.id}
-                className="p-3 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl flex flex-col justify-between gap-2 group transition"
+                className="p-3 bg-host-sunken border border-host-border hover:border-host-border-strong rounded-xl flex flex-col justify-between gap-2 group transition"
               >
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-slate-100">{item.title}</span>
+                    <span className="font-medium text-host-primary">{item.title}</span>
                     <span className="text-[9px] px-1.5 py-0.2 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">
                       {t('settings.promptBadgeGlobal')}
                     </span>
                   </div>
-                  <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">{item.content}</p>
+                  <p className="text-[11px] text-host-secondary line-clamp-2 leading-relaxed">{item.content}</p>
                 </div>
-                <div className="flex items-center justify-end gap-1 pt-1 border-t border-slate-900">
+                <div className="flex items-center justify-end gap-1 pt-1 border-t border-host-border">
                   <button
                     type="button"
                     onClick={() => handleStartEdit(item)}
-                    className="p-1 text-slate-400 hover:text-blue-300 hover:bg-slate-850 rounded transition"
+                    className="p-1 text-host-secondary hover:text-host-brand hover:bg-host-elevated rounded transition"
                     title={t('settings.promptEditTitle')}
                   >
                     <Edit2 className="w-3.5 h-3.5" />
@@ -328,7 +328,7 @@ export const QuickPromptsConfigPanel: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => handleDelete(item)}
-                    className="p-1 text-slate-400 hover:text-rose-400 hover:bg-slate-850 rounded transition"
+                    className="p-1 text-host-secondary hover:text-host-danger hover:bg-host-elevated rounded transition"
                     title={t('settings.promptDeleteTitle')}
                   >
                     <Trash2 className="w-3.5 h-3.5" />

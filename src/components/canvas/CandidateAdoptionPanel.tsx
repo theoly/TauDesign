@@ -86,18 +86,18 @@ export function CandidateAdoptionPanel({
       onKeyDown={(e) => {
         if (e.code === 'Space') e.stopPropagation();
       }}
-      className="absolute top-5 left-1/2 z-50 w-[min(40rem,calc(100%-1.5rem))] -translate-x-1/2 overflow-hidden rounded-2xl border border-violet-500/35 bg-slate-950/95 text-xs text-slate-300 shadow-2xl shadow-violet-950/40 backdrop-blur-xl"
+      className="absolute top-5 left-1/2 z-50 w-[min(40rem,calc(100%-1.5rem))] -translate-x-1/2 overflow-hidden rounded-xl border border-host-border-strong bg-host-elevated/95 text-xs text-host-secondary shadow-2xl backdrop-blur-xl"
     >
       {/* Status strip */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-slate-800/80 px-4 py-2.5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-host-border px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-violet-400 shadow-[0_0_8px_rgba(167,139,250,0.8)]" />
-          <span className="truncate font-semibold text-violet-100">{t('chat.candidateReadySideBySide')}</span>
+          <span className="h-2 w-2 shrink-0 rounded-full bg-host-accent" />
+          <span className="truncate font-semibold text-host-primary">{t('chat.candidateReadySideBySide')}</span>
         </div>
         {stagedCandidateSaveStatus && (
           <span
             role={stagedCandidateSaveStatus === 'failed' ? 'alert' : 'status'}
-            className={`shrink-0 ${stagedCandidateSaveStatus === 'failed' ? 'text-amber-300' : 'text-slate-500'}`}
+            className={`shrink-0 ${stagedCandidateSaveStatus === 'failed' ? 'text-host-warning' : 'text-host-tertiary'}`}
           >
             {stagedCandidateSaveStatus === 'pending'
               ? t('chat.candidateSaving')
@@ -119,8 +119,8 @@ export function CandidateAdoptionPanel({
               title={deliveryReport.checks.map((check) => `${check.id}: ${check.message}`).join('\n')}
               className={`rounded-md px-2 py-1 font-medium tabular-nums ${
                 deliveryReport.status === 'ready'
-                  ? 'bg-emerald-950/50 text-emerald-300'
-                  : 'bg-slate-900 text-slate-300'
+                  ? 'bg-host-accent-subtle text-host-brand'
+                  : 'bg-host-sunken text-host-secondary'
               }`}
             >
               {t('chat.deliveryChecks', { passed, total })}
@@ -137,34 +137,34 @@ export function CandidateAdoptionPanel({
         renderIncomplete ||
         !taskCurrent ||
         stagedAssetIssues.length > 0) && (
-        <div className="space-y-2 border-b border-slate-800/80 px-4 py-3">
+        <div className="space-y-2 border-b border-host-border px-4 py-3">
           {saving && (
-            <p role="status" className="text-slate-300">
+            <p role="status" className="text-host-secondary">
               {t('chat.savingDelivery')}
             </p>
           )}
           {stagedAdoptionError && (
-            <p role="alert" className="text-amber-300">
+            <p role="alert" className="text-host-warning">
               {stagedAdoptionError}
             </p>
           )}
           {renderPending && (
-            <p role="status" className="text-slate-400">
+            <p role="status" className="text-host-tertiary">
               {t('chat.renderChecking')}
             </p>
           )}
           {renderIncomplete && (
-            <p role="alert" className="text-amber-300">
+            <p role="alert" className="text-host-warning">
               {t('chat.renderIncompleteCannotAdopt')}
             </p>
           )}
           {!taskCurrent && (
-            <p role="alert" className="text-amber-300">
+            <p role="alert" className="text-host-warning">
               {t('chat.candidateExpired')}
             </p>
           )}
           {stagedAssetIssues.length > 0 && (
-            <p role="alert" className="text-amber-300">
+            <p role="alert" className="text-host-warning">
               {t('chat.assetIssuesPrefix', {
                 message: stagedAssetIssues[0].message,
                 extra:
@@ -175,26 +175,26 @@ export function CandidateAdoptionPanel({
             </p>
           )}
           {deliveryReport?.checks.find((check) => check.id === 'entities')?.status === 'blocked' && (
-            <p role="alert" className="break-words text-amber-300">
+            <p role="alert" className="break-words text-host-warning">
               {t('chat.entityIssuesPrefix', {
                 message: deliveryReport.checks.find((check) => check.id === 'entities')!.message,
               })}
             </p>
           )}
           {deliveryReport?.checks.find((check) => check.id === 'asset_files')?.status !== 'passed' && (
-            <p role="alert" className="flex flex-wrap items-center gap-2 text-amber-300">
+            <p role="alert" className="flex flex-wrap items-center gap-2 text-host-warning">
               <span>{deliveryReport?.checks.find((check) => check.id === 'asset_files')?.message}</span>
               <button
                 type="button"
                 onClick={onRecheckAssets}
-                className="underline text-blue-300 hover:text-blue-200"
+                className="underline text-host-brand hover:text-host-accent-hover"
               >
                 {t('chat.recheckAssets')}
               </button>
             </p>
           )}
           {renderedReport?.findings.some((f) => f.severity === 'error') && (
-            <p role="alert" className="text-rose-300">
+            <p role="alert" className="text-host-danger">
               {t('chat.severeRenderBlock')}
             </p>
           )}
@@ -204,24 +204,24 @@ export function CandidateAdoptionPanel({
               id="candidate-delivery-blockers"
               data-testid="candidate-delivery-blockers"
               role={deliveryReport?.status === 'blocked' ? 'alert' : 'status'}
-              className="rounded-xl border border-amber-500/25 bg-amber-950/25 px-3 py-2.5 text-amber-100"
+              className="rounded-xl border border-host-warning/30 bg-host-sunken px-3 py-2.5 text-host-primary"
             >
-              <p className="font-medium text-amber-50">
+              <p className="font-medium text-host-warning">
                 {structureConfirmed ? t('chat.structureConfirmedPrefix') : t('chat.cannotAdoptPrefix')}
-                <span className="font-normal text-amber-100/90">{primaryReason}</span>
+                <span className="font-normal text-host-secondary">{primaryReason}</span>
                 {extraBlockers > 0 && (
-                  <span className="ml-1 text-amber-200/70">{t('chat.moreBlockerReasons', { count: extraBlockers })}</span>
+                  <span className="ml-1 text-host-tertiary">{t('chat.moreBlockerReasons', { count: extraBlockers })}</span>
                 )}
               </p>
               {canConfirmDelivery && (
-                <label className="mt-2.5 flex cursor-pointer items-start gap-2 text-slate-200">
+                <label className="mt-2.5 flex cursor-pointer items-start gap-2 text-host-primary">
                   <input
                     type="checkbox"
                     aria-label={t(structureOnlyConfirm ? 'chat.structureAcceptAria' : 'chat.overrideAcceptAria')}
                     checked={structureConfirmed}
                     disabled={saving}
                     onChange={(e) => onConfirmStructure(e.target.checked)}
-                    className="mt-0.5"
+                    className="mt-0.5 accent-host-accent"
                   />
                   <span>{t(structureOnlyConfirm ? 'chat.structureAcceptHint' : 'chat.overrideAcceptHint')}</span>
                 </label>
@@ -230,26 +230,26 @@ export function CandidateAdoptionPanel({
           )}
 
           {(hasDesignIssues || hasRenderIssues) && (
-            <details className="group rounded-xl border border-slate-700/80 bg-slate-900/60">
-              <summary className="cursor-pointer list-none px-3 py-2 text-slate-300 marker:content-none [&::-webkit-details-marker]:hidden">
+            <details className="group rounded-xl border border-host-border bg-host-sunken/70">
+              <summary className="cursor-pointer list-none px-3 py-2 text-host-secondary marker:content-none [&::-webkit-details-marker]:hidden">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-slate-200">{t('chat.adoptionIssues')}</span>
+                  <span className="font-medium text-host-primary">{t('chat.adoptionIssues')}</span>
                   {hasDesignIssues && candidateQuality && (
-                    <span className="rounded-md bg-amber-950/40 px-1.5 py-0.5 text-[11px] text-amber-200">
+                    <span className="rounded-md bg-host-elevated px-1.5 py-0.5 text-[11px] text-host-warning">
                       {t('chat.designIssueChip')} · {findingSummary(candidateQuality.findings)}
                     </span>
                   )}
                   {hasRenderIssues && renderedReport && (
-                    <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[11px] text-slate-300">
+                    <span className="rounded-md bg-host-elevated px-1.5 py-0.5 text-[11px] text-host-secondary">
                       {t('chat.renderIssueChip')}
                       {renderFindings.length ? ` · ${findingSummary(renderFindings)}` : ''}
                     </span>
                   )}
-                  <span className="ml-auto text-[11px] text-slate-500 group-open:hidden">{t('chat.expandIssues')}</span>
-                  <span className="ml-auto hidden text-[11px] text-slate-500 group-open:inline">{t('chat.collapseIssues')}</span>
+                  <span className="ml-auto text-[11px] text-host-tertiary group-open:hidden">{t('chat.expandIssues')}</span>
+                  <span className="ml-auto hidden text-[11px] text-host-tertiary group-open:inline">{t('chat.collapseIssues')}</span>
                 </div>
               </summary>
-              <div className="max-h-56 space-y-2 overflow-y-auto border-t border-slate-800 px-3 py-2">
+              <div className="max-h-56 space-y-2 overflow-y-auto border-t border-host-border px-3 py-2">
                 {hasDesignIssues && candidateQuality && <QualityReportCard report={candidateQuality} embedded />}
                 {renderedReport && <RenderedQualityCard report={renderedReport} onLocate={onLocate} embedded />}
               </div>
@@ -260,7 +260,7 @@ export function CandidateAdoptionPanel({
 
       {/* Actions */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <p className="text-[11px] text-slate-500">{t('chat.adoptionActionsHint')}</p>
+        <p className="text-[11px] text-host-tertiary">{t('chat.adoptionActionsHint')}</p>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
@@ -278,7 +278,7 @@ export function CandidateAdoptionPanel({
                   ? t('chat.adoptStructureTitle')
                   : t('chat.adoptTitle')
             }
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-blue-600 px-3.5 py-2 font-medium text-white shadow transition enabled:hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-host-accent px-3.5 py-2 font-medium text-host-on-accent shadow transition enabled:hover:bg-host-accent-hover disabled:cursor-not-allowed disabled:bg-host-sunken disabled:text-host-tertiary disabled:shadow-none"
           >
             <Check className="h-4 w-4" />
             <span>{t('chat.adoptReplace')}</span>
@@ -293,7 +293,7 @@ export function CandidateAdoptionPanel({
             }
             aria-describedby={blockers.length ? 'candidate-delivery-blockers' : undefined}
             title={adoptionBlocked ? blockedDescription : t('chat.keepBothTitle')}
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-slate-700 bg-slate-900 px-3.5 py-2 font-medium text-slate-200 transition enabled:hover:bg-slate-800 disabled:cursor-not-allowed disabled:text-slate-500 disabled:opacity-60"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-host-border bg-host-sunken px-3.5 py-2 font-medium text-host-primary transition enabled:hover:bg-host-elevated disabled:cursor-not-allowed disabled:text-host-tertiary disabled:opacity-60"
           >
             <Copy className="h-4 w-4" />
             <span>{t('chat.keepBoth')}</span>
@@ -302,7 +302,7 @@ export function CandidateAdoptionPanel({
             type="button"
             onClick={onDiscard}
             title={t('chat.discardTitle')}
-            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-3 py-2 font-medium text-slate-400 transition hover:bg-slate-900 hover:text-rose-300"
+            className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg px-3 py-2 font-medium text-host-secondary transition hover:bg-host-sunken hover:text-host-danger"
           >
             <X className="h-4 w-4" />
             <span>{t('chat.keepOriginal')}</span>

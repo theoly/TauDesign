@@ -21,7 +21,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onCancel,
 }) => createPortal(
   <div
-    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
+    className="fixed inset-0 z-[200] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
     role="alertdialog"
     aria-modal="true"
     aria-labelledby="confirm-dialog-title"
@@ -30,19 +30,19 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
     onKeyDown={(event) => { if (event.key === 'Escape') onCancel(); }}
   >
     <div
-      className="w-full max-w-sm rounded-2xl border border-slate-800 bg-slate-900 p-5 text-xs shadow-2xl"
+      className="w-full max-w-sm rounded-xl border border-host-border-strong bg-host-dialog p-5 text-xs shadow-2xl"
       onClick={(event) => event.stopPropagation()}
     >
-      <h3 id="confirm-dialog-title" className="flex items-center gap-2 text-sm font-bold text-slate-100">
-        <AlertTriangle className="h-4 w-4 text-red-400" aria-hidden />
+      <h3 id="confirm-dialog-title" className="flex items-center gap-2 text-sm font-semibold text-host-primary">
+        <AlertTriangle className="h-4 w-4 text-host-danger" aria-hidden />
         <span>{title}</span>
       </h3>
-      <div className="mt-3 leading-relaxed text-slate-400">{message}</div>
+      <div className="mt-3 leading-relaxed text-host-secondary">{message}</div>
       <div className="mt-5 flex justify-end gap-2">
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-lg bg-slate-800 px-4 py-2 text-slate-200 hover:bg-slate-700"
+          className="rounded-lg border border-host-border bg-host-sunken px-4 py-2 text-host-primary hover:border-host-border-strong transition"
           data-testid="confirm-dialog-cancel"
         >
           {cancelLabel}
@@ -50,7 +50,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         <button
           type="button"
           onClick={onConfirm}
-          className="rounded-lg bg-red-600 px-4 py-2 font-medium text-white hover:bg-red-500"
+          className="rounded-lg border border-host-danger/40 bg-host-sunken px-4 py-2 font-medium text-host-danger hover:bg-host-danger/10 transition"
           data-testid="confirm-dialog-confirm"
         >
           {confirmLabel}

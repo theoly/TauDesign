@@ -31,37 +31,37 @@ export const DesignSystemPanel: React.FC<DesignSystemPanelProps> = ({ onOpenThem
   const swatch = (label: string, color: string) => (
     <div key={label} className="flex items-center gap-2 px-2 py-1 text-[11px]">
       <span
-        className="w-4 h-4 rounded border border-white/10 shrink-0"
+        className="w-4 h-4 rounded border border-host-border shrink-0"
         style={{ background: color }}
       />
-      <span className="text-slate-400 flex-1 truncate">{label}</span>
-      <span className="font-mono text-[10px] text-slate-600">{color}</span>
+      <span className="text-host-secondary flex-1 truncate">{label}</span>
+      <span className="font-mono text-[10px] text-host-tertiary">{color}</span>
     </div>
   );
 
   return (
     <>
       {extracting&&<PageStyleExtractionDialog onClose={()=>setExtracting(false)}/>}
-      <div className="px-2 py-1.5 border-b border-slate-850/80">
-        <button onClick={()=>setExtracting(true)} className="mb-1.5 w-full rounded-md bg-slate-800 py-2 text-[11px] text-slate-200 hover:bg-slate-700">{translate('theme.extractStyle')}</button>
+      <div className="px-2 py-1.5 border-b border-host-border">
+        <button onClick={()=>setExtracting(true)} className="mb-1.5 w-full rounded-md border border-host-border bg-host-sunken py-2 text-[11px] text-host-primary hover:bg-host-elevated transition">{translate('theme.extractStyle')}</button>
         <button
           onClick={onOpenThemeEditor}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-md text-[11px] transition"
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 border border-host-border bg-host-sunken hover:bg-host-elevated text-host-primary rounded-md text-[11px] transition"
         >
-          <Palette className="w-3.5 h-3.5 text-blue-400" />
+          <Palette className="w-3.5 h-3.5 text-host-brand" />
           <span>{translate('theme.fullEditor')}</span>
         </button>
         <button
           onClick={onOpenRestyle}
           title={translate('theme.restyleBatchHint')}
-          className="w-full flex items-center justify-center gap-1.5 py-1.5 mt-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-md text-[11px] transition"
+          className="w-full flex items-center justify-center gap-1.5 py-1.5 mt-1.5 border border-host-border bg-host-sunken hover:bg-host-elevated text-host-primary rounded-md text-[11px] transition"
         >
-          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+          <Sparkles className="w-3.5 h-3.5 text-host-warning" />
           <span>{translate('theme.batchRestyle')}</span>
         </button>
       </div>
 
-      <div className="p-2 border-b border-slate-800"><ReferenceDeviceOption settings={settings} onChange={id => useProjectStore.getState().setReferenceDevice(id)} /></div>
+      <div className="p-2 border-b border-host-border"><ReferenceDeviceOption settings={settings} onChange={id => useProjectStore.getState().setReferenceDevice(id)} /></div>
       {settings.deviceProfile === 'mobile' && <div className="p-2"><MobileNavigationOption /></div>}
       <Accordion panelKey="design.colors" title={translate('theme.panelColors')}>
         <div className="px-1">
@@ -69,7 +69,7 @@ export const DesignSystemPanel: React.FC<DesignSystemPanelProps> = ({ onOpenThem
           {swatch(translate('theme.swatchPrimaryBg'), colors.primary)}
           {swatch(translate('theme.swatchPrimaryFg'), colors.onPrimary)}
           {swatch(translate('theme.swatchBrandText'), colors.primaryText)}
-          <div className="h-px bg-slate-850 my-1 mx-2" />
+          <div className="h-px bg-host-border my-1 mx-2" />
           {swatch(translate('theme.swatchBackground', { mode }), colors.background)}
           {swatch(translate('theme.swatchSurface', { mode }), colors.surface)}
           {swatch(translate('theme.swatchTextPrimary', { mode }), colors.textPrimary)}
@@ -84,16 +84,16 @@ export const DesignSystemPanel: React.FC<DesignSystemPanelProps> = ({ onOpenThem
       <Accordion panelKey="design.typography" title={translate('theme.panelTypography')} defaultOpen={false}>
         <div className="px-3 space-y-1.5 text-[11px]">
           <div className="flex justify-between gap-2">
-            <span className="text-slate-500 shrink-0">{translate('theme.fontSans')}</span>
-            <span className="text-slate-300 truncate text-right">{t.typography.fontFamilySans}</span>
+            <span className="text-host-tertiary shrink-0">{translate('theme.fontSans')}</span>
+            <span className="text-host-primary truncate text-right">{t.typography.fontFamilySans}</span>
           </div>
           <div className="flex justify-between gap-2">
-            <span className="text-slate-500 shrink-0">{translate('theme.fontMono')}</span>
-            <span className="text-slate-300 truncate text-right">{t.typography.fontFamilyMono}</span>
+            <span className="text-host-tertiary shrink-0">{translate('theme.fontMono')}</span>
+            <span className="text-host-primary truncate text-right">{t.typography.fontFamilyMono}</span>
           </div>
           <div className="flex flex-wrap gap-1 pt-1">
             {Object.entries(t.typography.sizes).map(([k, v]) => (
-              <span key={k} className="px-1.5 py-0.5 bg-slate-950 border border-slate-800 rounded font-mono text-[10px] text-slate-400">
+              <span key={k} className="px-1.5 py-0.5 bg-host-sunken border border-host-border rounded font-mono text-[10px] text-host-secondary">
                 {k}:{v}
               </span>
             ))}
@@ -104,20 +104,20 @@ export const DesignSystemPanel: React.FC<DesignSystemPanelProps> = ({ onOpenThem
       <Accordion panelKey="design.scales" title={translate('theme.panelScales')} defaultOpen={false}>
         <div className="px-3 space-y-2 text-[11px]">
           <div>
-            <span className="text-slate-500 block mb-1">{translate('theme.scaleRadius')}</span>
+            <span className="text-host-tertiary block mb-1">{translate('theme.scaleRadius')}</span>
             <div className="flex flex-wrap gap-1">
               {Object.entries(t.radius).map(([k, v]) => (
-                <span key={k} className="px-1.5 py-0.5 bg-slate-950 border border-slate-800 rounded font-mono text-[10px] text-slate-400">
+                <span key={k} className="px-1.5 py-0.5 bg-host-sunken border border-host-border rounded font-mono text-[10px] text-host-secondary">
                   {k}:{v}
                 </span>
               ))}
             </div>
           </div>
           <div>
-            <span className="text-slate-500 block mb-1">{translate('theme.scaleSpacing')}</span>
+            <span className="text-host-tertiary block mb-1">{translate('theme.scaleSpacing')}</span>
             <div className="flex flex-wrap gap-1">
               {Object.entries(t.spacing).map(([k, v]) => (
-                <span key={k} className="px-1.5 py-0.5 bg-slate-950 border border-slate-800 rounded font-mono text-[10px] text-slate-400">
+                <span key={k} className="px-1.5 py-0.5 bg-host-sunken border border-host-border rounded font-mono text-[10px] text-host-secondary">
                   {k}:{v}
                 </span>
               ))}
@@ -130,7 +130,7 @@ export const DesignSystemPanel: React.FC<DesignSystemPanelProps> = ({ onOpenThem
       <Accordion panelKey="design.decisions" title={translate('theme.panelDecisions')} badge={decisionList.filter((d) => d.active).length}>
         <div className="px-2 space-y-1">
           {decisionList.length === 0 && (
-            <p className="px-1 py-2 text-[11px] text-slate-600 leading-relaxed">
+            <p className="px-1 py-2 text-[11px] text-host-tertiary leading-relaxed">
               {translate('theme.decisionsEmpty')}
             </p>
           )}
@@ -138,20 +138,20 @@ export const DesignSystemPanel: React.FC<DesignSystemPanelProps> = ({ onOpenThem
             <div
               key={d.id}
               className={`group flex items-start gap-1.5 px-2 py-1.5 rounded-md text-[11px] ${
-                d.active ? 'bg-slate-950 text-slate-300' : 'bg-slate-950/40 text-slate-600 line-through'
+                d.active ? 'bg-host-sunken border border-host-border/60 text-host-primary' : 'bg-host-sunken/40 text-host-tertiary line-through'
               }`}
             >
               <input
                 type="checkbox"
                 checked={d.active}
                 onChange={() => toggleDecision(d.id)}
-                className="mt-0.5 accent-blue-500 shrink-0"
+                className="mt-0.5 accent-host-accent shrink-0"
                 title={d.active ? translate('theme.decisionDisableTitle') : translate('theme.decisionEnableTitle')}
               />
               <span className="flex-1 leading-snug">{d.text}</span>
               <button
                 onClick={() => removeDecision(d.id)}
-                className="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 shrink-0"
+                className="opacity-0 group-hover:opacity-100 text-host-tertiary hover:text-host-danger shrink-0"
                 title={translate('common.delete')}
               >
                 <Trash2 className="w-3 h-3" />
@@ -170,7 +170,7 @@ export const DesignSystemPanel: React.FC<DesignSystemPanelProps> = ({ onOpenThem
                 }
               }}
               placeholder={translate('theme.decisionPlaceholder')}
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-md px-2 py-1 text-[11px] text-slate-300 focus:outline-none focus:border-blue-500"
+              className="flex-1 bg-host-sunken border border-host-border rounded-md px-2 py-1 text-[11px] text-host-primary placeholder:text-host-tertiary focus:outline-none focus:border-host-accent"
             />
             <button
               onClick={() => {
@@ -179,7 +179,7 @@ export const DesignSystemPanel: React.FC<DesignSystemPanelProps> = ({ onOpenThem
                   setNewDecision('');
                 }
               }}
-              className="p-1 text-slate-400 hover:text-blue-400 shrink-0"
+              className="p-1 text-host-secondary hover:text-host-brand shrink-0"
             >
               <Plus className="w-3.5 h-3.5" />
             </button>

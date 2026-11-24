@@ -295,35 +295,35 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 select-none">
-      <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 select-none">
+      <div className="w-full max-w-3xl bg-host-dialog text-host-primary border border-host-border-strong rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/80">
+        <div className="p-4 border-b border-host-border flex items-center justify-between bg-host-dialog">
           <div className="flex items-center gap-2">
-            <Layers className="w-5 h-5 text-blue-400" />
-            <span className="font-semibold text-slate-100 text-sm">
+            <Layers className="w-5 h-5 text-host-brand" />
+            <span className="font-semibold text-host-primary text-sm">
               {t('assets.title')}
             </span>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 text-lg leading-none">
+          <button onClick={onClose} className="text-host-secondary hover:text-host-primary text-lg leading-none">
             ×
           </button>
         </div>
 
         {/* Tab Selector */}
-        <div className="flex items-center border-b border-slate-800 bg-slate-950 px-4 text-xs font-medium">
+        <div className="flex items-center border-b border-host-border bg-host-sunken px-4 text-xs font-medium">
           <button
             onClick={() => setActiveTab('components')}
             className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
               activeTab === 'components'
-                ? 'border-indigo-500 text-indigo-400 font-semibold'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-host-accent text-host-brand font-semibold'
+                : 'border-transparent text-host-secondary hover:text-host-primary'
             }`}
           >
-            <Boxes className="w-3.5 h-3.5 text-indigo-400" />
+            <Boxes className="w-3.5 h-3.5 text-host-brand" />
             <span>{t('assets.tabComponents')}</span>
             {repeatedCandidates.length > 0 && (
-              <span className="px-1.5 py-0.2 bg-indigo-500/20 text-indigo-300 rounded-full text-[10px]">
+              <span className="px-1.5 py-0.2 bg-host-accent-subtle text-host-brand rounded-full text-[10px]">
                 {t('assets.suggestions', { count: repeatedCandidates.length })}
               </span>
             )}
@@ -333,11 +333,11 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
             onClick={() => setActiveTab('images')}
             className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
               activeTab === 'images'
-                ? 'border-blue-500 text-blue-400 font-semibold'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-host-accent text-host-brand font-semibold'
+                : 'border-transparent text-host-secondary hover:text-host-primary'
             }`}
           >
-            <ImageIcon className="w-3.5 h-3.5 text-blue-400" />
+            <ImageIcon className="w-3.5 h-3.5 text-host-brand" />
             <span>{t('assets.tabImages')}</span>
           </button>
 
@@ -345,8 +345,8 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
             onClick={() => setActiveTab('icons')}
             className={`py-3 px-4 border-b-2 transition ${
               activeTab === 'icons'
-                ? 'border-blue-500 text-blue-400 font-semibold'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-host-accent text-host-brand font-semibold'
+                : 'border-transparent text-host-secondary hover:text-host-primary'
             }`}
           >
             {t('assets.tabIcons')}
@@ -356,11 +356,11 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
             onClick={() => setActiveTab('ai_svg')}
             className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
               activeTab === 'ai_svg'
-                ? 'border-purple-500 text-purple-400 font-semibold'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-host-accent text-host-brand font-semibold'
+                : 'border-transparent text-host-secondary hover:text-host-primary'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <Sparkles className="w-3.5 h-3.5 text-host-brand" />
             <span>{t('assets.tabAiSvg')}</span>
           </button>
 
@@ -368,20 +368,20 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
             onClick={() => setActiveTab('mothers')}
             className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
               activeTab === 'mothers'
-                ? 'border-emerald-500 text-emerald-400 font-semibold'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+                ? 'border-host-accent text-host-brand font-semibold'
+                : 'border-transparent text-host-secondary hover:text-host-primary'
             }`}
           >
-            <Library className="w-3.5 h-3.5 text-emerald-400" />
+            <Library className="w-3.5 h-3.5 text-host-success" />
             <span>{t('assets.tabMothers')}</span>
           </button>
         </div>
 
         {/* Global Status Toast */}
         {statusMsg && (
-          <div className="bg-indigo-950/90 border-b border-indigo-800/60 px-4 py-2 text-indigo-300 text-xs flex items-center justify-between">
+          <div className="bg-host-accent-subtle border-b border-host-accent/40 px-4 py-2 text-host-brand text-xs flex items-center justify-between">
             <span>{statusMsg}</span>
-            <button onClick={() => setStatusMsg(null)} className="text-indigo-400 hover:text-indigo-200">×</button>
+            <button onClick={() => setStatusMsg(null)} className="text-host-brand hover:text-host-primary">×</button>
           </div>
         )}
 
@@ -392,26 +392,26 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
             <div className="space-y-5">
               {/* Repeated Structure Candidate Detection Banner */}
               {repeatedCandidates.length > 0 && (
-                <div className="p-4 bg-indigo-950/30 border border-indigo-800/40 rounded-2xl space-y-3">
+                <div className="p-4 bg-host-accent-subtle border border-host-accent/40 rounded-xl space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-indigo-400" />
-                      <span className="font-semibold text-indigo-200 text-xs">
+                      <Sparkles className="w-4 h-4 text-host-brand" />
+                      <span className="font-semibold text-host-primary text-xs">
                         {t('assets.fingerprintTitle', { count: repeatedCandidates.length })}
                       </span>
                     </div>
-                    <span className="text-[11px] text-indigo-300/70">{t('assets.fingerprintPrd')}</span>
+                    <span className="text-[11px] text-host-secondary">{t('assets.fingerprintPrd')}</span>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
                     {repeatedCandidates.map((cand, idx) => (
                       <div
                         key={idx}
-                        className="p-3 bg-slate-950/70 border border-indigo-800/40 rounded-xl flex items-center justify-between"
+                        className="p-3 bg-host-sunken border border-host-border rounded-xl flex items-center justify-between"
                       >
                         <div className="space-y-1 truncate pr-2">
-                          <span className="font-semibold text-slate-200 block truncate">{cand.suggestedName}</span>
-                          <span className="text-[10px] text-indigo-400 block font-mono">
+                          <span className="font-semibold text-host-primary block truncate">{cand.suggestedName}</span>
+                          <span className="text-[10px] text-host-brand block font-mono">
                             {t('assets.repeatedAcrossFrames', { count: cand.count })}
                           </span>
                         </div>
@@ -420,7 +420,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                             createComponent(cand.suggestedName, cand.templateHtml, t('assets.extractedByFingerprint'));
                             showFeedback(t('assets.toastExtractedComponent', { name: cand.suggestedName }));
                           }}
-                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-medium whitespace-nowrap transition"
+                          className="px-3 py-1.5 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg text-xs font-medium whitespace-nowrap transition"
                         >
                           {t('assets.extractAsComponent')}
                         </button>
@@ -433,18 +433,18 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
               {/* Defined Components List */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-300 text-xs">
+                  <span className="font-semibold text-host-primary text-xs">
                     {t('assets.componentLibraryTitle', { count: Object.keys(components).length })}
                   </span>
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-[11px] text-host-tertiary">
                     {t('assets.extractViaInspectorHint')}
                   </span>
                 </div>
 
                 {Object.keys(components).length === 0 ? (
-                  <div className="p-8 border-2 border-dashed border-slate-800 rounded-2xl flex flex-col items-center justify-center text-center text-slate-500 space-y-2">
-                    <Boxes className="w-8 h-8 text-slate-600 mb-1" />
-                    <span className="font-medium text-slate-400">{t('assets.emptyComponentsTitle')}</span>
+                  <div className="p-8 border-2 border-dashed border-host-border rounded-xl flex flex-col items-center justify-center text-center text-host-tertiary space-y-2">
+                    <Boxes className="w-8 h-8 text-host-tertiary mb-1" />
+                    <span className="font-medium text-host-secondary">{t('assets.emptyComponentsTitle')}</span>
                     <p className="text-[11px] max-w-sm leading-relaxed">
                       {t('assets.emptyComponentsBody')}
                     </p>
@@ -454,20 +454,20 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                     {Object.values(components).map((comp) => (
                       <div
                         key={comp.id}
-                        className="p-4 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-2xl space-y-3 flex flex-col justify-between"
+                        className="p-4 bg-host-sunken border border-host-border hover:border-host-border-strong rounded-xl space-y-3 flex flex-col justify-between"
                       >
                         <div className="space-y-1">
                           <div className="flex items-center justify-between">
-                            <span className="font-semibold text-slate-200 text-xs truncate">{comp.name}</span>
-                            <span className="text-[10px] text-slate-500 font-mono">#{comp.id.slice(0, 8)}</span>
+                            <span className="font-semibold text-host-primary text-xs truncate">{comp.name}</span>
+                            <span className="text-[10px] text-host-tertiary font-mono">#{comp.id.slice(0, 8)}</span>
                           </div>
-                          <div className="p-2.5 bg-slate-900 border border-slate-800 rounded-lg text-[10px] font-mono text-slate-400 max-h-16 overflow-hidden select-none">
+                          <div className="p-2.5 bg-host-elevated border border-host-border rounded-lg text-[10px] font-mono text-host-secondary max-h-16 overflow-hidden select-none">
                             {comp.templateHtml.slice(0, 140)}...
                           </div>
                         </div>
 
                         <ComponentContractEditor component={comp}/>
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-900 gap-1.5">
+                        <div className="flex items-center justify-between pt-1 border-t border-host-border gap-1.5">
                           <div className="flex items-center gap-1.5">
                             <button
                               onClick={() => {
@@ -478,7 +478,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                                   alert(t('assets.alertActivatePageFirst'));
                                 }
                               }}
-                              className="px-2.5 py-1 bg-blue-600/80 hover:bg-blue-600 text-white rounded-lg text-[11px] font-medium transition"
+                              className="px-2.5 py-1 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg text-[11px] font-medium transition"
                             >
                               {t('assets.insertToActiveBoard')}
                             </button>
@@ -497,7 +497,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                                   showFeedback(t('assets.toastSyncSuccess', { count: res.syncedCount }));
                                 }
                               }}
-                              className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px] transition"
+                              className="px-2.5 py-1 bg-host-elevated hover:bg-host-chrome border border-host-border text-host-primary rounded-lg text-[11px] transition"
                             >
                               {t('assets.syncBatch')}
                             </button>
@@ -508,7 +508,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                                 deleteComponent(comp.id);
                               }
                             }}
-                            className="p-1 text-slate-500 hover:text-red-400 transition"
+                            className="p-1 text-host-tertiary hover:text-host-danger transition"
                             disabled={libraryMemberLocked({designLibraryBinding},'components',comp.id)}
                             title={libraryMemberLocked({designLibraryBinding},'components',comp.id)?t('assets.libraryReadonlyHint'):t('assets.deleteComponent')}
                           >
@@ -527,13 +527,13 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
           {activeTab === 'images' && (
             <div className="space-y-6">
               {/* AI Image Generator Section */}
-              <div className="p-4 bg-blue-950/20 border border-blue-800/40 rounded-2xl space-y-4">
+              <div className="p-4 bg-host-elevated border border-host-border rounded-xl space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-blue-400" />
-                    <span className="font-semibold text-blue-200">{t('assets.aiImageGeneratorTitle')}</span>
+                    <Sparkles className="w-4 h-4 text-host-brand" />
+                    <span className="font-semibold text-host-primary">{t('assets.aiImageGeneratorTitle')}</span>
                   </div>
-                  <span className="text-[11px] text-blue-300/70">{t('assets.aiImagePrd')}</span>
+                  <span className="text-[11px] text-host-secondary">{t('assets.aiImagePrd')}</span>
                 </div>
 
                 <div className="space-y-3">
@@ -543,7 +543,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                       value={imgPrompt}
                       onChange={(e) => setImgPrompt(e.target.value)}
                       placeholder={t('assets.imagePromptPlaceholder')}
-                      className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
+                      className="flex-1 bg-host-sunken border border-host-border rounded-xl px-3 py-2 text-host-primary focus:outline-none focus:border-host-accent text-xs"
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleGenerateAiImage();
                       }}
@@ -551,7 +551,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                     <button
                       onClick={handleGenerateAiImage}
                       disabled={isImgGenerating || !imgPrompt.trim()}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-medium rounded-xl transition shadow flex items-center gap-1.5 whitespace-nowrap"
+                      className="px-4 py-2 bg-host-accent hover:bg-host-accent-hover disabled:opacity-40 text-host-on-accent font-medium rounded-xl transition shadow flex items-center gap-1.5 whitespace-nowrap"
                     >
                       <Wand2 className="w-3.5 h-3.5" />
                       <span>{isImgGenerating ? t('assets.generatingImage') : t('assets.generateImage')}</span>
@@ -559,7 +559,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                   </div>
 
                   {/* Style & Aspect Ratio Controls */}
-                  <div className="flex items-center gap-4 text-[11px] text-slate-400">
+                  <div className="flex items-center gap-4 text-[11px] text-host-secondary">
                     <div className="flex items-center gap-1.5">
                       <span>{t('assets.stylePreset')}</span>
                       {(['3d', 'photo', 'vector', 'flat'] as const).map((st) => (
@@ -567,7 +567,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                           key={st}
                           onClick={() => setImgStyle(st)}
                           className={`px-2 py-0.5 rounded transition ${
-                            imgStyle === st ? 'bg-blue-600 text-white font-medium' : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                            imgStyle === st ? 'bg-host-accent text-host-on-accent font-medium' : 'bg-host-sunken text-host-secondary hover:text-host-primary'
                           }`}
                         >
                           {st === '3d' ? t('assets.style3d') : st === 'photo' ? t('assets.stylePhoto') : st === 'vector' ? t('assets.styleVector') : t('assets.styleFlat')}
@@ -582,7 +582,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                           key={r}
                           onClick={() => setImgRatio(r)}
                           className={`px-2 py-0.5 rounded transition ${
-                            imgRatio === r ? 'bg-blue-600 text-white font-medium' : 'bg-slate-900 text-slate-400 hover:text-slate-200'
+                            imgRatio === r ? 'bg-host-accent text-host-on-accent font-medium' : 'bg-host-sunken text-host-secondary hover:text-host-primary'
                           }`}
                         >
                           {r}
@@ -594,26 +594,26 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
 
                 {/* Generated Preview */}
                 {generatedImgUrl && (
-                  <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
+                  <div className="p-3 bg-host-sunken border border-host-border rounded-xl space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-slate-300">{t('assets.generatedPreview')}</span>
-                      <span className="text-[10px] text-slate-500 font-mono">{t('assets.generatedPreviewMeta')}</span>
+                      <span className="text-[11px] font-semibold text-host-primary">{t('assets.generatedPreview')}</span>
+                      <span className="text-[10px] text-host-tertiary font-mono">{t('assets.generatedPreviewMeta')}</span>
                     </div>
 
-                    <div className="w-full max-h-48 overflow-hidden rounded-lg border border-slate-800 flex items-center justify-center bg-slate-900">
+                    <div className="w-full max-h-48 overflow-hidden rounded-lg border border-host-border flex items-center justify-center bg-host-elevated">
                       <img src={generatedImgUrl} alt={t('assets.generatedAssetAlt')} className="max-h-48 object-contain" />
                     </div>
 
                     <div className="flex items-center justify-end gap-2 pt-1">
                       <button
                         onClick={() => handleApplyImageToSelected(generatedImgUrl)}
-                        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition"
+                        className="px-3 py-1.5 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg text-xs font-medium transition"
                       >
                         {t('assets.applyToSelected')}
                       </button>
                       <button
                         onClick={handleSaveImageToAssets}
-                        className="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-slate-200 rounded-lg text-xs transition"
+                        className="px-3 py-1.5 bg-host-elevated hover:bg-host-chrome border border-host-border text-host-primary rounded-lg text-xs transition"
                       >
                         {t('assets.saveToLibrary')}
                       </button>
@@ -625,7 +625,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
               {/* Local File Upload Zone */}
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="p-6 border-2 border-dashed border-slate-800 hover:border-slate-700 rounded-2xl flex flex-col items-center justify-center text-center cursor-pointer bg-slate-950/40 transition"
+                className="p-6 border-2 border-dashed border-host-border hover:border-host-border-strong rounded-xl flex flex-col items-center justify-center text-center cursor-pointer bg-host-sunken transition"
               >
                 <input
                   type="file"
@@ -635,9 +635,9 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                   accept="image/*"
                   className="hidden"
                 />
-                <Upload className="w-6 h-6 text-slate-500 mb-2" />
-                <span className="font-semibold text-slate-300">{t('assets.uploadZoneTitle')}</span>
-                <span className="text-[11px] text-slate-500 mt-1">
+                <Upload className="w-6 h-6 text-host-tertiary mb-2" />
+                <span className="font-semibold text-host-primary">{t('assets.uploadZoneTitle')}</span>
+                <span className="text-[11px] text-host-tertiary mt-1">
                   {t('assets.uploadZoneHint')}
                 </span>
               </div>
@@ -645,7 +645,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
               {/* Project Asset Gallery */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="font-semibold text-slate-300 text-xs">
+                  <span className="font-semibold text-host-primary text-xs">
                     {t('assets.imageAssetListTitle', { count: Object.keys(assets).length })}
                   </span>
                   {Object.keys(assets).length > 0 && (
@@ -654,7 +654,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                         const cleaned = cleanupUnusedAssets();
                         showFeedback(t('assets.toastCleanupUnused', { count: cleaned }));
                       }}
-                      className="text-[11px] text-slate-400 hover:text-slate-200"
+                      className="text-[11px] text-host-secondary hover:text-host-primary"
                     >
                       {t('assets.cleanupUnused')}
                     </button>
@@ -662,29 +662,29 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                 </div>
 
                 {Object.keys(assets).length === 0 ? (
-                  <span className="text-slate-500 block text-center py-4">{t('assets.noProjectImages')}</span>
+                  <span className="text-host-tertiary block text-center py-4">{t('assets.noProjectImages')}</span>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {Object.values(assets).map((ast) => (
                       <div
                         key={ast.id}
-                        className="p-2.5 bg-slate-950 border border-slate-800 rounded-xl space-y-2 flex flex-col justify-between"
+                        className="p-2.5 bg-host-sunken border border-host-border rounded-xl space-y-2 flex flex-col justify-between"
                       >
-                        <div className="aspect-video bg-slate-900 rounded-lg overflow-hidden flex items-center justify-center border border-slate-800/80">
+                        <div className="aspect-video bg-host-elevated rounded-lg overflow-hidden flex items-center justify-center border border-host-border">
                           {ast.relPath ? (
                             <AssetPreviewImage asset={ast} className="w-full h-full object-cover" />
                           ) : (
-                            <ImageIcon className="w-6 h-6 text-slate-600" />
+                            <ImageIcon className="w-6 h-6 text-host-tertiary" />
                           )}
                         </div>
                         <div className="truncate">
-                          <span className="font-medium text-slate-200 truncate block text-[11px]">{ast.name}</span>
-                          <span className="text-[10px] text-slate-500 font-mono">#{ast.id.slice(0, 8)}</span>
+                          <span className="font-medium text-host-primary truncate block text-[11px]">{ast.name}</span>
+                          <span className="text-[10px] text-host-tertiary font-mono">#{ast.id.slice(0, 8)}</span>
                         </div>
-                        <div className="flex items-center justify-between pt-1 border-t border-slate-900">
+                        <div className="flex items-center justify-between pt-1 border-t border-host-border">
                           <button
                             onClick={() => handleApplyImageToSelected(ast.relPath)}
-                            className="text-[10px] text-blue-400 hover:text-blue-300"
+                            className="text-[10px] text-host-brand hover:text-host-accent-hover"
                           >
                             {t('assets.useAsset')}
                           </button>
@@ -696,7 +696,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                                 catch(error){showFeedback(error instanceof Error?error.message:t('assets.toastReplaceAssetFailed'));}
                               }
                             }}
-                            className="text-[10px] text-slate-400 hover:text-slate-200"
+                            className="text-[10px] text-host-secondary hover:text-host-primary"
                           >
                             {t('assets.replaceGlobally')}
                           </button>
@@ -704,7 +704,7 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                             disabled={libraryMemberLocked({designLibraryBinding},'assets',ast.id)}
                             title={libraryMemberLocked({designLibraryBinding},'assets',ast.id)?t('assets.libraryReadonlyHint'):t('assets.deleteAsset')}
                             onClick={() => removeAsset(ast.id)}
-                            className="text-slate-500 hover:text-red-400 p-0.5"
+                            className="text-host-tertiary hover:text-host-danger p-0.5"
                           >
                             <Trash2 className="w-3 h-3" />
                           </button>
@@ -721,13 +721,13 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
           {activeTab === 'icons' && (
             <div className="space-y-4">
               <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-2.5" />
+                <Search className="w-3.5 h-3.5 text-host-tertiary absolute left-3 top-2.5" />
                 <input
                   type="text"
                   placeholder={t('assets.searchIconsPlaceholder')}
                   value={iconSearch}
                   onChange={(e) => setIconSearch(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-slate-200 focus:outline-none focus:border-blue-500 text-xs"
+                  className="w-full bg-host-sunken border border-host-border rounded-xl pl-9 pr-3 py-2 text-host-primary focus:outline-none focus:border-host-accent text-xs"
                 />
               </div>
 
@@ -739,16 +739,16 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                     <div
                       key={item.name}
                       onClick={() => handleCopySvg(item.svg, item.name)}
-                      className="p-3 bg-slate-950/70 border border-slate-800 hover:border-slate-700 rounded-xl cursor-pointer transition flex items-center justify-between group"
+                      className="p-3 bg-host-sunken border border-host-border hover:border-host-border-strong rounded-xl cursor-pointer transition flex items-center justify-between group"
                     >
                       <div className="flex items-center gap-2.5">
-                        <div className="p-2 bg-slate-900 border border-slate-800 rounded-lg text-blue-400 group-hover:text-blue-300">
+                        <div className="p-2 bg-host-elevated border border-host-border rounded-lg text-host-brand group-hover:text-host-accent-hover">
                           <IconComp className="w-4 h-4" />
                         </div>
-                        <span className="text-slate-200 truncate">{t(item.labelKey)}</span>
+                        <span className="text-host-primary truncate">{t(item.labelKey)}</span>
                       </div>
-                      <button className="text-slate-500 group-hover:text-slate-300">
-                        {isCopied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                      <button className="text-host-tertiary group-hover:text-host-primary">
+                        {isCopied ? <Check className="w-3.5 h-3.5 text-host-success" /> : <Copy className="w-3.5 h-3.5" />}
                       </button>
                     </div>
                   );
@@ -760,12 +760,12 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
           {/* TAB 4: AI Vector Icon Generator */}
           {activeTab === 'ai_svg' && (
             <div className="space-y-4">
-              <div className="p-4 bg-purple-950/30 border border-purple-800/40 rounded-xl space-y-3">
+              <div className="p-4 bg-host-elevated border border-host-border rounded-xl space-y-3">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-400" />
-                  <span className="font-semibold text-purple-200">{t('assets.aiSvgTitle')}</span>
+                  <Sparkles className="w-4 h-4 text-host-brand" />
+                  <span className="font-semibold text-host-primary">{t('assets.aiSvgTitle')}</span>
                 </div>
-                <p className="text-[11px] text-purple-300/80 leading-relaxed">
+                <p className="text-[11px] text-host-secondary leading-relaxed">
                   {t('assets.aiSvgDescription')}
                 </p>
                 <div className="flex items-center gap-2">
@@ -777,12 +777,12 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                       if (e.key === 'Enter') handleGenerateAiSvg();
                     }}
                     placeholder={t('assets.aiIconPlaceholder')}
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-slate-200 focus:outline-none focus:border-purple-500 text-xs"
+                    className="flex-1 bg-host-sunken border border-host-border rounded-xl px-3 py-2 text-host-primary focus:outline-none focus:border-host-accent text-xs"
                   />
                   <button
                     onClick={handleGenerateAiSvg}
                     disabled={isAiGenerating || !aiIconPrompt.trim()}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-40 text-white font-medium rounded-xl transition shadow"
+                    className="px-4 py-2 bg-host-accent hover:bg-host-accent-hover disabled:opacity-40 text-host-on-accent font-medium rounded-xl transition shadow"
                   >
                     {isAiGenerating ? t('assets.generatingIcon') : t('assets.generateIcon')}
                   </button>
@@ -790,10 +790,10 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
               </div>
 
               {generatedSvg && (
-                <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
-                  <span className="font-semibold text-slate-300 block">{t('assets.vectorPreviewTitle')}</span>
+                <div className="p-4 bg-host-sunken border border-host-border rounded-xl space-y-3">
+                  <span className="font-semibold text-host-primary block">{t('assets.vectorPreviewTitle')}</span>
                   <div className="flex items-center gap-6">
-                    <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center text-purple-400 p-3 shadow-inner">
+                    <div className="w-16 h-16 rounded-xl bg-host-elevated border border-host-border flex items-center justify-center text-host-brand p-3 shadow-inner">
                       <svg
                         className="w-full h-full"
                         viewBox="0 0 24 24"
@@ -806,14 +806,14 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                       />
                     </div>
                     <div className="flex-1 col gap-2">
-                      <pre className="p-2 bg-slate-900 border border-slate-800 rounded-lg text-[10px] font-mono text-slate-400 max-h-20 overflow-auto">
+                      <pre className="p-2 bg-host-elevated border border-host-border rounded-lg text-[10px] font-mono text-host-secondary max-h-20 overflow-auto">
                         {generatedSvg}
                       </pre>
                       <button
                         onClick={() => handleCopySvg(generatedSvg, 'ai-gen')}
-                        className="flex items-center justify-center gap-1.5 py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition"
+                        className="flex items-center justify-center gap-1.5 py-1.5 px-3 bg-host-elevated hover:bg-host-chrome border border-host-border text-host-primary rounded-lg transition"
                       >
-                        {copiedKey === 'ai-gen' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedKey === 'ai-gen' ? <Check className="w-3.5 h-3.5 text-host-success" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>{copiedKey === 'ai-gen' ? t('assets.copiedIconRef') : t('assets.saveIconCopyRef')}</span>
                       </button>
                     </div>
@@ -829,10 +829,10 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-2">
-                    <Library className="w-4 h-4 text-emerald-400" />
-                    <span className="font-semibold text-slate-200">{t('assets.mothersTitle')}</span>
+                    <Library className="w-4 h-4 text-host-success" />
+                    <span className="font-semibold text-host-primary">{t('assets.mothersTitle')}</span>
                   </div>
-                  <p className="mt-1 text-[11px] text-slate-500 leading-relaxed">
+                  <p className="mt-1 text-[11px] text-host-tertiary leading-relaxed">
                     {t('assets.mothersDescription')}
                   </p>
                 </div>
@@ -840,29 +840,29 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
                   type="button"
                   disabled={!activeScreenId || savingMother}
                   onClick={handleSaveActiveScreenAsMother}
-                  className="shrink-0 px-3 py-2 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-xl text-[11px] font-medium transition"
+                  className="shrink-0 px-3 py-2 bg-host-accent hover:bg-host-accent-hover disabled:opacity-40 text-host-on-accent rounded-xl text-[11px] font-medium transition"
                 >
                   {savingMother ? t('assets.savingMother') : t('assets.saveMother')}
                 </button>
               </div>
 
               {builtinMothers.length === 0 ? (
-                <p className="text-[11px] text-slate-500 px-1 py-6 text-center">{t('assets.emptyBuiltinMothers')}</p>
+                <p className="text-[11px] text-host-tertiary px-1 py-6 text-center">{t('assets.emptyBuiltinMothers')}</p>
               ) : (
                 <div className="space-y-1.5 max-h-[48vh] overflow-y-auto pr-1">
                   {builtinMothers.map((meta) => (
                     <div
                       key={meta.id}
-                      className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border border-slate-800 bg-slate-950/60"
+                      className="flex items-center justify-between gap-3 px-3 py-2 rounded-xl border border-host-border bg-host-sunken"
                     >
                       <div className="min-w-0">
-                        <div className="text-slate-200 font-medium truncate">{meta.id}</div>
-                        <div className="text-[10px] text-slate-500 mt-0.5 truncate">
+                        <div className="text-host-primary font-medium truncate">{meta.id}</div>
+                        <div className="text-[10px] text-host-tertiary mt-0.5 truncate">
                           {meta.device} · {meta.pageKind}
                           {meta.aliases[0] ? ` · ${meta.aliases[0]}` : ''}
                         </div>
                       </div>
-                      <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-slate-700 text-slate-500">
+                      <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-host-border text-host-tertiary">
                         {t('assets.readonly')}
                       </span>
                     </div>
@@ -874,8 +874,8 @@ export const AssetModal: React.FC<AssetModalProps> = ({ onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-end">
-          <button onClick={onClose} className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-xl text-xs transition">
+        <div className="p-4 border-t border-host-border bg-host-chrome flex justify-end">
+          <button onClick={onClose} className="px-5 py-2 bg-host-elevated hover:bg-host-dialog border border-host-border text-host-primary font-medium rounded-xl text-xs transition">
             {t('common.close')}
           </button>
         </div>

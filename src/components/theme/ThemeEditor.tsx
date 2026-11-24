@@ -86,43 +86,43 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 lg:p-6">
-      <div className="w-full max-w-6xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col h-[90vh]">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 lg:p-6">
+      <div className="w-full max-w-6xl bg-host-chrome text-host-primary border border-host-border-strong rounded-xl shadow-2xl overflow-hidden flex flex-col h-[90vh]">
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
+        <div className="p-4 border-b border-host-border flex items-center justify-between bg-host-chrome">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
-              <Palette className="w-4 h-4 text-blue-400" />
+            <div className="w-8 h-8 rounded-lg bg-host-accent-subtle border border-host-accent/40 flex items-center justify-center">
+              <Palette className="w-4 h-4 text-host-brand" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="font-semibold text-slate-100 text-sm">{t('theme.title')}</span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-mono">
+                <span className="font-semibold text-host-primary text-sm">{t('theme.title')}</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-host-accent-subtle text-host-brand border border-host-accent/40 font-mono">
                   {designSystem.name}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[11px] text-host-secondary">
                 {t('theme.subtitle')}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 text-lg flex items-center justify-center transition"
+            className="w-8 h-8 rounded-lg hover:bg-host-elevated text-host-secondary hover:text-host-primary text-lg flex items-center justify-center transition"
           >
             ×
           </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center justify-between border-b border-slate-800 bg-slate-950 px-4 text-xs font-medium">
+        <div className="flex items-center justify-between border-b border-host-border bg-host-sunken px-4 text-xs font-medium">
           <div className="flex items-center">
             <button
               onClick={() => setActiveTab('tokens')}
               className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
                 activeTab === 'tokens'
-                  ? 'border-blue-500 text-blue-400 font-semibold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'border-host-accent text-host-brand font-semibold'
+                  : 'border-transparent text-host-secondary hover:text-host-primary'
               }`}
             >
               <Palette className="w-3.5 h-3.5" />
@@ -132,22 +132,22 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               onClick={() => setActiveTab('decisions')}
               className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
                 activeTab === 'decisions'
-                  ? 'border-blue-500 text-blue-400 font-semibold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'border-host-accent text-host-brand font-semibold'
+                  : 'border-transparent text-host-secondary hover:text-host-primary'
               }`}
             >
-              <Bookmark className="w-3.5 h-3.5 text-amber-400" />
+              <Bookmark className="w-3.5 h-3.5 text-host-warning" />
               <span>{t('theme.tabDecisions')}</span>
             </button>
             <button
               onClick={() => setActiveTab('base_css')}
               className={`py-3 px-4 border-b-2 flex items-center gap-1.5 transition ${
                 activeTab === 'base_css'
-                  ? 'border-blue-500 text-blue-400 font-semibold'
-                  : 'border-transparent text-slate-400 hover:text-slate-200'
+                  ? 'border-host-accent text-host-brand font-semibold'
+                  : 'border-transparent text-host-secondary hover:text-host-primary'
               }`}
             >
-              <Code className="w-3.5 h-3.5 text-emerald-400" />
+              <Code className="w-3.5 h-3.5 text-host-success" />
               <span>{t('theme.tabBaseCss')}</span>
             </button>
           </div>
@@ -156,9 +156,9 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
             <button
               disabled={libraryReadOnly} title={libraryReadOnly?'固定版本参考只读，请先转为项目副本':undefined}
               onClick={() => setShowStylePicker(true)}
-              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium transition flex items-center gap-1.5 border border-slate-700"
+              className="px-2.5 py-1.5 bg-host-elevated hover:bg-host-dialog text-host-primary rounded-lg text-xs font-medium transition flex items-center gap-1.5 border border-host-border"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <Sparkles className="w-3.5 h-3.5 text-host-warning" />
               <span>{t('theme.styleCompare')}</span>
             </button>
           </div>
@@ -167,24 +167,24 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
         {/* Split-pane Body */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 min-h-0 overflow-hidden">
           {/* Left Panel: Configuration & Rules */}
-          <div className="lg:col-span-5 border-r border-slate-800 p-5 space-y-5 text-xs overflow-y-auto bg-slate-900/60">
+          <div className="lg:col-span-5 border-r border-host-border p-5 space-y-5 text-xs overflow-y-auto bg-host-chrome">
           {/* Tab 1: Tokens */}
           {activeTab === 'tokens' && (
             <>
               <DesignLibraryImportPanel />
               {/* Color Mode */}
-              <div className="flex items-center justify-between p-3 bg-slate-950 border border-slate-800 rounded-xl">
+              <div className="flex items-center justify-between p-3 bg-host-sunken border border-host-border rounded-xl">
                 <div>
-                  <span className="font-semibold text-slate-200 block">{t('theme.colorMode')}</span>
-                  <span className="text-slate-500 text-[11px]">{t('theme.colorModeHint')}</span>
+                  <span className="font-semibold text-host-primary block">{t('theme.colorMode')}</span>
+                  <span className="text-host-tertiary text-[11px]">{t('theme.colorModeHint')}</span>
                 </div>
-                <div className="flex items-center gap-1 bg-slate-800 p-1 rounded-lg border border-slate-700">
+                <div className="flex items-center gap-1 bg-host-elevated p-1 rounded-lg border border-host-border">
                   <button
                     onClick={() => setColorMode('light')}
                     className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition ${
                       settings.colorMode === 'light'
-                        ? 'bg-blue-600 text-white font-medium shadow'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'bg-host-accent text-host-on-accent font-medium shadow'
+                        : 'text-host-secondary hover:text-host-primary'
                     }`}
                   >
                     <Sun className="w-3.5 h-3.5" />
@@ -194,8 +194,8 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                     onClick={() => setColorMode('dark')}
                     className={`flex items-center gap-1.5 px-3 py-1 rounded-md transition ${
                       settings.colorMode === 'dark'
-                        ? 'bg-blue-600 text-white font-medium shadow'
-                        : 'text-slate-400 hover:text-slate-200'
+                        ? 'bg-host-accent text-host-on-accent font-medium shadow'
+                        : 'text-host-secondary hover:text-host-primary'
                     }`}
                   >
                     <Moon className="w-3.5 h-3.5" />
@@ -205,17 +205,17 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               </div>
 
               {/* Theme Presets */}
-              <button onClick={()=>setExtracting(true)} className="w-full rounded-lg border border-slate-700 bg-slate-800 p-3 text-xs text-slate-200">{t('theme.extractStyle')}</button>
+              <button onClick={()=>setExtracting(true)} className="w-full rounded-lg border border-host-border bg-host-elevated hover:bg-host-dialog p-3 text-xs text-host-primary transition">{t('theme.extractStyle')}</button>
               {extracting&&<PageStyleExtractionDialog onClose={()=>setExtracting(false)}/>}
               <fieldset disabled={libraryReadOnly} className="space-y-5 disabled:opacity-50" aria-label={t('theme.tokenEditAria')}>
               <details className="space-y-3">
-                <summary className="cursor-pointer text-slate-300 font-semibold">{t('theme.presets')}</summary>
+                <summary className="cursor-pointer text-host-primary font-semibold">{t('theme.presets')}</summary>
                 <div className="flex items-center justify-between gap-3">
-                  <span className="font-semibold text-slate-300 block">{t('theme.presetsTitle')}</span>
+                  <span className="font-semibold text-host-primary block">{t('theme.presetsTitle')}</span>
                   <button
                     disabled={libraryReadOnly} title={libraryReadOnly?'固定版本参考只读，请先转为项目副本':undefined}
                     onClick={() => setShowStylePicker(true)}
-                    className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-[10px] font-medium whitespace-nowrap"
+                    className="px-2.5 py-1 bg-host-elevated hover:bg-host-dialog border border-host-border text-host-primary rounded-lg text-[10px] font-medium whitespace-nowrap"
                   >
                     {t('theme.sideBySidePreview')}
                   </button>
@@ -229,8 +229,8 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                         onClick={() => handleSelectPreset(preset.theme)}
                         className={`p-4 text-left rounded-xl border cursor-pointer transition flex flex-col gap-2 ${
                           isSelected
-                            ? 'border-blue-500 bg-blue-950/40 ring-1 ring-blue-500'
-                            : 'border-slate-800 bg-slate-950/60 hover:border-slate-700'
+                            ? 'border-host-accent/50 bg-host-accent-subtle ring-1 ring-host-accent/50'
+                            : 'border-host-border bg-host-sunken hover:border-host-border-strong'
                         }`}
                       >
                         <div className="flex items-center justify-between">
@@ -239,11 +239,11 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                               className="w-4 h-4 rounded-full shadow-sm"
                               style={{ backgroundColor: preset.primaryColor }}
                             />
-                            <span className="font-semibold text-slate-200">{preset.name}</span>
+                            <span className="font-semibold text-host-primary">{preset.name}</span>
                           </div>
-                          {isSelected && <Check className="w-4 h-4 text-blue-400" />}
+                          {isSelected && <Check className="w-4 h-4 text-host-brand" />}
                         </div>
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                        <p className="text-[11px] text-host-secondary leading-relaxed">
                           {preset.description}
                         </p>
                       </button>
@@ -253,18 +253,18 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               </details>
 
               {/* Primary Color Picker */}
-              <div className="space-y-3 p-4 bg-slate-950 border border-slate-800 rounded-xl">
-                <span className="font-semibold text-slate-300 block">{t('theme.brandColors')}</span>
+              <div className="space-y-3 p-4 bg-host-sunken border border-host-border rounded-xl">
+                <span className="font-semibold text-host-primary block">{t('theme.brandColors')}</span>
                 <div className="grid grid-cols-2 gap-2">
                   {COLOR_SCHEMES.map(scheme => (
                     <button key={scheme.id} type="button" onClick={() => {
                       setDesignSystem({ ...designSystem, tokens: applyBrandColor(designSystem.tokens, scheme.seed, true) });
-                    }} title={scheme.description} className="flex items-center gap-2 rounded-lg border border-slate-700 p-2 text-xs text-slate-200 hover:bg-slate-800">
+                    }} title={scheme.description} className="flex items-center gap-2 rounded-lg border border-host-border bg-host-elevated p-2 text-xs text-host-primary hover:bg-host-dialog">
                       <span className="h-4 w-4 rounded-full" style={{ background: scheme.seed }} />{scheme.name}
                     </button>
                   ))}
                 </div>
-                <label className="flex items-center gap-2 text-xs text-slate-400">
+                <label className="flex items-center gap-2 text-xs text-host-secondary">
                   <input type="checkbox" checked={harmonizeSurfaces} onChange={e => setHarmonizeSurfaces(e.target.checked)} />
                   自定义主色时联动背景、卡片、中性色与阴影
                 </label>
@@ -277,15 +277,15 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                     className="w-10 h-10 rounded-lg cursor-pointer bg-transparent border-0"
                   />
                   <div className="col">
-                    <span className="font-mono text-slate-200">
+                    <span className="font-mono text-host-primary">
                       {designSystem.tokens.colors.primary['500'] || '#2563eb'}
                     </span>
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-[11px] text-host-tertiary">
                       {harmonizeSurfaces ? '自动生成完整色阶与协调表面；支持撤销。' : '更新完整品牌色阶，保留自定义背景与表面；支持撤销。'}
                     </span>
                   </div>
                 </div>
-                <p className="text-[11px] leading-relaxed text-slate-400">背景保持低饱和，卡片用表面色；品牌色集中用于主操作和选中态，成功、警告、危险色只表达状态。</p>
+                <p className="text-[11px] leading-relaxed text-host-secondary">背景保持低饱和，卡片用表面色；品牌色集中用于主操作和选中态，成功、警告、危险色只表达状态。</p>
               </div>
 
               <ThemeBackgroundEditor/>
@@ -293,11 +293,11 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                 onChange={tokens => setDesignSystem({ ...designSystem, tokens })} />
 
               {/* 风格性格参数 (T-AE-24) */}
-              <div className="space-y-3 p-4 bg-slate-950 border border-slate-800 rounded-xl">
-                <span className="font-semibold text-slate-300 block">{t('theme.personality')}</span>
+              <div className="space-y-3 p-4 bg-host-sunken border border-host-border rounded-xl">
+                <span className="font-semibold text-host-primary block">{t('theme.personality')}</span>
 
                 <div className="space-y-1.5">
-                  <span className="text-[11px] text-slate-500">{t('theme.radiusScale')}</span>
+                  <span className="text-[11px] text-host-tertiary">{t('theme.radiusScale')}</span>
                   <div className="grid grid-cols-4 gap-2">
                     {RADIUS_PRESETS.map((r) => (
                       <button
@@ -305,8 +305,8 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                         onClick={() => patchTokens((tokens) => ({ ...tokens, radius: r.value }))}
                         className={`py-1.5 rounded-lg border text-[11px] transition ${
                           designSystem.tokens.radius.md === r.value.md
-                            ? 'border-blue-500 bg-blue-950/40 text-slate-200'
-                            : 'border-slate-800 text-slate-400 hover:border-slate-700'
+                            ? 'border-host-accent/50 bg-host-accent-subtle text-host-brand'
+                            : 'border-host-border text-host-secondary hover:border-host-border-strong'
                         }`}
                       >
                         {t(r.labelKey)}
@@ -316,7 +316,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <span className="text-[11px] text-slate-500">{t('theme.density')}</span>
+                  <span className="text-[11px] text-host-tertiary">{t('theme.density')}</span>
                   <div className="grid grid-cols-3 gap-2">
                     {(['compact', 'standard', 'relaxed'] as const).map((d) => (
                       <button
@@ -324,8 +324,8 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                         onClick={() => patchTokens((tokens) => ({ ...tokens, personality: { ...tokens.personality, density: d } }))}
                         className={`py-1.5 rounded-lg border text-[11px] transition ${
                           designSystem.tokens.personality.density === d
-                            ? 'border-blue-500 bg-blue-950/40 text-slate-200'
-                            : 'border-slate-800 text-slate-400 hover:border-slate-700'
+                            ? 'border-host-accent/50 bg-host-accent-subtle text-host-brand'
+                            : 'border-host-border text-host-secondary hover:border-host-border-strong'
                         }`}
                       >
                         {d === 'compact' ? t('theme.densityCompact') : d === 'standard' ? t('theme.densityStandard') : t('theme.densityRelaxed')}
@@ -336,8 +336,8 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-slate-500">{t('theme.borderAlpha')}</span>
-                    <span className="font-mono text-[11px] text-slate-300">
+                    <span className="text-[11px] text-host-tertiary">{t('theme.borderAlpha')}</span>
+                    <span className="font-mono text-[11px] text-host-primary">
                       {designSystem.tokens.personality.borderAlpha.toFixed(2)}
                     </span>
                   </div>
@@ -353,37 +353,37 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                         personality: { ...tokens.personality, borderAlpha: Number(e.target.value) }
                       }))
                     }
-                    className="w-full accent-blue-500"
+                    className="w-full accent-host-accent"
                   />
-                  <span className="text-[10px] text-slate-500">
+                  <span className="text-[10px] text-host-tertiary">
                     值越低边框越柔和；生效于 .border-subtle 与 .glass
                   </span>
                 </div>
 
                 {/* Collapsible Card for Active DESIGN.md (T-OD-18 / UI/UX-3) */}
-                <div className="pt-3 border-t border-slate-800">
-                  <div className="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden">
+                <div className="pt-3 border-t border-host-border">
+                  <div className="bg-host-sunken border border-host-border rounded-xl overflow-hidden">
                     <button
                       type="button"
                       onClick={() => setShowProseCard(!showProseCard)}
-                      className="w-full p-3 flex items-center justify-between text-left hover:bg-slate-900/50 transition cursor-pointer"
+                      className="w-full p-3 flex items-center justify-between text-left hover:bg-host-elevated transition cursor-pointer"
                     >
                       <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-blue-400" />
-                        <span className="text-xs font-semibold text-slate-200">
+                        <FileText className="w-4 h-4 text-host-brand" />
+                        <span className="text-xs font-semibold text-host-primary">
                           当前激活设计规范 (DESIGN.md)
                         </span>
                         <span
                           className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                             activeProse.source === 'project_override'
                               ? 'bg-purple-900/60 text-purple-300 border border-purple-700/50'
-                              : 'bg-slate-800 text-slate-400 border border-slate-700'
+                              : 'bg-host-elevated text-host-secondary border border-host-border'
                           }`}
                         >
                           {activeProse.source === 'project_override' ? '工程覆盖' : '内置预设'}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1 text-slate-500 text-xs">
+                      <div className="flex items-center gap-1 text-host-tertiary text-xs">
                         <span>{showProseCard ? '收起' : '展开查看'}</span>
                         <ChevronDown
                           className={`w-3.5 h-3.5 transition-transform ${showProseCard ? 'rotate-180' : ''}`}
@@ -392,12 +392,12 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                     </button>
 
                     {showProseCard && (
-                      <div className="p-3 border-t border-slate-800/80 bg-slate-900/40 space-y-2">
-                        <div className="flex items-center justify-between text-[11px] text-slate-400">
-                          <span>规范名称: <strong className="text-slate-200">{activeProse.title}</strong></span>
-                          <span className="font-mono text-[10px] text-slate-500">{activeProse.presetId}</span>
+                      <div className="p-3 border-t border-host-border bg-host-chrome space-y-2">
+                        <div className="flex items-center justify-between text-[11px] text-host-secondary">
+                          <span>规范名称: <strong className="text-host-primary">{activeProse.title}</strong></span>
+                          <span className="font-mono text-[10px] text-host-tertiary">{activeProse.presetId}</span>
                         </div>
-                        <pre className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 font-mono text-[11px] text-slate-300 leading-relaxed overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap">
+                        <pre className="p-2.5 bg-host-sunken rounded-lg border border-host-border font-mono text-[11px] text-host-primary leading-relaxed overflow-x-auto max-h-60 overflow-y-auto whitespace-pre-wrap">
                           {activeProse.rulesMarkdown}
                         </pre>
                       </div>
@@ -413,8 +413,8 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
           {activeTab === 'decisions' && (
             <div className="space-y-4">
               <div className="space-y-1">
-                <span className="font-semibold text-slate-200 block text-sm">{t('theme.decisionsTitle')}</span>
-                <p className="text-slate-400 text-[11px] leading-relaxed">
+                <span className="font-semibold text-host-primary block text-sm">{t('theme.decisionsTitle')}</span>
+                <p className="text-host-secondary text-[11px] leading-relaxed">
                   沉淀在工程中的设计偏好（如“不使用渐变”、“按钮一律胶囊圆角”）。每次 AI 生成新页面时均自动作为上下文下发，保证项目越做越契合统一。
                 </p>
               </div>
@@ -429,12 +429,12 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                     if (e.key === 'Enter') handleAddManualRule();
                   }}
                   placeholder={t('theme.decisionPlaceholder')}
-                  className="flex-1 bg-slate-950 border border-slate-750 rounded-xl px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-blue-500"
+                  className="flex-1 bg-host-sunken border border-host-border rounded-xl px-3 py-2 text-host-primary text-xs focus:outline-none focus:border-host-accent"
                 />
                 <button
                   onClick={handleAddManualRule}
                   disabled={!newRuleInput.trim()}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white font-medium rounded-xl text-xs transition"
+                  className="px-4 py-2 bg-host-accent hover:bg-host-accent-hover disabled:opacity-40 text-host-on-accent font-medium rounded-xl text-xs transition"
                 >
                   <Plus className="w-4 h-4 inline mr-1" />
                   <span>{t('theme.addDecision')}</span>
@@ -444,27 +444,27 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               {/* Decision List */}
               <div className="space-y-2">
                 {Object.values(decisions).length === 0 ? (
-                  <div className="p-6 text-center text-slate-500 bg-slate-950/40 rounded-xl">
+                  <div className="p-6 text-center text-host-tertiary bg-host-sunken border border-host-border rounded-xl">
                     暂无工程设计约定。在右侧 AI 对话中提到偏好时会自动提示沉淀。
                   </div>
                 ) : (
                   Object.values(decisions).map((dec) => (
                     <div
                       key={dec.id}
-                      className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center justify-between"
+                      className="p-3 bg-host-sunken border border-host-border rounded-xl flex items-center justify-between"
                     >
                       <div className="flex items-center gap-3">
                         <input
                           type="checkbox"
                           checked={dec.active}
                           onChange={() => toggleDecision(dec.id)}
-                          className="rounded text-blue-600 focus:ring-0 cursor-pointer"
+                          className="rounded text-host-brand focus:ring-0 cursor-pointer"
                         />
-                        <span className={`text-slate-200 ${!dec.active ? 'line-through text-slate-500' : ''}`}>
+                        <span className={`text-host-primary ${!dec.active ? 'line-through text-host-tertiary' : ''}`}>
                           {dec.text}
                         </span>
                       </div>
-                      <span className="text-[10px] text-slate-500 font-mono">
+                      <span className="text-[10px] text-host-tertiary font-mono">
                         {dec.source.kind === 'auto_extracted' ? '对话沉淀' : '人工添加'}
                       </span>
                     </div>
@@ -479,8 +479,8 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="font-semibold text-slate-200 block text-sm">{t('theme.baseCssTitle')}</span>
-                  <p className="text-slate-400 text-[11px] leading-relaxed">
+                  <span className="font-semibold text-host-primary block text-sm">{t('theme.baseCssTitle')}</span>
+                  <p className="text-host-secondary text-[11px] leading-relaxed">
                     随工程持久化存储。类名白名单由此实时派生下发给 AI。用户禁止手改以免破坏契约，可经下方对话申请演进（PRD D15 / §3.5.6）。
                   </p>
                 </div>
@@ -488,18 +488,18 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
 
               {/* Search filter */}
               <div className="relative flex items-center">
-                <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3" />
+                <Search className="w-3.5 h-3.5 text-host-tertiary absolute left-3" />
                 <input
                   type="text"
                   placeholder={t('theme.searchCssPlaceholder')}
                   value={baseCssFilter}
                   onChange={(e) => setBaseCssFilter(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-8 pr-3 py-1.5 text-slate-200 text-xs focus:outline-none focus:border-blue-500"
+                  className="w-full bg-host-sunken border border-host-border rounded-xl pl-8 pr-3 py-1.5 text-host-primary text-xs focus:outline-none focus:border-host-accent"
                 />
               </div>
 
               {/* Code Preview */}
-              <pre className="p-4 bg-slate-950 border border-slate-800 rounded-xl text-[11px] font-mono text-slate-300 leading-relaxed max-h-52 overflow-auto select-text">
+              <pre className="p-4 bg-host-sunken border border-host-border rounded-xl text-[11px] font-mono text-host-primary leading-relaxed max-h-52 overflow-auto select-text">
                 {rawBaseCss
                   .split('\n')
                   .filter((line: string) => !baseCssFilter || line.toLowerCase().includes(baseCssFilter.toLowerCase()))
@@ -507,8 +507,8 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
               </pre>
 
               {/* AI Evolution Input Box (PRD §3.5.6) */}
-              <div className="p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-2">
-                <div className="flex items-center gap-1.5 text-blue-400 font-semibold text-xs">
+              <div className="p-3 bg-host-sunken border border-host-border rounded-xl space-y-2">
+                <div className="flex items-center gap-1.5 text-host-brand font-semibold text-xs">
                   <Sparkles className="w-3.5 h-3.5" />
                   <span>AI 辅助基座样式演进 (PRD §3.5.6)</span>
                 </div>
@@ -518,7 +518,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                     placeholder="以自然语言提出修改，例：新增 .badge-glow 呼吸灯高光徽章..."
                     value={aiEvolveInput}
                     onChange={(e) => setAiEvolveInput(e.target.value)}
-                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 text-xs focus:outline-none focus:border-blue-500"
+                    className="flex-1 bg-host-elevated border border-host-border rounded-lg px-3 py-1.5 text-host-primary text-xs focus:outline-none focus:border-host-accent"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && aiEvolveInput.trim()) {
                         setEvolveResult(`已创建基座变更提案：「${aiEvolveInput.trim()}」，并在历史中建立快照保护点。`);
@@ -532,13 +532,13 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
                       setEvolveResult(`已创建基座变更提案：「${aiEvolveInput.trim()}」，并在历史中建立快照保护点。`);
                       setAiEvolveInput('');
                     }}
-                    className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-medium transition"
+                    className="px-3 py-1.5 bg-host-accent hover:bg-host-accent-hover text-host-on-accent rounded-lg text-xs font-medium transition"
                   >
                     申请演进
                   </button>
                 </div>
                 {evolveResult && (
-                  <div className="text-[11px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/40 p-2 rounded-lg">
+                  <div className="text-[11px] text-host-success bg-host-accent-subtle border border-host-accent/40 p-2 rounded-lg">
                     ✓ {evolveResult}
                   </div>
                 )}
@@ -548,7 +548,7 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
           </div>
 
           {/* Right Panel: OpenDesign-style Realtime Visual Preview */}
-          <div className="hidden lg:flex lg:col-span-7 min-h-0 overflow-hidden flex-col bg-slate-950/40">
+          <div className="hidden lg:flex lg:col-span-7 min-h-0 overflow-hidden flex-col bg-host-sunken">
             <DesignSystemVisualPreview device={settings.deviceProfile}
               theme={designSystem}
               colorMode={settings.colorMode}
@@ -559,13 +559,13 @@ export const ThemeEditor: React.FC<ThemeEditorProps> = ({ onClose }) => {
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950 flex justify-between items-center">
-          <div className="text-[11px] text-slate-500">
+        <div className="p-4 border-t border-host-border bg-host-sunken flex justify-between items-center">
+          <div className="text-[11px] text-host-tertiary">
             预设切换与参数调整将实时同步至画框沙箱与设计令牌
           </div>
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl text-xs transition shadow"
+            className="px-5 py-2 bg-host-accent hover:bg-host-accent-hover text-host-on-accent font-medium rounded-xl text-xs transition shadow"
           >
             {t('common.done')}
           </button>

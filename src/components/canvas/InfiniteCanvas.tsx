@@ -323,7 +323,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
   return (
     <div
       ref={containerRef}
-      className={`relative w-full h-full overflow-hidden bg-slate-950 ${
+      className={`relative w-full h-full overflow-hidden bg-host-canvas ${
         isSpacePressed ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-default'
       }`}
       onWheel={handleWheel}
@@ -335,7 +335,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
       <div
         ref={gridRef}
         className="absolute inset-0 pointer-events-none opacity-20"
-        style={{ backgroundImage: 'radial-gradient(#475569 1px, transparent 1px)' }}
+        style={{ backgroundImage: 'radial-gradient(#524D45 1px, transparent 1px)' }}
       />
 
       {(() => {
@@ -396,7 +396,7 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
           </div>
           {/* Full-window mask — viewport-fixed, not part of the live transform. */}
           <div data-testid="comparison-backdrop" aria-hidden="true"
-            className="absolute inset-0 z-20 pointer-events-none bg-slate-950/75" />
+            className="absolute inset-0 z-20 pointer-events-none bg-host-canvas/75" />
           {/* Live compare pair only */}
           <div ref={worldLayerRef} data-testid="comparison-live-world"
             className="absolute top-0 left-0 will-change-transform origin-top-left z-30">
@@ -465,19 +465,19 @@ export const InfiniteCanvas: React.FC<InfiniteCanvasProps> = ({ onPolish }) => {
       {/* 纯净工作区空画布引导 (OpenDesign / PRD 体验升级) */}
       {screenOrder.length === 0 && !stagedScreen && (
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none p-4">
-          <div className="max-w-md w-full p-6 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-md text-center shadow-2xl pointer-events-auto">
-            <div className="w-12 h-12 mx-auto rounded-xl bg-gradient-to-tr from-blue-600/20 to-indigo-500/20 border border-blue-500/30 flex items-center justify-center text-blue-400 mb-3.5 shadow-inner">
+          <div className="max-w-md w-full p-6 rounded-2xl bg-host-elevated/90 border border-host-border-strong backdrop-blur-md text-center shadow-2xl pointer-events-auto">
+            <div className="w-12 h-12 mx-auto rounded-xl bg-host-accent-subtle border border-host-accent/30 flex items-center justify-center text-host-brand mb-3.5 shadow-inner">
               <Sparkles className="w-6 h-6" />
             </div>
-            <h3 className="text-sm font-semibold text-slate-100">{useProjectStore.getState().projectSaveStatus==='readonly'?'工程需要恢复页面文件':'纯净工作区 · 准备就绪'}</h3>
-            <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
+            <h3 className="text-sm font-semibold text-host-primary">{useProjectStore.getState().projectSaveStatus==='readonly'?'工程需要恢复页面文件':'纯净工作区 · 准备就绪'}</h3>
+            <p className="text-xs text-host-secondary mt-1.5 leading-relaxed">
               {useProjectStore.getState().projectSaveStatus==='readonly'?'工程记录仍在，但页面文件未能完整读取。对话历史不代表页面已保存；请查看顶部“只读恢复”的具体原因，恢复文件后重新打开工程。':'在左侧对话框输入界面描述（如：“生成一个现代科技风的控制台仪表盘”），AI 将直接生成设计画框；或手动添加空白画框开始。'}
             </p>
             <div className="mt-5 flex items-center justify-center gap-2.5">
               <button
                 disabled={useProjectStore.getState().projectSaveStatus==='readonly'}
                 onClick={() => useProjectStore.getState().addBlankScreen()}
-                className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-medium transition shadow flex items-center gap-1.5"
+                className="px-4 py-2 rounded-lg bg-host-accent hover:bg-host-accent-hover text-host-on-accent text-xs font-medium transition shadow flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>新建空白画框</span>

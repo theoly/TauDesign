@@ -59,13 +59,13 @@ const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
   // 1. 优先展示显式设置的工程封面 (保持等比完整呈现，杜绝局部畸变放大)
   if (meta.coverImage) {
     return (
-      <div className="w-full h-full relative overflow-hidden bg-slate-950 flex items-center justify-center" data-testid="project-custom-cover">
+      <div className="w-full h-full relative overflow-hidden bg-host-sunken flex items-center justify-center" data-testid="project-custom-cover">
         <img
           src={meta.coverImage}
           alt={t('workspace.coverAlt', { name: meta.name })}
           className="w-full h-full object-contain select-none pointer-events-none transition-transform duration-300 group-hover:scale-105"
         />
-        <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-slate-900/80 backdrop-blur-sm border border-slate-700/50 text-[10px] text-blue-400 font-medium flex items-center gap-1 shadow select-none pointer-events-none z-10">
+        <div className="absolute top-2 right-2 px-1.5 py-0.5 rounded bg-host-dialog/85 backdrop-blur-sm border border-host-border text-[10px] text-host-brand font-medium flex items-center gap-1 shadow select-none pointer-events-none z-10">
           <Sparkles className="w-2.5 h-2.5" />
           <span>{t('workspace.customCover')}</span>
         </div>
@@ -81,10 +81,10 @@ const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
       const phoneScale = phoneH / (meta.referenceViewportHeight ?? 760); // ~0.1737
       const phoneW = Math.round(meta.frameWidth * phoneScale); // ~68px
       return (
-        <div className="w-full h-full relative overflow-hidden bg-gradient-to-b from-slate-900/80 via-slate-950 to-slate-950 flex items-center justify-center" data-testid="project-screen-cover">
-          <div className="absolute w-32 h-32 bg-blue-500/5 rounded-full blur-xl pointer-events-none" />
+        <div className="w-full h-full relative overflow-hidden bg-host-sunken flex items-center justify-center" data-testid="project-screen-cover">
+          <div className="absolute w-32 h-32 bg-host-accent-subtle rounded-full blur-xl pointer-events-none" />
           <div
-            className="relative rounded-[12px] border border-slate-700/70 shadow-2xl bg-black overflow-hidden pointer-events-none flex-shrink-0"
+            className="relative rounded-[12px] border border-host-border-strong shadow-2xl bg-black overflow-hidden pointer-events-none flex-shrink-0"
             style={{ width: `${phoneW}px`, height: `${phoneH}px` }}
           >
             <iframe
@@ -108,7 +108,7 @@ const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
     // PC 桌面端：等比微缩呈现完整横向首屏布局
     const pcScale = 0.25;
     return (
-      <div className="w-full h-full relative overflow-hidden bg-slate-950 flex items-start justify-center" data-testid="project-screen-cover">
+      <div className="w-full h-full relative overflow-hidden bg-host-sunken flex items-start justify-center" data-testid="project-screen-cover">
         <iframe
           title={t('workspace.previewTitle', { name: meta.name })}
           sandbox="allow-same-origin"
@@ -129,24 +129,24 @@ const ProjectThumbnail: React.FC<{ meta: ProjectMeta }> = ({ meta }) => {
   // 3. 无页面时：使用空白微质感结合工程名字作为封面 (优雅降级，告别简陋的单行暂无预览)
   return (
     <div
-      className="w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-slate-850 to-slate-950 border-b border-slate-800/80 select-none relative overflow-hidden group-hover:from-slate-850 group-hover:to-slate-900 transition-colors"
+      className="w-full h-full flex flex-col items-center justify-center p-4 bg-host-sunken border-b border-host-border select-none relative overflow-hidden group-hover:bg-host-chrome transition-colors"
       data-testid="project-name-cover"
     >
       {/* 水印与背景微质感 */}
-      <div className="absolute -right-2 -bottom-4 text-7xl font-black text-slate-800/20 select-none pointer-events-none font-mono">
+      <div className="absolute -right-2 -bottom-4 text-7xl font-black text-host-tertiary/20 select-none pointer-events-none font-mono">
         {(meta.name || 'P').slice(0, 2).toUpperCase()}
       </div>
-      <div className="w-9 h-9 rounded-xl bg-slate-800/90 border border-slate-700/70 shadow-inner flex items-center justify-center text-slate-300 mb-2 z-10 group-hover:border-blue-500/40 group-hover:text-blue-400 transition">
+      <div className="w-9 h-9 rounded-xl bg-host-elevated border border-host-border shadow-inner flex items-center justify-center text-host-secondary mb-2 z-10 group-hover:border-host-accent/40 group-hover:text-host-brand transition">
         {meta.deviceProfile === 'pc' ? (
           <Laptop className="w-4 h-4" />
         ) : (
           <Smartphone className="w-4 h-4" />
         )}
       </div>
-      <div className="text-xs font-bold text-slate-200 text-center max-w-[200px] truncate z-10 tracking-tight" title={meta.name}>
+      <div className="text-xs font-bold text-host-primary text-center max-w-[200px] truncate z-10 tracking-tight" title={meta.name}>
         {meta.name}
       </div>
-      <div className="text-[10px] text-slate-500 mt-1 z-10 flex items-center gap-1">
+      <div className="text-[10px] text-host-tertiary mt-1 z-10 flex items-center gap-1">
         <span>{meta.deviceProfile === 'pc' ? t('workspace.devicePc1440') : t('workspace.deviceMobile390')}</span>
         <span>·</span>
         <span>{t('workspace.blankBoard')}</span>
@@ -242,19 +242,19 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
 
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-5xl h-[85vh] bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+      <div className="w-full max-w-5xl h-[85vh] bg-host-dialog border border-host-border-strong rounded-xl shadow-2xl flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 shrink-0">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-host-border shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400">
+            <div className="w-7 h-7 rounded-lg bg-host-accent-subtle border border-host-accent/30 flex items-center justify-center text-host-brand">
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="font-bold text-slate-100 text-sm">{t('workspace.newDialogTitle')}</h2>
-              <p className="text-[11px] text-slate-400">{t('workspace.newDialogSubtitle')}</p>
+              <h2 className="font-bold text-host-primary text-sm">{t('workspace.newDialogTitle')}</h2>
+              <p className="text-[11px] text-host-secondary">{t('workspace.newDialogSubtitle')}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-200 p-1" aria-label={t('common.close')}>
+          <button onClick={onClose} className="text-host-secondary hover:text-host-primary p-1" aria-label={t('common.close')}>
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -262,24 +262,24 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
         {/* Two-column body */}
         <div className="flex-1 flex min-h-0 overflow-hidden">
           {/* Left Column: Settings & Presets */}
-          <div className="w-[410px] border-r border-slate-800 flex flex-col p-5 space-y-4 overflow-y-auto shrink-0 bg-slate-900/60">
+          <div className="w-[410px] border-r border-host-border flex flex-col p-5 space-y-4 overflow-y-auto shrink-0 bg-host-chrome">
             {/* 1. Name */}
             <div className="space-y-1.5">
-              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{t('workspace.projectName')}</label>
+              <label className="text-[11px] font-semibold text-host-secondary uppercase tracking-wider">{t('workspace.projectName')}</label>
               <input
                 autoFocus
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && submit()}
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-200 text-xs focus:outline-none focus:border-blue-500"
+                className="w-full bg-host-sunken border border-host-border rounded-lg px-3 py-2 text-host-primary text-xs focus:outline-none focus:border-host-accent"
               />
             </div>
 
             {/* 2. Device */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{t('workspace.deviceProfile')}</label>
-                <span className="text-[10px] text-amber-500/80">{t('workspace.deviceImmutable')}</span>
+                <label className="text-[11px] font-semibold text-host-secondary uppercase tracking-wider">{t('workspace.deviceProfile')}</label>
+                <span className="text-[10px] text-host-warning">{t('workspace.deviceImmutable')}</span>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {([
@@ -292,13 +292,13 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
                     onClick={() => { setDevice(opt.key); setReferenceDeviceId(`${opt.key}-standard`); }}
                     className={`flex items-center gap-2 p-2.5 rounded-xl border transition text-left ${
                       device === opt.key
-                        ? 'border-blue-500 bg-blue-950/40 text-blue-300'
-                        : 'border-slate-800 bg-slate-950 hover:border-slate-700 text-slate-400'
+                        ? 'border-host-accent bg-host-accent-subtle text-host-brand'
+                        : 'border-host-border bg-host-sunken hover:border-host-border-strong text-host-secondary'
                     }`}
                   >
                     <opt.icon className="w-4 h-4 shrink-0" />
                     <div>
-                      <div className="text-xs font-semibold text-slate-200">{opt.title}</div>
+                      <div className="text-xs font-semibold text-host-primary">{opt.title}</div>
                       <div className="text-[10px] opacity-70">{opt.desc}</div>
                     </div>
                   </button>
@@ -307,19 +307,19 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
             </div>
 
             <ReferenceDeviceOption settings={{ deviceProfile: device, frameWidth: device === 'mobile' ? 390 : 1440, viewportGuideHeight: device === 'mobile' ? 844 : 900, referenceDevice, useCustomNavigation, showViewportGuide: true, colorMode: 'light', lodBudget: 12 }} onChange={setReferenceDeviceId} />
-            {device === 'mobile' && <label className="flex items-center gap-2 text-xs text-slate-300"><input type="checkbox" aria-label={t('workspace.customNav')} checked={useCustomNavigation} onChange={event => setUseCustomNavigation(event.target.checked)} />{t('workspace.customNav')}<span className="text-[10px] text-slate-500">{t('workspace.customNavHint')}</span></label>}
+            {device === 'mobile' && <label className="flex items-center gap-2 text-xs text-host-primary"><input type="checkbox" aria-label={t('workspace.customNav')} checked={useCustomNavigation} onChange={event => setUseCustomNavigation(event.target.checked)} />{t('workspace.customNav')}<span className="text-[10px] text-host-tertiary">{t('workspace.customNavHint')}</span></label>}
             {/* 3. Folder Path (Desktop) */}
             {isDesktop && (
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  <label className="text-[11px] font-semibold text-host-secondary uppercase tracking-wider">
                     {t('workspace.projectFolder')}
                   </label>
                   {folderPath && (
                     <button
                       type="button"
                       onClick={() => setFolderPath(undefined)}
-                      className="text-[10px] text-slate-500 hover:text-slate-300 underline transition"
+                      className="text-[10px] text-host-tertiary hover:text-host-primary underline transition"
                     >
                       {t('workspace.useBuiltinStorage')}
                     </button>
@@ -327,18 +327,18 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
                 </div>
                 <div className="flex items-center gap-2">
                   <div
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-slate-300 text-xs truncate flex items-center gap-2"
+                    className="flex-1 bg-host-sunken border border-host-border rounded-lg px-3 py-2 text-host-primary text-xs truncate flex items-center gap-2"
                     title={folderPath || t('workspace.folderUnspecified')}
                   >
-                    <FolderOpen className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                    <span className={`truncate ${folderPath ? 'text-slate-200 font-mono text-[11px]' : 'text-slate-500 italic'}`}>
+                    <FolderOpen className="w-3.5 h-3.5 text-host-tertiary shrink-0" />
+                    <span className={`truncate ${folderPath ? 'text-host-primary font-mono text-[11px]' : 'text-host-tertiary italic'}`}>
                       {folderPath ? folderPath : t('workspace.defaultBuiltinStorage')}
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={handlePickFolder}
-                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg text-xs transition shrink-0"
+                    className="px-3 py-2 bg-host-elevated hover:bg-host-sunken border border-host-border text-host-primary font-medium rounded-lg text-xs transition shrink-0"
                   >
                     {folderPath ? t('workspace.changeFolder') : t('workspace.chooseFolder')}
                   </button>
@@ -346,9 +346,9 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800" role="group" aria-label={t('workspace.designSystemSource')}>
+            <div className="grid grid-cols-2 gap-1 p-1 rounded-xl bg-host-sunken border border-host-border" role="group" aria-label={t('workspace.designSystemSource')}>
               {([{ value: 'preset' as const, label: t('workspace.presetSource') }, { value: 'custom' as const, label: t('workspace.customSource') }]).map(option => (
-                <button key={option.value} type="button" aria-pressed={designSystemMode === option.value} onClick={() => setDesignSystemMode(option.value)} className={`py-2 rounded-lg text-xs transition ${designSystemMode === option.value ? 'bg-slate-800 text-slate-100 font-semibold' : 'text-slate-400 hover:text-slate-200'}`}>{option.label}</button>
+                <button key={option.value} type="button" aria-pressed={designSystemMode === option.value} onClick={() => setDesignSystemMode(option.value)} className={`py-2 rounded-lg text-xs transition ${designSystemMode === option.value ? 'bg-host-elevated text-host-primary font-semibold' : 'text-host-secondary hover:text-host-primary'}`}>{option.label}</button>
               ))}
             </div>
             <div hidden={designSystemMode !== 'custom'}>
@@ -356,22 +356,22 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
             </div>
 
             {/* 4. Design System Presets Selector (OpenDesign style) */}
-            <div hidden={designSystemMode !== 'preset'} className="space-y-2 pt-1 border-t border-slate-800/80">
+            <div hidden={designSystemMode !== 'preset'} className="space-y-2 pt-1 border-t border-host-border">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                <label className="text-[11px] font-semibold text-host-secondary uppercase tracking-wider">
                   {t('workspace.designSystemPresets')}
                 </label>
-                <span className="text-[10px] text-slate-500">{t('workspace.livePreviewHint')}</span>
+                <span className="text-[10px] text-host-tertiary">{t('workspace.livePreviewHint')}</span>
               </div>
 
               {/* Search Presets */}
               <div className="relative">
-                <Search className="w-3 h-3 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <Search className="w-3 h-3 text-host-tertiary absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
                   value={searchPreset}
                   onChange={(e) => setSearchPreset(e.target.value)}
                   placeholder={t('workspace.searchPresets')}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-7 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                  className="w-full bg-host-sunken border border-host-border rounded-lg pl-7 pr-3 py-1.5 text-xs text-host-primary focus:outline-none focus:border-host-accent"
                 />
               </div>
 
@@ -390,8 +390,8 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
                       onClick={() => setSelectedPresetId(preset.id)}
                       className={`p-2.5 rounded-xl border transition cursor-pointer flex items-start gap-2.5 ${
                         isSelected
-                          ? 'border-blue-500 bg-blue-950/40 ring-1 ring-blue-500/50'
-                          : 'border-slate-800/80 bg-slate-950/60 hover:border-slate-700 hover:bg-slate-950'
+                          ? 'border-host-accent bg-host-accent-subtle ring-1 ring-host-accent/50'
+                          : 'border-host-border bg-host-sunken hover:border-host-border-strong'
                       }`}
                     >
                       <span
@@ -400,16 +400,16 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1">
-                          <span className="font-semibold text-slate-200 text-xs truncate">{label.name}</span>
+                          <span className="font-semibold text-host-primary text-xs truncate">{label.name}</span>
                           {isDefault && (
-                            <span className="px-1.5 py-0.2 bg-blue-500/20 text-blue-300 text-[9px] rounded font-medium">
+                            <span className="px-1.5 py-0.2 bg-host-accent-subtle text-host-brand text-[9px] rounded font-medium">
                               {t('workspace.defaultBadge')}
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] text-slate-400 truncate mt-0.5">{label.description}</p>
+                        <p className="text-[10px] text-host-secondary truncate mt-0.5">{label.description}</p>
                       </div>
-                      {isSelected && <Check className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />}
+                      {isSelected && <Check className="w-3.5 h-3.5 text-host-brand shrink-0 mt-0.5" />}
                     </div>
                   );
                 })}
@@ -417,8 +417,8 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
             </div>
 
             {/* 5. Radius Tuning */}
-            <div hidden={designSystemMode !== 'preset'} className="space-y-1.5 pt-1 border-t border-slate-800/80">
-              <label className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">{t('workspace.radiusTune')}</label>
+            <div hidden={designSystemMode !== 'preset'} className="space-y-1.5 pt-1 border-t border-host-border">
+              <label className="text-[11px] font-semibold text-host-secondary uppercase tracking-wider">{t('workspace.radiusTune')}</label>
               <div className="grid grid-cols-3 gap-1.5">
                 {SHAPE_OPTIONS.map((opt) => (
                   <button
@@ -434,8 +434,8 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
                     onClick={() => setShape(opt.value)}
                     className={`py-1.5 px-2 rounded-lg border text-center transition text-xs ${
                       shape === opt.value
-                        ? 'border-blue-500 bg-blue-950/40 text-blue-300 font-medium'
-                        : 'border-slate-800 bg-slate-950 text-slate-400 hover:border-slate-700'
+                        ? 'border-host-accent bg-host-accent-subtle text-host-brand font-medium'
+                        : 'border-host-border bg-host-sunken text-host-secondary hover:border-host-border-strong'
                     }`}
                   >
                     {t(
@@ -452,27 +452,27 @@ const NewProjectDialog: React.FC<{ initialFolderPath?: string; onClose: () => vo
           </div>
 
           {/* Right Column: Visual Preview */}
-          <div className="flex-1 flex flex-col min-w-0 bg-slate-950 overflow-hidden">
-            {currentTheme ? <DesignSystemVisualPreview theme={currentTheme} device={device} /> : <div className="flex-1 flex items-center justify-center p-8 text-sm text-slate-400">{t('workspace.customPreviewHint')}</div>}
+          <div className="flex-1 flex flex-col min-w-0 bg-host-sunken overflow-hidden">
+            {currentTheme ? <DesignSystemVisualPreview theme={currentTheme} device={device} /> : <div className="flex-1 flex items-center justify-center p-8 text-sm text-host-secondary">{t('workspace.customPreviewHint')}</div>}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-800 shrink-0 bg-slate-900/90">
-          <div className="text-[11px] text-slate-500">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-host-border shrink-0 bg-host-chrome">
+          <div className="text-[11px] text-host-tertiary">
             {t('workspace.canvasCleanHint')}
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs transition"
+              className="px-4 py-2 bg-host-sunken hover:bg-host-elevated border border-host-border text-host-primary rounded-lg text-xs transition"
             >
               {t('common.cancel')}
             </button>
             <button
               onClick={submit}
               disabled={!currentTheme}
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-xs shadow transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="px-5 py-2 bg-host-accent hover:bg-host-accent-hover text-host-on-accent font-medium rounded-lg text-xs shadow transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>{t('workspace.createAndEnter')}</span>
@@ -509,25 +509,25 @@ export const ProjectManager: React.FC = () => {
   };
 
   return (
-    <div className="w-screen h-screen bg-slate-950 text-slate-200 overflow-y-auto" onClick={() => setMenuFor(null)}>
+    <div className="w-screen h-screen bg-host-chrome text-host-primary overflow-y-auto" onClick={() => setMenuFor(null)}>
       <div className="max-w-5xl mx-auto px-8 py-12">
         <header className="flex items-center gap-3 mb-8">
           <BrandMark size={40} className="shadow rounded-xl" />
           <div className="min-w-0 flex-1">
-            <h1 className="text-lg font-bold text-slate-100">{t('app.name')}</h1>
-            <p className="text-xs text-slate-500">{t('workspace.tagline')}</p>
+            <h1 className="text-lg font-bold text-host-primary">{t('app.name')}</h1>
+            <p className="text-xs text-host-tertiary">{t('workspace.tagline')}</p>
           </div>
           <LanguageMenu />
         </header>
 
         <div className="flex items-center gap-3 mb-6">
           <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-host-tertiary absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={t('workspace.searchProjects')}
-              className="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+              className="w-full bg-host-sunken border border-host-border rounded-lg pl-8 pr-3 py-2 text-xs text-host-primary focus:outline-none focus:border-host-accent"
             />
           </div>
           {/* T-AE-43: 打开任意本地 *.aidesign 工程文件夹 (PRD §3.0.1) */}
@@ -545,7 +545,7 @@ export const ProjectManager: React.FC = () => {
                 }
               }
             }}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium rounded-lg text-xs transition"
+            className="flex items-center gap-1.5 px-3 py-2 bg-host-sunken hover:bg-host-elevated border border-host-border text-host-primary font-medium rounded-lg text-xs transition"
           >
             <FolderOpen className="w-3.5 h-3.5" />
             <span>{t('workspace.openLocalProject')}</span>
@@ -555,7 +555,7 @@ export const ProjectManager: React.FC = () => {
               setTargetInitFolder(null);
               setShowNew(true);
             }}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-xs shadow transition"
+            className="flex items-center gap-1.5 px-4 py-2 bg-host-accent hover:bg-host-accent-hover text-host-on-accent font-medium rounded-lg text-xs shadow transition"
           >
             <Plus className="w-3.5 h-3.5" />
             <span>{t('workspace.createProject')}</span>
@@ -563,20 +563,20 @@ export const ProjectManager: React.FC = () => {
         </div>
 
         {uninitFolder && (
-          <div className="mb-4 p-4 bg-blue-950/40 border border-blue-800/60 rounded-xl text-xs text-blue-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+          <div className="mb-4 p-4 bg-host-elevated border border-host-border-strong rounded-xl text-xs text-host-primary flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
             <div className="space-y-1">
-              <div className="flex items-center gap-2 font-semibold text-blue-300">
-                <FolderOpen className="w-4 h-4 text-blue-400 shrink-0" />
+              <div className="flex items-center gap-2 font-semibold text-host-brand">
+                <FolderOpen className="w-4 h-4 text-host-brand shrink-0" />
                 <span>{t('workspace.uninitTitle')}</span>
               </div>
-              <p className="text-[11px] text-slate-300 leading-relaxed">
-                {t('workspace.uninitBodyPrefix')} <code className="px-1.5 py-0.5 bg-slate-900 rounded text-blue-300 font-mono text-[10px]">{uninitFolder}</code> {t('workspace.uninitBodyMissing')} <code className="text-blue-300">project.json</code>{t('workspace.uninitBodySuffix')}
+              <p className="text-[11px] text-host-secondary leading-relaxed">
+                {t('workspace.uninitBodyPrefix')} <code className="px-1.5 py-0.5 bg-host-sunken rounded text-host-brand font-mono text-[10px]">{uninitFolder}</code> {t('workspace.uninitBodyMissing')} <code className="text-host-brand">project.json</code>{t('workspace.uninitBodySuffix')}
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <button
                 onClick={() => setUninitFolder(null)}
-                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs transition"
+                className="px-3 py-1.5 bg-host-sunken hover:bg-host-elevated border border-host-border text-host-primary rounded-lg text-xs transition"
               >
                 {t('common.cancel')}
               </button>
@@ -587,7 +587,7 @@ export const ProjectManager: React.FC = () => {
                   setTargetInitFolder(target);
                   setShowNew(true);
                 }}
-                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-xs shadow transition flex items-center gap-1.5"
+                className="px-3 py-1.5 bg-host-accent hover:bg-host-accent-hover text-host-on-accent font-medium rounded-lg text-xs shadow transition flex items-center gap-1.5"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>{t('workspace.createInFolder')}</span>
@@ -597,9 +597,9 @@ export const ProjectManager: React.FC = () => {
         )}
 
         {(notice||sourceTransitionError) && (
-          <div className="mb-4 px-3 py-2 bg-amber-950/40 border border-amber-800/50 rounded-lg text-[11px] text-amber-200 flex items-center justify-between gap-3">
+          <div className="mb-4 px-3 py-2 bg-host-elevated border border-host-border rounded-lg text-[11px] text-host-warning flex items-center justify-between gap-3">
             <span className="leading-relaxed">{notice??sourceTransitionError}</span>
-            <button onClick={() => {setNotice(null);useWorkspaceStore.setState({sourceTransitionError:null});}} className="text-amber-400 hover:text-amber-200 shrink-0">
+            <button onClick={() => {setNotice(null);useWorkspaceStore.setState({sourceTransitionError:null});}} className="text-host-warning hover:opacity-80 shrink-0">
               {t('workspace.dismissNotice')}
             </button>
           </div>
@@ -607,15 +607,15 @@ export const ProjectManager: React.FC = () => {
 
         {projects.length === 0 ? (
           /* 空状态：首次启动给引导，而非一片空白 (PRD §3.0.1) */
-          <div className="border border-dashed border-slate-800 rounded-2xl py-20 flex flex-col items-center text-center">
-            <FolderOpen className="w-10 h-10 text-slate-700 mb-4" />
-            <h2 className="font-semibold text-slate-300 text-sm">{t('workspace.emptyTitle')}</h2>
-            <p className="text-xs text-slate-500 mt-1.5 max-w-xs leading-relaxed">
+          <div className="border border-dashed border-host-border-strong rounded-xl py-20 flex flex-col items-center text-center bg-host-sunken/40">
+            <FolderOpen className="w-10 h-10 text-host-tertiary mb-4" />
+            <h2 className="font-semibold text-host-primary text-sm">{t('workspace.emptyTitle')}</h2>
+            <p className="text-xs text-host-secondary mt-1.5 max-w-xs leading-relaxed">
               {t('workspace.emptyHint')}
             </p>
             <button
               onClick={() => setShowNew(true)}
-              className="mt-5 flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg text-xs shadow"
+              className="mt-5 flex items-center gap-1.5 px-4 py-2 bg-host-accent hover:bg-host-accent-hover text-host-on-accent font-medium rounded-lg text-xs shadow"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>{t('workspace.createFirstProject')}</span>
@@ -628,17 +628,19 @@ export const ProjectManager: React.FC = () => {
               return (
                 <div
                   key={p.id}
-                  className={`group relative bg-slate-900 border rounded-xl overflow-hidden transition ${
+                  className={`group relative bg-slate-900 !bg-host-elevated border rounded-xl transition ${
+                    menuFor === p.id ? 'z-30' : ''
+                  } ${
                     missing
-                      ? 'border-slate-800 opacity-60'
-                      : 'border-slate-800 hover:border-blue-600/60 cursor-pointer'
+                      ? 'border-host-border opacity-60'
+                      : 'border-host-border hover:border-host-border-strong cursor-pointer'
                   }`}
                   onClick={() => !missing && openProject(p.id)}
                 >
-                  <div className="h-[150px] bg-slate-950 border-b border-slate-800 overflow-hidden relative">
+                  <div className="h-[150px] bg-host-sunken border-b border-host-border rounded-t-xl overflow-hidden relative">
                     {missing ? (
-                      <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 text-slate-600">
-                        <AlertTriangle className="w-5 h-5 text-amber-600" />
+                      <div className="w-full h-full flex flex-col items-center justify-center gap-1.5 text-host-tertiary">
+                        <AlertTriangle className="w-5 h-5 text-host-warning" />
                         <span className="text-[11px]">{t('workspace.dataLost')}</span>
                       </div>
                     ) : (
@@ -648,7 +650,7 @@ export const ProjectManager: React.FC = () => {
 
                   <div className="p-3">
                     <div className="flex items-start justify-between gap-2">
-                      <span className="font-semibold text-slate-200 text-xs truncate" title={p.name}>
+                      <span className="font-semibold text-host-primary text-xs truncate" title={p.name}>
                         {p.name}
                       </span>
                       <button
@@ -656,17 +658,17 @@ export const ProjectManager: React.FC = () => {
                           e.stopPropagation();
                           setMenuFor(menuFor === p.id ? null : p.id);
                         }}
-                        className="text-slate-500 hover:text-slate-200 shrink-0 opacity-0 group-hover:opacity-100 transition"
+                        className="text-host-tertiary hover:text-host-primary shrink-0 opacity-0 group-hover:opacity-100 transition"
                       >
                         <MoreHorizontal className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-500">
+                    <div className="flex items-center gap-2 mt-1.5 text-[10px] text-host-tertiary">
                       <span
                         className={`px-1.5 py-0.5 rounded font-medium ${
                           p.deviceProfile === 'pc'
-                            ? 'bg-blue-950/60 text-blue-300'
-                            : 'bg-emerald-950/60 text-emerald-300'
+                            ? 'bg-host-accent-subtle text-host-brand'
+                            : 'bg-emerald-950/60 text-host-success'
                         }`}
                       >
                         {p.deviceProfile === 'pc' ? t('workspace.devicePc1440') : t('workspace.deviceMobile390')}
@@ -674,7 +676,7 @@ export const ProjectManager: React.FC = () => {
                       <span>{t('workspace.screenCount', { count: p.screenCount })}</span>
                       {/* T-AE-42: 未迁移的工程仍写 localStorage，受 ~5-10MB 配额限制 */}
                       {p.folderPath ? (
-                        <span className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-400" title={p.folderPath}>
+                        <span className="px-1.5 py-0.5 rounded bg-host-sunken text-host-secondary" title={p.folderPath}>
                           {t('workspace.folderBadge')}
                         </span>
                       ) : (
@@ -686,19 +688,19 @@ export const ProjectManager: React.FC = () => {
                             if (r.message !== '已取消') setNotice(r.message);
                           }}
                           title={t('workspace.migrateTitle')}
-                          className="px-1.5 py-0.5 rounded bg-amber-950/60 text-amber-300 hover:bg-amber-900/60 flex items-center gap-1"
+                          className="px-1.5 py-0.5 rounded bg-amber-950/60 text-host-warning hover:bg-amber-900/60 flex items-center gap-1"
                         >
                           <HardDriveDownload className="w-2.5 h-2.5" />
                           {t('workspace.migrate')}
                         </button>
                       )}
                     </div>
-                    <div className="text-[10px] text-slate-600 mt-1">{fmtTime(p.updatedAt)}</div>
+                    <div className="text-[10px] text-host-tertiary mt-1">{fmtTime(p.updatedAt)}</div>
                   </div>
 
                   {menuFor === p.id && (
                     <div
-                      className="absolute right-2 top-[160px] w-40 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-1 z-20 text-[11px]"
+                      className="absolute right-2 top-[160px] w-40 bg-host-dialog border border-host-border-strong rounded-lg shadow-2xl py-1 z-20 text-[11px]"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <button
@@ -707,7 +709,7 @@ export const ProjectManager: React.FC = () => {
                           if (next && next.trim())void renameProject(p.id,next.trim()).catch(error=>setNotice(error instanceof Error?error.message:t('workspace.renameFailed')));
                           setMenuFor(null);
                         }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-slate-700 text-slate-200"
+                        className="w-full text-left px-3 py-1.5 hover:bg-host-elevated text-host-primary"
                       >
                         {t('workspace.rename')}
                       </button>
@@ -716,7 +718,7 @@ export const ProjectManager: React.FC = () => {
                           removeFromList(p.id);
                           setMenuFor(null);
                         }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-slate-700 text-slate-300"
+                        className="w-full text-left px-3 py-1.5 hover:bg-host-elevated text-host-secondary"
                         title={t('workspace.removeFromListTitle')}
                       >
                         {t('workspace.removeFromList')}
@@ -726,7 +728,7 @@ export const ProjectManager: React.FC = () => {
                           setConfirmDelete(p);
                           setMenuFor(null);
                         }}
-                        className="w-full text-left px-3 py-1.5 hover:bg-red-950/60 text-red-400 flex items-center gap-1.5"
+                        className="w-full text-left px-3 py-1.5 hover:bg-red-950/60 text-host-danger flex items-center gap-1.5"
                       >
                         <Trash2 className="w-3 h-3" />
                         <span>{t('workspace.deleteProject')}</span>
@@ -752,20 +754,20 @@ export const ProjectManager: React.FC = () => {
 
       {/* 删除是不可恢复操作，必须二次确认并说明后果 (PRD §3.0.1) */}
       {confirmDelete && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-5 text-xs">
-            <h3 className="font-bold text-slate-100 text-sm flex items-center gap-2">
-              <AlertTriangle className="w-4 h-4 text-red-400" />
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-host-dialog border border-host-border-strong rounded-xl shadow-2xl p-5 text-xs">
+            <h3 className="font-bold text-host-primary text-sm flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-host-danger" />
               <span>{t('workspace.deleteProject')}</span>
             </h3>
-            <p className="text-slate-400 mt-3 leading-relaxed">
+            <p className="text-host-secondary mt-3 leading-relaxed">
               {t('workspace.deleteConfirmBody', { name: confirmDelete.name })}
-              <span className="text-red-400">{t('workspace.deleteIrreversible')}</span>
+              <span className="text-host-danger">{t('workspace.deleteIrreversible')}</span>
             </p>
             <div className="flex justify-end gap-2 mt-5">
               <button
                 onClick={() => setConfirmDelete(null)}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg"
+                className="px-4 py-2 bg-host-sunken hover:bg-host-elevated border border-host-border text-host-primary rounded-lg"
               >
                 {t('common.cancel')}
               </button>

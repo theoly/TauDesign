@@ -16,8 +16,8 @@ const retainedSessions = new Map<string, Session>();
 const identity = (state: { id: string; folderPath?: string }) => JSON.stringify([state.id, state.folderPath || '']);
 const snapshot = (entry?: ProjectDocumentEntry) => JSON.stringify(entry);
 const isDirty = (editor?: Editor) => Boolean(editor && (!editor.baseline || snapshot(editor.entry) !== snapshot(editor.baseline)));
-const control = 'rounded border border-slate-700 px-2 py-1.5 text-xs hover:bg-slate-800 disabled:opacity-40';
-const field = 'w-full rounded border border-slate-700 bg-slate-950 p-2 text-xs text-slate-200 focus:outline-none focus:border-blue-500 disabled:opacity-50';
+const control = 'rounded border border-host-border bg-host-sunken text-host-primary px-2 py-1.5 text-xs hover:bg-host-elevated disabled:opacity-40 transition';
+const field = 'w-full rounded border border-host-border bg-host-sunken p-2 text-xs text-host-primary focus:outline-none focus:border-host-accent disabled:opacity-50';
 
 /** Local drafts stay mounted in SideBar and are isolated by both project id and folder. */
 export const ProjectDocumentsPanel: React.FC = () => {
@@ -161,39 +161,39 @@ export const ProjectDocumentsPanel: React.FC = () => {
 
   const draftModal = draft && createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-6">
-      <section role="dialog" aria-modal="true" aria-label={t('docs.draftDialogAria')} className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-5 text-slate-200 shadow-xl">
+      <section role="dialog" aria-modal="true" aria-label={t('docs.draftDialogAria')} className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl border border-host-border-strong bg-host-elevated p-5 text-host-primary shadow-xl">
         <h2 className="text-lg font-semibold">{t('docs.draftTitle')}</h2>
-        <p className="my-2 text-xs text-slate-400">{t('docs.draftHint')}</p>
-        {session.error && <p role="alert" className="my-2 text-sm text-amber-300">{session.error}</p>}
+        <p className="my-2 text-xs text-host-secondary">{t('docs.draftHint')}</p>
+        {session.error && <p role="alert" className="my-2 text-sm text-host-warning">{session.error}</p>}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 my-4">
           <label className="text-sm">{t('docs.previousSummary')}<textarea aria-label={t('docs.previousSummary')} readOnly value={draft.previous?.content || t('docs.noPreviousSummary')} className={`${field} mt-2 h-80`} /></label>
           <label className="text-sm">{t('docs.newDraft')}<textarea aria-label={t('docs.draftAria')} value={draft.content} onChange={event => update({ draft: { ...draft, content: event.target.value } })} className={`${field} mt-2 h-80`} /></label>
         </div>
-        <div className="flex justify-end gap-2"><button className={control} onClick={() => update({ draft: undefined, error: undefined })}>{t('docs.discardDraft')}</button><button className={`${control} bg-blue-600`} onClick={adopt}>{t('docs.adoptDraft')}</button></div>
+        <div className="flex justify-end gap-2"><button className={control} onClick={() => update({ draft: undefined, error: undefined })}>{t('docs.discardDraft')}</button><button className="rounded border border-host-accent bg-host-accent hover:bg-host-accent-hover text-host-on-accent px-2 py-1.5 text-xs font-medium disabled:opacity-40 transition" onClick={adopt}>{t('docs.adoptDraft')}</button></div>
       </section>
     </div>, document.body);
 
-  return <div className="p-3 space-y-3 text-slate-300" data-testid="project-documents-panel">
-    <p className="text-xs text-slate-400 leading-relaxed">{t('docs.intro')}</p>
+  return <div className="p-3 space-y-3 text-host-secondary" data-testid="project-documents-panel">
+    <p className="text-xs text-host-secondary leading-relaxed">{t('docs.intro')}</p>
     <div className="flex flex-wrap gap-2"><button className={control} disabled={busy} onClick={() => { if (guard()) newEntry(); }}>{t('docs.newDocument')}</button><button className={control} disabled={busy} onClick={() => { if (guard()) fileInput.current?.click(); }}>{t('docs.importFile')}</button><button className={control} disabled={busy} onClick={generate}>{t('docs.aiOrganize')}</button>{busy && <button className={control} onClick={cancel}>{t('docs.cancelOrganize')}</button>}</div>
     <input ref={fileInput} type="file" accept=".md,.txt" aria-label={t('docs.importAria')} className="hidden" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; void importFile(file); }} />
-    {busy && <p role="status" className="text-xs text-blue-300">{t('docs.organizing')}</p>}
-    {session.error && <p role="alert" className="text-xs text-amber-300">{session.error}</p>}
+    {busy && <p role="status" className="text-xs text-host-brand">{t('docs.organizing')}</p>}
+    {session.error && <p role="alert" className="text-xs text-host-warning">{session.error}</p>}
     <div className="space-y-1" aria-label={t('docs.listAria')}>
-      {documents.length === 0 && <p className="py-4 text-xs text-slate-500">{t('docs.empty')}</p>}
-      {documents.map(entry => <div key={entry.id} className={`rounded border p-2 ${editor?.entry.id === entry.id ? 'border-blue-500/60 bg-blue-500/10' : 'border-slate-800'}`}>
+      {documents.length === 0 && <p className="py-4 text-xs text-host-tertiary">{t('docs.empty')}</p>}
+      {documents.map(entry => <div key={entry.id} className={`rounded border p-2 ${editor?.entry.id === entry.id ? 'border-host-accent/50 bg-host-accent-subtle text-host-primary' : 'border-host-border bg-host-sunken/40'}`}>
         <button className="w-full text-left text-sm break-words" disabled={busy} onClick={() => open(entry)}>{entry.title}</button>
-        <p className="mt-1 text-[11px] text-slate-500">{sourceLabel(entry.source)} · {entry.missing ? t('docs.missingDisabled') : entry.enabled ? t('docs.enabled') : t('docs.disabled')}{entry.source === 'ai' && entry.sourceFingerprint !== fingerprint && <span className="text-amber-400">{t('docs.staleHint')}</span>}</p>
+        <p className="mt-1 text-[11px] text-host-tertiary">{sourceLabel(entry.source)} · {entry.missing ? t('docs.missingDisabled') : entry.enabled ? t('docs.enabled') : t('docs.disabled')}{entry.source === 'ai' && entry.sourceFingerprint !== fingerprint && <span className="text-host-warning">{t('docs.staleHint')}</span>}</p>
       </div>)}
     </div>
-    {editor && <div className="border-t border-slate-700 pt-3 space-y-3">
-      {editor.entry.source === 'ai' && <p className="text-xs text-blue-300">{t('docs.aiEditHint')}</p>}
-      {isDirty(editor) && <p className="text-xs text-amber-300">{t('docs.dirtyHint')}</p>}
-      {editor.entry.missing && <p className="text-xs text-amber-300">{t('docs.missingHint')}</p>}
+    {editor && <div className="border-t border-host-border pt-3 space-y-3">
+      {editor.entry.source === 'ai' && <p className="text-xs text-host-brand">{t('docs.aiEditHint')}</p>}
+      {isDirty(editor) && <p className="text-xs text-host-warning">{t('docs.dirtyHint')}</p>}
+      {editor.entry.missing && <p className="text-xs text-host-warning">{t('docs.missingHint')}</p>}
       <label className="block text-xs space-y-1"><span>{t('docs.titleLabel')}</span><input aria-label={t('docs.titleAria')} className={field} disabled={busy} value={editor.entry.title} onChange={event => edit({ title: event.target.value })} /></label>
       <label className="block text-xs space-y-1"><span>{t('docs.bodyLabel')}</span><textarea aria-label={t('docs.bodyAria')} className={`${field} min-h-64`} disabled={busy} value={editor.entry.content} onChange={event => edit({ content: event.target.value })} /></label>
-      <div className="flex flex-wrap gap-2"><button className={`${control} bg-blue-600`} disabled={busy} onClick={save}>{t('docs.saveDocument')}</button><button className={control} disabled={busy} onClick={discard}>{t('docs.discardChanges')}</button>{editor.baseline && <><button className={control} disabled={busy || editor.entry.missing} onClick={toggle}>{editor.entry.enabled ? t('docs.disableDocument') : t('docs.enableDocument')}</button><button className={`${control} text-red-300`} disabled={busy} onClick={remove}>{t('docs.deleteDocument')}</button></>}</div>
-      {editor.entry.originalContent !== undefined && <div className="space-y-2"><button className={control} onClick={() => update({ showOriginal: !session.showOriginal })}>{session.showOriginal ? t('docs.hideOriginal') : t('docs.showOriginal')}</button>{session.showOriginal && <><pre className="whitespace-pre-wrap break-words text-xs rounded bg-slate-950 p-2 max-h-64 overflow-auto">{editor.entry.originalContent}</pre><button className={control} disabled={busy} onClick={() => { if (isDirty(editor)) { error(t('docs.errSaveOrDiscard')); return; } edit({ content: editor.entry.originalContent! }); }}>{t('docs.restoreOriginal')}</button></>}</div>}
+      <div className="flex flex-wrap gap-2"><button className="rounded border border-host-accent bg-host-accent hover:bg-host-accent-hover text-host-on-accent px-2 py-1.5 text-xs font-medium disabled:opacity-40 transition" disabled={busy} onClick={save}>{t('docs.saveDocument')}</button><button className={control} disabled={busy} onClick={discard}>{t('docs.discardChanges')}</button>{editor.baseline && <><button className={control} disabled={busy || editor.entry.missing} onClick={toggle}>{editor.entry.enabled ? t('docs.disableDocument') : t('docs.enableDocument')}</button><button className={`${control} text-host-danger`} disabled={busy} onClick={remove}>{t('docs.deleteDocument')}</button></>}</div>
+      {editor.entry.originalContent !== undefined && <div className="space-y-2"><button className={control} onClick={() => update({ showOriginal: !session.showOriginal })}>{session.showOriginal ? t('docs.hideOriginal') : t('docs.showOriginal')}</button>{session.showOriginal && <><pre className="whitespace-pre-wrap break-words text-xs rounded border border-host-border bg-host-sunken text-host-secondary p-2 max-h-64 overflow-auto">{editor.entry.originalContent}</pre><button className={control} disabled={busy} onClick={() => { if (isDirty(editor)) { error(t('docs.errSaveOrDiscard')); return; } edit({ content: editor.entry.originalContent! }); }}>{t('docs.restoreOriginal')}</button></>}</div>}
     </div>}
     {draftModal}
   </div>;
