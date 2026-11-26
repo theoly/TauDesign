@@ -1,4 +1,4 @@
-import {verifyGeneratedMediaAssets} from '../ai/generatedMedia';
+import {verifyGeneratedMediaAssets, resolveMissingBundledIcons, mergeVerifiedAssets} from '../ai/generatedMedia';
 import type {Asset} from '../../types/project';
 import {renderEvidenceIdentity} from '../ai/evidenceIdentity';
 import {prepareNewPageWithRepair,type PageRepairModel} from '../ai/pageCreationRepair';
@@ -90,12 +90,29 @@ export class CanvasToolExecutor {
   /** The only AI creation entry. Low-level blank/specimen/duplicate store actions remain synchronous. */
   static async executeAsync(call:CanvasToolCall,options:{signal?:AbortSignal;isCurrent?:()=>boolean;repair?:PageRepairModel;taskBudget?:TaskBudget}={}):Promise<CanvasToolExecutionResult> {
     if(call.tool!=='create_screen'){
-      if(call.tool==='modify_screen'&&call.params.generatedAssets?.length){
+      if(call.tool==='modify_screen'){
         const state=useProjectStore.getState(),context=pageCreationContext(state);
         const guard=()=>{options.taskBudget?.assertActive();if(options.signal?.aborted||options.isCurrent?.()===false||pageCreationContext(useProjectStore.getState())!==context)throw Error('工程已变化或媒体登记已取消。');};
-        try{guard();await verifyGeneratedMediaAssets(createProjectStorage(state.id,state.folderPath),call.params.generatedAssets,guard);guard();
-          useProjectStore.getState().registerGeneratedAssets(call.params.generatedAssets,state.id,context);
+        let nextHtml=call.params.html;
+        try{
+          guard();
+          const storage=createProjectStorage(state.id,state.folderPath);
+          const resolved=await resolveMissingBundledIcons({
+            html:nextHtml,
+            scopedCss:state.screens[call.params.screenId]?.scopedCss,
+            storage,
+            assets:mergeVerifiedAssets(Object.values(state.assets),call.params.generatedAssets),
+            signal:options.signal,
+            isCurrent:()=>{options.taskBudget?.assertActive();return !options.signal?.aborted&&options.isCurrent?.()!==false&&pageCreationContext(useProjectStore.getState())===context;}
+          });
+          nextHtml=resolved.html;
+          const mergedAssets=mergeVerifiedAssets(call.params.generatedAssets,resolved.assets);
+          if(mergedAssets.length){
+            guard();await verifyGeneratedMediaAssets(storage,mergedAssets,guard);guard();
+            useProjectStore.getState().registerGeneratedAssets(mergedAssets,state.id,context);
+          }
         }catch(error){return {success:false,tool:call.tool,status:'failed',error:error instanceof Error?error.message:String(error)};}
+        return this.execute({...call,params:{...call.params,html:nextHtml}});
       }
       return this.execute(call);
     }
@@ -116,7 +133,21 @@ export class CanvasToolExecutor {
       resolveWorkflowValidation(contract,'create').ok&&renderEvidenceIdentity(state.settings.deviceProfile)===renderIdentity&&pageCreationContext(useProjectStore.getState())===context;};
     pendingCreations.add(key);
     try {
-      if(params.generatedAssets?.length)await verifyGeneratedMediaAssets(createProjectStorage(state.id,state.folderPath),params.generatedAssets,()=>{if(!current())throw Error('媒体核对期间工程已变化。');});
+      const storage=createProjectStorage(state.id,state.folderPath);
+      const resolved=await resolveMissingBundledIcons({
+        html:params.html,
+        storage,
+        assets:mergeVerifiedAssets(Object.values(state.assets),params.generatedAssets),
+        signal:options.signal,
+        isCurrent:current
+      });
+      if(resolved.rewritten.length){
+        params.html=resolved.html;
+        if(params.executionRecord?.completeHtml)params.executionRecord.completeHtml=resolved.html;
+      }
+      const mergedAssets=mergeVerifiedAssets(params.generatedAssets,resolved.assets);
+      if(mergedAssets.length)params.generatedAssets=mergedAssets;
+      if(params.generatedAssets?.length)await verifyGeneratedMediaAssets(storage,params.generatedAssets,()=>{if(!current())throw Error('媒体核对期间工程已变化。');});
       const snapshot=structuredClone({id:state.id,folderPath:state.folderPath,screens:state.screens,settings:state.settings,assets:state.assets,
         designSystem:state.designSystem,designSystemOrigin:state.designSystemOrigin,designLibraryBinding:state.designLibraryBinding,
         components:state.components,decisions:state.decisions,projectDocuments:state.projectDocuments,overrides:state.overrides});
@@ -124,7 +155,7 @@ export class CanvasToolExecutor {
       const id=params.screenId&&!state.screens[params.screenId]?params.screenId:crypto.randomUUID();
       const name=resolveScreenTitle({artifactTitle:params.title?.trim()||undefined,html:params.html});
       const prepare=(signal?:AbortSignal)=>prepareNewPageWithRepair(snapshot,{id,name,htmlContent:params.html,position:{x:0,y:0}},contract,
-        createProjectStorage(state.id,state.folderPath),{isCurrent:current,signal,repair:options.repair});
+        storage,{isCurrent:current,signal,repair:options.repair});
       const prepared=options.taskBudget?await options.taskBudget.run(prepare,options.signal):await prepare(options.signal);
       // Beauty ladder ledger is attached inside prepareNewPageWithRepair (withBeautyImprove).
       // Full auto-polish when beautyImprove.shouldRunPolish remains gated on an explicit polish budget

@@ -1,4 +1,4 @@
-import {verifyGeneratedMediaAssets} from '../../generatedMedia';
+import {verifyGeneratedMediaAssets, prepareStagedMediaAssets} from '../../generatedMedia';
 import type {DraftRegionRequest} from '../../draftRegionRepair';
 import {archiveFailedConversation,backfillFailedConversations,type FailureArchiveSource} from '../../failureConversationArchive';
 import type {ConversationFailure} from '../../../storage/conversationFailure';
@@ -764,12 +764,19 @@ export function useAIEngineChat() {
         setMessages(prev=>prev.map(m=>m.id===messageId?{...m,workflowContract:candidate.contract,taskBudget:candidate.taskBudget}:m));
         if (candidate.status!=='ready') throw new Error(candidate.message);
         if (!elementCurrent()) throw new Error('原页面、工程或模型已变化，本次未应用修改。');
-        current.stageScreenChange(screen.id,candidate.html,`${screen.name}（${structural?'元素子树':'元素细节'}修改候选）`,textToSend,candidate.contract,
+        const preparedHtml=await prepareStagedMediaAssets({
+          html:candidate.html,scopedCss:screen.scopedCss,
+          storage:createProjectStorage(current.id,current.folderPath),
+          assets:Object.values(current.assets),signal:controller.signal,
+          isCurrent:()=>elementCurrent()&&pageCreationContext(useProjectStore.getState())===creationContext,
+          register:assets=>useProjectStore.getState().registerGeneratedAssets(assets,current.id,creationContext)
+        });
+        useProjectStore.getState().stageScreenChange(screen.id,preparedHtml,`${screen.name}（${structural?'元素子树':'元素细节'}修改候选）`,textToSend,candidate.contract,
           candidate.executionRecord);
         current.panToScreen(screen.id);publishPhase(messageId,controller,elementCurrent,'candidate');
         const resultText = structural?'已在原页副本中修改所引用元素的内部结构，其他区域保留。请对比后采纳。':'已在原页副本中修改所引用元素的局部细节，其他内容保留。请对比后采纳。';
         setMessages(prev=>prev.map(m=>m.id===messageId?{...m,text:resultText,isGenerating:false,elapsedSeconds:Number(((Date.now()-startedAt)/1000).toFixed(1)),
-          screenId:screen.id,screenName:screen.name,toolAction:'modified',htmlOutput:candidate.html,qualityReport:candidate.qualityReport,workflowContract:candidate.contract,taskBudget:candidate.taskBudget}:m));
+          screenId:screen.id,screenName:screen.name,toolAction:'modified',htmlOutput:preparedHtml,qualityReport:candidate.qualityReport,workflowContract:candidate.contract,taskBudget:candidate.taskBudget}:m));
         finishOperation(messageId,controller);
         try {
           const saved = attachment ? await attachmentStore.saveReference(attachment.name,attachment.dataUrl) : null;
@@ -1387,7 +1394,14 @@ export function useAIEngineChat() {
           throw new Error(candidate.message);
         }
         if(!structuredCurrent())throw new Error('原页面、工程或模型已变化，未暂存本次区块结果。');
-        current.stageScreenChange(screen.id, candidate.html, `${screen.name}（${modeName}修改候选）`, scope, candidate.contract,
+        const preparedHtml=await prepareStagedMediaAssets({
+          html:candidate.html,scopedCss:screen.scopedCss,
+          storage:createProjectStorage(current.id,current.folderPath),
+          assets:Object.values(current.assets),signal:controller.signal,
+          isCurrent:()=>structuredCurrent()&&pageCreationContext(useProjectStore.getState())===generationInputFingerprint,
+          register:assets=>useProjectStore.getState().registerGeneratedAssets(assets,current.id,generationInputFingerprint)
+        });
+        useProjectStore.getState().stageScreenChange(screen.id, preparedHtml, `${screen.name}（${modeName}修改候选）`, scope, candidate.contract,
           candidate.executionRecord);
         current.panToScreen(screen.id);publishPhase(messageId,controller,structuredCurrent,'candidate');
         update({ ...plan.analysis, status: 'submitted' });
@@ -1396,7 +1410,7 @@ export function useAIEngineChat() {
         setMessages(prev => {const execution=prev.find(m=>m.id===messageId);return [...prev.map(m=>m.id===messageId?{...m,isGenerating:false,executionEvents:priorExecution?.executionEvents,executionActivity:priorExecution?.executionActivity}:m),
           { id: `local_usr_${executionId}`, sender: 'user', text: scope },
           { id: `local_ast_${executionId}`, sender: 'assistant', text: resultText,thinkingStage:4,executionEvents:execution?.executionEvents,executionActivity:execution?.executionActivity, screenId: screen.id, screenName: screen.name,
-            toolAction: 'modified', qualityReport: candidate.qualityReport, workflowContract:candidate.contract,taskBudget:candidate.taskBudget, htmlOutput: candidate.html, generationInputFingerprint, preActionSnapshot: { screenId: screen.id, screenName: screen.name, htmlContent: screen.htmlContent },
+            toolAction: 'modified', qualityReport: candidate.qualityReport, workflowContract:candidate.contract,taskBudget:candidate.taskBudget, htmlOutput: preparedHtml, generationInputFingerprint, preActionSnapshot: { screenId: screen.id, screenName: screen.name, htmlContent: screen.htmlContent },
             structuredRetry:{reviewId:messageId,selected:[...authorizedSelected],extra,mode},
             originalUserPrompt: `${plan.request}\n${scope}`, originalReferencedScreenId: screen.id, originalAttachment: plan.attachment,
             originalDecision: { action: 'modify_screen', targetScreenId: screen.id, styleReferenceScreenId: null, elementNid: null } }
@@ -1464,10 +1478,10 @@ export function useAIEngineChat() {
         ? storeScreens[decided.targetScreenId]
         : null;
       if (decided.action !== 'create_screen' && target) {
-        return CanvasToolExecutor.execute({
+        return CanvasToolExecutor.executeAsync({
           tool: 'modify_screen',
           params: { screenId: target.id, title: target.name, html: htmlToApply, modificationRequest: userPrompt, workflowContract: msg?.workflowContract }
-        });
+        },executionOptions);
       }
       if (decided.action === 'create_screen') {
         return CanvasToolExecutor.executeAsync({
@@ -1496,10 +1510,10 @@ export function useAIEngineChat() {
 
     if (toolCall) {
       if (toolCall.tool === 'modify_screen') {
-        return CanvasToolExecutor.execute({
+        return CanvasToolExecutor.executeAsync({
           ...toolCall,
           params: { ...toolCall.params, modificationRequest: userPrompt, workflowContract: msg?.workflowContract }
-        });
+        },executionOptions);
       }
       return CanvasToolExecutor.executeAsync(toolCall.tool==='create_screen'?{...toolCall,params:{...toolCall.params,workflowContract:msg?.workflowContract}}:toolCall,executionOptions);
     }
@@ -1633,6 +1647,7 @@ export function useAIEngineChat() {
                     result.tool==='create_screen'?`已重新检查并挂载「${result.screenName||'页面'}」。`:`已重新检查并更新「${result.screenName||'页面'}」。`,
                   screenId: result.screenId,
                   screenName: result.screenName,
+                  htmlOutput: result.createdHtml ?? result.candidateHtml ?? m.htmlOutput,
                   checkpointId: result.checkpointId,
                   toolAction:
                     result.tool === 'create_screen'

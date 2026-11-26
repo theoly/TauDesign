@@ -122,7 +122,7 @@ export class PipelineExecutor {
     const activity=options.onActivity?observeRequestActivity(options.engineCore,options.onActivity,()=>!options.signal?.aborted&&options.isCurrent?.()!==false):undefined;
     try{
       const processor=options.generatedMedia&&options.designSystem?createGeneratedMediaProcessor({...options.generatedMedia,designSystem:options.designSystem,signal:options.signal,isCurrent:()=>options.isCurrent?.()!==false&&options.generatedMedia?.isCurrent?.()!==false,onProgress:options.onSectionProgress}):undefined;
-      const output=await PipelineExecutor.executeTask({...options,prepareGeneratedHtml:processor?.prepare,engineCore:activity?.core??options.engineCore});
+      const output=await PipelineExecutor.executeTask({...options,prepareGeneratedHtml:processor?.prepare,resolveGeneratedResources:processor?.resolveResources,engineCore:activity?.core??options.engineCore});
       if(processor&&output.extractedHtml){
         try{output.generatedAssets=await processor.collect(output.extractedHtml);}
         catch(error){output.status='error';output.errorMessage=error instanceof Error?error.message:String(error);delete output.extractedHtml;delete output.stagedScreen;
@@ -134,7 +134,7 @@ export class PipelineExecutor {
       return output;
     }finally{activity?.stop();}
   }
-  private static async executeTask(options:ExecutePipelineOptions & {prepareGeneratedHtml?:import('../../generatedMedia').PrepareGeneratedHtml}):Promise<PipelineOutput>{
+  private static async executeTask(options:ExecutePipelineOptions & {prepareGeneratedHtml?:import('../../generatedMedia').PrepareGeneratedHtml;resolveGeneratedResources?:(html:string)=>Promise<{html:string;rewritten:string[]}>}):Promise<PipelineOutput>{
     const phase=(value:PipelinePhase)=>{if(!options.signal?.aborted&&options.isCurrent?.()!==false){try{options.onPhase?.(value);}catch{console.warn('[pipeline] 阶段显示回调失败');}}};
     phase('preparing');
     const {
@@ -266,6 +266,7 @@ export class PipelineExecutor {
       }catch(error){return attachContract({status:'error',rawResponse:'',errorMessage:error instanceof Error?error.message:'参考图解析失败。'});}
     }
 
+    const planningWarnings:string[]=[];
     if(options.pageTaskPlanning||options.wholePageRedesign){
       const planning=options.pageTaskPlanning??{};
       if(!planning.snapshot)phase('planning');
@@ -278,6 +279,7 @@ export class PipelineExecutor {
           contract:workflowContract,provider,model,budget:taskBudget!,projectKnowledge:options.projectKnowledge,baselineHtml:sourceTarget?.htmlContent,textReferences:input.textReferences,
           attachment:input.attachment,useCustomNavigation:options.useCustomNavigation,wholePageRedesign:options.wholePageRedesign,signal,
           maxTokens: planning.maxTokens ?? 3072,
+          onWarning: w => planningWarnings.push(w),
           isCurrent:()=>!signal?.aborted&&(options.isCurrent?.()??true)});
         // Local draft repair reuses a frozen plan: keep a new taskId, but restore the origin binding surface so candidate adoption still validates.
         if(options.qualityRepair){
@@ -499,8 +501,8 @@ export class PipelineExecutor {
       }catch(error){recovered={...recovered,errorMessage:error instanceof Error?error.message:String(error)};}
     }
     generationResult = recovered;
-    const { rawResponse, reasoningText, usage, recoveredStreamError, finishReason } = recovered;
-    const recoveryWarnings = [...enriched.warnings,...recovered.warnings];
+    let { rawResponse, reasoningText, usage, recoveredStreamError, finishReason } = recovered;
+    const recoveryWarnings = [...enriched.warnings,...recovered.warnings,...planningWarnings];
     if (recovered.errorMessage) return attachContract({ status: 'error', rawResponse, reasoningText, usage, recoveredStreamError,
       warnings: recoveryWarnings, errorMessage: recovered.errorMessage });
     phase('validating');
@@ -517,6 +519,25 @@ export class PipelineExecutor {
         warnings: recoveryWarnings,
         usage
       });
+    }
+
+    if(options.resolveGeneratedResources){
+      const preArtifact=extractArtifact(recovered.rawResponse);
+      if(preArtifact?.isComplete){
+        try{
+          const resolved=await options.resolveGeneratedResources(preArtifact.html);
+          if(resolved.rewritten.length){
+            const replaced=recovered.rawResponse.replace(/(<artifact(?:\s+[^>]*)?>)([\s\S]*?)(<\/artifact>)/i,(_m,open,_,close)=>`${open}${resolved.html}${close}`);
+            recovered={...recovered,rawResponse:replaced!==recovered.rawResponse?replaced:recovered.rawResponse.replace(preArtifact.html,()=>resolved.html)};
+            generationResult=recovered;
+            rawResponse=recovered.rawResponse;
+            recoveryWarnings.push(`已自动准备并登记 ${resolved.rewritten.length} 个图标资源。`);
+          }
+        }catch(error){
+          return attachContract({status:'error',rawResponse,reasoningText,usage,recoveredStreamError,
+            warnings:recoveryWarnings,errorMessage:error instanceof Error?error.message:String(error)});
+        }
+      }
     }
 
     // 4. Shared HTML terminal checks (also used by polish/restyle).

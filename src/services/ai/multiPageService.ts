@@ -210,6 +210,7 @@ export async function executeMultiPagePlan(prepared:PreparedMultiPagePlan,edited
    if(reused&&output.workflowContract.referenceImage?.inputReceipt)output.workflowContract.referenceImage.inputReceipt.reusedFromTaskId=reused.contract.taskId;
    const draft={id:page.screenId,name:page.name,position:{x:0,y:0},htmlContent:reused?output.extractedHtml:shared?materializeTreeSlot(shared.ancestor.html,shared.slot,output.extractedHtml,true):output.extractedHtml};
    const media=createGeneratedMediaProcessor({storage,settings:base.settings,designSystem:base.designSystem,assets:Object.values(base.assets),signal:taskSignal,isCurrent:()=>{guard();return true;}});
+   if(!reused){const resolved=await media.resolveResources(draft.htmlContent);if(resolved.rewritten.length)draft.htmlContent=resolved.html;}
    for(const asset of await media.collect(draft.htmlContent))base.assets[asset.id]??=asset;
    const result=reused?await prepareNewPage(base,draft,output.workflowContract,storage,{signal:taskSignal,isCurrent:()=>{guard();return true;}}):await prepareNewPageWithRepair(base,draft,output.workflowContract,storage,{signal:taskSignal,isCurrent:()=>{guard();return true;},repair:{core:shared?.core??batchCore,taskBudget:budget,provider:entry.provider,model:entry.model,onPhase:phase=>{progress[index].message=phase==='repairing'?'发现控件渲染问题，正在尝试一次受控样式修复。':'修复指令已执行，正在重新检查全部门禁。';publish();}}});
    guard();if(result.status!=='ready')throw Error(`${page.name}：${result.message}`);

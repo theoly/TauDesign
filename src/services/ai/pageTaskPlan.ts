@@ -1,11 +1,11 @@
-import {referenceFieldOwnership} from './referenceFieldOwnership';
+import {reconcileReferenceFieldsInPlan} from './referenceFieldOwnership';
 import {inlineFormContracts,requestedProgressSummary,renderExplicitUiRequirements} from './inlineFormContract';
 import type {AIEngineCore,StreamTextOptions} from './engine/core/types';
 import type {DesignTaskContract} from './designWorkflow';
 import {contentFingerprint} from './designWorkflow';
 import {TaskBudget,withTaskBudget} from './taskBudget';
 import {validateTextReferences,type TextReference} from './textFileContext';
-import {renderReferenceEvidence,referenceFieldCoverage,referencePlanningFields} from './referenceEvidence';
+import {renderReferenceEvidence,referencePlanningFields} from './referenceEvidence';
 import {referenceImageIdentity,validReferenceImageIdentity} from './workflowSources';
 import {supportsVision} from './engine/core/multimodalGuard';
 import type {ImageAttachment} from '../../types/referenceImage';
@@ -223,8 +223,8 @@ export function refinePageTaskScope(contract:DesignTaskContract,snapshot:PageTas
 }
 /** Read-only planning. The owner supplies and closes the SAME parent ledger used by generation. */
 export async function preparePageTaskPlan(core:AIEngineCore,options:{contract:DesignTaskContract;provider:StreamTextOptions['provider'];model:string;
-  budget:TaskBudget;projectKnowledge?:string;baselineHtml?:string;regionNids?:string[];wholePageRedesign?:boolean;textReferences?:TextReference[];attachment?:ImageAttachment;useCustomNavigation?:boolean;signal?:AbortSignal;isCurrent:()=>boolean;maxTokens?:number}):Promise<PageTaskSnapshot>{
-  const {signal,isCurrent,budget,...data}=options,input=structuredClone(data),contract=input.contract;
+  budget:TaskBudget;projectKnowledge?:string;baselineHtml?:string;regionNids?:string[];wholePageRedesign?:boolean;textReferences?:TextReference[];attachment?:ImageAttachment;useCustomNavigation?:boolean;signal?:AbortSignal;isCurrent:()=>boolean;maxTokens?:number;onWarning?:(warning:string)=>void}):Promise<PageTaskSnapshot>{
+  const {signal,isCurrent,budget,onWarning,...data}=options,input=structuredClone(data),contract=input.contract;
   const guard=()=>{if(signal?.aborted)throw new DOMException('业务规划已取消','AbortError');if(!isCurrent())throw Error('任务或工程已变化，业务规划已停止。');};
   guard();
   const planTokens = options.maxTokens ?? (contract.request.length > 2500 ? 6144 : 3072);
@@ -282,10 +282,15 @@ basis/sourceIds记录资料归属而非已经证实的业务事实；不确定�
     try{
       value=await withTaskBudget(core,budget).generateObject<unknown>(schema,{provider:input.provider,model:input.model,messages:actualMessages,maxTokens:planTokens,temperature:0.1,enableThinking:false,signal});
       guard();const plan=validatePageTaskPlan(value,contract);
-      if(contract.referenceImage?.evidence&&!contract.multiPage){const issue=referenceFieldCoverage(contract.referenceImage.evidence,plan.features.flatMap(f=>f.information.map(i=>i.label)),contract.request);if(issue)throw new PageTaskPlanFormatError('referenceImage.fields',issue);if(plan.features.length>=7)try{referenceFieldOwnership(plan,contract.referenceImage.evidence,contract.request);}catch(error){throw new PageTaskPlanFormatError('referenceImage.fields',error instanceof Error?error.message:String(error));}}
+      let finalPlan=plan;
+      if(contract.referenceImage?.evidence&&!contract.multiPage){
+        const reconciled=reconcileReferenceFieldsInPlan(plan,contract.referenceImage.evidence,contract.request);
+        finalPlan=validatePageTaskPlan(reconciled.plan,contract);
+        for(const warning of reconciled.warnings)onWarning?.(warning);
+      }
       const request:PageTaskSnapshot['request']={providerId:input.provider.id,model:input.model,status:'completed',inputFingerprint,
         ...(repair?{formatRepair:repair}:{}),...(contract.referenceImage?{imageFingerprint:contract.referenceImage.fingerprint}:{})};
-      return {version:1,bindingFingerprint:contentFingerprint(JSON.stringify([pageTaskBinding(contract),plan,request])),plan,request};
+      return {version:1,bindingFingerprint:contentFingerprint(JSON.stringify([pageTaskBinding(contract),finalPlan,request])),plan:finalPlan,request};
     }catch(error){
       guard();if(attempt||!(error instanceof SyntaxError||error instanceof PageTaskPlanFormatError)||!budget.canReserve(planTokens))throw error;
       repair={attempts:2,firstIssue:(error instanceof PageTaskPlanFormatError?error.message:'JSON格式无法解析').slice(0,300),firstInputFingerprint:inputFingerprint};

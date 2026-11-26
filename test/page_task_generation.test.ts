@@ -69,23 +69,41 @@ test('actual section writer spends one bounded layout call and at most three reg
  expect(result.sectioned?.requestedOutputTokens).toBe(ledger.snapshot().requestedOutputTokens);ledger.close();
 });
 
-test('参考字段按唯一功能归属注入各分区，重复或遗漏归属阻止写入',()=>{
+test('参考字段按唯一功能归属注入各分区，重复或遗漏归属自动确定归属并产出提示',()=>{
  const p=plan(7),ref={evidence:{observation:{fields:[{label:'完整内容1',type:'text',required:false,group:'基础资料',value:''}]}} as ReferenceEvidence,request:'完整内容1字段只读'};
- const compiled=compileSectionPlan(p,'mobile','页面',undefined,ref);
+ const cleanWarnings:string[]=[];
+ const compiled=compileSectionPlan(p,'mobile','页面',undefined,ref,undefined,w=>cleanWarnings.push(w));
  const fields=compiled.sections.flatMap(s=>JSON.parse(s.requirements).referenceFields);
  expect(fields).toHaveLength(1);expect(fields[0]).toMatchObject({label:'完整内容1',featureId:'f1',mode:'readonly'});
+ expect(cleanWarnings).toEqual([]);
+
  const duplicate=structuredClone(p);duplicate.features[1].information.push({label:'完整内容1',kind:'display'});
- expect(()=>compileSectionPlan(duplicate,'mobile','页面',undefined,ref)).toThrow('唯一归属');
+ const dupWarnings:string[]=[];
+ const dupCompiled=compileSectionPlan(duplicate,'mobile','页面',undefined,ref,undefined,w=>dupWarnings.push(w));
+ const dupFields=dupCompiled.sections.flatMap(s=>JSON.parse(s.requirements).referenceFields);
+ expect(dupFields).toHaveLength(1);expect(dupFields[0].featureId).toBe('f1');
+ expect(dupWarnings.some(w=>w.includes('完整内容1'))).toBe(true);
+
  const missing=structuredClone(p);missing.features[0].information=[];
- expect(()=>compileSectionPlan(missing,'mobile','页面',undefined,ref)).toThrow('唯一归属');
+ const missWarnings:string[]=[];
+ const missCompiled=compileSectionPlan(missing,'mobile','页面',undefined,ref,undefined,w=>missWarnings.push(w));
+ const missFields=missCompiled.sections.flatMap(s=>JSON.parse(s.requirements).referenceFields);
+ expect(missFields).toHaveLength(1);expect(p.features.some(f=>f.id===missFields[0].featureId)).toBe(true);
+ expect(missWarnings.some(w=>w.includes('完整内容1'))).toBe(true);
 });
 
-test('个人图片字段与用户新增择偶同名字段不混归，使用已验证的图片来源功能组',()=>{
+test('个人图片字段与用户新增择偶同名字段不混归，使用已验证的图片来源功能组；同源重复时自动裁决并提示',()=>{
  const p=plan(7);p.features[1].information.push({label:'完整内容1',kind:'input'});p.features[0].basis='image';p.features[0].sourceIds=['image:12345678'];
  const ref={evidence:{image:{fingerprint:'12345678'},observation:{fields:[{label:'完整内容1',type:'text',required:false,group:'个人条件',value:''}]}} as ReferenceEvidence,request:'设计页面'};
- const fields=compileSectionPlan(p,'mobile','页面',undefined,ref).sections.flatMap(s=>JSON.parse(s.requirements).referenceFields);
- expect(fields).toHaveLength(1);expect(fields[0].featureId).toBe('f1');
- p.features[1].basis='image';p.features[1].sourceIds=['image:12345678'];expect(()=>compileSectionPlan(p,'mobile','页面',undefined,ref)).toThrow('唯一归属');
+ const cleanWarnings:string[]=[];
+ const fields=compileSectionPlan(p,'mobile','页面',undefined,ref,undefined,w=>cleanWarnings.push(w)).sections.flatMap(s=>JSON.parse(s.requirements).referenceFields);
+ expect(fields).toHaveLength(1);expect(fields[0].featureId).toBe('f1');expect(cleanWarnings).toEqual([]);
+
+ p.features[1].basis='image';p.features[1].sourceIds=['image:12345678'];
+ const dupWarnings:string[]=[];
+ const resolvedFields=compileSectionPlan(p,'mobile','页面',undefined,ref,undefined,w=>dupWarnings.push(w)).sections.flatMap(s=>JSON.parse(s.requirements).referenceFields);
+ expect(resolvedFields).toHaveLength(1);expect(resolvedFields[0].featureId).toBe('f1');
+ expect(dupWarnings.some(w=>w.includes('完整内容1'))).toBe(true);
 });
 
 test('composition-plan omits bulky rendering system prompt while preserving request and feature allocation rules',async()=>{

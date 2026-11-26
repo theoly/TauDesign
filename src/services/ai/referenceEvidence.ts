@@ -124,7 +124,8 @@ function coversReferenceField(label:string,value:string):boolean{
 export function isStyleOnlyReferenceRequest(request:string):boolean{
  const text=request.trim();
  if(!text)return false;
- if(!/(?:样式|风格|视觉|外观|排版|版式)\s*参考|参考\s*(?:样式|风格|视觉|外观|排版|版式|截图|图片)|style\s*reference|(?:for|as)\s+(?:a\s+)?(?:style|visual|look(?:\s*and\s*feel)?)\s+reference|reference\s+(?:the\s+)?(?:screenshot|image)\s+for\s+style/i.test(text))return false;
+ const styleRequest=/(?:样式|风格|视觉|外观|排版|版式)\s*参考|参考\s*(?:样式|风格|视觉|外观|排版|版式|截图|图片)|style\s*reference|(?:for|as)\s+(?:a\s+)?(?:style|visual|look(?:\s*and\s*feel)?)\s+reference|reference\s+(?:the\s+)?(?:screenshot|image)\s+for\s+style|(?:图标|配色|颜色|色彩|色调|主题色|样式|风格|视觉|外观|排版|版式|圆角|阴影|字体|质感|按钮配色|按钮样式).{0,24}(?:与|和|跟|按|照|参考).{0,8}(?:附图|参考图|截图|图片|原图)|(?:与|和|跟|按|照|参考).{0,8}(?:附图|参考图|截图|图片|原图).{0,24}(?:一致|统一|对齐|配色|颜色|图标|样式|风格|视觉|外观)|(?:match|align|follow).{0,24}(?:colors?|palette|icons?|styles?|visuals?).{0,16}(?:screenshot|image|reference)/i;
+ if(!styleRequest.test(text))return false;
  return !/(?:按|照|根据|还原|复刻|对齐)(?:照)?(?:图|截图|图片|参考图)(?:中|里|上)?(?:的)?(?:全部|所有)?(?:字段|表单|信息项)|截图中的字段|字段必须|必须包含(?:图|截图|图片).{0,12}字段|recreate\s+(?:the\s+)?(?:form|fields)|(?:all|every)\s+fields?\s+from\s+(?:the\s+)?(?:screenshot|image)/i.test(text);
 }
 

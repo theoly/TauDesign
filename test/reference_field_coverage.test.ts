@@ -1,7 +1,7 @@
 import {expect,test} from 'bun:test';
 import {isStyleOnlyReferenceRequest,referenceFieldCoverage,referenceFieldsForRequest,referencePlanningFields,validReferenceEvidence,withReferenceEvidence,type ReferenceEvidence} from '../src/services/ai/referenceEvidence';
 import {buildDesignTaskContract,contentFingerprint} from '../src/services/ai/designWorkflow';
-import {preparePageTaskPlan,type PageTaskPlan} from '../src/services/ai/pageTaskPlan';
+ import {preparePageTaskPlan,pageTaskPlanIssue,type PageTaskPlan} from '../src/services/ai/pageTaskPlan';
 import {DefaultAIEngineCore} from '../src/services/ai/engine/core/aiEngineCore';
 import {MockTransport} from '../src/services/ai/engine/transport/mockTransport';
 import {streamWithContinuation} from '../src/services/ai/boundedContinuation';
@@ -33,7 +33,7 @@ function fixture(labels=['居住地'],request='基础资料使用现居地字段
 }
 test('style-only reference prompts do not require observed form fields',()=>{
  const e=evidence(['综合评分','候选评价']);
- for(const request of ['修改页面中的评价，样式参考截图','按截图参考样式调整评价区','style reference screenshot for the rating UI']){
+ for(const request of ['修改页面中的评价，样式参考截图','按截图参考样式调整评价区','style reference screenshot for the rating UI','修改页面图标和按钮配色，与附图一致']){
   expect(isStyleOnlyReferenceRequest(request)).toBe(true);
   expect(referenceFieldsForRequest(e,request)).toEqual([]);
   expect(referenceFieldCoverage(e,[],request)).toBeUndefined();
@@ -78,38 +78,64 @@ test('full pipeline independently observes 11 fields, plans the user alias, then
   expect(result.workflowContract?.referenceImage?.evidence?.observation.fields.map(f=>f.label)).toContain('居住地');expect(result.workflowContract?.pageTaskPlan?.plan.features.flatMap(f=>f.information.map(i=>i.label))).toContain('现居地');expect(result.workflowContract?.pageTaskPlan?.request.formatRepair).toBeUndefined();expect(result.extractedHtml).toContain('现居地');expect(result.qualityReport?.passed).toBe(true);
  }finally{restore();f.budget.close();}
 });
-test('real omitted field gets exactly one correction on the same parent ledger, never a silent pass',async()=>{
- const f=fixture(fields),bad=structuredClone(f.plan);for(const group of bad.features)group.information=group.information.filter(i=>i.label!=='现居地');f.transport.queueResponse(JSON.stringify(bad),1);f.transport.queueResponse(JSON.stringify(bad),1);
- try{await expect(f.prepare()).rejects.toThrow('referenceImage.fields');expect(f.requests).toHaveLength(2);expect(f.budget.snapshot().requests).toBe(2);expect(f.budget.snapshot().requestedOutputTokens).toBe(6144);}finally{f.budget.close();}
+test('real omitted field is auto-reconciled in 1 request with advisory warning and unchanged source evidence',async()=>{
+ const f=fixture(fields),before=JSON.stringify(f.e),bad=structuredClone(f.plan);for(const group of bad.features)group.information=group.information.filter(i=>i.label!=='现居地');f.transport.queueResponse(JSON.stringify(bad),1);
+ const warnings:string[]=[];
+ try{
+  const snapshot=await preparePageTaskPlan(f.core,{contract:f.contract,provider,model:'synthetic',budget:f.budget,isCurrent:()=>true,onWarning:w=>warnings.push(w)});
+  expect(snapshot.plan.features.flatMap(g=>g.information.map(i=>i.label))).toContain('居住地');
+  expect(pageTaskPlanIssue({...f.contract,pageTaskPlan:snapshot})).toBeUndefined();
+  expect(warnings.some(w=>w.includes('居住地'))).toBe(true);
+  expect(f.requests).toHaveLength(1);expect(f.budget.snapshot().requests).toBe(1);expect(f.budget.snapshot().requestedOutputTokens).toBe(3072);
+  expect(JSON.stringify(f.e)).toBe(before);
+ }finally{f.budget.close();}
 });
-test('missing-field correction can restore coverage without discarding the source evidence or adding a third attempt',async()=>{
- const f=fixture(),bad=structuredClone(f.plan);bad.features[0].information=[];f.transport.queueResponse(JSON.stringify(bad),1);f.transport.queueResponse(JSON.stringify(f.plan),1);
- try{const result=await f.prepare();expect(result.plan.features[0].information[0].label).toBe('现居地');expect(result.request.formatRepair?.firstIssue).toContain('居住地');expect(f.requests).toHaveLength(2);expect(JSON.stringify(f.requests.map(r=>r.body))).not.toContain('image_url');}finally{f.budget.close();}
-});
-test('a missing field cannot enlarge an exhausted one-request planning budget',async()=>{
+test('missing-field reconciliation works even on a one-request planning budget',async()=>{
  const f=fixture(),budget=new TaskBudget({maxRequests:1,maxRequestedOutputTokens:3072,maxDurationMs:10000,maxRequestDurationMs:10000}),bad=structuredClone(f.plan);bad.features[0].information=[];f.transport.queueResponse(JSON.stringify(bad),1);
- try{await expect(preparePageTaskPlan(f.core,{contract:f.contract,provider,model:'synthetic',budget,isCurrent:()=>true})).rejects.toThrow('referenceImage.fields');expect(f.requests).toHaveLength(1);expect(budget.snapshot().requests).toBe(1);expect(budget.snapshot().requestedOutputTokens).toBe(3072);}finally{budget.close();f.budget.close();}
+ const warnings:string[]=[];
+ try{
+  const snapshot=await preparePageTaskPlan(f.core,{contract:f.contract,provider,model:'synthetic',budget,isCurrent:()=>true,onWarning:w=>warnings.push(w)});
+  expect(snapshot.plan.features[0].information.some(i=>i.label==='居住地')).toBe(true);
+  expect(warnings.some(w=>w.includes('居住地'))).toBe(true);
+  expect(f.requests).toHaveLength(1);expect(budget.snapshot().requests).toBe(1);expect(budget.snapshot().requestedOutputTokens).toBe(3072);
+ }finally{budget.close();f.budget.close();}
 });
-test('native field labels share equivalence, but placeholders, nearby text and explicit exact wording cannot bypass delivery',()=>{
+test('native field labels share equivalence, and missing/non-readonly reference fields emit advisory warning without blocking delivery',()=>{
  const f=fixture();f.budget.close();const contract={...f.contract,pageTaskPlan:{plan:f.plan} as any};
  expect(checkGenerationQuality(f.html,{contentTask:contract}).findings.some(f=>f.code==='reference_field_missing')).toBe(false);
- for(const html of ['<main><p>现居地</p><input placeholder="现居地"/></main>','<main><label>家乡<input/></label></main>','<main><label>期望对象现居地<input/></label></main>'])expect(checkGenerationQuality(html,{contentTask:contract}).findings.some(f=>f.code==='reference_field_missing')).toBe(true);
+ for(const html of ['<main><p>现居地</p><input placeholder="现居地"/></main>','<main><label>家乡<input/></label></main>','<main><label>期望对象现居地<input/></label></main>']){
+  const report=checkGenerationQuality(html,{contentTask:contract});
+  const finding=report.findings.find(f=>f.code==='reference_field_missing');
+  expect(finding?.severity).toBe('warning');
+  expect(report.passed).toBe(true);
+ }
  const exact={...contract,request:'字段标签文案必须为“居住地”'};expect(checkGenerationQuality(f.html,{contentTask:exact}).findings.some(f=>f.code==='required_field_label_missing')).toBe(true);
 });
 
-test('明确只读字段可用可见dt/dd展示，普通字段不能以旁文冒充可输入字段',()=>{
+test('明确只读字段可用可见dt/dd展示，普通字段作为提示告警不阻断生成',()=>{
  const f=fixture();f.budget.close();const contract={...f.contract,pageTaskPlan:{plan:f.plan} as any,request:'居住地字段只读'};
  const readonly='<main><dl><dt>居住地</dt><dd>云岩区</dd></dl></main>';
  expect(checkGenerationQuality(readonly,{contentTask:contract}).findings.some(f=>f.code==='reference_field_missing')).toBe(false);
- expect(checkGenerationQuality(readonly,{contentTask:{...contract,request:'填写居住地'}}).findings.some(f=>f.code==='reference_field_missing')).toBe(true);
- for(const value of ['<dd hidden>云岩区</dd>','<dd></dd>','<dd><input value="云岩区"/></dd>'])expect(checkGenerationQuality('<dl><dt>居住地</dt>'+value+'</dl>',{contentTask:contract}).findings.some(f=>f.code==='reference_field_missing')).toBe(true);
- expect(checkGenerationQuality(readonly,{contentTask:{...contract,request:'居住地字段不要只读'}}).findings.some(f=>f.code==='reference_field_missing')).toBe(true);
+ for(const report of [
+  checkGenerationQuality(readonly,{contentTask:{...contract,request:'填写居住地'}}),
+  checkGenerationQuality('<dl><dt>居住地</dt><dd hidden>云岩区</dd></dl>',{contentTask:contract}),
+  checkGenerationQuality('<dl><dt>居住地</dt><dd></dd></dl>',{contentTask:contract}),
+  checkGenerationQuality('<dl><dt>居住地</dt><dd><input value="云岩区"/></dd></dl>',{contentTask:contract}),
+  checkGenerationQuality(readonly,{contentTask:{...contract,request:'居住地字段不要只读'}})
+ ]){
+  expect(report.findings.find(f=>f.code==='reference_field_missing')?.severity).toBe('warning');
+  expect(report.passed).toBe(true);
+ }
 });
 
-test('只读字段合同沿有限同义标签生效，不能换同义词或星号绕开只读要求',()=>{
+test('只读字段合同沿有限同义标签生效，未匹配仅告警提示不拦截',()=>{
  const f=fixture();f.budget.close();const contract={...f.contract,pageTaskPlan:{plan:f.plan} as any,request:'居住地字段只读'};
  const editable='<main><label>现居地 *<input/></label></main>';
- expect(checkGenerationQuality(editable,{contentTask:contract}).findings.some(f=>f.code==='reference_field_missing')).toBe(true);
+ const editableReport=checkGenerationQuality(editable,{contentTask:contract});
+ expect(editableReport.findings.find(f=>f.code==='reference_field_missing')?.severity).toBe('warning');
+ expect(editableReport.passed).toBe(true);
  expect(checkGenerationQuality(editable.replace('<input/>','<input readonly/>'),{contentTask:contract}).findings.some(f=>f.code==='reference_field_missing')).toBe(false);
- expect(checkGenerationQuality(editable.replace('<input/>','<input type="checkbox" readonly/>'),{contentTask:contract}).findings.some(f=>f.code==='reference_field_missing')).toBe(true);
+ const checkboxReport=checkGenerationQuality(editable.replace('<input/>','<input type="checkbox" readonly/>'),{contentTask:contract});
+ expect(checkboxReport.findings.find(f=>f.code==='reference_field_missing')?.severity).toBe('warning');
+ expect(checkboxReport.passed).toBe(true);
 });

@@ -137,6 +137,7 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
       }
       if(functional&&contract.pageTaskPlan)contract.pageTaskPlan=refinePageTaskScope(contract,contract.pageTaskPlan);
     }else if(contract.regionSubdivision)throw Error('当前修改不适用旧内部细分计划。');
+    const planningWarnings:string[]=[];
     if(functional){
       if(input.imageUrl&&!input.attachment)throw new Error('参考图功能修改缺少实际附件身份，请重新附图。');
       if(contract.referenceImage&&!input.attachment)throw new Error('冻结功能规划缺少原参考图片，请重新附图。');
@@ -148,7 +149,7 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
       }
       if(!contract.pageTaskPlan){guard();onPhase?.('planning');
         contract.pageTaskPlan=await preparePageTaskPlan(core!,{contract,provider:input.binding!.provider,model:input.binding!.model,budget:budget!,baselineHtml:input.screen.htmlContent,
-          regionNids:requested as string[],projectKnowledge:input.projectKnowledge,textReferences:input.textReferences,attachment:input.attachment,useCustomNavigation:input.settings.useCustomNavigation,signal,isCurrent});
+          regionNids:requested as string[],projectKnowledge:input.projectKnowledge,textReferences:input.textReferences,attachment:input.attachment,useCustomNavigation:input.settings.useCustomNavigation,onWarning:w=>planningWarnings.push(w),signal,isCurrent});
       }
       const issue=pageTaskPlanIssue(contract);if(issue)throw new Error(issue);
       const pageTask=contract.pageTaskPlan;
@@ -198,8 +199,9 @@ async function executeStructuredEditTask(core:AIEngineCore|undefined,options:Str
     if(!safe.passed||!qualityReport.passed)throw new Error(qualitySummary(!safe.passed?safe:qualityReport));
     if(styleOnly){const diff=compareStructure(html,candidate.html);if(!diff.ok||diff.textChanged)throw new Error('纯润色不能改变元素树或文案。');}
     const operationCount=candidate.operations?.length??candidate.targetNids.length;
-    guard();return finish({status:'ready',html:candidate.html,qualityReport,targetNids:candidate.targetNids,operationCount,contract,
-      executionRecord:localEditExecutionRecord({html:candidate.html,qualityReport,mode:input.mode,targetNids:candidate.targetNids,operationCount,...(elementStructure?{structural:true as const}:{})})});
+    const executionRecord=localEditExecutionRecord({html:candidate.html,qualityReport,mode:input.mode,targetNids:candidate.targetNids,operationCount,...(elementStructure?{structural:true as const}:{})});
+    if(planningWarnings.length)executionRecord.warnings=[...executionRecord.warnings,...planningWarnings];
+    guard();return finish({status:'ready',html:candidate.html,qualityReport,targetNids:candidate.targetNids,operationCount,contract,executionRecord});
   }catch(error){
     let failure=error;
     try {guard();} catch(interruption){failure=interruption;}

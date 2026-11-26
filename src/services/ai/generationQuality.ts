@@ -65,7 +65,7 @@ export function checkGenerationQuality(html: string, options: QualityOptions = {
   const userRequest=options.contentTask?.request??options.modificationRequest??'';
   findings.push(...inspectInlineForms(doc,userRequest),...inspectProgressSummary(doc,userRequest));
   const reference=options.contentTask?.referenceImage?.evidence;
-  if(reference&&options.contentTask?.pageTaskPlan&&!options.contentTask.multiPage){const issue=referenceFieldCoverage(reference,nativeReferenceLabels(doc,options.contentTask.request).concat(readonlyFieldLabels(doc).filter(label=>referenceFieldMode(label,options.contentTask!.request)==='readonly')),options.contentTask.request);if(issue)findings.push({code:'reference_field_missing',severity:'error',message:issue,actual:'图片字段未在有效关联的表单标签上保留',expected:'按用户要求和已解析字段完整呈现表单，不用旁文或占位符代替'});}
+  if(reference&&options.contentTask?.pageTaskPlan&&!options.contentTask.multiPage){const issue=referenceFieldCoverage(reference,nativeReferenceLabels(doc,options.contentTask.request).concat(readonlyFieldLabels(doc).filter(label=>referenceFieldMode(label,options.contentTask!.request)==='readonly')),options.contentTask.request);if(issue)findings.push({code:'reference_field_missing',severity:'warning',message:issue,actual:'图片字段未在有效关联的表单标签上保留',expected:'按用户要求和已解析字段完整呈现表单，不用旁文或占位符代替'});}
   if(options.wholePageRedesign)try{
     if(!options.baselineHtml)throw Error('整页重设计缺少原业务基线。');
     const source=buildPageRedesignSource(options.baselineHtml,{deviceProfile:options.deviceProfile??'pc',useCustomNavigation:options.useCustomNavigation,protectedNids:options.protectedNids});

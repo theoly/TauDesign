@@ -29,6 +29,9 @@ import {TaskBudget} from '../../services/ai/taskBudget';
 import {createRestyleBudget} from '../../services/ai/taskBudgetPolicy';
 import {continuationBindingKey} from '../../services/ai/generationContinuation';
 import {screenForAssetAudit} from '../../services/ai/projectAssetIntegrity';
+import {prepareStagedMediaAssets} from '../../services/ai/generatedMedia';
+import {createProjectStorage} from '../../services/storage/projectStorage';
+import {pageCreationContext} from '../../services/ai/pageCreationValidation';
 
 type RestyleBinding=ReturnType<ReturnType<typeof useAIConfigStore.getState>['getActiveProviderForRole']>;
 interface RestyleOperation {controller:AbortController;projectKey:string;binding:RestyleBinding;bindingKey:string|null|undefined}
@@ -268,7 +271,17 @@ export const RestylePanel: React.FC<RestylePanelProps> = ({ scope, onClose }) =>
       if (!isLive(operation)) return;
       if (!isModificationSnapshotCurrent(useProjectStore.getState(), snapshot)) throw new Error(t('theme.restyleErrChangedDuringGen'));
       if (outcome.status !== 'applied' || !outcome.html) throw new Error(outcome.message || t('theme.restyleErrStructureRejected'));
-      useProjectStore.getState().stageScreenChange(scope, outcome.html, `${plan.dryRun.name}（润色候选）`, request, outcome.workflowContract, outcome.executionRecord);
+      const latest=useProjectStore.getState(),stageContext=pageCreationContext(latest);
+      const preparedHtml=await prepareStagedMediaAssets({
+        html:outcome.html,
+        scopedCss:latest.screens[scope]?.scopedCss,
+        storage:createProjectStorage(latest.id,latest.folderPath),
+        assets:Object.values(latest.assets),
+        signal:operation.controller.signal,
+        isCurrent:()=>isLive(operation)&&isModificationSnapshotCurrent(useProjectStore.getState(),snapshot)&&pageCreationContext(useProjectStore.getState())===stageContext,
+        register:assets=>useProjectStore.getState().registerGeneratedAssets(assets,latest.id,stageContext)
+      });
+      useProjectStore.getState().stageScreenChange(scope, preparedHtml, `${plan.dryRun.name}（润色候选）`, request, outcome.workflowContract, outcome.executionRecord);
       useProjectStore.getState().panToScreen(scope); onClose();
     } catch (e) { if (isOwner(operation)&&!operation.controller.signal.aborted) setError(e instanceof Error ? e.message : String(e)); }
     finally { finishOperation(operation); }
